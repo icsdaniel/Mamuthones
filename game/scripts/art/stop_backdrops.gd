@@ -39,14 +39,57 @@ static func info(stop: int) -> Dictionary:
 			return {"lit": Palette.BONE, "sky": "day", "fires": [], "glow": [0.3, 260.0, 500.0, 0.0],
 				"fog": [0.3, Color(Palette.BONE, 0.55)], "sparks": false, "crowd_rim": 0.5}
 		5:
-			return {"lit": Palette.BONE, "sky": "day", "fires": [], "glow": [0.7, 200.0, 400.0, 0.0],
-				"fog": [0.2, Color(Palette.BONE, 0.45)], "sparks": false, "crowd_rim": 0.55}
+			# Low afternoon sun down the lane: warm light, long shadows, little fog.
+			return {"lit": Color("#f0cf95"), "sky": "day", "fires": [], "glow": [0.64, 250.0, 420.0, 0.25],
+				"fog": [0.1, Color("#f0cf95", 0.35)], "sparks": false, "crowd_rim": 0.7}
 		6:
 			return {"lit": Palette.EMBER, "sky": "evening", "fires": [], "glow": [0.3, 120.0, 420.0, 0.35],
 				"fog": [0.3, Color(Palette.BONE, 0.4)], "sparks": false, "crowd_rim": 0.6}
 		_:
 			return {"lit": Palette.EMBER, "sky": "dusk", "fires": [{"x": 0.08, "y": 96.0, "w": 70.0, "h": 84.0}],
 				"glow": [0.75, 190.0, 520.0, 0.4], "fog": [0.5, Color(Palette.EMBER_HOT, 0.35)], "sparks": true, "crowd_rim": 0.8}
+
+
+## How the procession is staged at each stop, so no two stops show the same group:
+##   x        where the row's centre stands, as a fraction of W
+##   front    Mamuthones in the front line (1..3; your Mamuthone is always one of them)
+##   back     Mamuthones in the back line (0..3)
+##   isso     Issohadores (0 none, 1 the front one, 2 both)
+##   scale    figure size (smaller = further away)
+##   ground   the row's ground line relative to G (negative = further up the street)
+##   depth    how far behind the front line the back line walks, in figure heights
+##   spread   spacing multiplier
+##   flip     true: the row walks to the left
+##   shade    colour the figures are multiplied by (silhouettes against a bright sky)
+##   isso_at  optional [x fraction, ground, scale] for the front Issohadore standing apart
+##   onlooker optional [x fraction, ground, scale]: someone in the crowd for the rope to catch
+static func row(stop: int) -> Dictionary:
+	var r := {"x": 0.36, "front": 3, "back": 3, "isso": 2, "scale": 1.0, "ground": 0.0, "depth": 0.09, "spread": 1.0,
+		"flip": false, "shade": Color.WHITE}
+	match clampi(stop, 1, COUNT):
+		1:
+			# The night before: your Mamuthone alone, dressed and ready by the hearth.
+			r.merge({"x": 0.6, "front": 1, "back": 0, "isso": 0, "scale": 1.04}, true)
+		2:
+			pass
+		3:
+			# Circling the bonfires: the row turns back past the fire, walking left, the back line far off.
+			r.merge({"x": 0.5, "front": 2, "back": 3, "isso": 1, "scale": 0.9, "ground": -6.0, "depth": 0.2, "flip": true}, true)
+		4:
+			# Carnival Sunday: the whole procession filling the street.
+			r.merge({"x": 0.44, "scale": 0.86, "ground": -8.0, "depth": 0.13, "spread": 0.92}, true)
+		5:
+			# The Rope: the row is further up the lane; the Issohadore works the crowd right in front.
+			r.merge({"x": 0.3, "front": 2, "back": 2, "isso": 2, "scale": 0.7, "ground": -52.0, "depth": 0.1,
+				"isso_at": [0.6, 4.0, 1.12], "onlooker": [0.85, 6.0, 1.0]}, true)
+		6:
+			# The Piazza: small figures in the big square before the church.
+			r.merge({"x": 0.52, "scale": 0.74, "ground": -18.0, "depth": 0.12, "spread": 1.05}, true)
+		_:
+			# Shrove Tuesday: close, dark against the red dusk, walking toward the last of the light.
+			r.merge({"x": 0.4, "front": 3, "back": 2, "isso": 1, "scale": 1.1, "ground": 4.0, "depth": 0.07, "spread": 0.95,
+				"shade": Color(0.62, 0.56, 0.54)}, true)
+	return r
 
 
 static func paint(ci: CanvasItem, stop: int, w: float, h: float, g: float) -> void:
@@ -68,9 +111,7 @@ static func paint(ci: CanvasItem, stop: int, w: float, h: float, g: float) -> vo
 			_houses(ci, -20.0, w + 20.0, g - 64.0, 170.0, 250.0, Color("#cdbfa9"), Palette.INK, 41, 0.0, true)
 			_street(ci, w, h, g - 70.0, Color("#cfc6b8"), Color(Palette.INK, 0.6))
 		5:
-			_sky_paper(ci, w, h, g - 260.0)
-			_houses(ci, -20.0, w + 20.0, g - 150.0, 90.0, 150.0, Color("#c9bba5"), Color(Palette.INK, 0.7), 51, 0.0, true)
-			_street(ci, w, h, g - 150.0, Color("#cbc2b4"), Color(Palette.INK, 0.5))
+			_alley(ci, w, h, g)
 		6:
 			_sky_bands(ci, w, h, g, [Color("#2b2521"), Color("#4a3f37"), Color("#7a6a5a"), Color("#b3a28a")], 6)
 			_piazza(ci, w, h, g)
@@ -102,9 +143,11 @@ static func paint_front(ci: CanvasItem, stop: int, w: float, h: float, g: float)
 		4:
 			_crowd(ci, -10.0, w + 10.0, g - 58.0, 80.0, Color("#2a2420"), Color(Palette.BONE, 0.5), 401, 0.7)
 		5:
-			_crowd(ci, -10.0, w + 10.0, g - 120.0, 70.0, Color("#3a322c"), Color(Palette.BONE, 0.4), 501, 1.0)
-			_crowd(ci, -10.0, w + 10.0, g - 84.0, 84.0, Color("#29221e"), Color(Palette.BONE, 0.5), 502, 1.0)
-			_crowd(ci, -10.0, w + 10.0, g - 46.0, 100.0, Color("#171311"), Color(Palette.BONE, 0.55), 503, 0.9)
+			# People pressed against both walls of the lane, thickest near the viewer.
+			_crowd(ci, w * 0.12, w * 0.3, g - 96.0, 58.0, Color("#3a322c"), rim, 501, 1.2)
+			_crowd(ci, w * 0.42, w * 0.56, g - 98.0, 56.0, Color("#3a322c"), rim, 502, 1.2)
+			_crowd(ci, -30.0, w * 0.08, g - 30.0, 120.0, Color("#1c1714"), rim, 503, 1.1)
+			_crowd(ci, w * 0.7, w + 20.0, g - 26.0, 124.0, Color("#1c1714"), rim, 504, 1.1)
 		6:
 			_crowd(ci, -10.0, w * 0.3, g - 50.0, 86.0, Palette.INK, rim, 601, 0.9)
 			_crowd(ci, w * 0.7, w + 10.0, g - 50.0, 86.0, Palette.INK, rim, 602, 0.9)
@@ -277,6 +320,76 @@ static func _houses(ci: CanvasItem, x0: float, x1: float, base: float, hmin: flo
 		WoodcutDraw.stroke(ci, PackedVector2Array([Vector2(x + 1.0, top + 2.0), Vector2(x + 1.0, base)]), Color(edge, 0.35 if not day else 0.5), 1.0, 1.0, 2.0)
 		x += hw + (2.0 if day else 6.0 + 20.0 * WoodcutDraw.hash01(i, salt + 6))
 		i += 1
+
+
+## The Rope: a narrow granite lane in steep perspective, the low sun at its far end, the right wall in
+## shadow and a long shadow across the stones.
+static func _alley(ci: CanvasItem, w: float, h: float, g: float) -> void:
+	var vp := Vector2(w * 0.63, g - 150.0)
+	# Sky strip and the far end of the lane, bright with the sun.
+	WoodcutDraw.fill(ci, _rect(0, 0, w, h), Color("#e9d3a8"))
+	WoodcutDraw.fill(ci, _rect(0, 0, w, h), Color(Palette.INK, 0.08), Palette.tex("paper"), 1.0 / 512.0)
+	WoodcutDraw.glow(ci, vp + Vector2(0, -60), 260.0, Color(Palette.EMBER_HOT, 0.8), 0.8)
+	WoodcutDraw.rays(ci, vp + Vector2(0, -70), 50.0, 260.0, 26, Color(Palette.BONE, 0.55), 2.4, 51, PI * 1.1, PI * 0.95)
+	# Far houses closing the lane.
+	_houses(ci, vp.x - 90.0, vp.x + 90.0, vp.y + 36.0, 70.0, 110.0, Color("#cdb994"), Palette.INK, 55, 0.0, true)
+	# Street: the stones run toward the far end.
+	var street := PackedVector2Array([Vector2(vp.x - 80.0, vp.y + 36.0), Vector2(vp.x + 80.0, vp.y + 36.0), Vector2(w + 40.0, h), Vector2(-40.0, h)])
+	WoodcutDraw.fill(ci, street, Color("#cdbfa6"))
+	for i in 26:
+		var t := pow(float(i) / 25.0, 1.8)
+		var y := lerpf(vp.y + 38.0, h, t)
+		var half := lerpf(80.0, w * 0.75, t)
+		WoodcutDraw.stroke(ci, PackedVector2Array([Vector2(vp.x - half, y), Vector2(vp.x + half, y + 1.0)]), Color(Palette.INK, 0.25 + 0.2 * t), 0.4, 0.4, 0.6 + 1.6 * t)
+	for i in 11:
+		var x := lerpf(-w * 0.3, w * 1.3, float(i) / 10.0)
+		WoodcutDraw.stroke(ci, PackedVector2Array([vp + Vector2((x - vp.x) * 0.13, 38.0), Vector2(x, h)]), Color(Palette.INK, 0.18), 0.3, 1.2)
+	# The long shadow of the right-hand houses across the street.
+	WoodcutDraw.fill(ci, PackedVector2Array([Vector2(vp.x + 30.0, vp.y + 36.0), Vector2(vp.x + 80.0, vp.y + 36.0), Vector2(w + 40.0, h), Vector2(w * 0.38, h)]),
+		Color(Palette.INK, 0.28), Palette.tex("hatch"), 1.0 / 90.0)
+	# Left wall, in the sun: granite courses running to the vanishing point, doors and windows.
+	var lw := PackedVector2Array([Vector2(-10, -10), Vector2(vp.x - 90.0, vp.y - 120.0), Vector2(vp.x - 90.0, vp.y + 36.0), Vector2(-10, g + 30.0)])
+	WoodcutDraw.fill(ci, lw, Color("#d6c4a2"))
+	WoodcutDraw.fill(ci, lw, Color(Palette.INK, 0.14), Palette.tex("chisel"), 1.0 / 160.0)
+	_wall_courses(ci, Vector2(-10, -10), Vector2(-10, g + 30.0), Vector2(vp.x - 90.0, vp.y - 120.0), Vector2(vp.x - 90.0, vp.y + 36.0), 14, Color(Palette.INK, 0.3), 57)
+	_wall_openings(ci, Vector2(-10, -10), Vector2(-10, g + 30.0), Vector2(vp.x - 90.0, vp.y - 120.0), Vector2(vp.x - 90.0, vp.y + 36.0), Color("#2a211b"), 58)
+	# Right wall, in shadow, hatched.
+	var rw := PackedVector2Array([Vector2(w + 10, -10), Vector2(vp.x + 90.0, vp.y - 110.0), Vector2(vp.x + 90.0, vp.y + 36.0), Vector2(w + 10, g + 30.0)])
+	WoodcutDraw.fill(ci, rw, Color("#7a6c5c"))
+	WoodcutDraw.fill(ci, rw, Color(Palette.INK, 0.4), Palette.tex("hatch"), 1.0 / 110.0)
+	_wall_courses(ci, Vector2(w + 10, -10), Vector2(w + 10, g + 30.0), Vector2(vp.x + 90.0, vp.y - 110.0), Vector2(vp.x + 90.0, vp.y + 36.0), 14, Color(Palette.INK, 0.35), 59)
+	_wall_openings(ci, Vector2(w + 10, -10), Vector2(w + 10, g + 30.0), Vector2(vp.x + 90.0, vp.y - 110.0), Vector2(vp.x + 90.0, vp.y + 36.0), Color("#1a1512"), 60)
+	# Eaves against the sky strip.
+	WoodcutDraw.stroke(ci, PackedVector2Array([Vector2(-10, -4), Vector2(vp.x - 90.0, vp.y - 124.0)]), Color("#2a211c"), 14.0, 4.0)
+	WoodcutDraw.stroke(ci, PackedVector2Array([Vector2(w + 10, -4), Vector2(vp.x + 90.0, vp.y - 114.0)]), Color("#2a211c"), 14.0, 4.0)
+
+
+## Stone courses on a wall seen in perspective: lines from the near edge (a0..a1) to the far edge (b0..b1).
+static func _wall_courses(ci: CanvasItem, a0: Vector2, a1: Vector2, b0: Vector2, b1: Vector2, rows: int, col: Color, salt: int) -> void:
+	for i in rows:
+		var t := (float(i) + 0.5) / float(rows)
+		var p := a0.lerp(a1, t)
+		var q := b0.lerp(b1, t)
+		var cut := 0.1 + 0.3 * WoodcutDraw.hash01(i, salt)
+		WoodcutDraw.stroke(ci, PackedVector2Array([p.lerp(q, cut), q]), col, 1.6, 0.3)
+
+
+## Doors and windows on a wall seen in perspective (fractions along the wall are foreshortened).
+static func _wall_openings(ci: CanvasItem, a0: Vector2, a1: Vector2, b0: Vector2, b1: Vector2, col: Color, salt: int) -> void:
+	var at := func(u: float, v: float) -> Vector2:
+		# u along the wall (0 near .. 1 far, foreshortened), v down the wall (0 top .. 1 ground).
+		var uu := 1.0 - pow(1.0 - u, 2.2)
+		return a0.lerp(b0, uu).lerp(a1.lerp(b1, uu), v)
+	for k in 5:
+		var u0 := 0.08 + 0.2 * float(k)
+		var u1 := u0 + 0.07
+		# A window up high with its shutter, and every other bay a door at the street.
+		for q in [[0.3, 0.45], [0.58, 0.72]]:
+			var win := PackedVector2Array([at.call(u0, q[0]), at.call(u1, q[0]), at.call(u1, q[1]), at.call(u0, q[1])])
+			WoodcutDraw.fill(ci, win, col)
+		if k % 2 == int(WoodcutDraw.hash01(k, salt) * 2.0):
+			var door := PackedVector2Array([at.call(u0, 0.78), at.call(u1 + 0.02, 0.78), at.call(u1 + 0.02, 1.0), at.call(u0, 1.0)])
+			WoodcutDraw.fill(ci, door, col)
 
 
 static func _street(ci: CanvasItem, w: float, h: float, y0: float, fill: Color, line: Color) -> void:

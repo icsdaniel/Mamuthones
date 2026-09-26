@@ -537,7 +537,10 @@ class Charter:
                 continue
             # candidates to drop: plain steps, weakest first, spread through the section
             pool = [n for n in inside if n.k == "step" and not n.call and n.sig is None and n.tag != "triple_step"]
-            pool.sort(key=lambda n: (-n.rank, -ROLE_PRIO.get(n.role, 5), (n.b * 7.31) % 1))
+            # the same place in every two-bar phrase is thinned the same way, so music that
+            # repeats keeps a repeating pattern (phrases echo each other)
+            span = 2 * s.bpb
+            pool.sort(key=lambda n: (-n.rank, -ROLE_PRIO.get(n.role, 5), (((n.b - sec.b) % span) * 7.31) % 1))
             drop = set(id(n) for n in pool[:excess])
             notes = [n for n in notes if id(n) not in drop]
         return notes

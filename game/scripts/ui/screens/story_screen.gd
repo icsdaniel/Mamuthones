@@ -61,10 +61,12 @@ func _row(song: SongData, is_next: bool) -> Control:
 
 
 func _status(song: SongData, open: bool, is_next: bool) -> String:
-	var date := tr("stop_date_%d" % song.stop)
 	if not open:
 		return tr("story_locked")
-	var parts: Array[String] = [date]
+	var parts: Array[String] = []
+	var date := UIKit.stop_date(song)
+	if date != "":
+		parts.append(date)
 	if is_next:
 		parts.append(tr("story_next"))
 	elif UIKit.best_bells(song.id) > 0:

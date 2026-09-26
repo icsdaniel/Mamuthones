@@ -52,7 +52,7 @@ def build():
 
     # ---- A1: the tune
     b = s.sec("tune1", 8, 1)
-    harm(b // 4, [1, 1, 6, 7, 1, 1, 6, 7])
+    harm(b // 4, [1, 1, 1, 7, 1, 1, 7, 1])
     pipes(b, 4, TUNE_A)
     pipes(b + 16, 4, TUNE_B)
     s.drums(b, 8, "B.......B.......")
@@ -62,7 +62,7 @@ def build():
 
     # ---- A2: the tenore joins, bass drum on every beat
     b = s.sec("tune2", 8, 2)
-    harm(b // 4, [1, 1, 6, 7, 1, 1, 6, 7])
+    harm(b // 4, [1, 1, 1, 7, 1, 1, 7, 1])
     pipes(b, 4, TUNE_A)
     pipes(b + 16, 4, TUNE_B)
     s.tenore(b, 32, "rhythm", pattern="x...o...x...o.o.", vowels="aoia", vel=0.8)
@@ -88,7 +88,7 @@ def build():
 
     # ---- A3: the tune with throws and shouts
     b = s.sec("tune3", 8, 2)
-    harm(b // 4, [1, 1, 6, 7, 1, 1, 6, 7])
+    harm(b // 4, [1, 1, 1, 7, 1, 1, 7, 1])
     pipes(b, 4, TUNE_B)
     pipes(b + 16, 4, TUNE_A)
     s.tenore(b, 32, "rhythm", pattern="x.o.x...x.o.x.o.", vowels="aoia", vel=0.85)
@@ -129,7 +129,7 @@ def build():
 
     # ---- climax 1: everything, the tune at full tilt
     b = s.sec("climax1", 8, 3)
-    harm(b // 4, [1, 1, 6, 7, 1, 1, 6, 7])
+    harm(b // 4, [1, 1, 1, 7, 1, 1, 7, 1])
     pipes(b, 4, TUNE_A, vel=1.0)
     pipes(b + 16, 4, TUNE_B, vel=1.0)
     s.tenore(b, 32, "rhythm", pattern="x.o.x.oox.o.x.oo", vowels="aoiao", vel=0.95)
@@ -158,7 +158,7 @@ def build():
 
     # ---- climax 2: the fast figure over everything
     b = s.sec("climax2", 8, 3)
-    harm(b // 4, [1, 1, 6, 7, 1, 6, 7, 1])
+    harm(b // 4, [1, 1, 1, 7, 1, 1, 7, 1])
     pipes(b, 4, FAST, vel=1.0)
     pipes(b + 16, 4, TUNE_A, vel=1.0)
     s.tenore(b, 32, "rhythm", pattern="x.o.x.oox.o.x.oo", vowels="aoiao", vel=1.0)

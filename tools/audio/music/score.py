@@ -360,9 +360,33 @@ class Song:
     def drone(self, inst, b0, beats, pitch, vel=0.6, **p):
         self.ev(inst, b0, beats, pitch, vel, drone=True, **p)
 
+    def auto_fills(self):
+        """A frame-drum pickup in the last beat of a section that leads into an equal or bigger one,
+        so sections join with a musical transition (skipped where the music stands still)."""
+        if self.kind != "story":
+            return
+        for a, z in zip(self.sections, self.sections[1:]):
+            if z.energy < max(1, a.energy) or a.opts.get("chart", "default") is None:
+                continue
+            end = z.b
+            span = 1.0 if self.sub == 2 else 1.0
+            step = 0.25 if self.sub == 2 else 1 / 3
+            if any(sb < end and sb + sl > end - span for (sb, sl) in self.stops):
+                continue
+            if not any(e.inst == "frame" and a.b <= e.b < end for e in self.events):
+                continue
+            k = 0
+            t = end - span
+            while t < end - 1e-6:
+                if not self.find("frame", t):
+                    self.ev("frame", t, step, None, 0.45 + 0.15 * k, hit="tak", fill=True)
+                k += 1
+                t += step
+
     def finalize(self):
         """A stand-still ends before any cue inside it (the rim click or call that announces the
         next bell), so the cue is heard and the rest stays silent."""
+        self.auto_fills()
         cues = sorted(e.b for e in self.events
                       if (e.inst == "frame" and e.p.get("hit") == "rim") or e.inst == "calls")
         new = []

@@ -59,7 +59,7 @@ def build():
 
     # ---- tune A: skipping pipes, off-beat shouts from the row
     b = s.sec("tune1", 8, 1)
-    harm(b // 4, [1, 1, 4, 1, 1, 1, 7, 1])
+    harm(b // 4, [1, 1, 4, 1, 1, 1, 4, 1])
     pipes(b, 8, TUNE_A)
     s.drums(b, 8, ["D...t.t.D.t.t...", "D...t.t.D.t.t.t."])
     for bar in range(8):
@@ -69,7 +69,7 @@ def build():
 
     # ---- the rope: call, crack, laughter - the pipes answer each throw
     b = s.sec("throws1", 8, 1)
-    harm(b // 4, [1, 1, 7, 1, 1, 1, 7, 1])
+    harm(b // 4, [1, 1, 4, 1, 1, 1, 4, 1])
     s.drone("tumbu", b, 32, tumbu, vel=0.5)
     for k in range(4):
         s.melody("mancosedda", b + k * 8 + 2, "5:.25 6 5 6 5:.5 3 4:.25 5 4 5 4:.5 2", vel=0.8, hold_min=99)
@@ -82,7 +82,7 @@ def build():
 
     # ---- tune A again with the tenore's shouts, throws every four bars
     b = s.sec("tune2", 8, 2)
-    harm(b // 4, [1, 1, 4, 1, 1, 1, 7, 1])
+    harm(b // 4, [1, 1, 4, 1, 1, 1, 4, 1])
     pipes(b, 8, TUNE_B)
     s.tenore(b, 32, "rhythm", pattern="x.......x...o...", vowels="oaoe", vel=0.7)
     s.drums(b, 8, ["D...t.t.D.t.t...", "D.t.t.t.D.t.t.t."])
@@ -112,7 +112,7 @@ def build():
 
     # ---- tune A3: the pipes and the tenore together, a throw at each phrase end
     b = s.sec("tune3", 8, 2)
-    harm(b // 4, [1, 1, 4, 1, 1, 1, 7, 1])
+    harm(b // 4, [1, 1, 4, 1, 1, 1, 4, 1])
     pipes(b, 8, TUNE_A)
     s.tenore(b, 32, "rhythm", pattern="x...o...x...o.o.", vowels="aoia", vel=0.75)
     s.drums(b, 8, ["D.t.t.t.D.t.t...", "D.t.t.t.D.t.t.t."])

@@ -219,7 +219,7 @@ func _stops() -> void:
 	for n in range(1, StopBackdrops.COUNT + 1):
 		var p := _scene(n, Vector2(720, 480))
 		p.set_unison(2)
-		p.set_ghost_delta(0.2)
+		# No ghost here: these are the store-page views of each stop (the ghost is in procession_*).
 		await render(p, Vector2i(720, 480), "stop_%d.png" % n, 20)
 
 
@@ -236,6 +236,15 @@ func _procession() -> void:
 		get_root().add_child(vp)
 		for i in 10:
 			await process_frame
+		# Unison at a glance: ring the bells and catch the swing (ragged at 0, one shared swing at 5).
+		p.jolt("bell")
+		for i in 7:
+			await process_frame
+		await RenderingServer.frame_post_draw
+		vp.get_texture().get_image().save_png(out_dir.path_join("procession_ring_u%d.png" % u))
+		print("saved procession_ring_u%d.png" % u)
+		for i in 30:
+			await process_frame
 		p.jolt("bell")
 		p.throw_rope()
 		for i in 5:
@@ -248,6 +257,22 @@ func _procession() -> void:
 		await RenderingServer.frame_post_draw
 		vp.get_texture().get_image().save_png(out_dir.path_join("procession_rope_u%d.png" % u))
 		vp.queue_free()
+	# A miss: your Mamuthone stumbles (caught mid-stumble).
+	var pm := _scene(4, Vector2(720, 480))
+	var vpm := SubViewport.new()
+	vpm.size = Vector2i(720, 480)
+	vpm.render_target_update_mode = SubViewport.UPDATE_ALWAYS
+	vpm.add_child(pm)
+	get_root().add_child(vpm)
+	for i in 10:
+		await process_frame
+	pm.jolt("miss")
+	for i in 6:
+		await process_frame
+	await RenderingServer.frame_post_draw
+	vpm.get_texture().get_image().save_png(out_dir.path_join("procession_miss.png"))
+	print("saved procession_miss.png")
+	vpm.queue_free()
 	await render(_scene(4, Vector2(720, 1440)), Vector2i(720, 1440), "procession_fullscreen.png", 10)
 	await render(_scene(7, Vector2(1080, 1440)), Vector2i(1080, 1440), "procession_tablet.png", 10)
 	await render(_scene(6, Vector2(720, 300)), Vector2i(720, 300), "procession_short.png", 10)

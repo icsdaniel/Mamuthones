@@ -29,7 +29,7 @@ def build():
     hard_mid = "default"
 
     def harm_a(bar0):
-        for i, deg in enumerate([1, 1, 7, 1, 1, 1, 7, 5]):
+        for i, deg in enumerate([1, 4, 1, 1, 1, 4, 1, 1]):
             s.chord((bar0 + i) * 4, 1, deg)
 
     def harm_b(bar0):

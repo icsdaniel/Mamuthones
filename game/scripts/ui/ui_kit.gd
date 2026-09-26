@@ -44,8 +44,13 @@ static func first_screen() -> String:
 	return "title"
 
 
+## Buzzes that were asked for (tests read it: the handheld call does nothing on a desktop).
+static var vibrations := 0
+
+
 static func vibrate(ms: int) -> void:
 	if bool(Profile.get_setting("vibration")):
+		vibrations += 1
 		Input.vibrate_handheld(ms)
 
 
@@ -203,6 +208,14 @@ static func pop_in(c: CanvasItem, delay := 0.0) -> void:
 
 static func song_title(song: SongData) -> String:
 	return song.title(I18n.locale()) if song != null else ""
+
+
+## The stop's day ("16 January"), or "" when the song is already named after it (Shrove Tuesday).
+static func stop_date(song: SongData) -> String:
+	if song == null:
+		return ""
+	var d := tr_("stop_date_%d" % song.stop)
+	return "" if d.to_lower() == song_title(song).to_lower() else d
 
 
 ## 12345 -> "12,345" (English) or "12.345" (Italian).

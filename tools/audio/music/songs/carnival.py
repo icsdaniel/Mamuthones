@@ -63,7 +63,7 @@ def build():
 
     # ---- tenore: the procession song, launeddas drop to the drone
     b = s.sec("song1", 8, 1)
-    harm(b // 4, [1, 1, 5, 1, 4, 1, 5, 1])
+    harm(b // 4, [1, 1, 5, 1, 1, 1, 5, 1])
     s.drone("tumbu", b, 32, tumbu, vel=0.45)
     s.tenore(b, 32, "rhythm", pattern="x.......x...o...", vowels="oaoe", vel=0.8)
     s.melody("boghe", b, SONG1, vel=0.9)
@@ -94,7 +94,7 @@ def build():
 
     # ---- tenore again, higher and with the launeddas answering each phrase
     b = s.sec("song2", 8, 2)
-    harm(b // 4, [1, 1, 5, 1, 4, 1, 5, 1])
+    harm(b // 4, [1, 1, 5, 1, 1, 1, 5, 1])
     s.drone("tumbu", b, 32, tumbu, vel=0.5)
     s.tenore(b, 32, "rhythm", pattern="x...o...x...o.o.", vowels="oaoe", vel=0.85)
     s.melody("boghe", b, SONG2, vel=0.95)

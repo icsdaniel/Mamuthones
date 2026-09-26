@@ -203,8 +203,8 @@ def piazza_chart(song):
 
 
 def _job(args):
-    sid, opts = args
-    rep = {}
+    sid, opts, prev = args
+    rep = {sid: prev} if prev else {}
     render_one(sid, opts, rep)
     return sid, rep[sid]
 
@@ -241,7 +241,7 @@ def main(argv):
     if jobs > 1 and len(ids) > 1:
         import multiprocessing as mp
         with mp.get_context("fork").Pool(jobs) as pool:
-            for sid, entry in pool.imap_unordered(_job, [(sid, opts) for sid in ids]):
+            for sid, entry in pool.imap_unordered(_job, [(sid, opts, report.get(sid)) for sid in ids]):
                 report[sid] = entry
                 with open(rpath, "w") as f:
                     json.dump(report, f, indent=1, default=float)

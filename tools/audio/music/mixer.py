@@ -101,8 +101,10 @@ def mix(song, stems, n):
 
 
 def master(x, target=-14.0, ceiling=-1.5):
-    for _ in range(5):
+    for _ in range(8):
         lk = dsp.integrated_loudness(x)
+        if abs(lk - target) < 0.15:
+            break
         x = x * 10 ** ((target - lk) / 20)
         x = dsp.limiter(x, ceiling)
     for _ in range(4):

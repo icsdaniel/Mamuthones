@@ -31,7 +31,8 @@ func build() -> void:
 	box.add_child(pic)
 	var facts := UIKit.card(box, true)
 	facts.add_child(UIKit.label(UIKit.song_title(song), UIKit.PAPER_HEADER))
-	facts.add_child(UIKit.label(tr("stop_date_%d" % song.stop), UIKit.PAPER))
+	if UIKit.stop_date(song) != "":
+		facts.add_child(UIKit.label(UIKit.stop_date(song), UIKit.PAPER))
 	facts.add_child(UIKit.label(tr("stop_fact_%d" % song.stop), UIKit.PAPER))
 
 	if song.kind == "tutorial":

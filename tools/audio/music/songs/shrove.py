@@ -54,7 +54,7 @@ def build():
 
     # ---- the theme on the launeddas, the tenore underneath
     b = s.sec("theme", 8, 1)
-    harm(b // 4, [1, 4, 5, 1, 1, 7, 4, 1])
+    harm(b // 4, [1, 4, 5, 1, 1, 4, 5, 1])
     pipes(b, 8, THEME_PIPE)
     s.tenore(b, 32, "rhythm", pattern="x.......x...o...", vowels="oaoe", vel=0.75)
     s.drums(b, 8, "D...t...D...t.t.")
@@ -122,7 +122,7 @@ def build():
 
     # ---- climax in triplets: the theme in 12/8 over everything, triple rings on the leaps
     b = s.sec("climax", 8, 3)
-    harm(b // 4, [1, 4, 5, 1, 1, 7, 4, 1])
+    harm(b // 4, [1, 4, 5, 1, 1, 4, 5, 1])
     s.drone("tumbu", b, 32, tumbu, vel=0.55)
     s.melody("mancosedda", b, TRIP, vel=1.0, hold_min=99, sig_start=0)
     s.melody("mancosedda", b + 16, TRIP, vel=1.0, hold_min=99, sig_start=0)
@@ -140,7 +140,7 @@ def build():
 
     # ---- final: straight again, the theme on everything, the last big push
     b = s.sec("final", 8, 3)
-    harm(b // 4, [1, 4, 5, 1, 1, 7, 4, 1])
+    harm(b // 4, [1, 4, 5, 1, 1, 4, 5, 1])
     pipes(b, 4, THEME_PIPE, vel=1.0)
     pipes(b + 16, 4, FAST, vel=1.0)
     s.melody("boghe", b, THEME, vel=1.0, cands=False)

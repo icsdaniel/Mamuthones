@@ -19,24 +19,24 @@ def build():
     s.mechanics = {"step", "bell", "rest"}
     s.signature = {"medium": [1, 2, 1, 0], "hard": [1, 2, 1, 0], "expert": [1, 2, 1, 0]}
     s.countin()
-    s.tail = 9.0
+    s.tail = 7.0
     s.ev("fire", -6, 200, None, 0.55)
 
-    # harmony (bar, bars, degree): i ... bVII, bVI in the build
-    for (bar, ln, deg) in [(0, 4, 1), (4, 4, 1), (8, 4, 1), (12, 2, 7), (14, 2, 1), (16, 4, 1), (20, 2, 6),
-                           (22, 2, 7), (24, 2, 6), (26, 2, 7), (28, 2, 4), (30, 2, 5), (32, 4, 1), (36, 2, 6),
-                           (38, 2, 7), (40, 4, 1)]:
-        s.chord(bar * 4, ln, deg)
+    def harm(b0, degs):
+        for i, d in enumerate(degs):
+            s.chord(b0 + i * 4, 1, d)
 
     # ---- intro: the fire, the bells coming closer at walking pace, the bassu enters
-    b = s.sec("intro", 4, 0, chart=None)
+    b = s.sec("intro", 2, 0, chart=None)
+    harm(b, [1, 1])
     for i in range(8):
-        s.ev("bells", b + i * 2, 1, None, 0.15 + 0.07 * i, count=8, spread=0.05, width=0.6)
-    s.tenore(b + 8, 8, "drone", vowels="o", vel=0.6, parts=("bassu",), sustain_cands=False)
-    s.drums(b + 12, 1, "B.......b.......", cands=False)
+        s.ev("bells", b + i, 1, None, 0.12 + 0.05 * i, count=8, spread=0.05, width=0.6)
+    s.tenore(b + 4, 4, "drone", vowels="o", vel=0.6, parts=("bassu",), sustain_cands=False)
+    s.drums(b + 4, 1, "B.......b.......", cands=False)
 
     # ---- verse 1: drone chords, the boghe's first phrases, the heavy walk
     b = s.sec("verse1", 8, 1)
+    harm(b, [1, 1, 1, 1, 1, 1, 7, 1])
     s.tenore(b, 32, "drone", vowels="oa", vel=0.75)
     s.melody("boghe", b, A1, vel=0.85, sig_start=0)
     s.melody("boghe", b + 16, A2, vel=0.85, sig_start=0)
@@ -48,6 +48,7 @@ def build():
 
     # ---- verse 2: the tenore turns rhythmic, the frame drum joins, the answer phrases (higher)
     b = s.sec("verse2", 8, 2)
+    harm(b, [1, 1, 7, 1, 1, 1, 7, 1])
     s.tenore(b, 32, "rhythm", pattern="x.......x...o.o.", vowels="oaoe", vel=0.8)
     s.melody("boghe", b, B1, vel=0.9)
     s.melody("boghe", b + 16, B2, vel=0.9)
@@ -60,6 +61,7 @@ def build():
 
     # ---- build: the harmony climbs (bVI bVII bVI bVII iv v), drums double, a roll into the stop
     b = s.sec("build", 8, 2)
+    harm(b, [6, 6, 7, 7, 6, 6, 4, 5])
     s.tenore(b, 32, "rhythm", pattern="x...o.o.x...o.o.", vowels="aoae", vel=0.85)
     s.melody("boghe", b, A1, vel=0.9, sig_start=0)
     s.melody("boghe", b + 16, "5*:2 6*:1 5*:.5 4*:.5 6:2 7:2 1':1 7:.5 6:.5 5:1 6:1 7:2 r:2", vel=0.95, sig_start=0)
@@ -72,6 +74,7 @@ def build():
 
     # ---- climax: everything, the melody an octave up, the row's bells behind the beat
     b = s.sec("climax", 8, 3, chart={"hard": dict(steps=[("pulse", 4), ("mel", 5), ("chorus", 5), ("perc", 5)])})
+    harm(b, [1, 1, 7, 1, 6, 7, 4, 1])
     s.tenore(b, 32, "rhythm", pattern="x...o.o.x.o.o.o.", vowels="aoae", vel=0.95)
     s.melody("boghe", b, A1, vel=1.0, octave=1, sig_start=0)
     s.melody("boghe", b + 16, B2, vel=1.0)
@@ -85,6 +88,7 @@ def build():
 
     # ---- outro: back to the drone, one last halt, the last stroke, the bells walk away
     b = s.sec("outro", 4, 1)
+    harm(b, [1, 1, 1, 1])
     s.tenore(b, 8, "drone", vowels="oa", vel=0.75)
     s.melody("boghe", b, "5*:2 6*:1 5*:.5 4*:.5 3:.5 2:.5 1:3", vel=0.85, sig_start=0)
     s.drums(b, 2, "B.......b.......")

@@ -85,6 +85,10 @@ var _player: _Walker
 var _issos: Array[_Walker] = []
 var _arm: _Paint
 var _ghost_x := 0.0
+var _motion: _Paint
+var _onlooker: _Paint
+var _stumble_t := -1.0
+var _row := {}
 var _fire_mat: ShaderMaterial
 var _fog_mats: Array[ShaderMaterial] = []
 
@@ -126,6 +130,7 @@ class _Paint:
 ## One figure in the row and its jolt physics.
 class _Walker:
 	var root := Node2D.new()
+	var pivot := Node2D.new()  # the bell load swings from the shoulders
 	var back: _Paint
 	var body: _Paint
 	var head: _Paint
@@ -146,6 +151,10 @@ class _Walker:
 	var bell := 0.0
 	var vbell := 0.0
 	var pending: Array = []    # [[delay, amp, bell_dir], ...]
+	var base_y := 0.0          # ground line for this stop
+	var sc := 1.0              # size for this stop
+	var flip := 1.0            # -1 when the row walks left
+	var ring := 0.0            # 0..1, how hard its bells rang just now (motion lines)
 
 
 func _init() -> void:
@@ -189,9 +198,16 @@ func jolt(kind := "step") -> void:
 		bell_dir = 1.0 if _bell_up else -1.0
 		_bell_up = not _bell_up
 	if kind == "miss":
-		_player.vrot += 0.9 if not reduced_motion else 0.3
-		_player.vy += 60.0
+		# Your Mamuthone stumbles: pitches forward and down, drops back a step, the head lolls, a scuff
+		# of dust at the feet; then the springs bring him back into the row.
+		var k := 0.35 if reduced_motion else 1.0
+		_player.vrot += 5.5 * k
+		_player.vy += 140.0 * k
+		_player.vhy += 160.0 * k
+		_player.x -= _spacing() * 0.16 * k * _player.flip
+		_player.vbell -= 1.2 * k
 		_miss_flash = 1.0
+		_stumble_t = 0.0
 		return
 	var together := float(unison) / 5.0
 	for w in _walkers:
@@ -199,8 +215,10 @@ func jolt(kind := "step") -> void:
 			if kind != "step":
 				w.pending.append([0.05, amp * 0.4, 0.0])
 			continue
-		var delay := 0.0 if w.is_player else w.scatter * (1.0 - together) * 0.16 + 0.01
-		var a := amp * (1.0 if w.is_player else lerpf(0.55, 1.0, together))
+		# At low unison each Mamuthone rings late by his own amount and with his own strength
+		# (ragged); at full unison they all ring on the same instant, equally.
+		var delay := 0.0 if w.is_player else w.scatter * (1.0 - together) * 0.22 + 0.005
+		var a := amp * (1.0 if w.is_player else lerpf(0.4 + 0.6 * w.scatter, 1.0, together))
 		w.pending.append([delay, a, bell_dir])
 
 
@@ -301,6 +319,10 @@ func _build() -> void:
 	_issos = [isso_back, isso_front]
 	_arm = _cell(func(ci): Figures.issohadore_arm(ci, _hf * 0.93), Vector2(0, -0.5), Rect2(-0.06, -0.02, 0.12, 0.3))
 	isso_front.body.add_child(_arm)
+	_motion = _Paint.new(_paint_motion)
+	_world.add_child(_motion)
+	_onlooker = _cell(func(ci): Figures.crowd_person(ci, _hf * 0.8, 0, Color("#2a221d"), Color("#f0cf95", 0.7), 5), Vector2.ZERO, Rect2(-0.24, -0.84, 0.48, 0.86))
+	_world.add_child(_onlooker)
 	_rope = _Paint.new(_paint_rope)
 	_world.add_child(_rope)
 	_fog_near = _make_fog()
@@ -333,7 +355,8 @@ func _make_walker(line: int, slot: int, isso: bool) -> _Walker:
 				_paint_player_mark(ci)
 			Figures.mamuthone_body(ci, _hf, fleece if mine.call() else _npc_fleece(w), straps if mine.call() else "natural", lit_of.call(), detail), Vector2.ZERO, Rect2(-0.27, -0.85, 0.54, 0.91))
 		w.head = _cell(func(ci): Figures.mamuthone_head(ci, _hf, mask if mine.call() else _npc_mask(w), straps if mine.call() else "natural", detail), Vector2.ZERO, Rect2(-0.17, -1.0, 0.34, 0.22))
-	w.root.add_child(w.back)
+	w.root.add_child(w.pivot)
+	w.pivot.add_child(w.back)
 	w.root.add_child(w.body)
 	w.root.add_child(w.head)
 	return w
@@ -429,13 +452,31 @@ func _layout(rebake := true) -> void:
 	(_fog_near.material as ShaderMaterial).set_shader_parameter("rise", 0.2)
 	(_fog_near.material as ShaderMaterial).set_shader_parameter("lines", 7.0)
 	(_fog_far.material as ShaderMaterial).set_shader_parameter("lines", 16.0)
+	_row = StopBackdrops.row(stop)
+	var rs: float = _row.scale
+	var shade: Color = _row.shade
+	var fl := -1.0 if _row.flip else 1.0
 	for w in _walkers:
-		# Real people differ a little in height; the back line is further away.
-		var s := (1.0 if w.line == 0 else 0.84) * (1.0 + (WoodcutDraw.hash01(w.line * 10 + w.slot, 23) - 0.5) * (0.0 if w.is_player else 0.07))
-		w.root.scale = Vector2(s, s)
-		w.body.modulate = Color.WHITE if w.line == 0 else Color(0.78, 0.76, 0.74)
-		w.back.modulate = w.body.modulate
-		w.head.modulate = w.body.modulate
+		# Real people differ a little in height (and differently at every stop); the back line is further away.
+		var vary := (WoodcutDraw.hash01(w.line * 10 + w.slot, 23 + stop) - 0.5) * (0.0 if w.is_player else 0.08)
+		w.sc = rs * (1.0 if w.line == 0 else 0.84 - float(_row.depth) * 0.6) * (1.0 + vary)
+		w.flip = fl
+		w.root.visible = _walker_shown(w)
+		var c := (Color.WHITE if w.line == 0 else Color(0.78, 0.76, 0.74)) * shade
+		c.a = 1.0
+		w.body.modulate = c
+		w.back.modulate = c
+		w.head.modulate = c
+		w.pivot.position = Vector2(0, -_hf * 0.8)
+		w.back.position = Vector2(0, _hf * 0.8)
+		if w.is_isso and w.line == 0 and _row.has("isso_at"):
+			w.sc = float(_row.isso_at[2])
+		w.root.scale = Vector2(w.sc * fl, w.sc)
+	_onlooker.visible = _row.has("onlooker")
+	if _onlooker.visible:
+		var ol: Array = _row.onlooker
+		_onlooker.position = Vector2(_w * float(ol[0]), _g + float(ol[1]))
+		_onlooker.scale = Vector2(-float(ol[2]), float(ol[2]))
 	_place_row(true)
 	_arm.position = Vector2(14.5, -77.0) * _hf * 0.93 / 100.0
 	for n in [_glow, _frame]:
@@ -451,14 +492,38 @@ func _layout(rebake := true) -> void:
 			n.queue_redraw()
 
 
+## Which figures this stop's staging shows. Your Mamuthone (front slot 1) always walks.
+func _walker_shown(w: _Walker) -> bool:
+	if w.is_player:
+		return true
+	if w.is_isso:
+		var n: int = _row.get("isso", 2)
+		return n >= 2 or (n == 1 and w.line == 0)
+	if w.line == 0:
+		var n: int = _row.get("front", FRONT)
+		return n >= 3 or (n == 2 and w.slot == 0)
+	return w.slot < int(_row.get("back", BACK))
+
+
+## Row spacing for the current unison and staging.
+func _spacing() -> float:
+	var tight := float(unison) / 5.0
+	return lerpf(_hf * 0.56, _hf * 0.4, tight) * float(_row.get("scale", 1.0)) * float(_row.get("spread", 1.0))
+
+
 ## Row positions for the current unison: the row closes up as unison rises.
 func _place_row(snap: bool) -> void:
 	if not _built:
 		return
+	if _row.is_empty():
+		_row = StopBackdrops.row(stop)
 	var tight := float(unison) / 5.0
-	var spacing := lerpf(_hf * 0.56, _hf * 0.4, tight)
+	var spacing := _spacing()
 	var row_w := spacing * float(FRONT - 1)
-	var x0 := _w * 0.38 - row_w * 0.5
+	var cx := _w * float(_row.x)
+	var x0 := cx - row_w * 0.5
+	var fl := -1.0 if _row.flip else 1.0
+	var ground: float = _g + float(_row.ground)
 	for w in _walkers:
 		var x: float
 		if w.is_isso:
@@ -470,10 +535,15 @@ func _place_row(snap: bool) -> void:
 		# Out-of-step Mamuthones straggle a little at low unison.
 		if not w.is_player and not w.is_isso:
 			x += (w.scatter - 0.5) * spacing * 0.3 * (1.0 - tight)
+		x = cx + (x - cx) * fl
+		w.base_y = ground if w.line == 0 else ground - _hf * float(_row.depth)
+		if w.is_isso and w.line == 0 and _row.has("isso_at"):
+			x = _w * float(_row.isso_at[0])
+			w.base_y = _g + float(_row.isso_at[1])
 		w.target_x = x
 		if snap:
 			w.x = x
-	_ghost_x = _player.target_x - spacing * 0.5 if snap else _ghost_x
+	_ghost_x = _player.target_x - spacing * 0.5 * fl if snap else _ghost_x
 
 
 # ------------------------------------------------------------------ per frame
@@ -508,6 +578,8 @@ func _process(delta: float) -> void:
 				w.vy -= float(p[1]) * 26.0
 				w.vhy -= float(p[1]) * 10.0
 				w.vbell += float(p[2]) * float(p[1]) * 0.09 + float(p[1]) * 0.02
+				if absf(float(p[2])) > 0.0:
+					w.ring = maxf(w.ring, clampf(float(p[1]) / 12.0, 0.3, 1.0))
 				w.pending.remove_at(i)
 			else:
 				i += 1
@@ -527,24 +599,25 @@ func _process(delta: float) -> void:
 			var ph := w.phase * (1.0 - together)
 			sway = sin(_t * 2.2 + ph) * 1.3
 			lean = sin(_t * 1.1 + ph) * 0.012
-		var base_y := _g if w.line == 0 else _g - _hf * 0.09
-		w.root.position = Vector2(w.x, base_y + w.y + sway)
-		w.root.rotation = lean + w.rot * 0.1
+		w.root.position = Vector2(w.x, w.base_y + w.y + sway)
+		w.root.rotation = (lean + w.rot * 0.35) * w.flip
 		w.head.position = Vector2(0, w.hy - w.y * 0.2)
-		w.back.rotation = clampf(w.bell * 0.12, -0.12, 0.12)
-		w.back.position = Vector2(0, -_hf * 0.6 * (1.0 - cos(w.back.rotation)))
+		w.pivot.rotation = clampf(w.bell * 0.9, -0.16, 0.16)
+		w.ring = maxf(0.0, w.ring - delta * 2.6)
 	# Player feedback on a miss: the stumble plus a brief red cast.
 	if _miss_flash > 0.0:
 		_miss_flash = maxf(0.0, _miss_flash - delta * 2.5)
 		var c := Color(1.0, 1.0 - 0.35 * _miss_flash, 1.0 - 0.4 * _miss_flash)
-		_player.body.modulate = c
-		_player.head.modulate = c
+		_player.body.modulate = c * _row.get("shade", Color.WHITE)
+		_player.head.modulate = _player.body.modulate
 	# Ghost drifts to where it would be.
 	if ghost_visible:
-		var spacing := lerpf(_hf * 0.56, _hf * 0.4, together)
-		var gx := _player.x - spacing * 0.5 + clampf(ghost_delta * 90.0, -spacing * 0.6, spacing * 0.9)
+		var spacing := _spacing()
+		var fl := _player.flip
+		var gx := _player.x + (-spacing * 0.5 + clampf(ghost_delta * 90.0, -spacing * 0.6, spacing * 0.9)) * fl
 		_ghost_x = lerpf(_ghost_x, gx, minf(1.0, delta * 4.0))
-		_ghost.position = Vector2(_ghost_x, _g - _hf * 0.045 + sin(_t * 2.2) * (0.0 if reduced_motion or still else 1.0))
+		_ghost.position = Vector2(_ghost_x, _player.base_y - _hf * 0.045 * _player.sc + sin(_t * 2.2) * (0.0 if reduced_motion or still else 1.0))
+		_ghost.scale = Vector2(_player.sc * fl, _player.sc)
 	# Firelight flicker.
 	if not reduced_motion:
 		_glow.modulate.a = 0.86 + 0.1 * sin(_t * 9.0) * sin(_t * 5.3 + 1.0) + 0.04 * sin(_t * 23.0)
@@ -563,6 +636,11 @@ func _process(delta: float) -> void:
 		_rope.queue_redraw()
 	if StopBackdrops.info(stop).sparks and not reduced_motion:
 		_sparks.queue_redraw()
+	if _stumble_t >= 0.0:
+		_stumble_t += delta
+		if _stumble_t > 0.6:
+			_stumble_t = -1.0
+	_motion.queue_redraw()
 	last_process_usec = Time.get_ticks_usec() - t0
 
 
@@ -724,10 +802,16 @@ func _paint_rope(ci: CanvasItem) -> void:
 	var out := sin(clampf((u - 0.15) / 0.8, 0.0, 1.0) * PI)
 	if out <= 0.01:
 		return
+	if not isso.root.visible:
+		return
 	WoodcutDraw.begin(ci)
-	var shoulder := isso.root.position + (_arm.position).rotated(isso.body.rotation)
-	var hand := shoulder + Figures.issohadore_hand(_hf * 0.93, _arm.rotation)
-	var target := Vector2(minf(_w - 30.0, hand.x + _hf * 0.75), _g - _hf * 0.95)
+	# The hand in world space, through the figure's own transform (it may be scaled or walking left).
+	var arm_xf := _world.global_transform.affine_inverse() * _arm.global_transform
+	var hand := arm_xf * (Vector2(1, 26) * _hf * 0.93 / 100.0)
+	var target := Vector2(clampf(hand.x + _hf * 0.75 * isso.flip * isso.sc, 30.0, _w - 30.0), isso.base_y - _hf * 0.95 * isso.sc)
+	if _onlooker.visible:
+		# The rope goes for the onlooker's shoulders.
+		target = _onlooker.position + Vector2(0, -_hf * 0.62 * absf(_onlooker.scale.y))
 	var tip := hand.lerp(target, out)
 	var mid := (hand + tip) * 0.5 + Vector2(0, -60.0 * out + 30.0 * (1.0 - out))
 	var pts := WoodcutDraw.quad(hand, mid, tip, 14)
@@ -738,10 +822,76 @@ func _paint_rope(ci: CanvasItem) -> void:
 		var d := (pts[i + 1] - pts[i - 1]).normalized().orthogonal() * 2.0
 		WoodcutDraw.line(ci, pts[i] - d, pts[i] + d + (pts[i + 1] - pts[i]) * 0.5, Palette.ROPE_DARK, 1.4)
 	# The noose at the end.
-	var loop := WoodcutDraw.ellipse(tip + Vector2(0, 8), Vector2(9, 12), 14, 0.4)
+	var loop := WoodcutDraw.ellipse(tip + Vector2(0, 8), Vector2(12, 9) if _onlooker.visible else Vector2(9, 12), 14, 0.4)
 	loop.append(loop[0])
 	WoodcutDraw.stroke(ci, loop, Palette.INK, 4.4, 4.4)
 	WoodcutDraw.stroke(ci, loop, Palette.ROPE, 3.0, 3.0)
+	WoodcutDraw.end()
+
+
+## Motion lines: when a Mamuthone's bells ring, carved swing strokes flick out at both sides of his
+## load. At low unison they come ragged, one figure after another and of different strengths; from
+## unison 4 the row rings on one instant and a single shared swing line runs along all the loads,
+## so the state of the row reads at a glance. Also the scuff of dust when you stumble.
+func _paint_motion(ci: CanvasItem) -> void:
+	WoodcutDraw.begin(ci)
+	var day: bool = StopBackdrops.info(stop).sky == "day"
+	var ink := Palette.INK if day else Palette.BONE
+	var accent := Palette.RED_DEEP if day else Palette.EMBER
+	var u := _hf / 100.0
+	var tops := PackedVector2Array()
+	var ring_sum := 0.0
+	var ringing := 0
+	for w in _walkers:
+		if w.is_isso or not w.root.visible:
+			continue
+		var xf := w.root.transform * w.pivot.transform * w.back.transform
+		if w.line == 0:
+			tops.append(xf * (Vector2(0, -84) * u))
+			ring_sum += w.ring
+			if w.ring > 0.3:
+				ringing += 1
+		if w.ring <= 0.03 or reduced_motion:
+			continue
+		var dir := signf(w.vbell) if absf(w.vbell) > 0.05 else 1.0
+		for side in [-1.0, 1.0]:
+			for k in 2:
+				var off: float = 35.0 + 4.0 * float(k)
+				var arc := PackedVector2Array()
+				for j in 5:
+					var t := float(j) / 4.0
+					var yy := lerpf(-66.0, -40.0, t) + float(k) * 2.0
+					arc.append(xf * (Vector2(side * (off + sin(t * PI) * 3.0), yy + dir * sin(t * PI) * 2.0) * u))
+				var a := w.ring * (0.85 - 0.3 * float(k)) * (1.0 if w.line == 0 else 0.6)
+				WoodcutDraw.stroke(ci, arc, Color(ink if k == 0 else accent, a), 0.2 * u * w.sc, 0.2 * u * w.sc, 1.3 * u * w.sc)
+	# The shared swing: one line through every front load, only when the row rings together.
+	if unison >= 4 and ringing >= 2 and tops.size() >= 2 and not reduced_motion:
+		var sorted_tops := Array(tops)
+		sorted_tops.sort_custom(func(p, q): return p.x < q.x)
+		var a := clampf(ring_sum / float(tops.size()), 0.0, 1.0) * (0.55 if unison == 4 else 0.95)
+		var line := PackedVector2Array()
+		var first: Vector2 = sorted_tops[0]
+		var last: Vector2 = sorted_tops[sorted_tops.size() - 1]
+		line.append(first + Vector2(-_hf * 0.22, _hf * 0.04))
+		for p in sorted_tops:
+			line.append(p + Vector2(0, -_hf * 0.05))
+		line.append(last + Vector2(_hf * 0.22, _hf * 0.04))
+		var smooth := WoodcutDraw.smooth_open(line, 6)
+		WoodcutDraw.stroke(ci, smooth, Color(accent, a), 1.0, 1.0, 5.0)
+		var upper := smooth.duplicate()
+		for i in upper.size():
+			upper[i] += Vector2(0, -7.0)
+		WoodcutDraw.stroke(ci, upper, Color(ink, a * 0.8), 0.6, 0.6, 2.4)
+	# Dust scuffed up by a stumble.
+	if _stumble_t >= 0.0 and _player.root.visible:
+		var t := _stumble_t / 0.6
+		var feet := _player.root.position + Vector2(_player.flip * _hf * 0.06, 0)
+		for i in 7:
+			var ang := lerpf(-PI + 0.25, -0.25, float(i) / 6.0)
+			var d := Vector2.from_angle(ang) * Vector2(1.0, 0.45)
+			var r0 := _hf * (0.05 + 0.12 * t)
+			var r1 := r0 + _hf * (0.05 + 0.04 * WoodcutDraw.hash01(i, 71))
+			WoodcutDraw.stroke(ci, PackedVector2Array([feet + d * r0, feet + d * r1]), Color(Palette.ASH if not day else Palette.INK, 0.8 * (1.0 - t)), 3.0, 0.5)
 	WoodcutDraw.end()
 
 
