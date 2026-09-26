@@ -88,6 +88,7 @@ var _ghost_x := 0.0
 var _motion: _Paint
 var _onlooker: _Paint
 var _stumble_t := -1.0
+var _motion_drawn := false
 var _row := {}
 var _fire_mat: ShaderMaterial
 var _fog_mats: Array[ShaderMaterial] = []
@@ -201,8 +202,8 @@ func jolt(kind := "step") -> void:
 		# Your Mamuthone stumbles: pitches forward and down, drops back a step, the head lolls, a scuff
 		# of dust at the feet; then the springs bring him back into the row.
 		var k := 0.35 if reduced_motion else 1.0
-		_player.vrot += 5.5 * k
-		_player.vy += 140.0 * k
+		_player.vrot += 9.0 * k
+		_player.vy += 220.0 * k
 		_player.vhy += 160.0 * k
 		_player.x -= _spacing() * 0.16 * k * _player.flip
 		_player.vbell -= 1.2 * k
@@ -640,7 +641,15 @@ func _process(delta: float) -> void:
 		_stumble_t += delta
 		if _stumble_t > 0.6:
 			_stumble_t = -1.0
-	_motion.queue_redraw()
+	# Motion marks only while something rings or stumbles (and once more to clear them).
+	var moving := _stumble_t >= 0.0
+	for w in _walkers:
+		if w.ring > 0.0:
+			moving = true
+			break
+	if moving or _motion_drawn:
+		_motion.queue_redraw()
+	_motion_drawn = moving
 	last_process_usec = Time.get_ticks_usec() - t0
 
 
@@ -847,23 +856,23 @@ func _paint_motion(ci: CanvasItem) -> void:
 			continue
 		var xf := w.root.transform * w.pivot.transform * w.back.transform
 		if w.line == 0:
-			tops.append(xf * (Vector2(0, -84) * u))
+			tops.append(w.root.transform * (Vector2(0, -106) * u))
 			ring_sum += w.ring
 			if w.ring > 0.3:
 				ringing += 1
 		if w.ring <= 0.03 or reduced_motion:
 			continue
+		# Swing ticks at the top corners of the load, curving the way the bells swing.
 		var dir := signf(w.vbell) if absf(w.vbell) > 0.05 else 1.0
 		for side in [-1.0, 1.0]:
-			for k in 2:
-				var off: float = 35.0 + 4.0 * float(k)
+			for k in 3:
+				var r := 30.0 + 5.0 * float(k)
 				var arc := PackedVector2Array()
 				for j in 5:
-					var t := float(j) / 4.0
-					var yy := lerpf(-66.0, -40.0, t) + float(k) * 2.0
-					arc.append(xf * (Vector2(side * (off + sin(t * PI) * 3.0), yy + dir * sin(t * PI) * 2.0) * u))
-				var a := w.ring * (0.85 - 0.3 * float(k)) * (1.0 if w.line == 0 else 0.6)
-				WoodcutDraw.stroke(ci, arc, Color(ink if k == 0 else accent, a), 0.2 * u * w.sc, 0.2 * u * w.sc, 1.3 * u * w.sc)
+					var ang := lerpf(-0.35, 0.35, float(j) / 4.0) + dir * 0.12
+					arc.append(xf * ((Vector2(0, -60) + Vector2(side * cos(ang - 0.95) * r, sin(ang - 0.95) * r)) * u))
+				var a := w.ring * (0.95 - 0.25 * float(k)) * (1.0 if w.line == 0 else 0.55)
+				WoodcutDraw.stroke(ci, arc, Color(ink if k != 1 else accent, a), 0.2 * u, 0.2 * u, (1.5 - 0.3 * float(k)) * u)
 	# The shared swing: one line through every front load, only when the row rings together.
 	if unison >= 4 and ringing >= 2 and tops.size() >= 2 and not reduced_motion:
 		var sorted_tops := Array(tops)
@@ -872,26 +881,32 @@ func _paint_motion(ci: CanvasItem) -> void:
 		var line := PackedVector2Array()
 		var first: Vector2 = sorted_tops[0]
 		var last: Vector2 = sorted_tops[sorted_tops.size() - 1]
-		line.append(first + Vector2(-_hf * 0.22, _hf * 0.04))
-		for p in sorted_tops:
-			line.append(p + Vector2(0, -_hf * 0.05))
-		line.append(last + Vector2(_hf * 0.22, _hf * 0.04))
+		# Arcs over the heads, one per gap, joined: the row's bells swinging as one.
+		line.append(first + Vector2(-_hf * 0.2, _hf * 0.1))
+		for i in sorted_tops.size():
+			var p: Vector2 = sorted_tops[i]
+			line.append(p)
+			if i + 1 < sorted_tops.size():
+				var q: Vector2 = sorted_tops[i + 1]
+				line.append((p + q) * 0.5 + Vector2(0, -_hf * 0.07))
+		line.append(last + Vector2(_hf * 0.2, _hf * 0.1))
 		var smooth := WoodcutDraw.smooth_open(line, 6)
-		WoodcutDraw.stroke(ci, smooth, Color(accent, a), 1.0, 1.0, 5.0)
-		var upper := smooth.duplicate()
-		for i in upper.size():
-			upper[i] += Vector2(0, -7.0)
-		WoodcutDraw.stroke(ci, upper, Color(ink, a * 0.8), 0.6, 0.6, 2.4)
+		for k in 3:
+			var band := smooth.duplicate()
+			for i in band.size():
+				band[i] += Vector2(0, -7.0 * float(k))
+			WoodcutDraw.stroke(ci, band, Color(accent if k == 0 else ink, a * (1.0 - 0.28 * float(k))), 0.5, 0.5, 3.6 - float(k))
 	# Dust scuffed up by a stumble.
 	if _stumble_t >= 0.0 and _player.root.visible:
 		var t := _stumble_t / 0.6
 		var feet := _player.root.position + Vector2(_player.flip * _hf * 0.06, 0)
-		for i in 7:
-			var ang := lerpf(-PI + 0.25, -0.25, float(i) / 6.0)
-			var d := Vector2.from_angle(ang) * Vector2(1.0, 0.45)
-			var r0 := _hf * (0.05 + 0.12 * t)
-			var r1 := r0 + _hf * (0.05 + 0.04 * WoodcutDraw.hash01(i, 71))
-			WoodcutDraw.stroke(ci, PackedVector2Array([feet + d * r0, feet + d * r1]), Color(Palette.ASH if not day else Palette.INK, 0.8 * (1.0 - t)), 3.0, 0.5)
+		for i in 9:
+			var ang := lerpf(-PI + 0.2, -0.2, float(i) / 8.0)
+			var d := Vector2.from_angle(ang) * Vector2(1.0, 0.5)
+			var r0 := _hf * (0.08 + 0.16 * t)
+			var r1 := r0 + _hf * (0.07 + 0.06 * WoodcutDraw.hash01(i, 71))
+			var col := Palette.INK if day else Palette.BONE_DIM
+			WoodcutDraw.stroke(ci, PackedVector2Array([feet + d * r0, feet + d * r1]), Color(col, 0.9 * (1.0 - t)), 5.0, 0.8)
 	WoodcutDraw.end()
 
 

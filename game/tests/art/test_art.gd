@@ -246,6 +246,80 @@ func test_procession_api() -> void:
 	scene.queue_free()
 
 
+func test_procession_staging_and_feedback() -> void:
+	var scene := ProcessionScene.new()
+	scene.size = Vector2(720, 480)
+	tree.root.add_child(scene)
+	await _frames(3)
+	# Every stop stages the row differently (who is there, where, how big, which way).
+	var seen := {}
+	for n in range(1, StopBackdrops.COUNT + 1):
+		scene.set_stop(n)
+		await _frames(1)
+		var sig := []
+		for w in scene._walkers:
+			sig.append([w.root.visible, snappedf(w.target_x, 1.0), snappedf(w.base_y, 1.0), snappedf(w.sc, 0.01), w.flip])
+		var key := str(sig)
+		check(not seen.has(key), "stop %d has its own staging" % n)
+		seen[key] = n
+		check(scene._player.root.visible, "your Mamuthone walks at stop %d" % n)
+	check(StopBackdrops.row(1).front == 1 and StopBackdrops.row(1).isso == 0, "the Workshop shows your Mamuthone alone")
+	check(StopBackdrops.row(5).has("onlooker"), "the Rope has someone for the rope to catch")
+	# A miss makes your Mamuthone visibly stumble: pitched over and dropped, then recovering.
+	scene.set_stop(4)
+	await _frames(20)
+	var r0: float = absf(scene._player.root.rotation)
+	var y0: float = scene._player.root.position.y
+	scene.jolt("miss")
+	check(scene._stumble_t >= 0.0, "a miss scuffs up dust")
+	# Sample the stumble over its first 0.3 s of game time (headless frames can be very short).
+	var max_rot := 0.0
+	var max_drop := 0.0
+	var t_end := Time.get_ticks_msec() + 300
+	while Time.get_ticks_msec() < t_end:
+		await tree.process_frame
+		max_rot = maxf(max_rot, absf(scene._player.root.rotation))
+		max_drop = maxf(max_drop, scene._player.root.position.y - y0)
+	check(max_rot > r0 + 0.1, "a miss pitches your Mamuthone over (%.2f rad)" % max_rot)
+	check(max_drop > 3.0, "and drops him (%.1f px)" % max_drop)
+	await tree.create_timer(1.5).timeout
+	check(absf(scene._player.root.rotation) < 0.05, "then he recovers")
+	# Bells ring: motion is shown per Mamuthone; at full unison every front Mamuthone rings at once.
+	scene.set_unison(5)
+	scene.jolt("bell")
+	await tree.create_timer(0.03).timeout
+	var ringing := 0
+	var front := 0
+	for w in scene._walkers:
+		if w.line == 0 and not w.is_isso and w.root.visible:
+			front += 1
+			if w.ring > 0.3:
+				ringing += 1
+	check(ringing == front and front >= 2, "full unison: the whole front line rings together (%d of %d)" % [ringing, front])
+	# Resizes re-render the baked textures once, after the size settles (not on every step).
+	var before := scene.bake_count
+	for i in 6:
+		scene.size = Vector2(720 + i * 20, 480)
+		await tree.process_frame
+	check(scene.bake_count == before, "no re-render while resizing")
+	await tree.create_timer(ProcessionScene.REBAKE_DELAY + 0.2).timeout
+	await _frames(2)
+	check(scene.bake_count == before + 1, "one re-render once the size settles (%d)" % (scene.bake_count - before))
+	# The ghost is off until the game asks for it (cards and store shots have none).
+	check(not scene._ghost.visible, "no ghost by default")
+	scene.queue_free()
+
+
+func test_rope_is_natural_fibre() -> void:
+	check(Palette.ROPE != Palette.RED and Palette.ROPE.s < 0.5, "the soha is drawn as natural rush or hemp, not red")
+	var src := FileAccess.get_file_as_string("res://scripts/art/figures.gd") + FileAccess.get_file_as_string("res://scripts/art/procession_scene.gd")
+	var rope_lines := 0
+	for line in src.split("\n"):
+		if ("loop" in line or "rope" in line.to_lower()) and "Palette.RED," in line:
+			rope_lines += 1
+	check_eq(rope_lines, 0, "no rope drawn in red in the scene or the figures")
+
+
 func _row_width(scene: ProcessionScene) -> float:
 	var lo := INF
 	var hi := -INF

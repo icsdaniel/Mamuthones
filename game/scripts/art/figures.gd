@@ -55,11 +55,17 @@ static func cowbell(ci: CanvasItem, c: Vector2, w: float, rot: float, lit: Color
 		Vector2(-0.52, 0.36), Vector2(-0.44, -0.1)])
 	var pts := xf * (Transform2D(0.0, Vector2(w, w), 0.0, Vector2.ZERO) * body)
 	WoodcutDraw.fill(ci, pts, BELL_DARK)
+	if detail > 0:
+		# Hammered iron: a dark shadow plane on the far side and an ink edge, so each bell reads as a
+		# solid shape on dark fleece and on pale streets alike.
+		var far := PackedVector2Array([Vector2(0.08, -0.62), Vector2(0.3, -0.62), Vector2(0.44, -0.1), Vector2(0.52, 0.36), Vector2(0.14, 0.36), Vector2(0.12, -0.1)])
+		WoodcutDraw.fill(ci, xf * (Transform2D(0.0, Vector2(w, w), 0.0, Vector2.ZERO) * far), Color(Palette.INK, 0.45))
+		WoodcutDraw.outline(ci, pts, Palette.INK, maxf(1.0, w * 0.06), 3)
 	# Mouth.
 	WoodcutDraw.fill(ci, xf * WoodcutDraw.ellipse(Vector2(0, 0.36 * w), Vector2(0.5 * w, 0.12 * w), 10), Palette.INK)
 	# Lit edge and a band across the shoulder of the bell.
 	var edge := PackedVector2Array([Vector2(-0.28, -0.56), Vector2(-0.42, -0.1), Vector2(-0.48, 0.3)])
-	WoodcutDraw.stroke(ci, xf * (Transform2D(0.0, Vector2(w, w), 0.0, Vector2.ZERO) * edge), Color(lit, 0.85), w * 0.03, w * 0.05, w * 0.14)
+	WoodcutDraw.stroke(ci, xf * (Transform2D(0.0, Vector2(w, w), 0.0, Vector2.ZERO) * edge), Color(lit, 0.9), w * 0.04, w * 0.07, w * 0.2)
 	if detail > 0:
 		WoodcutDraw.stroke(ci, xf * PackedVector2Array([Vector2(-0.4, -0.1) * w, Vector2(0.1, -0.12) * w]), Color(lit, 0.35), w * 0.02, 0.0, w * 0.07)
 		# Clapper.

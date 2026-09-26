@@ -65,13 +65,11 @@ func _centered_text(font: Font, text: String, y: float, fs: int, color: Color) -
 static func paint(ci: CanvasItem, c: Vector2, r: float, small := false) -> void:
 	WoodcutDraw.begin(ci)
 	# The firelit disc: ember with radiating gouges, rimmed in ink.
-	var disc := WoodcutDraw.rough(WoodcutDraw.ellipse(c, Vector2(r * 0.9, r * 0.9), 64), r * 0.008, 5, r * 0.05)
+	var disc := WoodcutDraw.rough(WoodcutDraw.ellipse(c, Vector2(r * 0.92, r * 0.92), 64), r * 0.01, 5, r * 0.05)
 	WoodcutDraw.fill(ci, disc, Palette.EMBER)
-	if not small:
-		WoodcutDraw.fill(ci, disc, Color(Palette.RED_DEEP, 0.35), Palette.tex("grain"), 1.0 / (r * 1.6))
-	WoodcutDraw.rays(ci, c + Vector2(0, -r * 0.05), r * 0.5, r * 0.9, 40 if not small else 18, Color(Palette.EMBER_HOT, 0.9), r * (0.03 if not small else 0.05), 11)
-	WoodcutDraw.glow(ci, c + Vector2(0, -r * 0.05), r * 0.8, Color(Palette.EMBER_HOT, 0.6))
-	WoodcutDraw.outline(ci, disc, Palette.INK, r * 0.05, 3)
+	WoodcutDraw.glow(ci, c + Vector2(0, -r * 0.05), r * 0.75, Color(Palette.EMBER_HOT, 0.7))
+	_gouges(ci, c, r, small)
+	WoodcutDraw.outline(ci, disc, Palette.INK, r * (0.07 if small else 0.055), 3)
 	# Bells hanging below, either side of the chin.
 	Figures.cowbell(ci, c + Vector2(-r * 0.46, r * 0.5), r * 0.3, 0.45, Palette.EMBER_HOT, 0 if small else 1)
 	Figures.cowbell(ci, c + Vector2(r * 0.46, r * 0.5), r * 0.3, -0.45, Palette.EMBER_HOT, 0 if small else 1)
@@ -90,6 +88,28 @@ static func paint(ci: CanvasItem, c: Vector2, r: float, small := false) -> void:
 	var tail := PackedVector2Array([end, end + Vector2(r * 0.05, r * 0.14), end + Vector2(r * 0.02, r * 0.3)])
 	_rope(ci, WoodcutDraw.smooth_open(tail, 4), r, small)
 	WoodcutDraw.end()
+
+
+## Hand-cut radial gouges in the firelit disc: V-shaped wedges of uneven length and width cut from
+## the rim toward the mask, each dark in its trough with a bright chip along its lit edge.
+static func _gouges(ci: CanvasItem, c: Vector2, r: float, small: bool) -> void:
+	var n := 14 if small else 34
+	for i in n:
+		var a := TAU * (float(i) + 0.35 * (WoodcutDraw.hash01(i, 61) - 0.5)) / float(n) - PI * 0.5
+		var r_out := r * (0.87 - 0.03 * WoodcutDraw.hash01(i, 62))
+		var r_in := r * lerpf(0.5, 0.66, WoodcutDraw.hash01(i, 63))
+		var half := (PI / float(n)) * lerpf(0.34, 0.5, WoodcutDraw.hash01(i, 64)) * (1.7 if small else 1.0)
+		var bend := (WoodcutDraw.hash01(i, 65) - 0.5) * 0.08
+		var tip := c + Vector2.from_angle(a + bend) * r_in
+		var o1 := c + Vector2.from_angle(a - half) * r_out
+		var o2 := c + Vector2.from_angle(a + half) * r_out
+		var mid := c + Vector2.from_angle(a + bend * 0.5) * lerpf(r_in, r_out, 0.5)
+		var m1 := mid + Vector2.from_angle(a - PI * 0.5) * (o1.distance_to(o2) * 0.28)
+		var m2 := mid + Vector2.from_angle(a + PI * 0.5) * (o1.distance_to(o2) * 0.28)
+		WoodcutDraw.fill(ci, PackedVector2Array([tip, m1, o1, o2, m2]), Color(Palette.RED_DEEP, 0.92))
+		if not small:
+			# The lit wall of the cut: a thin bright chip along one side.
+			WoodcutDraw.stroke(ci, PackedVector2Array([tip.lerp(o2, 0.15), m2, o2]), Color(Palette.EMBER_HOT, 0.9), r * 0.004, r * 0.012, r * 0.014)
 
 
 ## A loop round the mask: starts at the lower left, passes behind the head, comes round in front of

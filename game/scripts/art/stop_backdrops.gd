@@ -69,7 +69,7 @@ static func row(stop: int) -> Dictionary:
 	match clampi(stop, 1, COUNT):
 		1:
 			# The night before: your Mamuthone alone, dressed and ready by the hearth.
-			r.merge({"x": 0.6, "front": 1, "back": 0, "isso": 0, "scale": 1.04}, true)
+			r.merge({"x": 0.555, "front": 1, "back": 0, "isso": 0, "scale": 1.04}, true)
 		2:
 			pass
 		3:
@@ -77,7 +77,7 @@ static func row(stop: int) -> Dictionary:
 			r.merge({"x": 0.5, "front": 2, "back": 3, "isso": 1, "scale": 0.9, "ground": -6.0, "depth": 0.2, "flip": true}, true)
 		4:
 			# Carnival Sunday: the whole procession filling the street.
-			r.merge({"x": 0.44, "scale": 0.86, "ground": -8.0, "depth": 0.13, "spread": 0.92}, true)
+			r.merge({"x": 0.56, "scale": 0.9, "ground": -4.0, "depth": 0.18, "spread": 0.9}, true)
 		5:
 			# The Rope: the row is further up the lane; the Issohadore works the crowd right in front.
 			r.merge({"x": 0.3, "front": 2, "back": 2, "isso": 2, "scale": 0.7, "ground": -52.0, "depth": 0.1,

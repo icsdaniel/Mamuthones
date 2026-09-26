@@ -106,7 +106,8 @@ func _card(n: int) -> void:
 	for i in 8:
 		await process_frame
 	scene.set_unison(4)
-	scene.jolt("bell")
+	# A step, not a bell: the row mid-stride, without the in-game ring marks (a still print).
+	scene.jolt("step")
 	if n == 5:
 		scene.throw_rope()
 	for i in (14 if n == 5 else 5):
