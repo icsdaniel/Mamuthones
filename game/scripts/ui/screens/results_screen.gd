@@ -119,9 +119,11 @@ func _breakdown(box: Container) -> void:
 		"+" + UIKit.fmt_score(roundi(float(b.get("weight", 0.0)))), "Weight")
 	if float(b.get("holds", 0.0)) > 0.0:
 		_row(grid, tr("res_holds"), "+" + UIKit.fmt_score(roundi(float(b.holds))), "Holds")
-	if float(b.get("penalties", 0.0)) != 0.0 or int(st.get("rests", 0)) > 0:
+	if int(st.get("rests", 0)) > 0:
+		# Keeping still is scored both ways: a bonus for every stand-still kept, a cost for ringing in one.
+		var net := float(b.get("stills", 0.0)) - absf(float(b.get("penalties", 0.0)))
 		_row(grid, tr("res_still") % [int(st.get("still_kept", 0)), int(st.get("rests", 0))],
-			"−" + UIKit.fmt_score(roundi(absf(float(b.get("penalties", 0.0))))), "Still")
+			("+" if net >= 0.0 else "−") + UIKit.fmt_score(roundi(absf(net))), "Still")
 	c.add_child(UIKit.label(tr("res_formula"), UIKit.CAPTION))
 	UIKit.pop_in(c, 0.5)
 

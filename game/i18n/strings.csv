@@ -181,7 +181,6 @@ cred_fonts,"IM Fell English SC by Igino Marini and Alegreya Sans by the Alegreya
 cred_engine_h,Engine,Motore
 cred_engine,Made with Godot Engine (MIT licence).,Realizzato con Godot Engine (licenza MIT).
 cred_privacy,No data is collected. Scores and settings stay on this phone.,Nessun dato viene raccolto. Punteggi e impostazioni restano su questo telefono.
-play_demo,Demo,Dimostrazione
 play_pause,Pause,Pausa
 hud_unison,Unison %s,Unisono %s
 hud_unison_hint,Keep the row together,Tieni unita la fila
@@ -215,6 +214,21 @@ section_together,Together,Insieme
 section_break,Break,Stacco
 section_finale,Finale,Gran finale
 section_lessons,Lessons,Lezioni
+section_dance,Dance,Ballo
+section_turn,Turn,Giro
+section_procession,Procession,Processione
+section_song,Song,Canto
+section_halt,Halt,Sosta
+section_tune,Tune,Melodia
+section_chant,Chant,Coro
+section_throws,Throws,Lanci
+section_answer,Answer,Risposta
+section_round,Round,Giro
+section_theme,Theme,Tema
+section_walk,Walk,Cammino
+section_lilt,Lilt,Cadenza
+section_rope,Rope,Soha
+section_final,Last walk,Ultimo giro
 grade_0,The Issohadores are waiting for you,Gli Issohadores ti stanno aspettando
 grade_1,You found the step,Hai trovato il passo
 grade_2,You walked with the row,Hai camminato con la fila
@@ -227,7 +241,7 @@ res_base,Notes,Note
 res_unison,Unison (up to %s),Unisono (fino a %s)
 res_weight,Weight: %s bells %s,Peso: campanacci %s %s
 res_holds,Holds kept to the end,Note lunghe tenute fino in fondo
-res_still,Stand-stills kept: %d of %d,Soste rispettate: %d su %d
+res_still,Stillness: %d of %d stand-stills kept,Immobilità: %d soste rispettate su %d
 res_formula,Every note × unison × weight. Long steady streaks and heavier bells are the way to a big score.,Ogni nota × unisono × peso. Serie lunghe e regolari e campanacci più pesanti sono la strada per un grande punteggio.
 res_timing,Your timing,Il tuo tempo
 res_on_time,Right on the beat.,Proprio sul battito.

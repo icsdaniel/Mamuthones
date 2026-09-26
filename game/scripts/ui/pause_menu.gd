@@ -5,9 +5,13 @@ extends Control
 signal chosen(what: String)
 
 
-func _ready() -> void:
+func _init() -> void:
+	# Anchored before it enters the tree, so it fills the play screen.
 	set_anchors_preset(Control.PRESET_FULL_RECT)
 	mouse_filter = Control.MOUSE_FILTER_STOP
+
+
+func _ready() -> void:
 	var dim := ColorRect.new()
 	dim.color = Color(Palette.INK, 0.78)
 	dim.set_anchors_preset(Control.PRESET_FULL_RECT)

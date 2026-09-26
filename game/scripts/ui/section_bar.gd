@@ -42,9 +42,16 @@ func section_name(t: float) -> String:
 			name = _names[i]
 	if name == "":
 		return ""
-	var key := "section_" + name
+	if name.begins_with("lesson_"):
+		return tr("tut_%s_title" % name.substr(7))
+	# "verse2" -> "Verse 2": the base word is translated, the number kept.
+	var base := name.rstrip("0123456789")
+	var num := name.substr(base.length())
+	var key := "section_" + base
 	var out := tr(key)
-	return out if out != key else name.capitalize()
+	if out == key:
+		out = base.capitalize()
+	return out + (" " + num if num != "" else "")
 
 
 func _draw() -> void:

@@ -147,11 +147,6 @@ func build() -> void:
 		autoplay.stepped.connect(_on_stepped)
 		autoplay.rang.connect(_on_rang)
 		autoplay.swiped.connect(_on_swiped)
-		var tag := UIKit.label(tr("play_demo"), UIKit.HUD, false, HORIZONTAL_ALIGNMENT_CENTER)
-		tag.set_anchors_preset(Control.PRESET_CENTER_TOP)
-		tag.position.y = safe.y + HUD_TAG_Y
-		tag.name = "DemoTag"
-		add_child(tag)
 	router = InputRouter.new()
 	router.name = "InputRouter"
 	router.session = session
@@ -185,8 +180,6 @@ func build() -> void:
 	Sound.ambience("crowd+fire" if session.piazza else UIKit.ambience_for(song.stop))
 	resized.connect(_layout_router)
 	_start.call_deferred()
-
-const HUD_TAG_Y := 150.0
 
 
 func _start() -> void:
@@ -281,10 +274,12 @@ func _on_stepped(lane: int) -> void:
 
 
 func _on_rang(result: Dictionary) -> void:
+	# Quality is perfect, good, early, late, miss, silence or free: an early or late clank is pitched
+	# up or down by Sound, so the ear learns which way it was off.
 	var q := str(result.get("quality", "free"))
-	# An early or late clank is pitched up or down, so the ear learns which way it was off.
-	var j := str(result.get("judgement", ""))
-	Sound.bell(_bell_set, bool(result.get("up", true)), j if q == "ok" and j in ["early", "late"] else q)
+	if q == "ok" and str(result.get("side", "")) != "":
+		q = str(result.side)
+	Sound.bell(_bell_set, bool(result.get("up", true)), q)
 	scene.jolt("bell")
 	if q == "free" or q == "silence":
 		UIKit.vibrate(12)
@@ -347,6 +342,7 @@ func pause() -> void:
 		return
 	paused = true
 	conductor.pause()
+	router.release_all()
 	router.enabled = false
 	Sound.ui("tap")
 	_pause_panel = PauseMenu.new()
