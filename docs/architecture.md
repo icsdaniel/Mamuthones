@@ -5,15 +5,19 @@ Godot 4.6.2, GDScript, mobile renderer, portrait 720×1440 base size (stretch `c
 
 ## Ownership
 
-Four areas are built in parallel. Each owns its folders and nothing else; change another area's files
+Five areas are built in parallel. Each owns its folders and nothing else; change another area's files
 only by asking its owner (through the lead). `game/project.godot` belongs to the lead.
 
 | Area | Owns |
 | --- | --- |
 | Core (rules, input, saves) | `game/scripts/core/`, `game/tests/core/` |
-| Audio (music, bells, charts) | `tools/audio/`, `game/audio/`, `game/data/songs/`, `game/scripts/audio/`, `game/tests/audio/` |
+| Music (songs, remixes, charts) | `tools/audio/music/`, `tools/audio/validate_charts.py`, `game/audio/music/`, `game/data/songs/`, `game/tests/audio/test_songs*.gd` |
+| Sound (bells, effects, `Sound` autoload) | `tools/audio/sfx/`, `game/audio/sfx/`, `game/scripts/audio/`, `game/tests/audio/test_sound*.gd` |
 | Art (look, figures, theme) | `tools/art/`, `game/art/`, `game/fonts/`, `game/shaders/`, `game/scripts/art/`, `game/tests/art/` |
-| UI (screens, flow, text) | `game/scenes/`, `game/scripts/ui/`, `game/i18n/`, `game/tests/ui/`, `game/tests/screenshots.gd`, `game/export_presets.cfg` |
+| UI (screens, flow, text) | `game/scenes/`, `game/scripts/ui/`, `game/i18n/`, `game/tests/ui/`, `game/tests/screenshots.gd`, `game/tests/record.gd`, `game/export_presets.cfg`, `docs/store-listing.md` |
+
+`docs/credits.md` is shared: each area edits only its own section. `docs/community-check.md` belongs to
+the lead; list anything uncertain about the tradition in your report.
 
 ## Autoloads (registered in project.godot)
 
@@ -21,7 +25,7 @@ only by asking its owner (through the lead). `game/project.godot` belongs to the
 | --- | --- | --- |
 | `Profile` | `scripts/core/profile.gd` | Core |
 | `Leaderboards` | `scripts/core/leaderboards.gd` | Core |
-| `Sound` | `scripts/audio/sound.gd` | Audio |
+| `Sound` | `scripts/audio/sound.gd` | Sound |
 
 Everything else is a `class_name` script. Game rules are `RefCounted` classes with no scene, sound or
 sensor access, so headless tests can drive them.
@@ -40,6 +44,9 @@ sensor access, so headless tests can drive them.
   "remix": {"id": "fires_remix", "bpm": 76, "offset": 1.2, "audio": "res://audio/music/fires_remix.ogg"},
   "length": 128.4,
   "preview": 32.0,
+  "key_root": 62,
+  "sections": [{"name": "intro", "b": 0, "len": 16}, {"name": "verse", "b": 16, "len": 32}],
+  "lessons": [{"topic": "steps", "b": 8, "len": 16}],
   "charts": {
     "easy":   [{"b": 0, "k": "step", "lane": 1}],
     "medium": [],
@@ -50,6 +57,12 @@ sensor access, so headless tests can drive them.
 ```
 
 - `kind` is `story`, `piazza` (bells only; one chart named `piazza`) or `tutorial`.
+- `key_root` is the MIDI note of the song's tonic, so step and hold sounds can be pitched to fit
+  (`Sound.set_key(key_root)`).
+- `sections` name the song's parts in beats (intro, verse, build, climax, outro...) for the progress
+  bar and for practice.
+- `lessons` exist only in the tutorial song: `topic` is `steps`, `lanes`, `bells`, `holds`, `still`,
+  `swipes` or `full`; the tutorial plays one lesson at a time and repeats it until it's passed.
 - `offset` is the time in seconds of beat 0 in the audio file. A note's time is `offset + b * 60 / bpm`.
   Tempo is constant within a song.
 - `remix`, when present, is a second track that uses the same charts with its own `offset`/`audio`
@@ -90,6 +103,9 @@ sensor access, so headless tests can drive them.
 - `InputRouter` (Control, full rect): turns touches in the button row, keys and motion into `Session`
   calls, handles slam mode, emits `stepped(lane)`, `rang(result)`, `swiped(dir)` for sound and visuals.
   Needs `buttons_rect: Rect2` set by the play screen.
+- `Autoplay.new(session, human := false)`: `update(t)` plays the session perfectly (or with small
+  human-like errors) and emits `stepped(lane)`, `rang(result)`, `swiped(dir)` like `InputRouter`, for
+  demos, recordings and tests.
 - `Ghost`: `from_session(session)`, `score_at(t)`, `to_dict()`, `from_dict()`.
 - `Progression`: story order, `is_unlocked(song_id)`, `remix_unlocked(song_id)`, `bell_set_unlocked(id)`,
   `carving_points()`, `mask_option_unlocked(part, option)`.
@@ -103,6 +119,7 @@ sensor access, so headless tests can drive them.
 
 ## Audio API (`scripts/audio/sound.gd`, autoload `Sound`)
 
+`set_key(midi_root)`, `set_volume(bus, linear)` for `music|bells|sfx|ambience`,
 `step(lane)`, `bell(set_id, up, quality)`, `row_bells(unison_level)`, `call()`, `rope()`,
 `hold_start(lane)`, `hold_stop(lane)`, `ui(name)` (`tap`, `back`, `unlock`, `carve`, `result`),
 `ambience(name)` / `stop_ambience()` (`fire`, `crowd`, `wind`), `count_in(bpm)`. Low latency: short
