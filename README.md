@@ -6,10 +6,10 @@ Live at https://icsdaniel.github.io/Mamuthones-/ (GitHub Pages, deployed from `m
 
 ## Prototype (`index.html`)
 
-A 45-second playable procession, one-handed:
+A 45-second playable procession, held in both hands:
 
-- **Calibration:** 3 shakes up and 3 down. The game sets the bell sensitivity from your shakes and learns which way is up on your phone. It's saved on the phone and can be redone from the results screen.
-- **Play:** the thumb taps the top and bottom step pads, a shake up or down rings the bell, and grey bars mean stand still. A Right hand / Left hand switch mirrors the pads.
+- **Calibration:** 3 sharp tilts up and 3 down. The game uses the gyroscope (or acceleration, whichever reads the direction better), sets the bell sensitivity from your moves and learns which way is up. It's saved on the phone and can be redone from the results screen.
+- **Play:** the thumbs tap the left and right step pads, a tilt up or down rings the bell (middle lane), and grey bars mean stand still.
 - **Score:** Perfect 300, Good 150, Early/Late 50, times a combo multiplier up to ×3. Ringing during a stand-still costs 100. Your best score is kept on the phone.
 
 ## Sensor test (`test.html`)

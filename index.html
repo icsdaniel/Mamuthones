@@ -144,38 +144,63 @@
   .progress { height: 4px; background: var(--wood); border-radius: 2px; overflow: hidden; }
   .progress i { display: block; height: 100%; width: 0; background: var(--bone); }
   .play {
-    display: flex;
-    gap: 10px;
-    height: 72vh;
+    display: grid;
+    grid-template-columns: 24% 1fr 24%;
+    gap: 8px;
+    height: 74vh;
     min-height: 380px;
     touch-action: none;
     user-select: none;
     -webkit-user-select: none;
   }
-  .play.left { flex-direction: row-reverse; }
-  .lane-wrap { flex: 1 1 auto; position: relative; min-width: 0; }
+  .lane-wrap { position: relative; min-width: 0; }
   canvas#lanes { width: 100%; height: 100%; display: block; border-radius: 12px; background: var(--wood); }
   .judge {
     position: absolute;
-    left: 0; right: 0; top: 38%;
+    left: 0; right: 0; top: 36%;
     text-align: center;
     font-family: var(--display);
-    font-size: 1.7rem;
+    font-size: 1.8rem;
     pointer-events: none;
-    text-shadow: 0 2px 8px #000;
+    text-shadow: 0 2px 10px #000;
   }
-  .pads { flex: 0 0 42%; display: grid; grid-template-rows: 1fr 1fr; gap: 10px; }
+  .judge.pop { animation: pop 160ms ease-out; }
+  @keyframes pop { from { transform: scale(1.35); } to { transform: scale(1); } }
+  .countin {
+    position: absolute;
+    inset: 0;
+    display: grid;
+    place-items: center;
+    font-family: var(--display);
+    font-size: 5rem;
+    color: var(--bone);
+    pointer-events: none;
+    text-shadow: 0 4px 18px #000;
+  }
   .pad {
     border-radius: 14px;
     background: var(--wood);
     border: 2px solid var(--wood-2);
-    display: grid;
-    place-items: center;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: flex-end;
+    gap: 4px;
+    padding-bottom: 18px;
     text-align: center;
     font-family: var(--display);
-    font-size: 1.15rem;
+    font-size: 1.05rem;
     color: var(--ash);
+    transition: border-color 80ms, background 80ms;
   }
+  .pad .hoof {
+    width: 38px; height: 38px;
+    border-radius: 50%;
+    border: 3px solid currentColor;
+    margin-bottom: auto;
+    margin-top: 40%;
+  }
+  .pad.cue { border-color: var(--ember); }
   .pad.hit { background: var(--wood-2); border-color: var(--bone); color: var(--bone); }
 
   /* Results */
@@ -188,7 +213,7 @@
   }
   .grade { font-family: var(--display); font-size: 1.4rem; color: var(--ember); }
   a { color: var(--ember); }
-  @media (prefers-reduced-motion: reduce) { .meter i { transition: none; } }
+  @media (prefers-reduced-motion: reduce) { .meter i, .pad { transition: none; } .judge.pop { animation: none; } }
 </style>
 </head>
 <body>
@@ -197,18 +222,11 @@
 <section class="screen" id="intro">
   <div class="label">Mamuthones prototype</div>
   <h1>The Weight of <span>Bells</span></h1>
-  <p class="muted">A 45-second procession. Hold the phone in one hand: your thumb taps the steps, and shaking the phone up or down rings your bells. Headphones recommended.</p>
+  <p class="muted">A 45-second procession. Hold the phone in both hands: your thumbs tap the left and right steps, and a sharp tilt up or down rings your bells. Headphones recommended.</p>
   <ol class="how">
-    <li><b>Calibrate:</b> shake the phone 3 times up and 3 times down, so the game learns your shake.</li>
-    <li><b>Play:</b> hit each note as it reaches the line. Grey bars mean stand still: shaking there costs points.</li>
+    <li><b>Calibrate:</b> tilt the phone sharply 3 times up and 3 times down, so the game learns your move.</li>
+    <li><b>Play:</b> hit each note as it reaches the line. Grey bars mean stand still: ringing there costs points.</li>
   </ol>
-  <div>
-    <div class="label" style="margin-bottom:6px">Playing hand</div>
-    <div class="hand" role="group" aria-label="Playing hand">
-      <button id="handR" aria-pressed="true">Right hand</button>
-      <button id="handL" aria-pressed="false">Left hand</button>
-    </div>
-  </div>
   <p class="note" id="sensorNote" hidden></p>
   <div class="row">
     <button class="primary" id="introPlay">Calibrate and play</button>
@@ -221,8 +239,8 @@
 <!-- Calibration -->
 <section class="screen" id="calib" hidden>
   <div class="label">Calibration</div>
-  <h2 id="calibTitle">Shake <span>up</span></h2>
-  <p class="muted" id="calibText">Hold the phone as you'll play, then give it a sharp shake upward, like snapping the bells on your back. Three times.</p>
+  <h2 id="calibTitle">Tilt <span>up</span></h2>
+  <p class="muted" id="calibText">Hold the phone in both hands as you'll play, then sharply tilt the top of the phone up and back, like snapping the bells on your back. Three times.</p>
   <div class="calib-prompt" id="calibArrow" aria-hidden="true">↑</div>
   <div class="dots" id="dots"></div>
   <div>
@@ -230,7 +248,7 @@
     <div class="meter"><i id="meter"></i></div>
   </div>
   <div class="facts" id="calibFacts" hidden>
-    <div class="fact"><span class="label">Bell sensitivity</span><b id="factThr">–</b><small class="muted">m/s² needed to ring</small></div>
+    <div class="fact"><span class="label">Bell sensitivity</span><b id="factThr">–</b><small class="muted" id="factUnit">needed to ring</small></div>
     <div class="fact"><span class="label">Up / down</span><b id="factDir">–</b><small class="muted">can the phone tell them apart</small></div>
   </div>
   <div class="row">
@@ -248,14 +266,13 @@
   </div>
   <div class="progress"><i id="prog"></i></div>
   <div class="play" id="play">
+    <div class="pad" id="padL" role="button" aria-label="Left step"><span class="hoof" aria-hidden="true"></span>Left</div>
     <div class="lane-wrap">
       <canvas id="lanes"></canvas>
       <div class="judge" id="judge" aria-live="polite"></div>
+      <div class="countin" id="countin"></div>
     </div>
-    <div class="pads">
-      <div class="pad" id="padT" role="button" aria-label="Top step">Top<br>step</div>
-      <div class="pad" id="padB" role="button" aria-label="Bottom step">Bottom<br>step</div>
-    </div>
+    <div class="pad" id="padR" role="button" aria-label="Right step"><span class="hoof" aria-hidden="true"></span>Right</div>
   </div>
 </section>
 
@@ -269,7 +286,7 @@
     <div class="fact"><span class="label">Best combo</span><b id="resCombo">–</b></div>
     <div class="fact"><span class="label">Perfect / good</span><b id="resPG">–</b></div>
     <div class="fact"><span class="label">Missed</span><b id="resMiss">–</b></div>
-    <div class="fact"><span class="label">Wrong way / pad</span><b id="resWrong">–</b></div>
+    <div class="fact"><span class="label">Wrong way / side</span><b id="resWrong">–</b></div>
     <div class="fact"><span class="label">Rang in silence</span><b id="resSilence">–</b></div>
     <div class="fact"><span class="label">Step timing</span><b id="resTapOff">–</b></div>
     <div class="fact"><span class="label">Bell timing</span><b id="resBellOff">–</b></div>
@@ -290,17 +307,6 @@
   };
   const screens = ['intro', 'calib', 'game', 'results'];
   function go(name) { screens.forEach(s => $(s).hidden = s !== name); window.scrollTo(0, 0); }
-
-  /* ---------- Hand ---------- */
-  function setHand(side) {
-    $('play').classList.toggle('left', side === 'left');
-    $('handL').setAttribute('aria-pressed', side === 'left');
-    $('handR').setAttribute('aria-pressed', side !== 'left');
-    store.set('hand', side);
-  }
-  $('handL').addEventListener('click', () => setHand('left'));
-  $('handR').addEventListener('click', () => setHand('right'));
-  setHand(store.get('hand') === 'left' ? 'left' : 'right');
 
   /* ---------- Audio ---------- */
   let ctx = null;
@@ -326,7 +332,7 @@
     g.gain.exponentialRampToValueAtTime(0.0001, time + 0.35);
     o.connect(g).connect(ctx.destination); o.start(time); o.stop(time + 0.4);
   }
-  // Hoof-like step: a short filtered noise knock, higher for the top pad.
+  // Hoof-like step: a short filtered noise knock, higher for the right pad.
   let noiseBuf = null;
   function step(high) {
     if (!ctx) return;
@@ -390,7 +396,10 @@
       v = raw.map((r, i) => r - gravity[i]);
     }
     gotMotion = true;
-    if (motionHandler) motionHandler(v, Math.hypot(v[0], v[1], v[2]), t);
+    // Gyroscope, in degrees per second, when the phone has one. A tilt shows up here more cleanly than in acceleration.
+    const rr = e.rotationRate;
+    const r = rr && rr.alpha !== null ? [rr.alpha, rr.beta, rr.gamma] : null;
+    if (motionHandler) motionHandler(v, Math.hypot(v[0], v[1], v[2]), t, r, r ? Math.hypot(r[0], r[1], r[2]) : 0);
   }
   async function enableMotion() {
     if (typeof DeviceMotionEvent !== 'undefined' && typeof DeviceMotionEvent.requestPermission === 'function') {
@@ -406,13 +415,13 @@
   }
 
   /* ---------- Calibration ---------- */
-  // Saved as { thr, axis, upSign, dirOK }.
-  let cal = store.get('cal');
+  // Saved as { mode: 'rot' | 'acc', thr, axis, upSign, dirOK }.
+  let cal = store.get('cal2');
   if (cal) $('introSkip').hidden = false;
   const best = store.get('best');
   if (best) { $('bestLine').textContent = 'Your best: ' + best.toLocaleString() + ' points.'; $('bestLine').hidden = false; }
 
-  const CAL_THR = 4, PER_DIR = 3;
+  const CAL_THR = 4, CAL_ROT = 80, PER_DIR = 3;
   let calShakes = [], calArmed = true, calLast = 0, capture = null;
   function renderDots() {
     const dots = $('dots'); dots.innerHTML = '';
@@ -425,24 +434,28 @@
   }
   function calPhase() {
     const up = calShakes.length < PER_DIR;
-    $('calibTitle').innerHTML = up ? 'Shake <span>up</span>' : 'Shake <span>down</span>';
+    $('calibTitle').innerHTML = up ? 'Tilt <span>up</span>' : 'Tilt <span>down</span>';
     $('calibArrow').textContent = up ? '↑' : '↓';
     $('calibText').textContent = up
-      ? "Hold the phone as you'll play, then give it a sharp shake upward, like snapping the bells on your back. Three times."
-      : 'Now three sharp shakes downward.';
+      ? "Hold the phone in both hands as you'll play, then sharply tilt the top of the phone up and back, like snapping the bells on your back. Three times."
+      : 'Now three sharp tilts downward: top of the phone down and back.';
   }
   function startCalib() {
     calShakes = []; calArmed = true; capture = null;
     $('calibFacts').hidden = true; $('calibGo').hidden = true;
     $('calibArrow').hidden = false; $('dots').hidden = false;
     renderDots(); calPhase(); go('calib');
-    motionHandler = (v, m, t) => {
-      $('meter').style.width = Math.min(100, m / 30 * 100) + '%';
+    motionHandler = (v, m, t, r, rm) => {
+      $('meter').style.width = Math.min(100, Math.max(m / 30, rm / 600) * 100) + '%';
       if (calShakes.length >= PER_DIR * 2) return;
       if (capture) {
-        if (m > capture.peak) capture.peak = m;
+        capture.peakA = Math.max(capture.peakA, m);
+        capture.peakR = Math.max(capture.peakR, rm);
+        // Direction = the first clear lobe of each signal.
+        if (!capture.accVec && m > CAL_THR * 0.75) capture.accVec = v.slice();
+        if (!capture.rotVec && r && rm > CAL_ROT * 0.75) capture.rotVec = r.slice();
         if (t - capture.t0 > 150) {
-          calShakes.push({ vec: capture.vec, peak: capture.peak, up: calShakes.length < PER_DIR });
+          calShakes.push({ ...capture, up: calShakes.length < PER_DIR });
           capture = null; calLast = t;
           bell(calShakes[calShakes.length - 1].up);
           renderDots();
@@ -450,33 +463,52 @@
         }
         return;
       }
-      if (!calArmed && m < CAL_THR * 0.5 && t - calLast > 300) calArmed = true;
-      if (calArmed && m > CAL_THR) { calArmed = false; capture = { t0: t, peak: m, vec: v.slice() }; }
+      if (!calArmed && m < CAL_THR * 0.5 && rm < CAL_ROT * 0.5 && t - calLast > 300) calArmed = true;
+      if (calArmed && (m > CAL_THR || rm > CAL_ROT)) {
+        calArmed = false;
+        capture = { t0: t, peakA: m, peakR: rm, accVec: m > CAL_THR * 0.75 ? v.slice() : null, rotVec: r && rm > CAL_ROT * 0.75 ? r.slice() : null };
+      }
     };
   }
-  function finishCalib() {
-    const peaks = calShakes.map(s => s.peak).sort((a, b) => a - b);
-    const median = peaks[Math.floor(peaks.length / 2)];
-    const thr = Math.min(25, Math.max(4, median * 0.45));
-    // Which axis carries the shake, and which sign means "up" on it.
-    const sums = [0, 1, 2].map(i => calShakes.reduce((s, c) => s + Math.abs(c.vec[i]), 0));
+  // For one signal (acceleration or rotation): which axis carries the move, which sign is "up",
+  // how many of the 6 moves it reads the right way, and the typical peak.
+  function analyse(vecKey, peakKey) {
+    if (calShakes.some(s => !s[vecKey])) return null;
+    const sums = [0, 1, 2].map(i => calShakes.reduce((acc, c) => acc + Math.abs(c[vecKey][i]), 0));
     const axis = sums.indexOf(Math.max(...sums));
-    const upVals = calShakes.filter(s => s.up).map(s => Math.sign(s.vec[axis]));
-    const downVals = calShakes.filter(s => !s.up).map(s => Math.sign(s.vec[axis]));
+    const upVals = calShakes.filter(s => s.up).map(s => Math.sign(s[vecKey][axis]));
+    const downVals = calShakes.filter(s => !s.up).map(s => Math.sign(s[vecKey][axis]));
     const upSign = Math.sign(upVals.reduce((a, b) => a + b, 0)) || 1;
     const agree = upVals.filter(x => x === upSign).length + downVals.filter(x => x === -upSign).length;
-    const dirOK = agree >= 5;
-    cal = { thr, axis, upSign, dirOK };
-    store.set('cal', cal);
+    const peaks = calShakes.map(s => s[peakKey]).sort((a, b) => a - b);
+    return { axis, upSign, agree, median: peaks[Math.floor(peaks.length / 2)] };
+  }
+  function finishCalib() {
+    const rot = analyse('rotVec', 'peakR'), acc = analyse('accVec', 'peakA');
+    // Use the gyroscope when it reads directions at least as well as acceleration.
+    const useRot = rot && (!acc || rot.agree >= acc.agree);
+    const pick = useRot ? rot : acc;
+    if (!pick) {
+      $('calibTitle').innerHTML = 'Try again';
+      $('calibText').textContent = 'Some moves were too soft to measure. Tap Start over and make each tilt a little sharper.';
+      return;
+    }
+    const thr = useRot
+      ? Math.min(600, Math.max(60, pick.median * 0.45))
+      : Math.min(25, Math.max(4, pick.median * 0.45));
+    const dirOK = pick.agree >= 5;
+    cal = { mode: useRot ? 'rot' : 'acc', thr, axis: pick.axis, upSign: pick.upSign, dirOK };
+    store.set('cal2', cal);
     $('introSkip').hidden = false;
-    $('factThr').textContent = thr.toFixed(1);
+    $('factThr').textContent = useRot ? Math.round(thr) : thr.toFixed(1);
+    $('factUnit').textContent = useRot ? '°/s of tilt needed to ring' : 'm/s² of shake needed to ring';
     $('factDir').textContent = dirOK ? 'Yes' : 'Not reliably';
     $('calibFacts').hidden = false;
     $('calibArrow').hidden = true;
     $('calibTitle').innerHTML = 'Calibrated';
     $('calibText').textContent = dirOK
-      ? `Your phone told ${agree} of 6 shakes apart correctly. Up and down notes will count their direction.`
-      : `Only ${agree} of 6 shakes were read the right way, so any shake will ring the bell for now. You can start over and try crisper shakes.`;
+      ? `Your phone read ${pick.agree} of 6 moves the right way, using its ${useRot ? 'gyroscope' : 'motion sensor'}. Up and down notes will count their direction.`
+      : `Only ${pick.agree} of 6 moves were read the right way, so any tilt will ring the bell for now. You can start over and try crisper moves.`;
     $('calibGo').hidden = false;
   }
   $('calibRedo').addEventListener('click', startCalib);
@@ -495,13 +527,13 @@
   $('introSkip').addEventListener('click', () => begin(false));
 
   /* ---------- The procession ---------- */
-  // One symbol per beat: T top step, B bottom step, U bell up, D bell down, - stand still.
+  // One symbol per beat: L left step, R right step, U bell up, D bell down, - stand still.
   const BPM = 84;
   const CHART = [
-    'TBTU', 'TBTD', 'TBTU', 'TBT-',
-    'TTBU', 'T-TD', 'TBBU', 'TBTD',
-    'TBUD', 'TBU-', 'BTDU', 'TBUD',
-    'TTBB', 'UDUD', 'TBTU', 'U---'
+    'LRLU', 'LRLD', 'LRLU', 'LRL-',
+    'LLRU', 'L-LD', 'LRRU', 'LRLD',
+    'LRUD', 'LRU-', 'RLDU', 'LRUD',
+    'LLRR', 'UDUD', 'LRLU', 'U---'
   ].join('');
   const WIN = { perfect: 45, good: 90, ok: 140 };
   let notes = [], score = 0, combo = 0, maxCombo = 0, stats, gameRunning = false, endAt = 0, lastShakeAt = 0, armed = true;
@@ -516,6 +548,7 @@
 
   function startGame() {
     go('game');
+    $('countin').textContent = '';
     sizeCanvas();
     const spb = 60 / BPM, lead = ctx.currentTime + 0.4;
     // Count-in: four clicks, then the chart.
@@ -546,6 +579,7 @@
   let judgeTimer = 0;
   function flash(text, color) {
     const j = $('judge'); j.textContent = text; j.style.color = color;
+    j.classList.remove('pop'); void j.offsetWidth; j.classList.add('pop');
     clearTimeout(judgeTimer); judgeTimer = setTimeout(() => j.textContent = '', 450);
   }
   function hit(note, off, wrong) {
@@ -558,7 +592,8 @@
     else { pts = 50; word = off < 0 ? 'Early' : 'Late'; color = 'var(--ash)'; stats.ok++; }
     combo++; maxCombo = Math.max(maxCombo, combo);
     score += Math.round(pts * mult());
-    (note.kind === 'T' || note.kind === 'B' ? stats.tapOff : stats.bellOff).push(off);
+    (note.kind === 'L' || note.kind === 'R' ? stats.tapOff : stats.bellOff).push(off);
+    try { navigator.vibrate?.(12); } catch (_) {}
     note.flash = performance.now();
     flash(word, color); renderHud();
   }
@@ -579,24 +614,26 @@
 
   function onTap(pad, e) {
     e.preventDefault();
-    const t = performance.now(), top = pad.id === 'padT';
-    step(top);
+    const t = performance.now(), right = pad.id === 'padR';
+    step(right);
     pad.classList.add('hit'); setTimeout(() => pad.classList.remove('hit'), 90);
     if (!gameRunning) return;
-    const [n, off] = nearest(t, 'TB');
+    const [n, off] = nearest(t, 'LR');
     if (!n) return;
-    const want = n.kind === 'T';
-    hit(n, off, want === top ? null : 'Wrong step');
+    hit(n, off, (n.kind === 'R') === right ? null : 'Wrong side');
   }
-  [$('padT'), $('padB')].forEach(p => p.addEventListener('pointerdown', e => onTap(p, e)));
+  [$('padL'), $('padR')].forEach(p => p.addEventListener('pointerdown', e => onTap(p, e)));
 
-  function onGameMotion(v, m, t) {
+  function onGameMotion(v, m, t, r, rm) {
     if (!cal || !gameRunning) return;
+    const rot = cal.mode === 'rot';
+    const val = rot ? rm : m, vec = rot ? r : v;
+    if (!vec) return;
     const lockout = 30000 / BPM;
-    if (!armed && t - lastShakeAt > lockout && m < cal.thr * 0.5) armed = true;
-    if (!armed || m <= cal.thr) return;
+    if (!armed && t - lastShakeAt > lockout && val < cal.thr * 0.5) armed = true;
+    if (!armed || val <= cal.thr) return;
     armed = false; lastShakeAt = t;
-    const up = Math.sign(v[cal.axis]) === cal.upSign;
+    const up = Math.sign(vec[cal.axis]) === cal.upSign;
     bell(cal.dirOK ? up : true);
     // A shake on a stand-still beat breaks the silence.
     const [rest] = nearest(t, '-');
@@ -622,6 +659,17 @@
       }
     }
     draw(now);
+    // Count-in numbers over the lanes, and a glow on the pad whose note is about to land.
+    const spbMs = 60000 / BPM, toFirst = notes[0].t - now;
+    $('countin').textContent = toFirst > 0 && toFirst < spbMs * 4 ? String(Math.ceil(toFirst / spbMs)) : '';
+    let cueL = false, cueR = false;
+    for (const n of notes) {
+      if (n.done) continue;
+      if (n.t - now > 160) break;
+      if (n.kind === 'L') cueL = true; else if (n.kind === 'R') cueR = true;
+    }
+    $('padL').classList.toggle('cue', cueL);
+    $('padR').classList.toggle('cue', cueR);
     const first = notes[0].t, last = notes[notes.length - 1].t;
     $('prog').style.width = Math.max(0, Math.min(1, (now - first) / (last - first))) * 100 + '%';
     if (now > endAt) return finish();
@@ -632,19 +680,29 @@
     const w = canvas.clientWidth, h = canvas.clientHeight;
     g2.clearRect(0, 0, w, h);
     const hitY = h * 0.84, ahead = 2000;   // ms of notes visible above the line
-    const lanes = { T: 0, B: 1, U: 2, D: 2 };
+    const lanes = { L: 0, U: 1, D: 1, R: 2 };
     const lw = w / 3;
-    // lane guides
+    // Firelight rising from the hit line.
+    const glow = g2.createLinearGradient(0, hitY - h * 0.5, 0, h);
+    glow.addColorStop(0, 'rgba(224,162,74,0)');
+    glow.addColorStop(0.75, 'rgba(224,162,74,0.10)');
+    glow.addColorStop(1, 'rgba(192,57,43,0.06)');
+    g2.fillStyle = glow; g2.fillRect(0, 0, w, h);
+    // Bell lane is the middle one; mark it with a faint red wash.
+    g2.fillStyle = 'rgba(192,57,43,0.07)';
+    g2.fillRect(lw, 0, lw, h);
     g2.fillStyle = '#2e2620';
     g2.fillRect(lw - 0.5, 0, 1, h); g2.fillRect(lw * 2 - 0.5, 0, 1, h);
     g2.fillStyle = '#a89c8c';
     g2.font = '600 11px "IBM Plex Mono", monospace';
     g2.textAlign = 'center';
-    ['TOP', 'BOTTOM', 'BELL'].forEach((s, i) => g2.fillText(s, lw * i + lw / 2, h - 10));
-    // hit line
+    ['LEFT', 'BELL', 'RIGHT'].forEach((s, i) => g2.fillText(s, lw * i + lw / 2, h - 10));
+    // Hit line with a soft ember glow.
+    g2.fillStyle = 'rgba(224,162,74,0.25)';
+    g2.fillRect(4, hitY - 6, w - 8, 12);
     g2.fillStyle = '#ede6da';
-    g2.fillRect(6, hitY - 1.5, w - 12, 3);
-    const r = Math.min(lw * 0.34, 22);
+    g2.fillRect(4, hitY - 1.5, w - 8, 3);
+    const r = Math.min(lw * 0.36, 24);
     for (const n of notes) {
       const dt = n.t - now;
       if (dt > ahead || dt < -300) continue;
@@ -653,25 +711,34 @@
         if (n.done && n.t < now - 150) continue;
         g2.fillStyle = 'rgba(168,156,140,0.35)';
         g2.fillRect(8, y - 4, w - 16, 8);
+        g2.fillStyle = '#a89c8c';
+        g2.font = '600 10px "IBM Plex Mono", monospace';
+        g2.fillText('STILL', w / 2, y - 8);
         continue;
       }
       if (n.done && !n.flash) continue;
+      let yy = y, scale = 1;
       if (n.flash) {
         const age = now - n.flash;
-        if (age > 220) continue;
-        g2.globalAlpha = 1 - age / 220;
+        if (age > 240) continue;
+        g2.globalAlpha = 1 - age / 240;
+        yy = hitY; scale = 1 + age / 240 * 0.6;
       }
-      const x = lw * lanes[n.kind] + lw / 2;
-      const isBell = n.kind === 'U' || n.kind === 'D';
-      g2.beginPath(); g2.arc(x, n.flash ? hitY : y, r, 0, Math.PI * 2);
-      g2.fillStyle = isBell ? '#c0392b' : (n.kind === 'T' ? '#ede6da' : '#a89c8c');
-      g2.fill();
-      if (isBell) {
+      const x = lw * lanes[n.kind] + lw / 2, rr = r * scale;
+      if (n.kind === 'U' || n.kind === 'D') {
+        // A bell: rounded body with a clapper, pointing the way to tilt.
+        g2.fillStyle = '#c0392b';
+        g2.beginPath(); g2.arc(x, yy, rr, 0, Math.PI * 2); g2.fill();
         g2.fillStyle = '#ede6da';
-        g2.font = `800 ${Math.round(r * 1.2)}px "Alegreya SC", Georgia, serif`;
+        g2.font = `800 ${Math.round(rr * 1.25)}px "Alegreya SC", Georgia, serif`;
         g2.textBaseline = 'middle';
-        g2.fillText(cal && !cal.dirOK ? '•' : (n.kind === 'U' ? '↑' : '↓'), x, (n.flash ? hitY : y) + 1);
+        g2.fillText(cal && !cal.dirOK ? '•' : (n.kind === 'U' ? '↑' : '↓'), x, yy + 1);
         g2.textBaseline = 'alphabetic';
+      } else {
+        // A step: a bone-white hoof ring.
+        g2.strokeStyle = '#ede6da'; g2.lineWidth = Math.max(3, rr * 0.28);
+        g2.beginPath(); g2.arc(x, yy, rr * 0.82, 0, Math.PI * 2); g2.stroke();
+        g2.fillStyle = 'rgba(237,230,218,0.18)'; g2.fill();
       }
       g2.globalAlpha = 1;
     }
