@@ -22,8 +22,14 @@ func build() -> void:
 		func(v: float) -> String: return tr("ms_signed") % roundi(v * 1000.0))
 
 	box.add_child(UIKit.label(tr("set_play"), UIKit.SUB))
-	_slider(box, "note_speed", tr("set_note_speed"), 0.6, 1.6, 0.1,
-		func(v: float) -> String: return "×%.1f" % v)
+	var speed := _slider(box, "note_speed", tr("set_note_speed"), 0.5, 3.0, 0.1,
+		func(v: float) -> String: return "×" + UIKit.fmt_dec(v, 1) + " · " + tr("set_note_warning") % UIKit.fmt_dec(LaneView.LOOKAHEAD / maxf(v, 0.1), 2))
+	var preview := SpeedPreview.new()
+	preview.name = "SpeedPreview"
+	preview.custom_minimum_size = Vector2(0, 260)
+	preview.note_speed = speed.value
+	box.add_child(preview)
+	speed.value_changed.connect(func(v: float) -> void: preview.note_speed = v)
 	_toggle(box, "vibration", tr("set_vibration"))
 	_toggle(box, "slam", tr("set_slam"), tr("set_slam_note"))
 	_toggle(box, "reduced_motion", tr("set_reduced_motion"))

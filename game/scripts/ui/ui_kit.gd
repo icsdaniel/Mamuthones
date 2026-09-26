@@ -20,6 +20,23 @@ const PRIMARY := "AccentButton"
 const QUIET := "QuietButton"
 const CARD := "CardPanel"
 
+## One early/late language everywhere (bursts, the timing ticks, judgement hints, the results
+## histogram): early is cool and sits UP (the note had not reached the line yet), late is warm and
+## sits DOWN (it had passed). The woodcut palette has no cool colour, so the UI keeps this pair.
+const EARLY := Color("#8ec3e6")
+const LATE := Color("#ef8250")
+
+
+## "early", "late" or "" for a signed hit offset, with Core's one dead zone (Session.SIDE_DEAD_ZONE).
+static func side_of(offset: float) -> String:
+	if absf(offset) <= Session.SIDE_DEAD_ZONE:
+		return ""
+	return "early" if offset < 0.0 else "late"
+
+
+static func side_color(side: String) -> Color:
+	return EARLY if side == "early" else LATE
+
 
 static func apply_root(root: Control) -> void:
 	root.theme = WoodcutTheme.build()

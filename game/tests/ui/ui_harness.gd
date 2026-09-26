@@ -88,7 +88,14 @@ static func run_play(tree: SceneTree, play: Node, step := 0.05, limit := 400.0) 
 		return
 	c.use_manual_clock(true)
 	var elapsed := 0.0
-	while is_instance_valid(play) and not bool(play.get("done")) and elapsed < limit:
+	var start_ms := Time.get_ticks_msec()
+	# A count-in (lesson, quick restart, resume) holds the music on the real clock: wait it out
+	# without counting it against the song-time limit.
+	while is_instance_valid(play) and not bool(play.get("done")) and elapsed < limit \
+			and Time.get_ticks_msec() - start_ms < 600000:
+		if c.is_paused():
+			await tree.process_frame
+			continue
 		c.advance(step)
 		elapsed += step
 		await tree.process_frame

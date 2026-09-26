@@ -394,6 +394,78 @@ func test_ring_strength_follows_the_flick() -> void:
 		check(last > 0.3, "%s: the hardest flick rings strong (%.2f)" % [mode, last])
 
 
+# Seconds from the moment the signal truly crosses the threshold to the frame where the ring
+# (and so the bell sound) fires, for each flick.
+const CONFIRM_BOUND := 0.030   # BellDetector.CONFIRM plus a margin
+
+
+func _sound_lags(mode: String, hz: float, fps: float, peak_share: float) -> Array[float]:
+	var det := _detector(100.0, mode)
+	det.adapt = false
+	var sy := Synth.new(int(hz) + int(fps))
+	sy.jitter = 0.0
+	sy.acc_noise = 0.0
+	sy.gyro_noise = 0.0
+	var starts := []
+	for i in 10:
+		starts.append(1.0 + i * 0.7013)   # not a multiple of the frame or sensor period: every phase
+		sy.flick(starts[-1], true, det.threshold * peak_share, det.threshold * peak_share, 0.2)
+	var lags: Array[float] = []
+	var axis := det.axis
+	for f in sy.held_frames(0.0, 8.5, hz, fps):
+		if det.feed(f[0], f[1], f[2]):
+			# the true crossing, from the noise-free signal
+			var t0: float = starts[lags.size()] if lags.size() < starts.size() else f[0]
+			var tc := t0
+			while tc < f[0]:
+				var smp := sy.sample(tc)
+				if absf((smp[1] if mode == "gyro" else smp[0])[axis]) > det.threshold:
+					break
+				tc += 0.0005
+			lags.append(f[0] - tc)
+	return lags
+
+
+func test_bell_sound_lag() -> void:
+	# The sound plays when a ring is confirmed. Gyro fast path: a reading over the threshold rings at
+	# once when an earlier reading (>= 5 ms before) caught the flick on its rising slope; otherwise the
+	# 25 ms rule. With 25 ms alone the median lag was 35-60 ms; with the fast path it is about one
+	# frame plus one sensor interval whenever the readings are dense enough to catch the slope.
+	var rows := []
+	for hz: float in [50.0, 100.0, 200.0]:
+		for fps: float in [60.0, 120.0]:
+			for share: float in [1.5, 2.2, 3.0]:
+				var what := "gyro %d Hz / %d fps / %.1f×" % [hz, fps, share]
+				var g := _sound_lags("gyro", hz, fps, share)
+				check_eq(g.size(), 10, "%s: every flick rings" % what)
+				if g.size() != 10:
+					continue
+				g.sort()
+				var med := g[5]
+				rows.append("%3d Hz %3d fps %.1f×: median %.1f ms, worst %.1f ms" % [hz, fps, share, med * 1000.0, g[9] * 1000.0])
+				var slow := CONFIRM_BOUND + 2.0 / hz + 1.0 / fps
+				check(g[9] <= slow, "%s: never later than the 25 ms rule allows (worst %.1f ms)" % [what, g[9] * 1000.0])
+				if hz >= 100.0 and share <= 2.2:
+					var quick := 1.0 / fps + 1.0 / hz + 0.006
+					check(med <= quick, "%s: median lag about a frame + a sensor interval (%.1f <= %.1f ms)" % [what, med * 1000.0, quick * 1000.0])
+	print("  bell sound lag (gyro):\n    " + "\n    ".join(rows))
+
+
+func test_knocks_on_the_tilt_axis_do_not_ring() -> void:
+	# The gyro fast path must not turn a sharp knock into a ring: a 5-15 ms jolt of up to twice the
+	# threshold right on the calibrated axis, at every sensor and frame rate.
+	for hz: float in [50.0, 100.0, 200.0, 400.0]:
+		for fps: float in [60.0, 90.0, 120.0]:
+			for dur: float in [0.005, 0.010, 0.015]:
+				var det := _detector(100.0)
+				var sy := Synth.new(int(hz * fps * dur * 1000.0))
+				sy.gyro_noise = 5.0
+				for i in 30:
+					sy.tap(1.0 + i * 0.4137, 25.0, dur, det.threshold * 2.0, 0)
+				var n := _held_run(det, sy, 14.0, hz, fps).size()
+				check_eq(n, 0, "%d Hz / %d fps: 30 knocks of %d ms on the tilt axis ring 0 times" % [hz, fps, int(dur * 1000.0)])
+
+
 func test_held_readings_are_stamped_earlier() -> void:
 	# A 50 Hz sensor at 120 fps: readings are held for ~2.4 frames, so each is ~10 ms old on average.
 	var sy := Synth.new(17)

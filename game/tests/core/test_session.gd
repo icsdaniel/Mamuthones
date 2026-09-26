@@ -179,17 +179,40 @@ func test_unison_rises_every_12_and_drops_two() -> void:
 	check_eq(s.combo, 19, "current combo since the miss")
 
 
-func test_wrong_step_drops_two_levels() -> void:
+func test_wrong_step_drops_one_level() -> void:
 	var s := Session.new(make(steps(30, 0)), "easy")
+	var marks := []
+	s.wrong_step.connect(func(lane, n, _o): marks.append([lane, n.lane]))
 	for i in 24:
 		s.tap(0, _bt(i), 0)
 	check_eq(s.unison_level, 2, "two levels up")
 	var r := s.tap(2, _bt(24), 0)
 	check_eq(r.judgement, "wrong", "tapping lane 2 while a lane 0 note is due is wrong")
-	check_eq(s.unison_level, 0, "wrong drops two levels")
+	check_eq(s.unison_level, 1, "a wrong step drops one level")
 	check_eq(s.stats.wrong, 1, "counted")
+	check_eq(marks, [[2, 0]], "wrong_step names the pressed lane (and the note it was against)")
 	check_eq(s.tap(0, _bt(24), 0).judgement, "perfect", "the note can still be hit")
 	check_eq(s.tap(2, _bt(25) + 0.25, 0).judgement, "", "a stray tap between notes costs nothing")
+
+
+func test_tap_with_own_note_coming_is_stray() -> void:
+	# Lane 0 due at 1.0 s, lane 2 due at 1.25 s: pressing lane 2 at 1.0 s is inside lane 0's window,
+	# but lane 2's own note is 250 ms away (within 2 × 140 ms), so the tap is a stray and free.
+	var s := Session.new(make([{"b": 0, "k": "step", "lane": 0}, {"b": 0.5, "k": "step", "lane": 2}]), "easy")
+	var marks := []
+	s.wrong_step.connect(func(lane, _n, _o): marks.append(lane))
+	var r := s.tap(2, _bt(0), 0)
+	check_eq(r.judgement, "", "an early press for your own coming note is not a wrong step")
+	check_eq(s.stats.wrong, 0, "nothing counted")
+	check(marks.is_empty(), "no mark")
+	check_eq(s.tap(2, _bt(0.5), 1).judgement, "perfect", "and the note is still judged when it arrives")
+	check_eq(s.tap(0, _bt(0) + 0.02, 2).judgement, "perfect", "the other lane's note is untouched")
+	# 300 ms away is beyond 2 × 140 ms: that tap is a wrong step.
+	var w := Session.new(make([{"b": 0, "k": "step", "lane": 0}, {"b": 0.6, "k": "step", "lane": 2}]), "easy")
+	check_eq(w.tap(2, _bt(0), 0).judgement, "wrong", "own note 300 ms away does not excuse the tap")
+	# Full-load windows shrink the reach too (2 × 112 ms).
+	var f := Session.new(make([{"b": 0, "k": "step", "lane": 0}, {"b": 0.46, "k": "step", "lane": 2}]), "easy", "full")
+	check_eq(f.tap(2, _bt(0), 0).judgement, "wrong", "230 ms is beyond 2 × 112 ms with the full load")
 
 
 func test_weight_multiplies_score() -> void:
@@ -303,8 +326,8 @@ func test_stand_still() -> void:
 	var mid := s.score
 	s.update(_bt(23))
 	check_eq(s.stats.still_kept, 1, "the second rest was kept")
-	check_eq(s.score - mid, 50, "a kept stand-still earns 50 × unison × weight")
-	check_near(s.score_breakdown().stills, 50.0, 1e-9, "shown in the breakdown")
+	check_eq(s.score - mid, 150, "a kept stand-still earns 150 × unison × weight")
+	check_near(s.score_breakdown().stills, 150.0, 1e-9, "shown in the breakdown")
 	check_near(s.score_breakdown().penalties, 200.0, 1e-9, "penalties in the breakdown")
 
 
@@ -325,7 +348,48 @@ func test_still_bonus_scales_with_unison_and_weight() -> void:
 	check_eq(s.unison_level, 2, "unison ×2")
 	var before := s.score
 	s.update(_bt(27))
-	check_eq(s.score - before, 150, "50 × 2 × 1.5")
+	check_eq(s.score - before, 450, "150 × 2 × 1.5")
+
+
+func test_kept_still_counts_four_hits_and_top_stats() -> void:
+	# 8 Good-or-better hits + a kept stand-still (4) = 12: up one level.
+	var s := Session.new(make(steps(8) + [{"b": 8, "k": "rest", "len": 2}] + steps(60).map(func(d): return {"b": d.b + 12, "k": "step", "lane": 1})), "easy")
+	var kept := []
+	s.still_kept.connect(func(_n, pts): kept.append(pts))
+	for i in 8:
+		s.tap(1, _bt(i), 0)
+	check_eq(s.unison_level, 0, "8 hits: still ×1")
+	s.update(_bt(11))
+	check_eq(kept, [150.0], "still_kept signalled with its points")
+	check_eq(s.unison_level, 1, "the stand-still counted as 4 hits: ×1.5")
+	check_eq(s.unison_streak, 0, "run of 12 used up")
+	check_eq(s.stats.unison_peak, 1.5, "peak multiplier so far")
+	# Remainders carry: 10 hits + 4 = 14 -> one level and 2 toward the next.
+	var c := Session.new(make(steps(10) + [{"b": 10, "k": "rest", "len": 2}]), "easy")
+	for i in 10:
+		c.tap(1, _bt(i), 0)
+	c.update(_bt(13))
+	check_eq(c.unison_level, 1, "14 -> one level")
+	check_eq(c.unison_streak, 2, "and 2 carried")
+	# Reach ×4 and measure the time there: 4 more levels = 48 hits from beat 12.
+	for i in 60:
+		s.tap(1, _bt(12 + i), 0)
+		s.update(_bt(12 + i))
+	check_eq(s.unison_level, 5, "top level")
+	check_eq(s.stats.unison_peak, 4.0, "peak ×4")
+	# ×4 from the 48th hit (beat 59) to the last update (beat 71): 12 beats = 6 s.
+	check_near(s.stats.time_at_top, 6.0, 1e-6, "6 s at ×4")
+	s.update(1e6)
+	check_near(s.stats.time_at_top, s.end_time() - _bt(59), 1e-6, "counted up to the end of the song, not beyond")
+	var t0: float = s.stats.time_at_top
+	var m := Session.new(make(steps(70)), "easy")
+	for i in 60:
+		m.tap(1, _bt(i), 0)
+	m.update(_bt(63))   # ×4 from beat 59; the misses seen at beat 63 drop it
+	m.update(_bt(69))
+	check_eq(m.unison_level < 5, true, "missed notes left ×4")
+	check_near(m.stats.time_at_top, 2.0, 1e-6, "leaving ×4 stops the clock")
+	check(t0 >= 6.0, "clock ran to the end")
 
 
 func test_let_go_costs_one_unison_level() -> void:
@@ -408,6 +472,7 @@ func test_reference_formula_on_random_runs() -> void:
 		var s := Session.new(make(chart), "easy", bell_set)
 		var events := []
 		s.judged.connect(func(n, j, _o): events.append([n.kind, j]))
+		s.still_kept.connect(func(_n, _p): events.append([Note.Kind.REST, "still"]))
 		var rest_events := []
 		for n in s.notes:
 			var off := rng.randf_range(-0.2, 0.2)
@@ -443,14 +508,23 @@ func test_reference_formula_on_random_runs() -> void:
 					total += (ring_pts if e[0] == Note.Kind.RING else pts)[j] * mults[level] * w
 					if j == "perfect" or j == "good":
 						run12 += 1
-						if run12 == 12:
-							run12 = 0
+						if run12 >= 12:
+							run12 -= 12
 							level = mini(level + 1, 5)
 					else:
 						run12 = 0
-				"miss", "wrong":
+				"still":
+					total += 150 * mults[level] * w
+					run12 += 4
+					if run12 >= 12:
+						run12 -= 12
+						level = mini(level + 1, 5)
+				"miss":
 					run12 = 0
 					level = maxi(level - 2, 0)
+				"wrong":
+					run12 = 0
+					level = maxi(level - 1, 0)
 				"held":
 					total += 150 * mults[level] * w
 				"let_go":
@@ -460,10 +534,8 @@ func test_reference_formula_on_random_runs() -> void:
 					total -= 100
 					run12 = 0
 					level = maxi(level - 1, 0)
-		# Kept stand-stills are not signalled; add them from the notes.
-		var still_total: float = s.score_breakdown().stills
-		check_near(s.score_breakdown().total, total + still_total, 0.01, "run %d: score follows the formula" % run)
-		check_eq(s.score, maxi(0, int(round(total + still_total))), "run %d: shown score" % run)
+		check_near(s.score_breakdown().total, total, 0.01, "run %d: score follows the formula" % run)
+		check_eq(s.score, maxi(0, int(round(total))), "run %d: shown score" % run)
 		check_eq(s.unison_level, level, "run %d: unison level" % run)
 
 

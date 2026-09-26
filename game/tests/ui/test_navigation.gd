@@ -80,7 +80,7 @@ func test_menus_forward_and_back() -> void:
 	UIHarness.restore_profile()
 
 
-func test_pause_resume_keeps_the_song_time() -> void:
+func test_pause_resume_counts_back_in_from_a_bar_line() -> void:
 	UIHarness.fresh_profile()
 	var song := SongLibrary.story()[0]
 	var app := UIHarness.make_app(tree, "play", {"song_id": song.id, "difficulty": "easy", "bell_set": "light"})
@@ -99,7 +99,9 @@ func test_pause_resume_keeps_the_song_time() -> void:
 	UIHarness.press(play, "Resume")
 	await UIHarness.frames(tree, 2)
 	check(play.get("paused"), "resume first counts in")
-	check_near(c.song_time(), t, 0.001, "the count-in does not move the song")
+	var bar_t: float = play.call("resume_bar_time", t)
+	check_near(c.song_time(), bar_t, 0.001, "the count-in waits on the bar line one to two bars back")
+	check(c.song_time() <= t + 0.001, "never ahead of where the player paused")
 	var waited := 0.0
 	while play.get("paused") and waited < 6.0:
 		await tree.create_timer(0.1).timeout

@@ -52,8 +52,8 @@ Swipes get ±170 ms. Bells from the tilt get an extra 15 ms on every window, bec
 than touch.
 
 **Unison** is the multiplier: ×1, ×1.5, ×2, ×2.5, ×3, ×4. It goes up one level every 12 hits in a row
-that are Good or better. A miss or a wrong step drops it **two** levels (not to zero), so the row can
-recover. It is shown as the row of Mamuthones in the procession scene getting tighter and louder.
+that are Good or better. A miss drops it **two** levels and a wrong step one (never to zero), so the
+row can recover. It is shown as the row of Mamuthones in the procession scene getting tighter and louder.
 
 **Weight** is the bell set's multiplier. Heavier sets score more and have stricter windows:
 

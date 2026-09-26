@@ -15,6 +15,7 @@ var index := 0
 var fails := 0
 var _card: Control
 var _play: Screen
+var _last: Session               ## the last try, for what went wrong in the player's own numbers
 
 
 func build() -> void:
@@ -80,7 +81,13 @@ func _intro(after_fail := false, after_demo := false) -> void:
 		var why := UIKit.card(box, true)
 		why.name = "Why"
 		why.add_child(UIKit.label(tr("tut_almost"), UIKit.PAPER_HEADER))
-		why.add_child(UIKit.label(tr("tut_fail_" + t), UIKit.PAPER))
+		if _last != null:
+			for line in fail_lines(_last, t):
+				var l := UIKit.label(line, UIKit.PAPER)
+				l.name = "WhyNumbers"
+				why.add_child(l)
+		var fail_key := "tut_fail_%s_slam" % t if slam and t == "full" else "tut_fail_" + t
+		why.add_child(UIKit.label(tr(fail_key), UIKit.PAPER))
 	var go := UIKit.button(tr("tut_your_turn") if after_demo else (tr("tut_try_again") if after_fail else tr("tut_try")), _start.bind(false), UIKit.PRIMARY)
 	go.name = "Try"
 	box.add_child(go)
@@ -111,7 +118,10 @@ func _start(demo: bool) -> void:
 	_play.name = "Lesson"
 	add_child(_play)
 	_play.build()
-	var hint := UIKit.label(tr("tut_watch") if demo else tr("tut_%s_short" % topic()), UIKit.HUD, true, HORIZONTAL_ALIGNMENT_CENTER)
+	var short := "tut_%s_short" % topic()
+	if bool(Profile.get_setting("slam")) and topic() == "full":
+		short = "tut_full_slam_short"
+	var hint := UIKit.label(tr("tut_watch") if demo else tr(short), UIKit.HUD, true, HORIZONTAL_ALIGNMENT_CENTER)
 	hint.set_anchors_preset(Control.PRESET_CENTER)
 	hint.custom_minimum_size.x = 600
 	hint.position = Vector2(-300, -40)
@@ -132,12 +142,67 @@ func _on_lesson_done(session: Session, demo: bool) -> void:
 	if demo:
 		_intro(false, true)
 		return
+	_last = session
 	if passed(session, topic()):
 		fails = 0
 		_well_done(session)
 	else:
 		fails += 1
 		_intro(true)
+
+
+## What went wrong in a lesson try, in the player's own numbers: at most two lines, the biggest
+## problem first (missed notes of the lesson's kind, a lane that got most misses, timing, wrong lane,
+## bells in a stand-still, holds let go).
+static func fail_lines(s: Session, t: String) -> Array[String]:
+	var out: Array[String] = []
+	var st := s.stats
+	match t:
+		"still":
+			if int(st.silence) > 0:
+				out.append(UIKit.tr_("tut_why_silence") % int(st.silence))
+		"holds":
+			if int(st.get("holds", 0)) > 0:
+				out.append(UIKit.tr_("tut_why_holds") % [int(st.held), int(st.holds)])
+	# Misses, by the kind this lesson teaches (bells for bells, the lane with most misses for lanes).
+	var kinds := [Note.Kind.STEP, Note.Kind.HOLD, Note.Kind.RING]
+	if t == "bells":
+		kinds = [Note.Kind.BELL, Note.Kind.RING]
+	elif t == "swipes":
+		kinds = [Note.Kind.SWIPE]
+	var total := 0
+	var missed := 0
+	var lane_total := [0, 0, 0]
+	var lane_missed := [0, 0, 0]
+	for n in s.notes:
+		if not n.kind in kinds:
+			continue
+		total += 1
+		var m := n.judgement in ["miss", "wrong", ""] or not n.done
+		if m:
+			missed += 1
+		if n.lane >= 0 and n.lane <= 2:
+			lane_total[n.lane] += 1
+			if m:
+				lane_missed[n.lane] += 1
+	if missed > 0:
+		var worst := 0
+		for lane in 3:
+			if lane_missed[lane] > lane_missed[worst]:
+				worst = lane
+		if t == "lanes" and lane_missed[worst] > 0 and lane_missed[worst] * 2 >= missed:
+			out.append(UIKit.tr_("tut_why_lane_%d" % worst) % [lane_missed[worst], lane_total[worst]])
+		else:
+			out.append(UIKit.tr_("tut_why_missed") % [missed, total])
+	var med := s.median_offset()
+	var side := UIKit.side_of(med)
+	if s.hit_offsets.size() >= 3 and absf(med) >= 0.03:
+		out.append(UIKit.tr_("tut_why_" + side) % roundi(absf(med) * 1000.0))
+	if int(st.get("wrong", 0)) > 0:
+		out.append(UIKit.tr_("tut_why_wrong") % int(st.wrong))
+	if out.size() > 2:
+		out.resize(2)
+	return out
 
 
 ## Whether a lesson run counts as learned.

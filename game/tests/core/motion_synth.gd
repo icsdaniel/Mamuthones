@@ -35,8 +35,9 @@ func turn(t0: float, rate := 250.0, dur := 0.5) -> void:
 
 
 ## A hard thumb tap at t0: `acc` m/s² spike on z lasting `dur` seconds, with `rot` °/s of rotation.
-func tap(t0: float, acc := 25.0, dur := 0.005, rot := 25.0) -> void:
-	events.append({"kind": "tap", "t0": t0, "acc": acc, "dur": dur, "rot": rot})
+## rot_axis 1 (y) is the usual; 0 (x, the tilt axis) is a knock that jolts the tilt axis too.
+func tap(t0: float, acc := 25.0, dur := 0.005, rot := 25.0, rot_axis := 1) -> void:
+	events.append({"kind": "tap", "t0": t0, "acc": acc, "dur": dur, "rot": rot, "rot_axis": rot_axis})
 
 
 ## Frame times from t0 to t1.
@@ -82,7 +83,7 @@ func sample(t: float) -> Array:
 				continue
 			acc.z += e.acc
 			acc.x += e.acc * 0.15
-			gyro.y += e.rot
+			gyro[int(e.get("rot_axis", 1))] += e.rot
 		elif e.kind == "turn":
 			if dt < 0.0 or dt > e.dur:
 				continue

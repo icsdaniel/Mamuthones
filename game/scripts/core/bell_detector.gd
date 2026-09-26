@@ -9,8 +9,11 @@ extends RefCounted
 ##   confirms a ring (it only moves the clock for re-arming).
 ## - A ring starts where the signal crosses the threshold (interpolated between readings, and moved
 ##   back by the estimated age of a held reading). It only counts once the signal has stayed above
-##   half the threshold for 25 ms (45 ms right after a touch in accel mode): a tilt lasts 100 ms or
-##   more, a thumb tap is a spike of a few ms, mostly on the screen's z axis.
+##   half the threshold for 25 ms (45 ms right after a touch in accel mode). In gyro mode a reading
+##   over the full threshold rings at once when a reading at least 5 ms earlier caught the same lobe
+##   on its rising slope (so usually on the first frame past the crossing): a tilt lasts 100 ms or
+##   more and rises over tens of ms, a thumb tap or knock is a jump of a few ms, mostly on the
+##   screen's z axis.
 ## - One flick = one ring: a down-and-up flick has two lobes, so after a ring the detector waits
 ##   0.45 beat (bells written half a beat apart stay playable) AND for the signal to stay below half
 ##   the threshold for 50 ms (the dip between the two lobes of a slow flick is shorter than that).
@@ -25,6 +28,13 @@ const CALM := 0.050           ## seconds below half the threshold before the nex
 const SUSTAIN := 0.5          ## share of the threshold the signal must keep while confirming
 const CONFIRM := 0.025        ## seconds above SUSTAIN that make a ring
 const CONFIRM_NEAR_TOUCH := 0.045
+## Gyro fast path: a reading over the full threshold confirms at once when an earlier reading of the
+## same lobe, at least 5 ms before, was on the rising slope (between a quarter and the full threshold).
+## A tilt rises over tens of ms and leaves such readings; a knock or tap jumps from nothing to its
+## peak between two readings and does not, so it still needs the full 25 ms. This cuts the sound's
+## lag to about one frame for most flicks without letting knocks through.
+const CONFIRM_FAST := 0.005
+const SLOPE := 0.25           ## rising-slope readings lie between this share and the full threshold
 const MAX_GAP := 0.06         ## seconds; a longer gap between readings breaks interpolation
 const TOUCH_WINDOW := 0.10    ## seconds after a touch during which accel rings need more proof
 const PEAK_WATCH := 0.15
@@ -58,6 +68,8 @@ var _cand_t := NAN
 var _cand_first := NAN
 var _cand_vec := Vector3.ZERO
 var _cand_peak := 0.0
+var _rise_since := NAN        # first fresh reading of the current lobe on its rising slope
+var _lobe_over := false # the current lobe already went over the threshold
 var _prev_v := 0.0
 var _prev_t := -INF
 var _last_vec := Vector3(NAN, NAN, NAN)
@@ -102,6 +114,8 @@ func reset() -> void:
 	_armed = true
 	_calm_since = NAN
 	_cand_t = NAN
+	_rise_since = NAN
+	_lobe_over = false
 	_prev_v = 0.0
 	_prev_t = -INF
 	_last_vec = Vector3(NAN, NAN, NAN)
@@ -147,6 +161,12 @@ func feed(t: float, acc: Vector3, gyro_dps: Vector3) -> bool:
 	# A held reading says nothing new about a starting ring.
 	if not fresh:
 		return false
+	if v < threshold * SLOPE:
+		_rise_since = NAN
+	elif is_nan(_rise_since) and v < threshold and not _lobe_over:
+		_rise_since = t   # a reading on the rising slope, between half and the full threshold
+	_lobe_over = v >= threshold * SLOPE and (_lobe_over or v >= threshold)
+	var fast := mode == "gyro" and v >= threshold and not is_nan(_rise_since) and t - _rise_since >= CONFIRM_FAST - 1e-4
 	if _armed:
 		if is_nan(_cand_t):
 			if v > threshold:
@@ -156,12 +176,15 @@ func feed(t: float, acc: Vector3, gyro_dps: Vector3) -> bool:
 				_cand_first = t
 				_cand_vec = vec
 				_cand_peak = v
+				if fast:
+					fired = true
+					_fire()
 			else:
 				_watch_near(v, t)
 		elif v >= threshold * SUSTAIN:
 			_cand_peak = maxf(_cand_peak, v)
 			var near_touch := mode == "accel" and _last_touch >= _cand_t - TOUCH_WINDOW and _last_touch <= t
-			if t - _cand_first >= (CONFIRM_NEAR_TOUCH if near_touch else CONFIRM):
+			if fast or t - _cand_first >= (CONFIRM_NEAR_TOUCH if near_touch else CONFIRM):
 				fired = true
 				_fire()
 		else:

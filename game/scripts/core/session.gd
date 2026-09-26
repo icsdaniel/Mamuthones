@@ -17,6 +17,8 @@ extends RefCounted
 ## mean_offset(), median_offset(), hit_offsets, score_breakdown(), end_time(), progress(t),
 ## song_key(), ladder_ok(), passed(), upcoming_bell(t), window(kind), stats keys listed in _init,
 ## Note.side ("early"/"late"/"" for every judged hit, so a Perfect can still say which side it was).
+## Signals wrong_step(lane, note, offset) (the pressed lane of a wrong step) and still_kept(note,
+## points); stats unison_peak (the highest multiplier reached) and time_at_top (seconds at ×4).
 ##
 ## Matching uses note-lock: an input goes to the EARLIEST open note whose window contains it, so a
 ## late player in a fast stream reads as late instead of drifting onto the next note.
@@ -25,6 +27,11 @@ signal judged(note: Note, judgement: String, offset: float)
 signal unison_changed(level: int)
 signal hold_started(lane: int)
 signal hold_ended(lane: int, kept: bool)
+## A tap on `lane` counted as a wrong step against `note` (another lane's note); judged also fires
+## for that note. The UI marks the pressed button with this.
+signal wrong_step(lane: int, note: Note, offset: float)
+## A stand-still was kept to its end (at note.end_t); `points` is what it added.
+signal still_kept(note: Note, points: float)
 
 # Timing windows for the Light set, in seconds (half-widths).
 const PERFECT := 0.045
@@ -38,12 +45,15 @@ const RING_POINTS := {"perfect": 450, "good": 225, "early": 75, "late": 75}
 const HOLD_BONUS := 150
 const HOLD_GRACE := 0.120    ## a hold released up to 120 ms before its end still counts as kept
 const STILL_PENALTY := 100
-const STILL_BONUS := 50      ## a stand-still kept to its end: 50 × unison × weight
+const STILL_BONUS := 150     ## a stand-still kept to its end: 150 × unison × weight
+const STILL_HITS := 4        ## and it counts as 4 hits toward the next unison level
 const SILENCE_DEBOUNCE := 0.150  ## rings in a stand-still closer than this count once
 const SIDE_DEAD_ZONE := 0.010    ## hits this close to the beat are neither early nor late
 const UNISON_MULTS: Array[float] = [1.0, 1.5, 2.0, 2.5, 3.0, 4.0]
 const UNISON_STEP := 12      ## Good-or-better hits in a row per unison level
 const MISS_DROP := 2
+const WRONG_DROP := 1        ## a wrong step (a wrong-way swipe uses its note up: MISS_DROP)
+const WRONG_REACH := 2.0     ## the pressed lane's own note within 2 × Early/Late keeps a tap stray
 const SILENCE_DROP := 1
 const LET_GO_DROP := 1
 const SLAM_GAP := 0.080      ## Left and Right pressed within 80 ms of each other = one slam bell
@@ -89,6 +99,8 @@ var _last_silence := -INF
 var _next_free_up := true
 var _end_time := 0.0
 var _max_window := 0.0
+var _top_since := NAN
+var _top_time := 0.0
 
 
 func _init(p_song: SongData, p_difficulty: String, p_bell_set: String = "light", p_options: Dictionary = {}) -> void:
@@ -134,6 +146,7 @@ func _init(p_song: SongData, p_difficulty: String, p_bell_set: String = "light",
 		"perfect": 0, "good": 0, "early": 0, "late": 0, "miss": 0, "wrong": 0,
 		"held": 0, "let_go": 0, "silence": 0, "still_kept": 0, "early_hits": 0, "late_hits": 0,
 		"rests": 0, "holds": 0, "notes": 0, "total": 0, "max_unison": 0,
+		"unison_peak": 1.0, "time_at_top": 0.0,
 	}
 	var last_end := 0.0
 	for n in notes:
@@ -320,9 +333,12 @@ func tap(lane: int, t: float, touch_id: int = 0) -> Dictionary:
 		res.judgement = n.judgement
 	elif not piazza and not (slam and lane != 1) and _find_open(Note.Kind.SWIPE, t, win_swipe.z) == null:
 		# The touch that starts a rope swipe is not a wrong step.
+		# A wrong step only when another lane's note is due AND the pressed lane has no note of its
+		# own coming soon: otherwise the tap is stray and free, and the player's note still counts.
 		var other := _find_other_lane_note(lane, t)
-		if other != null:
-			_wrong(other, t, t - other.t)
+		if other != null and _own_note_near(lane, t) == null:
+			_wrong(other, t, t - other.t, WRONG_DROP)
+			wrong_step.emit(lane, other, t - other.t)
 			res.judgement = "wrong"
 			res.note = other
 	if slam and (lane == 0 or lane == 2):
@@ -363,7 +379,7 @@ func swipe(dir: int, t: float) -> Dictionary:
 		n.finished = true
 		n.hit_at = t
 		stats.notes += 1
-		_wrong(n, t, off)
+		_wrong(n, t, off, MISS_DROP)   # a wrong-way swipe uses its note up
 	else:
 		_hit(n, t, _grade(off, win_swipe), off, POINTS)
 	res.judgement = n.judgement
@@ -411,7 +427,7 @@ func ring(t: float, tilt: bool = true, strength: float = 0.5) -> Dictionary:
 			unison_streak = 0
 			_raw -= STILL_PENALTY
 			_breakdown.penalties += STILL_PENALTY
-			_set_unison(unison_level - SILENCE_DROP)
+			_set_unison(unison_level - SILENCE_DROP, t)
 			_refresh_score(t)
 			judged.emit(rest, "silence", t - rest.t)
 		_last_silence = t
@@ -422,6 +438,7 @@ func ring(t: float, tilt: bool = true, strength: float = 0.5) -> Dictionary:
 
 ## Call every frame with the current song time.
 func update(t: float) -> void:
+	_track_top(t)
 	for i in range(_first_open, notes.size()):
 		var n := notes[i]
 		if n.t > t:
@@ -439,6 +456,8 @@ func update(t: float) -> void:
 						_raw += v
 						_breakdown.stills += v
 						_refresh_score(n.end_t)
+						_add_streak(STILL_HITS, n.end_t)
+						still_kept.emit(n, v)
 			Note.Kind.HOLD:
 				if n.holding:
 					if t >= n.end_t:
@@ -489,6 +508,18 @@ func _timeout(n: Note) -> float:
 		Note.Kind.SWIPE:
 			return win_swipe.z
 	return win_touch.z
+
+
+# An open note of the pressed lane within WRONG_REACH × the Early/Late window of t.
+func _own_note_near(lane: int, t: float) -> Note:
+	var reach := WRONG_REACH * win_touch.z
+	for i in range(_first_open, notes.size()):
+		var n := notes[i]
+		if n.t - reach > t:
+			break
+		if not n.done and n.uses_lane() and n.lane == lane and absf(t - n.t) <= reach:
+			return n
+	return null
 
 
 # Note-lock: the earliest open note on the lane whose window contains t.
@@ -574,10 +605,7 @@ func _hit(n: Note, t: float, g: String, off: float, table: Dictionary) -> void:
 	combo += 1
 	max_combo = maxi(max_combo, combo)
 	if g == "perfect" or g == "good":
-		unison_streak += 1
-		if unison_streak >= UNISON_STEP:
-			unison_streak = 0
-			_set_unison(unison_level + 1)
+		_add_streak(1, t)
 	else:
 		unison_streak = 0
 	judged.emit(n, g, off)
@@ -600,18 +628,18 @@ func _miss(n: Note, t: float) -> void:
 	stats.notes += 1
 	combo = 0
 	unison_streak = 0
-	_set_unison(unison_level - MISS_DROP)
+	_set_unison(unison_level - MISS_DROP, t)
 	score_timeline.append(Vector2(t, score))
 	judged.emit(n, "miss", t - n.t)
 
 
-func _wrong(n: Note, t: float, off: float) -> void:
+func _wrong(n: Note, t: float, off: float, drop: int) -> void:
 	if n.done:
 		n.judgement = "wrong"
 	stats.wrong += 1
 	combo = 0
 	unison_streak = 0
-	_set_unison(unison_level - MISS_DROP)
+	_set_unison(unison_level - drop, t)
 	score_timeline.append(Vector2(t, score))
 	judged.emit(n, "wrong", off)
 
@@ -630,7 +658,7 @@ func _end_hold(n: Note, t: float, kept: bool) -> void:
 		stats.let_go += 1
 		combo = 0
 		unison_streak = 0
-		_set_unison(unison_level - LET_GO_DROP)
+		_set_unison(unison_level - LET_GO_DROP, t)
 		judged.emit(n, "let_go", t - n.end_t)
 	hold_ended.emit(n.lane, kept)
 
@@ -650,13 +678,35 @@ func _refresh_score(t: float) -> void:
 	score_timeline.append(Vector2(t, score))
 
 
-func _set_unison(level: int) -> void:
+# n hits toward the next unison level (a Good-or-better hit is 1, a kept stand-still 4).
+func _add_streak(n: int, t: float) -> void:
+	unison_streak += n
+	if unison_streak >= UNISON_STEP:
+		unison_streak -= UNISON_STEP
+		_set_unison(unison_level + 1, t)
+
+
+func _set_unison(level: int, t: float) -> void:
 	level = clampi(level, 0, UNISON_MULTS.size() - 1)
 	if level == unison_level:
 		return
+	var top := UNISON_MULTS.size() - 1
+	if unison_level == top and not is_nan(_top_since):
+		_top_time += maxf(0.0, t - _top_since)
+		_top_since = NAN
+	if level == top:
+		_top_since = t
 	unison_level = level
 	stats.max_unison = maxi(stats.max_unison, level)
+	stats.unison_peak = UNISON_MULTS[stats.max_unison]
+	stats.time_at_top = _top_time
 	unison_changed.emit(level)
+
+
+# stats.time_at_top counts the seconds spent at the top level (×4) up to song time t.
+func _track_top(t: float) -> void:
+	if not is_nan(_top_since):
+		stats.time_at_top = _top_time + maxf(0.0, minf(t, end_time()) - _top_since)
 
 
 # Slam: the bell comes from the outer buttons. A press on Left or Right that hits no note rings

@@ -111,12 +111,17 @@ func _shots() -> Array:
 		{"file": "play_bell", "screen": "play", "args": {"song_id": fires_id, "difficulty": "hard", "bell_set": "light", "autoplay": true}, "setup": "moment:bell", "wait": 0.1},
 		{"file": "play_still", "screen": "play", "args": {"song_id": fires_id, "difficulty": "hard", "bell_set": "light", "autoplay": true}, "setup": "moment:still", "wait": 0.1},
 		{"file": "play_miss", "screen": "play", "args": {"song_id": fires_id, "difficulty": "hard", "bell_set": "light", "autoplay": true}, "setup": "moment:miss", "wait": 0.05},
+		{"file": "play_countin", "screen": "play", "args": {"song_id": fires_id, "difficulty": "hard", "bell_set": "light"}, "setup": "moment:countin", "wait": 0.05},
+		{"file": "play_ready", "screen": "play", "args": {"song_id": fires_id, "difficulty": "hard", "bell_set": "light"}, "setup": "moment:ready", "wait": 0.05},
+		{"file": "play_resume", "screen": "play", "args": {"song_id": fires_id, "difficulty": "hard", "bell_set": "light"}, "setup": "resume", "wait": 0.0},
+		{"file": "play_wrong", "screen": "play", "args": {"song_id": fires_id, "difficulty": "hard", "bell_set": "light", "autoplay": true}, "setup": "moment:wrong", "wait": 0.05},
 		{"file": "play_tutorial", "screen": "play", "args": {"song_id": tut_id, "difficulty": "easy", "bell_set": "light", "autoplay": true}, "setup": "advance:0.25"},
 		{"file": "pause", "screen": "play", "args": {"song_id": fires_id, "difficulty": "medium", "bell_set": "light", "autoplay": true}, "setup": "pause"},
 		{"file": "results", "screen": "results", "setup": "results", "wait": 1.3},
 	]
 	var piazza := SongLibrary.piazza()
 	if not piazza.is_empty():
+		shots.append({"file": "play_piazza_hit", "screen": "play", "args": {"song_id": piazza[0].id, "difficulty": "piazza", "bell_set": "light", "piazza": true, "autoplay": true, "round": _round(1)}, "setup": "moment:rang", "wait": 0.05})
 		shots.append({"file": "play_piazza", "screen": "play", "args": {"song_id": piazza[0].id, "difficulty": "piazza", "bell_set": "light", "piazza": true, "autoplay": true, "round": _round(1)}, "setup": "advance:0.3"})
 	return shots
 
@@ -158,6 +163,14 @@ func _render(shot: Dictionary, size: Vector2i, locale: String, dir: String) -> v
 		await _advance(screen, float(setup.get_slice(":", 1)))
 	elif setup.begins_with("moment:") and screen != null:
 		await _moment(screen, setup.get_slice(":", 1))
+	elif setup == "resume" and screen != null:
+		await _advance(screen, 0.4)
+		screen.call("pause")
+		await process_frame
+		screen.call("_on_pause_choice", "resume")
+		var t0 := Time.get_ticks_msec()
+		while Time.get_ticks_msec() - t0 < 1000.0 * 1.15 * 60.0 / float((screen.get("session") as Session).song.bpm):
+			await process_frame
 	elif setup == "pause" and screen != null:
 		await _advance(screen, 0.2)
 		screen.call("pause")
@@ -212,8 +225,24 @@ func _moment(screen: Node, what: String) -> void:
 				if k > best:
 					best = k
 					target = s.notes[i].t + 0.9
-		"hold", "bell", "still", "miss":
-			var kinds := {"hold": [Note.Kind.HOLD], "bell": [Note.Kind.BELL, Note.Kind.RING],
+		"countin":
+			target = song_time_of(s, -2.35)
+		"ready":
+			target = minf(song_time_of(s, 0.4), s.notes[0].t - 0.2)
+		"wrong":
+			for i in s.notes.size():
+				var n: Note = s.notes[i]
+				if n.t < from or n.kind != Note.Kind.STEP or n.lane != 2:
+					continue
+				var lone := true
+				for m in s.notes:
+					if m != n and absf(m.t - n.t) < 0.6 and (m.lane == 0 or m.is_bell() or m.kind == Note.Kind.SWIPE):
+						lone = false
+				if lone:
+					target = n.t - 0.03
+					break
+		"hold", "bell", "still", "miss", "rang":
+			var kinds := {"hold": [Note.Kind.HOLD], "bell": [Note.Kind.BELL, Note.Kind.RING], "rang": [Note.Kind.BELL, Note.Kind.RING],
 				"still": [Note.Kind.REST], "miss": [Note.Kind.STEP]}
 			for i in s.notes.size():
 				var n: Note = s.notes[i]
@@ -224,6 +253,8 @@ func _moment(screen: Node, what: String) -> void:
 						target = lerpf(n.t, n.end_t, 0.45)
 					"bell":
 						target = n.t - 0.45
+					"rang":
+						target = n.t + 0.08
 					"miss":
 						var auto: Object = screen.get("autoplay")
 						if auto != null:
@@ -236,6 +267,14 @@ func _moment(screen: Node, what: String) -> void:
 	for i in steps:
 		c.advance(step)
 		await process_frame
+	if what == "wrong":
+		# The player's thumb lands on the left button while the right lane's note is due.
+		s.tap(0, c.song_time(), 7)
+		screen.call("_on_stepped", 0)
+
+
+static func song_time_of(s: Session, beat: float) -> float:
+	return s.song.time_of(beat, s.remix)
 
 
 func _results_args() -> Dictionary:

@@ -1,6 +1,7 @@
 extends Screen
 ## Free play: any unlocked song at any difficulty with any unlocked bell set, the remix when earned.
-## Shows the best score and bells for the choice, and whether a ghost is there to race.
+## Every song row shows its best bells and best score, every difficulty its own bells and best, so the
+## list reads at a glance; below, the best for the choice and whether a ghost is there to race.
 
 var song: SongData
 var difficulty := "easy"
@@ -24,6 +25,9 @@ func build() -> void:
 		b.disabled = not open
 		b.alignment = HORIZONTAL_ALIGNMENT_LEFT
 		b.name = "Song_" + s.id
+		if open:
+			var top := _best_of(s.id)
+			_badge(b, UIKit.best_bells(s.id), UIKit.fmt_score(top) if top > 0 else "")
 		box.add_child(b)
 		_song_buttons[s.id] = b
 	box.add_child(UIKit.label(tr("stop_difficulty"), UIKit.SUB))
@@ -38,7 +42,7 @@ func build() -> void:
 	_remix.focus_mode = Control.FOCUS_NONE
 	_remix.toggled.connect(func(on: bool) -> void:
 		use_remix = on
-		_refresh())
+		_pick_song(song))
 	_remix.name = "Remix"
 	box.add_child(_remix)
 	_info = UIKit.label("", UIKit.CAPTION)
@@ -68,6 +72,8 @@ func _pick_song(s: SongData) -> void:
 		b.set_pressed_no_signal(d == difficulty)
 		b.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 		b.name = "Diff_" + d
+		var best: Dictionary = Profile.best(UIKit.board_song_id(s, use_remix), d)
+		_badge(b, int(best.get("bells", 0)), "")
 		_diff_box.add_child(b)
 	var remix_open := s.has_remix() and Progression.remix_unlocked(s.id)
 	_remix.visible = s.has_remix()
@@ -77,6 +83,37 @@ func _pick_song(s: SongData) -> void:
 		use_remix = false
 		_remix.set_pressed_no_signal(false)
 	_refresh()
+
+
+## Best score of a song over every difficulty (0 when never played).
+static func _best_of(song_id: String) -> int:
+	var s := SongLibrary.get_song(song_id)
+	var out := 0
+	if s != null:
+		for d in s.difficulties():
+			out = maxi(out, int(Profile.best(song_id, d).get("score", 0)))
+	return out
+
+
+## Bells (and a score) at the right end of a list button.
+func _badge(b: Button, bells: int, score: String) -> void:
+	var row := HBoxContainer.new()
+	row.name = "Best"
+	row.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	row.alignment = BoxContainer.ALIGNMENT_END
+	row.add_theme_constant_override("separation", 10)
+	row.set_anchors_and_offsets_preset(Control.PRESET_RIGHT_WIDE)
+	row.offset_right = -14.0
+	row.grow_horizontal = Control.GROW_DIRECTION_BEGIN
+	if score != "":
+		var l := UIKit.label(score, UIKit.CAPTION, false)
+		l.name = "Score"
+		l.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+		row.add_child(l)
+	var marks := BellMarks.new(bells, 24.0)
+	marks.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+	row.add_child(marks)
+	b.add_child(row)
 
 
 func _pick_diff(d: String) -> void:

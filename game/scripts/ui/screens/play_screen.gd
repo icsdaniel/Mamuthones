@@ -7,7 +7,13 @@ extends Screen
 ## args: song_id, difficulty, bell_set, remix, mirror, daily, piazza, round (Piazza turn state),
 ##       autoplay (bool), human (autoplay with small errors), from_beat/to_beat (a lesson),
 ##       embedded (emit `finished` instead of opening the results), lead_in (seconds before the first
-##       note when starting mid-song).
+##       note when starting mid-song, with no count), quick (restart / retry: start a bar before the
+##       first note's bar, after a count-in, instead of the whole intro).
+##
+## Count-ins: a song started from its beginning has its count-in sticks in the music (beats -4..-1),
+## and the big 4-3-2-1 over the procession lands on them. A resume, a quick restart and a lesson
+## count in with Sound.count_in() while the music waits on a bar line; the digits follow those sticks
+## and the lanes keep moving so the approach replays, then the music starts on the next beat.
 
 signal finished(session: Session)
 
@@ -38,8 +44,13 @@ var _first_t := 0.0
 var _spb := 0.5
 var _sched := 0                  ## next note to check for calls and rope throws
 var _pause_panel: Control
-var _count: Label
-var _resume_at := -1.0           ## real time when a resume count-in ends
+var count_view: CountInView
+var _resume_at := -1.0           ## real time when a count-in ends and the music starts (-1: none)
+var _count_from := 0.0           ## real time the first count-in stick is heard
+var _count_music_t := 0.0        ## song time the music starts from after the count-in
+var _played := false             ## the music has run since the last count-in
+var _audio_count := false        ## the song started at its own count-in (sticks in the music)
+var _tap_hit := false            ## the tap being handled judged a note (set by _on_judged)
 var _clock := 0.0
 var _field_box: Control
 var _still := false
@@ -166,14 +177,13 @@ func build() -> void:
 	session.unison_changed.connect(_on_unison)
 	session.hold_started.connect(func(lane: int) -> void: Sound.hold_start(lane))
 	session.hold_ended.connect(func(lane: int, _kept: bool) -> void: Sound.hold_stop(lane))
+	session.wrong_step.connect(_on_wrong_step)
+	session.still_kept.connect(_on_still_kept)
 
-	_count = UIKit.label("", "BigNumberLabel", false, HORIZONTAL_ALIGNMENT_CENTER)
-	_count.set_anchors_preset(Control.PRESET_CENTER)
-	_count.grow_horizontal = Control.GROW_DIRECTION_BOTH
-	_count.grow_vertical = Control.GROW_DIRECTION_BOTH
-	_count.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	_count.name = "CountIn"
-	lanes.add_child(_count)
+	# The count-in is drawn over the procession, never over the notes.
+	count_view = CountInView.new()
+	count_view.name = "CountIn"
+	scene.add_child(count_view)
 
 	Sound.set_key(song.key_root)
 	Sound.row_bells(0)
@@ -184,13 +194,55 @@ func build() -> void:
 
 func _start() -> void:
 	_layout_router()
+	if args.has("lead_in"):
+		conductor.play(song, session.remix, _first_t - float(args.lead_in))
+		_played = true
+		return
+	if bool(args.get("quick", false)) or args.has("from_beat"):
+		# A restart, a retry or a lesson: wait on the bar line a bar before the first note's bar and
+		# count in, rather than replaying the whole intro.
+		var bar_t := lead_bar_time()
+		if bar_t > song.time_of(-4.0, session.remix) + 0.05:
+			conductor.play(song, session.remix, bar_t)
+			conductor.pause()
+			paused = true
+			_begin_count(bar_t)
+			return
 	var start := 0.0
-	if args.has("from_beat"):
-		# A lesson: start a bar before its first note so the player hears the beat.
-		start = _first_t - float(args.get("lead_in", 4.0 * _spb + 0.4))
-	elif _first_t < 4.0 * _spb + 0.5:
+	if _first_t < 4.0 * _spb + 0.5:
 		start = _first_t - (4.0 * _spb + 0.5)
+	_audio_count = start <= song.time_of(-4.0, session.remix) + 0.01
 	conductor.play(song, session.remix, start)
+	_played = true
+
+
+## Song time of the bar line one bar before the bar of the first note (bars of four beats from beat 0).
+func lead_bar_time() -> float:
+	var bf := song.beat_at(_first_t, session.remix)
+	return song.time_of(floorf(bf / 4.0) * 4.0 - 4.0, session.remix)
+
+
+## Song time to resume from: the bar line one to two bars before t, so the player hears the groove
+## back before the next note (never before the song's start).
+func resume_bar_time(t: float) -> float:
+	var b := song.beat_at(t, session.remix)
+	return maxf(song.time_of(floorf(b / 4.0) * 4.0 - 4.0, session.remix), 0.0)
+
+
+## Counts in one bar with Sound's sticks while the music waits at music_t, then starts it.
+func _begin_count(music_t: float) -> void:
+	if absf(conductor.song_time() - music_t) > 0.001:
+		conductor.seek(music_t)
+	router.release_all()
+	router.enabled = false
+	_count_music_t = music_t
+	var length := Sound.count_in(song.bpm)
+	if length <= 0.0:
+		length = 4.0 * _spb
+	_count_from = _clock + AudioServer.get_output_latency()
+	_resume_at = _clock + length
+	_played = false
+	_tick_count()
 
 
 func _layout_router() -> void:
@@ -202,8 +254,9 @@ func _process(delta: float) -> void:
 	_clock += delta
 	if done or session == null or conductor == null:
 		return
+	_tap_hit = false
 	if _resume_at >= 0.0:
-		_tick_resume()
+		_tick_count()
 		return
 	if paused:
 		return
@@ -250,27 +303,45 @@ func _schedule(t: float) -> void:
 	if still != _still:
 		_still = still
 		scene.set_still(still)
+		if cue != null:
+			cue.still = still
 
 
-## "4 3 2 1" on the beats before the first note.
+## Song start: "4 3 2 1" on the music's own count-in sticks (beats -4..-1), then "Get ready" with the
+## bars left until the first note.
 func _count_in(t: float) -> void:
-	var beats_left := (_first_t - t) / _spb
-	if beats_left > 0.0 and beats_left <= 4.0:
-		var n := ceili(beats_left)
-		var txt := str(n)
-		if _count.text != txt:
-			_count.text = txt
-			_pop(_count)
-	elif _count.text != "" and _resume_at < 0.0:
-		_count.text = ""
+	var b := song.beat_at(t, session.remix)
+	if _audio_count and b >= -4.0 and b < 0.0:
+		count_view.show_digit(int(-floorf(b)), fposmod(b, 1.0))
+	elif t < _first_t - 0.05 and b >= -4.0:
+		var bf := song.beat_at(_first_t, session.remix)
+		count_view.show_ready(maxi(ceili((bf - b) / 4.0), 1), fposmod(b, 1.0))
+	else:
+		count_view.clear()
 
 
 # ---------------------------------------------------------------- feedback (same frame as the input)
 
 
 func _on_stepped(lane: int) -> void:
-	Sound.step(lane)
-	lanes.press(lane)
+	# A finger landing while a rope is due is the start of a swipe: grab the rope at once, and hold
+	# the step sound back unless the touch itself hit a note in its lane.
+	if not _tap_hit and _swipe_open(conductor.song_time()):
+		lanes.rope_grab(lane)
+	else:
+		Sound.step(lane)
+		lanes.press(lane)
+	_tap_hit = false
+
+
+func _swipe_open(t: float) -> bool:
+	var reach := session.window("swipe").z
+	for n in session.notes:
+		if n.t > t + reach:
+			return false
+		if n.kind == Note.Kind.SWIPE and not n.done and absf(n.t - t) <= reach:
+			return true
+	return false
 
 
 func _on_rang(result: Dictionary) -> void:
@@ -292,34 +363,61 @@ func _on_swiped(_dir: int) -> void:
 
 
 func _on_judged(note: Note, judgement: String, offset: float) -> void:
+	if judgement == "wrong":
+		# Shown on the button actually pressed (_on_wrong_step); the row stumbles.
+		scene.jolt("miss")
+		return
 	var good := judgement in ["perfect", "good", "held"]
 	var soft := judgement in ["early", "late"]
 	var quality := judgement
 	if not quality in ["perfect", "good", "early", "late", "miss", "held"]:
 		quality = "miss"
+	var lane := note.lane if note != null and note.lane >= 0 else -1
+	if lane >= 0 and (good or soft) and note.kind != Note.Kind.RING:
+		_tap_hit = true
 	var pos: Vector2
-	if note != null and note.lane >= 0:
-		pos = lanes.lane_center(note.lane)
-		lanes.flash(note.lane, good or soft)
+	if lane >= 0:
+		pos = lanes.lane_center(lane)
+		lanes.flash(lane, good or soft)
 	else:
 		pos = Vector2(lanes.size.x * 0.5, lanes.lane_center(1).y)
-	lanes.burst(pos, quality)
+	var side := ""
+	if judgement in ["perfect", "good"]:
+		side = UIKit.side_of(offset)
+	lanes.burst(pos, quality, side)
 	var word_key: String = JUDGE_WORDS.get(judgement, "")
-	var hint := ""
-	if judgement in ["perfect", "good"] and absf(offset) > 0.022:
-		hint = tr("judge_hint_early") if offset < 0.0 else tr("judge_hint_late")
 	if word_key != "":
-		words.show_word(tr(word_key), hint, pos, quality)
+		words.show_word(tr(word_key), side, lanes.word_spot(lane), quality)
+		if cue != null:
+			cue.hit(quality, tr(word_key))
 	if judgement in ["perfect", "good", "early", "late"]:
-		lanes.add_offset(offset)
+		lanes.add_offset(offset, lane if lane >= 0 else 1)
 	if good or soft:
 		if note != null and note.kind == Note.Kind.RING:
 			scene.jolt("ring")
 		elif note != null and not note.is_bell():
 			scene.jolt("step")
 		UIKit.vibrate(30 if note != null and note.is_bell() else 14)
-	elif judgement in ["miss", "wrong", "silence"]:
+	elif judgement in ["miss", "silence"]:
 		scene.jolt("miss")
+
+
+## A step on the wrong lane: the red mark goes on the button actually pressed, with a faint ring on
+## the note it was meant for.
+func _on_wrong_step(lane: int, note: Note, _offset: float) -> void:
+	lanes.mark_wrong(lane, note.lane if note != null else -1)
+	words.show_word(tr("judge_wrong"), "", lanes.word_spot(lane), "wrong")
+
+
+## A stand-still kept to its end: the row settles, and it is named.
+func _on_still_kept(_note: Note, points: float) -> void:
+	var at := lanes.word_spot(1)
+	words.show_word(tr("judge_still_kept") + "  +" + UIKit.fmt_score(int(points)), "", at, "held", 0.8)
+	lanes.burst(lanes.lane_center(1), "held")
+	scene.set_unison(session.unison_level)
+	UIKit.vibrate(20)
+	if cue != null:
+		cue.hit("held", tr("judge_still_kept"))
 
 
 func _on_unison(level: int) -> void:
@@ -328,24 +426,30 @@ func _on_unison(level: int) -> void:
 	scene.set_unison(level)
 
 
-func _pop(c: Control) -> void:
-	if UIKit.reduced_motion():
-		return
-	c.pivot_offset = c.size * 0.5
-	c.scale = Vector2(1.5, 1.5)
-	c.create_tween().tween_property(c, "scale", Vector2.ONE, 0.2).set_trans(Tween.TRANS_CUBIC).set_ease(Tween.EASE_OUT)
-
-
 # ---------------------------------------------------------------- pause
 
 
 func pause() -> void:
-	if paused or done or _resume_at >= 0.0:
+	if done or session == null or _pause_panel != null:
+		return
+	if _resume_at >= 0.0:
+		# Focus lost (or pause pressed) during a count-in: stop the count and ask again. The music
+		# is still waiting on its bar line, so nothing is lost.
+		_resume_at = -1.0
+		count_view.clear()
+		_open_pause_menu()
+		return
+	if paused:
 		return
 	paused = true
 	conductor.pause()
 	router.release_all()
 	router.enabled = false
+	_open_pause_menu()
+
+
+func _open_pause_menu() -> void:
+	paused = true
 	Sound.ui("tap")
 	_pause_panel = PauseMenu.new()
 	_pause_panel.name = "PauseMenu"
@@ -358,12 +462,15 @@ func _on_pause_choice(what: String) -> void:
 		"resume":
 			_pause_panel.queue_free()
 			_pause_panel = null
-			# Count one bar back in before the music continues.
-			var length := Sound.count_in(song.bpm)
-			_resume_at = _clock + (length if length > 0.0 else 4.0 * _spb)
+			# Back to a bar line one to two bars before the pause, count one bar in on the beat grid,
+			# and let the approach replay. Notes already judged stay judged.
+			var t := conductor.song_time()
+			_begin_count(resume_bar_time(t) if _played else t)
 		"restart":
 			_end_sound()
-			app.replace("play", args)
+			var again := args.duplicate()
+			again["quick"] = true
+			app.replace("play", again)
 		"quit":
 			_end_sound()
 			Sound.stop_ambience()
@@ -373,17 +480,23 @@ func _on_pause_choice(what: String) -> void:
 				app.back()
 
 
-func _tick_resume() -> void:
+## During a count-in: the digits follow the sticks as they are heard, the lanes run toward the bar
+## line so the notes approach as they will, and the music starts when the bar is counted.
+func _tick_count() -> void:
 	var left := _resume_at - _clock
 	if left > 0.0:
-		var txt := str(ceili(left / _spb))
-		if _count.text != txt:
-			_count.text = txt
-			_pop(_count)
+		var tv := _count_music_t - left
+		lanes.song_time = tv
+		if cue != null:
+			cue.song_time = tv
+		var k := maxf((_clock - _count_from) / _spb, 0.0)
+		count_view.show_digit(clampi(4 - floori(k), 1, 4), fposmod(k, 1.0))
+		lanes.beat_pulse = 1.0 - fposmod(k, 1.0)
 		return
 	_resume_at = -1.0
-	_count.text = ""
+	count_view.clear()
 	paused = false
+	_played = true
 	conductor.resume()
 	if autoplay == null:
 		router.enabled = true

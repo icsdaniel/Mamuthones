@@ -8,6 +8,8 @@ const BUTTONS_H := 196.0        ## height of the button row
 const LOOKAHEAD := 1.5          ## seconds of notes visible at note speed 1.0
 const FLASH_TIME := 0.14
 const CUE_TIME := 0.22          ## a button is "cued" when its next note is this close
+const MARK_TIME := 0.4          ## wrong-lane and rope marks
+const TICK_TIME := 1.6          ## timing ticks fade over this long
 
 var session: Session
 var song_time := 0.0
@@ -22,7 +24,9 @@ var _flash_kind: Array[String] = ["hit", "hit", "hit"]
 var _auto_pressed: Array[float] = [-9.0, -9.0, -9.0]
 var _first := 0                  ## first note that may still be drawn
 var _clock := 0.0                ## real seconds, for burst ages while paused
-var _offsets: Array = []         ## [offset s, time added] of recent hits, for the timing meter
+var _offsets: Array = []         ## [offset s, time added, lane] of recent hits, for the timing ticks
+var _marks: Array = []           ## [kind, lane, time]: "wrong" X on a pressed button, "faint" ring on
+                                 ## the note it was meant for, "rope" grip across the buttons
 
 
 func field_rect() -> Rect2:
@@ -46,6 +50,15 @@ func lane_center(lane: int) -> Vector2:
 	return Vector2(r.get_center().x, LaneSkin.hit_line_y(field_rect()))
 
 
+## Centre of the strip between the hit line and the buttons, under a lane: where judgement words go,
+## clear of every note still to come.
+func word_spot(lane: int) -> Vector2:
+	var f := field_rect()
+	var hl := LaneSkin.hit_line_y(f)
+	var x := lane_center(lane).x if lane >= 0 else f.get_center().x
+	return Vector2(x, hl + (f.end.y - hl) * 0.5)
+
+
 func reset() -> void:
 	_first = 0
 	_bursts.clear()
@@ -67,16 +80,44 @@ func flash(lane: int, good: bool) -> void:
 	queue_redraw()
 
 
-func burst(pos: Vector2, quality: String) -> void:
-	_bursts.append([pos, quality, _clock])
+## A hit burst at pos. side ("early"/"late") adds a chevron in the early/late pair: up and cool for
+## early, down and warm for late.
+func burst(pos: Vector2, quality: String, side := "") -> void:
+	_bursts.append([pos, quality, _clock, side])
 	queue_redraw()
 
 
-## A judged hit's offset (negative = early), shown as a tick on the timing meter under the hit line.
-func add_offset(offset: float) -> void:
-	_offsets.append([offset, _clock])
-	if _offsets.size() > 16:
+## A judged hit's offset (negative = early), shown as a tick at the lane's hit line: above the line
+## for early (where the note still was), below for late.
+func add_offset(offset: float, lane := 1) -> void:
+	_offsets.append([offset, _clock, lane])
+	if _offsets.size() > 24:
 		_offsets.pop_front()
+
+
+## A step on the wrong lane: a red X on the button actually pressed, and a faint ring where the note
+## it was meant for is.
+func mark_wrong(pressed_lane: int, note_lane := -1) -> void:
+	_marks.append(["wrong", pressed_lane, _clock])
+	if note_lane >= 0 and note_lane != pressed_lane:
+		_marks.append(["faint", note_lane, _clock])
+	queue_redraw()
+
+
+## A finger landed on the buttons while a rope is due: the rope is "caught" at once, with no step.
+func rope_grab(lane: int) -> void:
+	_marks.append(["rope", lane, _clock])
+	_auto_pressed[clampi(lane, 0, 2)] = _clock
+	queue_redraw()
+
+
+## Marks drawn right now (kind:lane), for tests.
+func marks_shown() -> Array[String]:
+	var out: Array[String] = []
+	for m in _marks:
+		if _clock - float(m[2]) < MARK_TIME:
+			out.append("%s:%d" % [m[0], m[1]])
+	return out
 
 
 func _process(delta: float) -> void:
@@ -104,34 +145,90 @@ func _draw() -> void:
 	var i := 0
 	while i < _bursts.size():
 		var b: Array = _bursts[i]
-		if LaneSkin.draw_hit_burst(self, b[0], b[1], _clock - float(b[2])):
+		var q: String = b[1]
+		var age := _clock - float(b[2])
+		# Early/late keep one language: the woodcut spray of a Good, plus the UI's own chevron.
+		var art_q := "good" if q == "early" or q == "late" else q
+		if LaneSkin.draw_hit_burst(self, b[0], art_q, age):
+			var side: String = b[3] if q != "early" and q != "late" else q
+			if side != "":
+				_draw_chevron(b[0], side, age)
 			i += 1
 		else:
 			_bursts.remove_at(i)
-	_draw_timing_meter(field)
+	_draw_timing_ticks(field)
 	if show_buttons:
 		_draw_buttons()
+		_draw_marks()
 
 
-## A small bar centred under the hit line: left is early, right is late. Every hit leaves a tick that
-## fades, so the player sees which side their hits fall on without reading anything.
-func _draw_timing_meter(field: Rect2) -> void:
+## Timing ticks on the note axis: each hit leaves a short dash at both edges of its lane, above the
+## hit line when early (where the note still was), below when late, cool or warm, fading out. Hits
+## inside Core's dead zone sit on the line in bone. The dashes stay at the lane edges, clear of the
+## judgement word in the middle.
+func _draw_timing_ticks(field: Rect2) -> void:
 	if _offsets.is_empty():
 		return
-	var y := LaneSkin.hit_line_y(field) + (field.end.y - LaneSkin.hit_line_y(field)) * 0.55
-	var half := minf(field.size.x * 0.22, 160.0)
-	var cx := field.get_center().x
-	var span := 0.14
-	draw_line(Vector2(cx - half, y), Vector2(cx + half, y), Color(Palette.BONE, 0.35), 3.0)
-	draw_line(Vector2(cx, y - 12.0), Vector2(cx, y + 12.0), Color(Palette.BONE, 0.6), 3.0)
+	var hl := LaneSkin.hit_line_y(field)
+	var reach := minf((field.end.y - hl) * 0.9, 64.0)
+	var span := 0.12
+	var rects := LaneSkin.lane_rects(field)
 	for o in _offsets:
 		var age := _clock - float(o[1])
-		if age > 2.5:
+		if age > TICK_TIME:
 			continue
-		var x := cx + clampf(float(o[0]) / span, -1.0, 1.0) * half
-		var a := clampf(1.0 - age / 2.5, 0.0, 1.0)
-		var col := Palette.EMBER_HOT if absf(float(o[0])) < 0.045 else Palette.EMBER
-		draw_line(Vector2(x, y - 10.0), Vector2(x, y + 10.0), Color(col, a), 5.0)
+		var off := float(o[0])
+		var side := UIKit.side_of(off)
+		var col := Palette.BONE if side == "" else UIKit.side_color(side)
+		var a := clampf(1.0 - age / TICK_TIME, 0.0, 1.0)
+		var y := hl + clampf(off / span, -1.0, 1.0) * reach
+		var r: Rect2 = rects[clampi(int(o[2]), 0, 2)]
+		var dash := minf(r.size.x * 0.14, 34.0)
+		for x0 in [r.position.x + 6.0, r.end.x - 6.0 - dash]:
+			draw_line(Vector2(x0, y), Vector2(x0 + dash, y), Color(Palette.INK, a * 0.8), 9.0)
+			draw_line(Vector2(x0, y), Vector2(x0 + dash, y), Color(col, a), 5.0)
+
+
+## The early/late chevron over a burst: up and cool above the hit for early, down and warm below it
+## for late, cut out of an ink outline so it reads on any lane.
+func _draw_chevron(pos: Vector2, side: String, age: float) -> void:
+	var t := clampf(age / LaneSkin.BURST_TIME, 0.0, 1.0)
+	var a := minf(1.0, pow(1.0 - t, 1.2) * 1.3)
+	var d := -1.0 if side == "early" else 1.0
+	var cp := pos + Vector2(0.0, d * (30.0 + 26.0 * (1.0 - pow(1.0 - t, 3.0))))
+	var chev := PackedVector2Array([cp + Vector2(-26.0, -d * 15.0), cp, cp + Vector2(26.0, -d * 15.0)])
+	draw_polyline(chev, Color(Palette.INK, a), 17.0, true)
+	draw_polyline(chev, Color(UIKit.side_color(side), a), 9.0, true)
+
+
+func _draw_marks() -> void:
+	var i := 0
+	var r := buttons_rect()
+	var w := r.size.x / 3.0
+	while i < _marks.size():
+		var m: Array = _marks[i]
+		var age := _clock - float(m[2])
+		if age > MARK_TIME:
+			_marks.remove_at(i)
+			continue
+		i += 1
+		var a := clampf(1.0 - age / MARK_TIME, 0.0, 1.0)
+		var lane := clampi(int(m[1]), 0, 2)
+		var c := Vector2(r.position.x + w * (lane + 0.5), r.get_center().y)
+		match str(m[0]):
+			"wrong":
+				var s := minf(w, r.size.y) * 0.26
+				for dd in [Vector2(s, s), Vector2(s, -s)]:
+					draw_line(c - dd, c + dd, Color(Palette.INK, a), 26.0)
+					draw_line(c - dd, c + dd, Color("#e2574a", a), 14.0)
+			"faint":
+				var p := lane_center(lane)
+				draw_arc(p, 40.0, 0.0, TAU, 32, Color(Palette.ASH, a * 0.45), 4.0)
+			"rope":
+				var y := r.position.y + 14.0
+				draw_line(Vector2(r.position.x + 20.0, y), Vector2(r.end.x - 20.0, y), Color(Palette.ROPE_DARK, a), 16.0)
+				draw_line(Vector2(r.position.x + 20.0, y), Vector2(r.end.x - 20.0, y), Color(Palette.ROPE, a), 9.0)
+				draw_circle(Vector2(c.x, y), 16.0, Color(Palette.ROPE, a))
 
 
 func _draw_notes(field: Rect2) -> void:

@@ -46,13 +46,20 @@ func build() -> void:
 	if session.slam:
 		box.add_child(UIKit.label(tr("res_slam_note"), UIKit.CAPTION, true, HORIZONTAL_ALIGNMENT_CENTER))
 
-	_breakdown(box)
-	_tendency(box)
-	_unlocks(box)
+	# What to do next comes first, right under the score; then what was won, then the detail.
 	var tip := UIKit.card(box, true)
 	tip.name = "Tip"
 	tip.add_child(UIKit.label(tr("res_tip"), UIKit.PAPER_HEADER))
 	tip.add_child(UIKit.label(tip_text(session), UIKit.PAPER))
+	_unlocks(box)
+	var closest := closest_unlock(session)
+	if closest != "":
+		var cc := UIKit.card(box)
+		cc.name = "Closest"
+		cc.add_child(UIKit.label(tr("res_closest"), UIKit.SUB))
+		cc.add_child(UIKit.label(closest, UIKit.CAPTION))
+	_breakdown(box)
+	_tendency(box)
 
 	var again := UIKit.button(tr("res_again"), func() -> void: app.replace("play", play_args), UIKit.PRIMARY)
 	again.name = "Again"
@@ -113,8 +120,11 @@ func _breakdown(box: Container) -> void:
 	_row(grid, tr("res_accuracy"), "%d%%" % roundi(session.accuracy() * 100.0), "Accuracy")
 	_row(grid, tr("res_counts") % [int(st.perfect), int(st.good), int(st.early) + int(st.late), int(st.miss) + int(st.wrong)], "", "Counts", true)
 	_row(grid, tr("res_base"), UIKit.fmt_score(roundi(float(b.get("base", 0.0)))), "Base")
-	_row(grid, tr("res_unison") % Hud._mult_text(Session.UNISON_MULTS[int(st.get("max_unison", 0))]),
+	var peak := float(st.get("unison_peak", Session.UNISON_MULTS[int(st.get("max_unison", 0))]))
+	_row(grid, tr("res_unison") % Hud._mult_text(peak),
 		"+" + UIKit.fmt_score(roundi(float(b.get("unison", 0.0)))), "Unison")
+	var top := Session.UNISON_MULTS[Session.UNISON_MULTS.size() - 1]
+	_row(grid, tr("res_top_time") % Hud._mult_text(top), UIKit.fmt_dec(float(st.get("time_at_top", 0.0)), 0) + " s", "TopTime")
 	_row(grid, tr("res_weight") % [BellSets.name(session.bell_set, I18n.locale()), Hud._mult_text(session.weight())],
 		"+" + UIKit.fmt_score(roundi(float(b.get("weight", 0.0)))), "Weight")
 	if float(b.get("holds", 0.0)) > 0.0:
@@ -145,16 +155,20 @@ func _tendency(box: Container) -> void:
 	var med := session.median_offset()
 	var ms := roundi(absf(med) * 1000.0)
 	var text := tr("res_on_time")
+	var side := UIKit.side_of(med)
 	if session.hit_offsets.size() < 4:
 		text = tr("res_timing_few")
-	elif med < -0.012:
+	elif side == "early":
 		text = tr("res_early") % ms
-	elif med > 0.012:
+	elif side == "late":
 		text = tr("res_late") % ms
-	c.add_child(UIKit.label(text, ""))
+	var tl := UIKit.label(text, "")
+	if side != "" and session.hit_offsets.size() >= 4:
+		tl.add_theme_color_override("font_color", UIKit.side_color(side))
+	c.add_child(tl)
 	var meter := TendencyMeter.new()
 	meter.offsets = session.hit_offsets
-	meter.custom_minimum_size.y = 90
+	meter.custom_minimum_size.y = 210
 	c.add_child(meter)
 	UIKit.pop_in(c, 0.7)
 
@@ -176,6 +190,19 @@ func _unlocks(box: Container) -> void:
 		c.add_child(UIKit.label("• " + line, UIKit.PAPER))
 	if not list.is_empty():
 		UIKit.celebrate(self, lines[0], 2.2)
+
+
+## The unlock this run came closest to, as a goal line ("" when nothing is left): a goal about this
+## song first (its next stop, its remix), else the first open goal.
+static func closest_unlock(s: Session) -> String:
+	var goals: Array = Progression.next_goals()
+	if goals.is_empty():
+		return ""
+	for g in goals:
+		var need: Dictionary = g.get("need", {})
+		if str(need.get("song_id", "")) == s.song.id:
+			return UIKit.goal_line(g)
+	return UIKit.goal_line(goals[0])
 
 
 ## One concrete thing to do better, picked from what went wrong most.

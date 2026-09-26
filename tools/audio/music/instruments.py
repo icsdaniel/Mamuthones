@@ -130,7 +130,7 @@ def voice_line(song, events, n, kind, seed=1):
                 vib[d0:end] = np.maximum(vib[d0:end], ramp * prof["vib"])
         # amplitude envelope
         rel = int((0.07 if not syll else 0.03) * SR)
-        att = int((0.012 if not drone else 0.02) * SR)
+        att = int((0.012 if not drone else 0.014) * SR)
         env = np.ones(end + rel - s)
         if not legato:
             env[:att] = np.linspace(0, 1, att) ** 1.5

@@ -28,8 +28,10 @@ MIX = {
 # instruments that keep sounding through a stand-still (sustains without new onsets)
 THROUGH = {"fire", "crowd", "tumbu"}
 DUCKED = {"pad", "sub"}
-# ...but the drone drops out during the stand-still so the rest is heard as a rest
-STOP_DUCKED = {"tumbu": -30.0}
+# ...but inside a stand-still the music really stops: the drone drops out and ringing drum tails
+# are cut, so the rest is heard as a rest; the crowd only quietens, the fire keeps crackling
+STOP_DUCK_DEFAULT = -40.0
+STOP_DUCKED = {"tumbu": -30.0, "crowd": -8.0, "fire": 0.0}
 
 
 def stop_gain(song, n, db):
@@ -38,15 +40,17 @@ def stop_gain(song, n, db):
     low = 10 ** (db / 20)
     ramp = int(0.05 * SR)
     for (sb, sl) in song.stops:
-        a = int(round(song.time(sb) * SR))
-        b = int(round(song.time(sb + sl) * SR)) - int(0.03 * SR)
-        a0 = max(0, a - ramp)
-        if b <= a or a0 >= n:
+        a = int(round(song.time(sb) * SR)) + int(0.01 * SR)
+        e = int(round(song.time(sb + sl) * SR)) - int(0.005 * SR)   # back up just before the next beat
+        b = e - ramp
+        if b <= a or a >= n:
             continue
-        g[a0:a] = np.minimum(g[a0:a], np.linspace(1, low, a - a0))
-        g[a:b] = low
-        b1 = min(n, b + ramp)
-        g[b:b1] = np.minimum(g[b:b1], np.linspace(low, 1, b1 - b))
+        a1 = min(n, a + ramp)
+        g[a:a1] = np.minimum(g[a:a1], np.linspace(1, low, a1 - a))
+        g[a1:b] = low
+        e = min(n, e)
+        if e > b:
+            g[b:e] = np.minimum(g[b:e], np.linspace(low, 1, e - b))
     return g
 
 
@@ -104,8 +108,9 @@ def mix(song, stems, n):
         st = y * g if y.ndim == 2 else dsp.pan(y * g, p if p is not None else 0.0)
         if kick_env is not None and inst in DUCKED:
             st = st * (1 - 0.6 * kick_env)[:, None]
-        if inst in STOP_DUCKED and song.stops:
-            st = st * stop_gain(song, len(st), STOP_DUCKED[inst])[:, None]
+        duck = STOP_DUCKED.get(inst, STOP_DUCK_DEFAULT)
+        if song.stops and duck < 0:
+            st = st * stop_gain(song, len(st), duck)[:, None]
         dry += st
         wet_in += st * send
     rv = song.reverb
