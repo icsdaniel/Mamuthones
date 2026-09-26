@@ -1,0 +1,25 @@
+name: Godot tests
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    env:
+      GODOT_VERSION: 4.6.2
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install Godot
+        run: |
+          curl -sSL -o godot.zip "https://github.com/godotengine/godot/releases/download/${GODOT_VERSION}-stable/Godot_v${GODOT_VERSION}-stable_linux.x86_64.zip"
+          unzip -q godot.zip
+          mv "Godot_v${GODOT_VERSION}-stable_linux.x86_64" godot
+      - name: Import the project
+        run: ./godot --headless --path game --import 2>&1 | tee import.log; ! grep -E "SCRIPT ERROR|Parse Error" import.log
+      - name: Run tests
+        run: ./godot --headless --path game -s res://tests/run_tests.gd
+      - name: Check charts
+        run: pip install -q numpy && python3 tools/audio/validate_charts.py
