@@ -21,7 +21,7 @@ func test_rules_catch_problems() -> void:
 	check(_problems([{"b": 0, "k": "bell"}, {"b": 0.25, "k": "bell"}]).any(func(p): return "half a beat" in p), "bells too close")
 	check(_problems([{"b": 0, "k": "bell"}, {"b": 0.5, "k": "bell"}]).is_empty(), "bells half a beat apart are fine")
 	check(_problems([{"b": 0, "k": "step", "lane": 0}, {"b": 0, "k": "step", "lane": 1}, {"b": 0, "k": "step", "lane": 2}]).any(func(p): return "thumbs" in p), "three steps at once")
-	check(_problems([{"b": 0, "k": "step", "lane": 0}, {"b": 0.25, "k": "step", "lane": 0}]).any(func(p): return "thumbs" in p), "one thumb twice in an eighth at hard")
+	check(_problems([{"b": 0, "k": "step", "lane": 0}, {"b": 0.25, "k": "step", "lane": 0}]).any(func(p): return "thumb too fast" in p), "one thumb twice in an eighth at hard")
 	check(_problems([{"b": 0, "k": "step", "lane": 0}, {"b": 0.25, "k": "step", "lane": 0}], "story", "expert").is_empty(), "sixteenths are fine at expert")
 	check(_problems([{"b": 0, "k": "step", "lane": 0}, {"b": 0.25, "k": "step", "lane": 1}, {"b": 0.5, "k": "step", "lane": 0}]).is_empty(), "lane 1 goes to the free thumb")
 	check(_problems([{"b": 0, "k": "hold", "lane": 1, "len": 2}, {"b": 1, "k": "step", "lane": 1}]).any(func(p): return "under a hold" in p), "note under a hold")
@@ -36,6 +36,58 @@ func test_rules_catch_problems() -> void:
 	check(_problems([{"b": 0, "k": "step", "lane": 1}], "piazza", "piazza").any(func(p): return "piazza" in p), "piazza is bells only")
 	check(_problems([{"b": 0, "k": "swipe", "dir": 1}], "tutorial", "easy").is_empty(), "the tutorial may teach anything at any level")
 	check(_problems([{"b": 12.3333, "k": "bell"}, {"b": 12.8333, "k": "bell"}]).is_empty(), "thirds rounded to 4 decimals are half a beat apart")
+
+
+func _sectioned(chart: Array, diff: String, sections: Array, bpm := 120.0) -> Array[String]:
+	var s := SongData.from_dict({"id": "c", "kind": "story", "bpm": bpm, "offset": 1.0, "sections": sections, "charts": {diff: chart}})
+	return ChartRules.check(s, diff)
+
+
+func test_triplet_feel_per_section() -> void:
+	# Alternating thumbs a third of a beat apart, each thumb every 2/3 beat: fine in a triplet
+	# section at Hard (a thumb may play every triplet eighth, 1/3 beat).
+	var trip := []
+	for i in 12:
+		trip.append({"b": 16.0 + i / 3.0, "k": "step", "lane": 0 if i % 2 == 0 else 2})
+	var secs := [{"name": "a", "b": 0, "len": 16}, {"name": "climax", "b": 16, "len": 8}]
+	check_eq(_sectioned(trip, "hard", secs), [] as Array[String], "a triplet section passes at 1/3-beat gaps")
+	# One thumb on every triplet eighth: 1/3 beat per thumb is allowed at Hard in triplet feel...
+	var jack := []
+	for i in 6:
+		jack.append({"b": 16.0 + i / 3.0, "k": "step", "lane": 0})
+	check_eq(_sectioned(jack, "hard", secs), [] as Array[String], "one thumb per triplet eighth at Hard")
+	# ...but not at Medium (2/3) or Expert (1/3 also, so Expert passes).
+	check(_sectioned(jack, "medium", secs).any(func(p): return "thumb too fast" in p), "Medium triplets: 2/3 beat per thumb")
+	check_eq(_sectioned(jack, "expert", secs), [] as Array[String], "Expert triplets: 1/3 beat per thumb")
+	# The same gaps in a straight section fail: 1/3 beat is closer than the straight 1/2 per thumb.
+	var straight := []
+	for i in 6:
+		straight.append({"b": 16.0 + i * 0.35, "k": "step", "lane": 0})
+	check(_sectioned(straight, "hard", secs).any(func(p): return "thumb too fast" in p), "the same gaps in a straight section fail")
+	# Feel is decided per section: triplets in the climax do not loosen the verse.
+	var mixed := jack.duplicate()
+	mixed.push_front({"b": 1.35, "k": "step", "lane": 0})
+	mixed.push_front({"b": 1.0, "k": "step", "lane": 0})
+	var mp := _sectioned(mixed, "hard", secs)
+	check(mp.any(func(p): return "b=1.35" in p), "the straight verse keeps its half-beat rule")
+	check_eq(mp.size(), 1, "while the triplet climax passes (%s)" % [mp])
+	# Without sections the whole chart shares one feel: any note on a third makes it triplet.
+	check_eq(_sectioned(jack, "hard", []), [] as Array[String], "no sections: one feel for the chart")
+	check(ChartRules.on_third(12.3333) and ChartRules.on_third(3.8333) and not ChartRules.on_third(4.5), "third and sixth positions")
+
+
+func test_bell_uses_both_thumbs() -> void:
+	# Medium and Hard: nothing within half a beat of a bell, before or after.
+	check(_problems([{"b": 0, "k": "step", "lane": 0}, {"b": 0.25, "k": "bell"}]).any(func(p): return "before the bell" in p), "input a quarter beat before a bell")
+	check(_problems([{"b": 0, "k": "bell"}, {"b": 0.25, "k": "step", "lane": 2}]).any(func(p): return "after the bell" in p), "input a quarter beat after a bell")
+	check(_problems([{"b": 0, "k": "step", "lane": 0}, {"b": 0.5, "k": "bell"}, {"b": 1.0, "k": "step", "lane": 2}]).is_empty(), "half a beat either side is fine")
+	check(_problems([{"b": 0, "k": "ring", "lane": 1}, {"b": 0, "k": "step", "lane": 0}], "story", "expert").is_empty(), "a step on the bell's own beat (triple ring) is fine")
+	# Expert: 150 ms, at 120 bpm 0.3 beat.
+	check(_problems([{"b": 0, "k": "step", "lane": 0}, {"b": 0.25, "k": "bell"}], "story", "expert").any(func(p): return "before the bell" in p), "Expert: 125 ms is too close")
+	check(_problems([{"b": 0, "k": "step", "lane": 0}, {"b": 0.5, "k": "bell"}], "story", "expert").is_empty(), "Expert: 250 ms is fine")
+	# Easy: no two inputs closer than 0.6 s (the tutorial is exempt).
+	check(_problems([{"b": 0, "k": "step", "lane": 0}, {"b": 1, "k": "step", "lane": 2}], "story", "easy").any(func(p): return "apart" in p), "Easy: 0.5 s is too close for a story song")
+	check(_problems([{"b": 0, "k": "step", "lane": 0}, {"b": 1, "k": "step", "lane": 2}], "tutorial", "easy").is_empty(), "the tutorial may")
 
 
 # ---------------------------------------------------------------- the real songs

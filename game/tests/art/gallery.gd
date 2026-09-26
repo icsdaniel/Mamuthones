@@ -272,6 +272,17 @@ func _procession() -> void:
 	await RenderingServer.frame_post_draw
 	vpm.get_texture().get_image().save_png(out_dir.path_join("procession_miss.png"))
 	print("saved procession_miss.png")
+	# A stand-still held: the row bows and the dust settles (caught near the deepest bow).
+	pm.set_still(true)
+	for i in 30:
+		await process_frame
+	pm.settle()
+	var t_bow := Time.get_ticks_msec() + 520
+	while Time.get_ticks_msec() < t_bow:
+		await process_frame
+	await RenderingServer.frame_post_draw
+	vpm.get_texture().get_image().save_png(out_dir.path_join("procession_settle.png"))
+	print("saved procession_settle.png")
 	vpm.queue_free()
 	await render(_scene(4, Vector2(720, 1440)), Vector2i(720, 1440), "procession_fullscreen.png", 10)
 	await render(_scene(7, Vector2(1080, 1440)), Vector2i(1080, 1440), "procession_tablet.png", 10)

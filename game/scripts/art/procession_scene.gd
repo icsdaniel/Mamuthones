@@ -927,17 +927,18 @@ func _paint_motion(ci: CanvasItem) -> void:
 	# Dust settling round every Mamuthone's feet after a stand-still held well.
 	if _settle_t >= 0.0 and not reduced_motion:
 		var t := _settle_t / SETTLE_TIME
-		var col := Palette.INK if day else Palette.BONE_DIM
+		# Small puffs of dust drifting down and thinning out beside each pair of feet.
+		var col := Color("#9a8a74") if day else Palette.BONE_DIM
 		for w in _walkers:
 			if not w.root.visible:
 				continue
 			var feet := w.root.position
-			for i in 4:
+			for i in 6:
 				var side := -1.0 if i % 2 == 0 else 1.0
-				var y := feet.y - _hf * w.sc * (0.05 - 0.04 * t) - float(i / 2) * 3.0
-				var x0 := feet.x + side * _hf * w.sc * (0.1 + 0.05 * t)
-				var ln := _hf * w.sc * (0.05 + 0.03 * WoodcutDraw.hash01(i, w.slot + 80))
-				WoodcutDraw.stroke(ci, PackedVector2Array([Vector2(x0, y), Vector2(x0 + side * ln, y + 1.0)]), Color(col, 0.7 * sin(t * PI)), 0.4, 0.4, 2.2)
+				var k := float(i / 2)
+				var r := _hf * w.sc * (0.035 - 0.008 * k) * (1.0 - 0.4 * t)
+				var c := feet + Vector2(side * _hf * w.sc * (0.1 + 0.05 * k + 0.03 * t), -_hf * w.sc * (0.035 + 0.02 * k) * (1.0 - t))
+				WoodcutDraw.fill(ci, WoodcutDraw.ellipse(c, Vector2(r * 1.6, r), 10), Color(col, 0.55 * sin(t * PI)))
 	# Dust scuffed up by a stumble.
 	if _stumble_t >= 0.0 and _player.root.visible:
 		var t := _stumble_t / 0.6

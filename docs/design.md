@@ -95,7 +95,7 @@ Every song has four charts, all written to the music:
 | Expert | dense patterns, triplets in the finale | independent of the steps | everything, triple rings |
 
 Charts follow simple readability rules: no more than one input per hand per eighth at Hard (per
-sixteenth at Expert), bells at least half a beat apart, and nothing hidden under a hold's own lane.
+sixteenth at Expert; in triplet sections an eighth is a triplet eighth), bells at least half a beat apart, and nothing hidden under a hold's own lane.
 
 ## 5. Modes
 

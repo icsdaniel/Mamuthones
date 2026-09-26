@@ -453,6 +453,21 @@ func test_profile_crash_safety_and_checksum() -> void:
 	_clean()
 
 
+func test_bell_cue_setting() -> void:
+	_clean()
+	var p := _fresh_profile()
+	check_eq(p.get_setting("bell_cue"), true, "the bell cue is on by default")
+	p.set_setting("bell_cue", false)
+	p.save()
+	p.free()
+	var q := _fresh_profile()
+	check_eq(q.get_setting("bell_cue"), false, "turning it off is saved")
+	q.set_setting("bell_cue", "no")
+	check_eq(q.get_setting("bell_cue"), false, "a wrong type is refused")
+	q.free()
+	_clean()
+
+
 func test_profile_settings_are_clamped() -> void:
 	_clean()
 	var p := _fresh_profile()

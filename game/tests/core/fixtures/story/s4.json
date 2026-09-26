@@ -6,7 +6,7 @@
  },
  "stop": 4,
  "kind": "story",
- "bpm": 120,
+ "bpm": 90,
  "offset": 1.0,
  "audio": "res://audio/music/missing_s4.ogg",
  "length": 16.0,
@@ -453,7 +453,7 @@
  },
  "remix": {
   "id": "s4_remix",
-  "bpm": 120,
+  "bpm": 90,
   "offset": 0.8,
   "audio": "res://audio/music/missing_s4_remix.ogg"
  }

@@ -314,7 +314,7 @@ func _schedule(t: float) -> void:
 		if n.t - 0.5 * _spb - lead > t:
 			break
 		if _bell_cue and not n.done and n.t > t:
-			Sound.ui("tap")
+			Sound.ui("cue")
 		_bell_sched += 1
 	var still := false
 	for i in range(maxi(_sched - 8, 0), mini(_sched + 8, notes.size())):
@@ -350,6 +350,7 @@ func _on_stepped(lane: int) -> void:
 	# the step sound back unless the touch itself hit a note in its lane.
 	if not _tap_hit and _swipe_open(conductor.song_time()):
 		lanes.rope_grab(lane)
+		Sound.rope_grab()
 	else:
 		Sound.step(lane)
 		lanes.press(lane)
@@ -437,6 +438,7 @@ func _on_still_kept(_note: Note, points: float) -> void:
 	words.show_word(tr("judge_still_kept") + "  +" + UIKit.fmt_score(int(points)), "", at, "held", 0.8)
 	lanes.burst(lanes.lane_center(1), "held")
 	scene.set_unison(session.unison_level)
+	scene.settle()
 	UIKit.vibrate(20)
 	if cue != null:
 		cue.hit("held", tr("judge_still_kept"))
@@ -458,6 +460,7 @@ func pause() -> void:
 		# Focus lost (or pause pressed) during a count-in: stop the count and ask again. The music
 		# is still waiting on its bar line, so nothing is lost.
 		_resume_at = -1.0
+		Sound.stop_count_in()
 		count_view.clear()
 		_open_pause_menu()
 		return

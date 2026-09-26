@@ -35,6 +35,7 @@ const DEFAULT_SETTINGS := {
 	"music_volume": 1.0,
 	"sfx_volume": 1.0,
 	"audio_offset": 0.0,     # seconds, from the tap test or set by hand
+	"bell_cue": true,        # the bell cue shown at Easy and Medium
 }
 const FLAGS: Array[String] = ["language_chosen", "headphones_seen", "calibrated", "latency_tested", "tutorial_done"]
 const FLEECES: Array[String] = ["black", "dark_brown"]
