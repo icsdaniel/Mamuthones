@@ -1,6 +1,6 @@
 {
- "total_mbytes": 14.7,
- "files": 207,
+ "total_mbytes": 14.82,
+ "files": 213,
  "problems": [],
  "groups": {
   "ambience/crowd": {
@@ -272,6 +272,13 @@
    "attack_ms_worst": 346.7,
    "seconds": 0.45,
    "flatness": 0.125
+  },
+  "ui/cue_": {
+   "rise_ms": 8.6,
+   "phone_loss_db_worst": -0.0,
+   "attack_ms_worst": 0.0,
+   "seconds": 0.26,
+   "flatness": 0.034
   },
   "ui/tap_": {
    "rise_ms": 0.0,
@@ -2753,6 +2760,51 @@
    "attack_ms": 0.0,
    "flatness": 0.0
   },
+  "fx/grab_1.wav": {
+   "sr": 44100,
+   "seconds": 0.2,
+   "channels": 1,
+   "peak_dbfs": -9.89,
+   "first_sample": 0.0,
+   "last_sample": 0.0,
+   "kbytes": 17.3,
+   "onset_ms": 0.27,
+   "hf_click": 3.7,
+   "rise_ms": 0.1,
+   "phone_loss_db": -0.0,
+   "attack_ms": 0.0,
+   "flatness": 0.255
+  },
+  "fx/grab_2.wav": {
+   "sr": 44100,
+   "seconds": 0.2,
+   "channels": 1,
+   "peak_dbfs": -8.0,
+   "first_sample": 0.0,
+   "last_sample": 0.0,
+   "kbytes": 17.3,
+   "onset_ms": 0.29,
+   "hf_click": 3.4,
+   "rise_ms": 0.0,
+   "phone_loss_db": -0.0,
+   "attack_ms": 0.0,
+   "flatness": 0.26
+  },
+  "fx/grab_3.wav": {
+   "sr": 44100,
+   "seconds": 0.2,
+   "channels": 1,
+   "peak_dbfs": -9.43,
+   "first_sample": 0.0,
+   "last_sample": 0.0,
+   "kbytes": 17.3,
+   "onset_ms": 0.23,
+   "hf_click": 4.3,
+   "rise_ms": 0.1,
+   "phone_loss_db": -0.0,
+   "attack_ms": 0.0,
+   "flatness": 0.257
+  },
   "fx/rope_1.wav": {
    "sr": 44100,
    "seconds": 0.75,
@@ -3928,6 +3980,51 @@
    "phone_loss_db": -0.0,
    "attack_ms": 266.8,
    "flatness": 0.112
+  },
+  "ui/cue_1.wav": {
+   "sr": 44100,
+   "seconds": 0.26,
+   "channels": 1,
+   "peak_dbfs": -13.49,
+   "first_sample": 0.0,
+   "last_sample": 0.0,
+   "kbytes": 22.4,
+   "onset_ms": 0.32,
+   "hf_click": 4.9,
+   "rise_ms": 0.0,
+   "phone_loss_db": -0.0,
+   "attack_ms": 0.0,
+   "flatness": 0.046
+  },
+  "ui/cue_2.wav": {
+   "sr": 44100,
+   "seconds": 0.26,
+   "channels": 1,
+   "peak_dbfs": -12.16,
+   "first_sample": 0.0,
+   "last_sample": 0.0,
+   "kbytes": 22.4,
+   "onset_ms": 0.25,
+   "hf_click": 5.3,
+   "rise_ms": 0.0,
+   "phone_loss_db": -0.0,
+   "attack_ms": 0.0,
+   "flatness": 0.035
+  },
+  "ui/cue_3.wav": {
+   "sr": 44100,
+   "seconds": 0.26,
+   "channels": 1,
+   "peak_dbfs": -12.0,
+   "first_sample": 0.0,
+   "last_sample": 0.0,
+   "kbytes": 22.4,
+   "onset_ms": 0.36,
+   "hf_click": 3.8,
+   "rise_ms": 25.9,
+   "phone_loss_db": -0.0,
+   "attack_ms": 0.0,
+   "flatness": 0.022
   },
   "ui/result.ogg": {
    "sr": 44100,

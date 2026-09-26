@@ -17,6 +17,11 @@ const BONE_FAINT := Color("#6e645b")   ## disabled text
 const RED_DEEP := Color("#8e2a20")     ## shaded red cloth
 const EMBER_HOT := Color("#f3cf85")    ## the white-hot heart of a fire
 const ASH := Color("#7d756c")          ## grey for stand-stills and ash
+## Timing feedback, shared with the UI (UIKit.EARLY / UIKit.LATE): early is up and cool, late is down
+## and warm. They also differ in lightness (early is the lighter one), and every early/late mark
+## points its own way, so they stay apart in greyscale.
+const EARLY := Color("#8ec3e6")
+const LATE := Color("#ef8250")
 ## The soha as it really is: natural rush or hemp. (Red is kept only for the swipe note and the logo.)
 const ROPE := Color("#b39a6b")
 const ROPE_DARK := Color("#7a6446")    ## its twists

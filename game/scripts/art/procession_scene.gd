@@ -13,6 +13,7 @@ extends Control
 ##   set_ghost_delta(seconds)       shows your ghost beside you; > 0 means the ghost is ahead of you
 ##   hide_ghost()
 ##   set_still(bool)                stand-still: the row freezes, bells hang
+##   settle()                       the stand-still was held: bells go quiet, a slight bow, dust settles
 ##   throw_rope()                   the front Issohadore throws the rope into the crowd
 ##   set_reduced_motion(bool)       calms flicker, fog drift, sparks, sway and jolts
 ## Extras: auto_bpm (> 0 makes the row walk and ring on its own, for menus), framed (ink edges).
@@ -89,6 +90,8 @@ var _motion: _Paint
 var _onlooker: _Paint
 var _stumble_t := -1.0
 var _motion_drawn := false
+var _settle_t := -1.0
+const SETTLE_TIME := 1.1
 var _row := {}
 var _fire_mat: ShaderMaterial
 var _fog_mats: Array[ShaderMaterial] = []
@@ -239,6 +242,20 @@ func hide_ghost() -> void:
 	ghost_visible = false
 	if _ghost:
 		_ghost.visible = false
+
+
+## The player kept still through a stand-still: the row holds together, the bells go quiet, then a
+## small satisfied release: a slight bow down the row, the dust settling at their feet and the fire
+## burning steady for a moment. Reduced motion keeps only a much smaller bow and the steady fire.
+func settle() -> void:
+	if not _built:
+		return
+	_settle_t = 0.0
+	for w in _walkers:
+		w.vbell = 0.0
+		w.bell *= 0.2
+		w.ring = 0.0
+		w.pending.clear()
 
 
 func set_still(on: bool) -> void:
@@ -601,8 +618,12 @@ func _process(delta: float) -> void:
 			sway = sin(_t * 2.2 + ph) * 1.3
 			lean = sin(_t * 1.1 + ph) * 0.012
 		w.root.position = Vector2(w.x, w.base_y + w.y + sway)
-		w.root.rotation = (lean + w.rot * 0.35) * w.flip
-		w.head.position = Vector2(0, w.hy - w.y * 0.2)
+		var bow := _bow(w)
+		w.root.rotation = (lean + w.rot * 0.35 + bow * 0.06) * w.flip
+		w.head.position = Vector2(0, w.hy - w.y * 0.2 + bow * _hf * 0.025)
+		if _settle_t >= 0.0:
+			# Bells hang quiet while the row settles.
+			w.vbell *= maxf(0.0, 1.0 - delta * 10.0)
 		w.pivot.rotation = clampf(w.bell * 0.9, -0.16, 0.16)
 		w.ring = maxf(0.0, w.ring - delta * 2.6)
 	# Player feedback on a miss: the stumble plus a brief red cast.
@@ -621,7 +642,10 @@ func _process(delta: float) -> void:
 		_ghost.scale = Vector2(_player.sc * fl, _player.sc)
 	# Firelight flicker.
 	if not reduced_motion:
-		_glow.modulate.a = 0.86 + 0.1 * sin(_t * 9.0) * sin(_t * 5.3 + 1.0) + 0.04 * sin(_t * 23.0)
+		var flick := 0.1 * sin(_t * 9.0) * sin(_t * 5.3 + 1.0) + 0.04 * sin(_t * 23.0)
+		if _settle_t >= 0.0:
+			flick *= smoothstep(0.6, 1.0, _settle_t / SETTLE_TIME)   # the fire steadies
+		_glow.modulate.a = 0.86 + flick
 	# Rope throw: arm up, rope out into the crowd, back.
 	var isso: _Walker = _issos[1]
 	if _rope_t >= 0.0:
@@ -642,7 +666,11 @@ func _process(delta: float) -> void:
 		if _stumble_t > 0.6:
 			_stumble_t = -1.0
 	# Motion marks only while something rings or stumbles (and once more to clear them).
-	var moving := _stumble_t >= 0.0
+	if _settle_t >= 0.0:
+		_settle_t += delta
+		if _settle_t > SETTLE_TIME:
+			_settle_t = -1.0
+	var moving := _stumble_t >= 0.0 or _settle_t >= 0.0
 	for w in _walkers:
 		if w.ring > 0.0:
 			moving = true
@@ -896,6 +924,20 @@ func _paint_motion(ci: CanvasItem) -> void:
 			for i in band.size():
 				band[i] += Vector2(0, -7.0 * float(k))
 			WoodcutDraw.stroke(ci, band, Color(accent if k == 0 else ink, a * (1.0 - 0.28 * float(k))), 0.5, 0.5, 3.6 - float(k))
+	# Dust settling round every Mamuthone's feet after a stand-still held well.
+	if _settle_t >= 0.0 and not reduced_motion:
+		var t := _settle_t / SETTLE_TIME
+		var col := Palette.INK if day else Palette.BONE_DIM
+		for w in _walkers:
+			if not w.root.visible:
+				continue
+			var feet := w.root.position
+			for i in 4:
+				var side := -1.0 if i % 2 == 0 else 1.0
+				var y := feet.y - _hf * w.sc * (0.05 - 0.04 * t) - float(i / 2) * 3.0
+				var x0 := feet.x + side * _hf * w.sc * (0.1 + 0.05 * t)
+				var ln := _hf * w.sc * (0.05 + 0.03 * WoodcutDraw.hash01(i, w.slot + 80))
+				WoodcutDraw.stroke(ci, PackedVector2Array([Vector2(x0, y), Vector2(x0 + side * ln, y + 1.0)]), Color(col, 0.7 * sin(t * PI)), 0.4, 0.4, 2.2)
 	# Dust scuffed up by a stumble.
 	if _stumble_t >= 0.0 and _player.root.visible:
 		var t := _stumble_t / 0.6
@@ -908,6 +950,15 @@ func _paint_motion(ci: CanvasItem) -> void:
 			var col := Palette.INK if day else Palette.BONE_DIM
 			WoodcutDraw.stroke(ci, PackedVector2Array([feet + d * r0, feet + d * r1]), Color(col, 0.9 * (1.0 - t)), 5.0, 0.8)
 	WoodcutDraw.end()
+
+
+## How far a figure is bowed in the settle (0..1): the row bows one after another, left to right.
+func _bow(w: _Walker) -> float:
+	if _settle_t < 0.0:
+		return 0.0
+	var order := float(w.slot) * 0.06 + (0.03 if w.line == 1 else 0.0)
+	var t := clampf((_settle_t - 0.15 - order) / 0.75, 0.0, 1.0)
+	return sin(t * PI) * (0.3 if reduced_motion else 1.0)
 
 
 func _paint_player_mark(ci: CanvasItem) -> void:

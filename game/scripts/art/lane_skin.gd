@@ -29,7 +29,7 @@ extends RefCounted
 ##   draw_button(ci, rect, lane, state)                state "idle" | "cued" | "pressed" | "hit" | "miss"
 ##   draw_hit_burst(ci, pos, quality, age, size := 1.0) -> bool   false once finished (BURST_TIME)
 ##       quality perfect | good | early | late | miss | held | wrong. Early bursts spray upward with
-##       an ember up-chevron, late ones downward with a red down-chevron (ink-outlined), so timing reads
+##       a cool up-chevron, late ones downward with a warm down-chevron (Palette.EARLY / LATE, ink-outlined), so timing reads
 ##       without words; a perfect also shoots an ember streak up its lane.
 
 ## Notes, bars, buttons, the lanes and the hit line are drawn from sprites baked by tools/art/bake.sh
@@ -596,15 +596,15 @@ static func draw_hit_burst(ci: CanvasItem, pos: Vector2, quality: String, age: f
 			var up := quality == "early"
 			var r := lerpf(14.0, 64.0, grow) * s
 			var centre := -PI * 0.5 if up else PI * 0.5
-			_splinters(ci, pos, r * 0.3, r, 8, Color(Palette.EMBER if up else Palette.RED, fade), 5.0 * s, 4, centre - 1.0, 2.0)
+			_splinters(ci, pos, r * 0.3, r, 8, Color(Palette.EARLY if up else Palette.LATE, fade), 5.0 * s, 4, centre - 1.0, 2.0)
 			var d := -1.0 if up else 1.0
-			# Early is ember and points up, late is red and points down: they differ in shape, place and
-			# colour. Both are cut out of a heavy ink outline so they read on any lane or backdrop.
+			# Early is cool (Palette.EARLY) and points up, late is warm (Palette.LATE) and points down, the
+			# same pair the UI uses: they differ in direction, place, colour and lightness. Both are cut out of a heavy ink outline so they read on any lane or backdrop.
 			var cp := pos + Vector2(0, d * (34.0 + 34.0 * grow) * s)
 			var chev := PackedVector2Array([cp + Vector2(-30, -d * 17) * s, cp, cp + Vector2(30, -d * 17) * s])
 			var ca := minf(1.0, fade * 1.3)
 			WoodcutDraw.stroke(ci, chev, Color(Palette.INK, ca), 19.0 * s, 19.0 * s, 20.0 * s)
-			WoodcutDraw.stroke(ci, chev, Color(Palette.EMBER_HOT if up else Palette.RED, ca), 10.0 * s, 10.0 * s, 11.0 * s)
+			WoodcutDraw.stroke(ci, chev, Color(Palette.EARLY if up else Palette.LATE, ca), 10.0 * s, 10.0 * s, 11.0 * s)
 		"held":
 			var tex := Palette.tex("glow")
 			if tex:

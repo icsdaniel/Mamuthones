@@ -339,6 +339,53 @@ func test_procession_staging_and_feedback() -> void:
 	scene.queue_free()
 
 
+func test_settle_after_stand_still() -> void:
+	var scene := ProcessionScene.new()
+	scene.size = Vector2(720, 480)
+	tree.root.add_child(scene)
+	await _frames(3)
+	scene.set_stop(2)
+	scene.set_still(true)
+	scene.jolt("bell")
+	scene.settle()
+	check(scene._settle_t >= 0.0, "settle starts")
+	for w in scene._walkers:
+		check(w.pending.is_empty() and w.ring == 0.0, "settle quiets every bell")
+	# Sample the settle in wall time: the row bows (forward, in its walking direction), then recovers.
+	var max_bow := 0.0
+	var t_end := Time.get_ticks_msec() + 700
+	while Time.get_ticks_msec() < t_end:
+		await tree.process_frame
+		max_bow = maxf(max_bow, scene._bow(scene._player))
+	check(max_bow > 0.5, "your Mamuthone bows (%.2f)" % max_bow)
+	await tree.create_timer(ProcessionScene.SETTLE_TIME).timeout
+	await _frames(2)
+	check(scene._settle_t < 0.0, "the settle ends")
+	check_eq(scene._bow(scene._player), 0.0, "and the bow is released")
+	# Reduced motion: a much smaller bow.
+	scene.set_reduced_motion(true)
+	scene.settle()
+	var max_rm := 0.0
+	t_end = Time.get_ticks_msec() + 700
+	while Time.get_ticks_msec() < t_end:
+		await tree.process_frame
+		max_rm = maxf(max_rm, scene._bow(scene._player))
+	check(max_rm > 0.0 and max_rm <= 0.35, "reduced motion keeps only a small bow (%.2f)" % max_rm)
+	scene.queue_free()
+
+
+func test_early_late_colours_match_ui() -> void:
+	check(Palette.EARLY.to_html(false) == "8ec3e6", "early is the UI's cool #8ec3e6")
+	check(Palette.LATE.to_html(false) == "ef8250", "late is the UI's warm #ef8250")
+	# In greyscale they still differ in lightness (and the chevrons point opposite ways).
+	var le := Palette.EARLY.get_luminance()
+	var ll := Palette.LATE.get_luminance()
+	check(absf(le - ll) > 0.1, "early and late differ in greyscale (%.2f vs %.2f)" % [le, ll])
+	check(_contrast(Palette.EARLY, Palette.INK) >= 3.0 and _contrast(Palette.LATE, Palette.INK) >= 3.0, "both read against their ink outline")
+	var src := FileAccess.get_file_as_string("res://scripts/art/lane_skin.gd")
+	check("Palette.EARLY if up else Palette.LATE" in src, "LaneSkin bursts use the shared pair")
+
+
 func test_rope_is_natural_fibre() -> void:
 	check(Palette.ROPE != Palette.RED and Palette.ROPE.s < 0.5, "the soha is drawn as natural rush or hemp, not red")
 	var src := FileAccess.get_file_as_string("res://scripts/art/figures.gd") + FileAccess.get_file_as_string("res://scripts/art/procession_scene.gd")

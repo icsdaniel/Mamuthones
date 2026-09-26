@@ -45,7 +45,7 @@ func test_every_sample_loads() -> void:
 			if check(st != null, "%s/%s loads" % [path, f]):
 				check(st.get_length() > 0.05, "%s/%s has length" % [path, f])
 				count += 1
-	check(count >= 207, "found all samples (%d)" % count)
+	check(count >= 213, "found all samples (%d)" % count)
 
 
 func test_bell_matrix_complete() -> void:
@@ -110,7 +110,9 @@ func test_api_calls_headless() -> void:
 	check_eq(s._unison, 5, "unison clamps")
 	s.call_out()
 	s.rope()
-	for n in ["tap", "back", "unlock", "carve", "result"]:
+	s.rope_grab()
+	s.stop_count_in()
+	for n in ["tap", "back", "unlock", "carve", "result", "cue"]:
 		s.ui(n)
 	var len: float = s.count_in(120.0)
 	check_near(len, 2.0, 0.001, "count-in at 120 bpm lasts 2 s")
@@ -134,14 +136,39 @@ func test_count_in_is_beat_exact() -> void:
 	var s := _sound()
 	for bpm in [60.0, 76.0, 128.0, 200.0]:
 		s.count_in(bpm)
-		# the stream was just handed to the pool player before the round-robin index
-		var n: int = s._sfx_pool.size()
-		var p: AudioStreamPlayer = s._sfx_pool[(s._next[4] - 1 + n) % n]
-		var found := p.stream as AudioStreamWAV
-		if check(found != null, "count-in stream exists"):
+		var found := s._count_player.stream as AudioStreamWAV
+		if check(found != null and s._count_player.playing, "count-in plays"):
 			var beat := int(round(44100.0 * 60.0 / bpm))
 			check_eq(found.data.size(), beat * 2 * 4, "count-in at %s bpm is 4 whole beats" % bpm)
 	await _settle()
+
+
+func test_stop_count_in() -> void:
+	var s := _sound()
+	s.count_in(90.0)
+	s.stop_count_in()
+	check(s._count_stopping, "stopping fades first (no click)")
+	s._process(0.05)
+	check(not s._count_player.playing, "the count-in is silent after the fade")
+	s.stop_count_in()  # harmless when nothing plays
+	s.count_in(90.0)
+	check(s._count_player.playing and is_equal_approx(s._count_player.volume_db, 0.0), "a new count-in plays at full level")
+	await _settle()
+
+
+func test_cue_and_rope_grab() -> void:
+	var s := _sound()
+	s.ui("cue")
+	var p := _last_player(s, s._sfx_pool, 4)
+	check(s._ui["cue"].has(p.stream), "ui(\"cue\") plays the bell cue")
+	check(p.stream.get_length() < 0.35, "the cue is short")
+	check(not s._bells["light"][0].has(p.stream), "the cue is not a bell ring")
+	s.rope_grab()
+	p = _last_player(s, s._sfx_pool, 4)
+	check(s._grabs.has(p.stream), "rope_grab() plays a grip")
+	check(p.stream.get_length() < 0.3, "the grab is short")
+	await _settle()
+
 
 func test_steps_follow_key() -> void:
 	var s := _sound()

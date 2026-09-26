@@ -24,7 +24,7 @@ const QUALITIES: Array[String] = ["perfect", "good", "ok", "miss", "early", "lat
 const QUALITY_TAKES: Array[int] = [3, 3, 3, 3, 2, 2]
 const TAKES := 3
 const LANES := 3
-const UI_NAMES: Array[String] = ["tap", "back", "unlock", "carve", "result"]
+const UI_NAMES: Array[String] = ["tap", "back", "unlock", "carve", "result", "cue"]
 const AMBIENCES: Array[String] = ["fire", "crowd", "wind"]
 
 ## A suggested ambience for each story stop (index = stop number, 1..7), for
@@ -41,6 +41,7 @@ const HOLD_FADE_OUT := 0.09
 const DRONE_IDLE_STOP := 4.0
 const AMBIENCE_FADE := 1.5
 const JANGLE_CHOKE := 0.12
+const COUNT_STOP_FADE := 0.03
 const SILENT_DB := -80.0
 const SEMITONE := 1.0594630943592953
 const BUS_BELLS := &"Bells"
@@ -59,6 +60,7 @@ var _tones: Array = []  # [lane] -> 6 streams, for pitch classes 0, 2, .. 10
 var _drones: Array = [] # [lane] -> 12 looping streams
 var _calls: Array[AudioStream] = []
 var _ropes: Array[AudioStream] = []
+var _grabs: Array[AudioStream] = []
 var _ui := {}           # name -> Array[AudioStream]
 var _amb_streams: Array[AudioStream] = []
 var _count_hi: AudioStreamWAV
@@ -79,6 +81,8 @@ var _tone_pitch := 1.0  # odd keys play the tone a semitone below, resampled up
 var _unison := 0
 var _streak := 0
 var _jangle_choking := false
+var _count_player: AudioStreamPlayer
+var _count_stopping := false
 var _last_take := {}
 # hold fades: gain in [0, 1] and the direction it moves in (+1 in, -1 out, 0 still)
 var _hold_gain := PackedFloat32Array([0.0, 0.0, 0.0])
@@ -210,6 +214,12 @@ func rope() -> void:
 	_play(_sfx_pool, 4, _pick(_ropes, 301), randf_range(-1.0, 0.0))
 
 
+## A finger has closed on an open rope (swipe) note: a hand gripping the rope, a
+## short creak of the fibres.
+func rope_grab() -> void:
+	_play(_sfx_pool, 4, _pick(_grabs, 302), randf_range(-1.0, 0.0))
+
+
 ## Fades in the lane's drone (a launeddas-style reed at the lane's pitch), looping.
 func hold_start(lane: int) -> void:
 	lane = clampi(lane, 0, LANES - 1)
@@ -237,7 +247,8 @@ func hold_stop(lane: int) -> void:
 		_hold_dir[lane] = -1
 
 
-## UI sounds: tap, back, unlock, carve, result.
+## UI sounds: tap, back, unlock, carve, result, and cue (the soft shake of tiny bells
+## played half a beat before a bell on Easy and Medium: quiet and high, not a ring).
 func ui(name: String) -> void:
 	if not _ui.has(name):
 		push_warning("Sound.ui: unknown sound '%s'" % name)
@@ -293,8 +304,18 @@ func count_in(bpm: float) -> float:
 	stream.mix_rate = 44100
 	stream.stereo = false
 	stream.data = data
-	_play(_sfx_pool, 4, stream, 0.0)
+	# the count-in has a player of its own, so stop_count_in() can find it
+	_count_stopping = false
+	_count_player.stream = stream
+	_count_player.volume_db = 0.0
+	_count_player.play()
 	return 4.0 * 60.0 / bpm
+
+
+## Silences a count-in that is playing (a quick 30 ms fade, no click).
+func stop_count_in() -> void:
+	if _count_player.playing:
+		_count_stopping = true
 
 
 # ---------------------------------------------------------------------------- inside
@@ -307,6 +328,9 @@ func stop_all() -> void:
 			p.stop()
 	if _jangle_player:
 		_jangle_player.stop()
+	if _count_player:
+		_count_player.stop()
+		_count_stopping = false
 	_hold_gain.fill(0.0)
 	_hold_dir.fill(0)
 	_hold_idle.fill(0.0)
@@ -353,6 +377,11 @@ func _process(delta: float) -> void:
 		p.volume_db = linear_to_db(maxf(sin(g * PI * 0.5), 0.001))
 		if g <= 0.0 and p.playing:
 			p.stop()
+	if _count_stopping:
+		_count_player.volume_db -= delta * 60.0 / COUNT_STOP_FADE
+		if _count_player.volume_db <= -60.0 or not _count_player.playing:
+			_count_player.stop()
+			_count_stopping = false
 	if _jangle_choking and _jangle_player.playing:
 		# a miss muffles the load: the jangle is choked within ~0.1 s
 		_jangle_player.volume_db -= delta * 60.0 / JANGLE_CHOKE
@@ -543,6 +572,8 @@ func _load_all() -> void:
 		_drones.append(drones)
 	_calls.assign(_load_takes("voice/call_%d.wav", 4))
 	_ropes.assign(_load_takes("fx/rope_%d.wav", TAKES))
+	_grabs.assign(_load_takes("fx/grab_%d.wav", TAKES))
+	_ui["cue"] = _load_takes("ui/cue_%d.wav", TAKES)
 	_ui["tap"] = _load_takes("ui/tap_%d.wav", TAKES)
 	_ui["back"] = _load_takes("ui/back_%d.wav", 1)
 	_ui["carve"] = _load_takes("ui/carve_%d.wav", TAKES)
@@ -595,6 +626,9 @@ func _make_players() -> void:
 	var j: Array[AudioStreamPlayer] = []
 	_fill(j, 1, "Bells")
 	_jangle_player = j[0]
+	var c: Array[AudioStreamPlayer] = []
+	_fill(c, 1, "Sfx")
+	_count_player = c[0]
 
 
 func _fill(pool: Array[AudioStreamPlayer], count: int, bus: String) -> void:

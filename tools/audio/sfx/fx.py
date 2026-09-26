@@ -176,6 +176,41 @@ def result() -> np.ndarray:
     return out
 
 
+def cue(take: int) -> np.ndarray:
+    """The bell cue before a tilt on Easy and Medium: a light shake of a few tiny
+    bells, soft and high, gone in a quarter second; nothing like a ring of the load."""
+    rng = np.random.default_rng([181, take])
+    n = int(0.26 * SR)
+    out = np.zeros(n)
+    tiny = [Bell(float(f), 0.25, rng, 0.0) for f in rng.uniform(2600, 4200, 4)]
+    t = 0.0
+    for k in range(int(rng.integers(3, 5))):
+        b = tiny[k % len(tiny)]
+        start = int(t * SR)
+        add_at(out, strike_response(b, n - start, rng.uniform(0.4, 0.7) * (1 - 0.15 * k), 9000, rng, 0.35), start)
+        t += rng.uniform(0.018, 0.035)
+    out = highpass(out, 1800, 2)
+    return fade(out, 0.0008, 0.06)
+
+
+def rope_grab(take: int) -> np.ndarray:
+    """A hand closing on the rope: palm friction on the fibres and a short creak as
+    the twist takes the load."""
+    rng = np.random.default_rng([191, take])
+    n = int(0.2 * SR)
+    t = np.arange(n) / SR
+    rub = bandpass(rng.standard_normal(n), 900, 5000, 2) * np.exp(-t / 0.03) * 0.35
+    imp = np.zeros(n)
+    pos = rng.uniform(0.008, 0.015) * SR
+    while pos < 0.11 * SR:
+        imp[int(pos)] = rng.uniform(0.5, 1.0)
+        pos += SR / rng.uniform(110, 190)
+    creak = (resonator(imp, rng.uniform(650, 800), 5) + 0.6 * resonator(imp, rng.uniform(1300, 1600), 6))
+    creak *= np.clip(t / 0.01, 0, 1) * np.exp(-np.clip(t - 0.03, 0, None) / 0.04)
+    out = rub + creak * 0.5
+    return fade(out, 0.0008, 0.04)
+
+
 # ----------------------------------------------------------------------------- ambience
 
 def fire_loop(seconds=20.0, xf=1.5) -> np.ndarray:
@@ -279,6 +314,14 @@ def main() -> None:
     add_at(back, wood_knock(r, 700, 0.8, 0.22), 0)
     add_at(back, wood_knock(r, 520, 0.6, 0.22), int(0.075 * SR))
     write_wav("ui/back_1.wav", fade(back * db(-6) / np.max(np.abs(back)), 0.0003, 0.04))
+    cues = [cue(k) for k in range(3)]
+    pk = max(np.max(np.abs(x)) for x in cues)
+    for k, x in enumerate(cues):
+        write_wav(f"ui/cue_{k + 1}.wav", x * db(-12) / pk)
+    grabs = [rope_grab(k) for k in range(3)]
+    pk = max(np.max(np.abs(x)) for x in grabs)
+    for k, x in enumerate(grabs):
+        write_wav(f"fx/grab_{k + 1}.wav", x * db(-8) / pk)
     carves = [carve(k) for k in range(3)]
     pk = max(np.max(np.abs(x)) for x in carves)
     for k, x in enumerate(carves):
