@@ -6,6 +6,7 @@
   "bpm": 108,
   "offset": 2.7222,
   "audio": "res://audio/music/carnival.ogg",
+  "remix": {"id": "carnival_remix", "bpm": 108, "offset": 2.7222, "audio": "res://audio/music/carnival_remix.ogg"},
   "length": 143.056,
   "preview": 109.39,
   "key_root": 65,

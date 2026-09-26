@@ -6,6 +6,7 @@
   "bpm": 100,
   "offset": 2.9,
   "audio": "res://audio/music/bonfires.ogg",
+  "remix": {"id": "bonfires_remix", "bpm": 100, "offset": 2.9, "audio": "res://audio/music/bonfires_remix.ogg"},
   "length": 136.0,
   "preview": 103.7,
   "key_root": 55,

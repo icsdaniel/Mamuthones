@@ -105,6 +105,7 @@ func test_profile_corruption_and_versions() -> void:
 	cfg.set_value("bests", "values", {"s1:easy": "nonsense", "s2:easy": {"score": 1000, "bells": 2}})
 	cfg.set_value("look", "values", [1, 2, 3])
 	cfg.set_value("stats", "plays", "many")
+	ProfileScript.seal(cfg)
 	cfg.save(P)
 	var w := _fresh_profile()
 	check_eq(w.load_status, "ok", "loads")
@@ -119,6 +120,7 @@ func test_profile_corruption_and_versions() -> void:
 	cfg.set_value("meta", "version", 99)
 	cfg.set_value("settings", "values", {"note_speed": 1.75})
 	cfg.set_value("future", "stuff", {"x": 1})
+	ProfileScript.seal(cfg)
 	cfg.save(P)
 	var v := _fresh_profile()
 	check_eq(v.load_status, "future", "newer version recognised")
@@ -260,12 +262,17 @@ func test_daily_determinism() -> void:
 		if d.song_id == prev:
 			repeats += 1
 		prev = d.song_id
-		date = Daily._shift(date, 1)
+		date = _next_day(date)
 	check_eq(songs.size(), 6, "every story song comes up")
 	check_eq(mirrors.size(), 2, "mirrored and not")
 	check_eq(diffs.size(), 4, "all four difficulties")
 	check_eq(repeats, 0, "never the same song two days running")
 	SongLibrary.reset()
+
+
+static func _next_day(date: Dictionary) -> Dictionary:
+	var unix := Time.get_unix_time_from_datetime_dict({"year": date.year, "month": date.month, "day": date.day, "hour": 12})
+	return Time.get_date_dict_from_unix_time(unix + 86400)
 
 
 func test_daily_hash_is_pinned() -> void:

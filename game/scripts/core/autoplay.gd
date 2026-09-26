@@ -6,7 +6,7 @@ extends RefCounted
 ## update(t) sends every input that is due by song time t (with its exact time stamp), then calls
 ## session.update(t), so the play screen can call autoplay.update(t) in place of session.update(t).
 ## human = true adds small timing errors (about ±20 ms), an occasional early hold release and a
-## rare miss; `seed` makes that repeatable.
+## rare miss; `p_seed` makes that repeatable. In slam mode it rings with the buttons (two thumbs).
 
 signal stepped(lane: int)
 signal rang(result: Dictionary)
@@ -20,6 +20,7 @@ var rng := RandomNumberGenerator.new()
 var _next := 0
 var _plan: Array[float] = []           # per note: planned input time (NAN = skip)
 var _releases: Array = []              # [t, touch_id]
+var _holding: Dictionary = {}          # touch_id -> lane of holds being kept
 
 
 func _init(p_session: Session, p_human := false, p_seed := 12345) -> void:
@@ -54,6 +55,7 @@ func update(t: float) -> void:
 	while i < _releases.size():
 		if _releases[i][0] <= t:
 			session.release(_releases[i][0], _releases[i][1])
+			_holding.erase(_releases[i][1])
 			_releases.remove_at(i)
 		else:
 			i += 1
@@ -64,23 +66,45 @@ func _play(n: Note, at: float) -> void:
 	var id := TOUCH_BASE + n.index
 	match n.kind:
 		Note.Kind.STEP:
-			session.tap(n.lane, at, id)
-			stepped.emit(n.lane)
-			_releases.append([at + 0.06, id])
+			_tap(n.lane, at, id, 0.03)
 		Note.Kind.HOLD:
-			session.tap(n.lane, at, id)
-			stepped.emit(n.lane)
+			_tap(n.lane, at, id, -1.0)
 			var end := n.end_t
 			if human and rng.randf() < 0.05:
 				end -= 0.3
 			_releases.append([end, id])
+			_holding[id] = n.lane
 		Note.Kind.BELL:
-			rang.emit(session.ring(at))
+			if session.slam:
+				_slam_bell(at, id)
+			else:
+				rang.emit(session.ring(at))
 		Note.Kind.RING:
-			session.tap(n.lane, at, id)
-			stepped.emit(n.lane)
-			rang.emit(session.ring(at))
-			_releases.append([at + 0.06, id])
+			_tap(n.lane, at, id, 0.03)
+			if not session.slam:   # in slam a full ring is its step alone
+				rang.emit(session.ring(at))
 		Note.Kind.SWIPE:
 			session.swipe(n.dir, at)
 			swiped.emit(n.dir)
+
+
+# Slam bell with two thumbs: both outer buttons together, or, while one thumb keeps a hold, the
+# outer button that thumb is not on.
+func _slam_bell(at: float, id: int) -> void:
+	if _holding.is_empty():
+		_tap(0, at, id + 100000, 0.03)
+		_tap(2, at, id + 200000, 0.03)
+		return
+	var held: int = _holding.values()[0]
+	_tap(2 if held == 0 else 0, at, id + 100000, 0.03)
+
+
+# Presses a button (and lets go after `hold_for` seconds unless negative), passing on any bell
+# a slam press made.
+func _tap(lane: int, at: float, id: int, hold_for: float) -> void:
+	var r := session.tap(lane, at, id)
+	stepped.emit(lane)
+	if not r.ring.is_empty():
+		rang.emit(r.ring)
+	if hold_for >= 0.0:
+		_releases.append([at + hold_for, id])

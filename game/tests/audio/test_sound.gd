@@ -18,7 +18,7 @@ func _settle() -> void:
 	# stop everything and give the audio server time to drop the playbacks, so the
 	# run ends without leaked streams
 	_sound().stop_all()
-	await tree.create_timer(0.15).timeout
+	await tree.create_timer(0.5).timeout
 
 
 func test_buses_exist() -> void:
@@ -216,3 +216,62 @@ func test_loop_seams_in_godot_decoder() -> void:
 			if not buf[seam + i].is_equal_approx(buf[2 + i]):
 				same = false
 		check(same, "%s: the loop restarts sample-exactly" % path.get_file())
+
+
+func test_early_and_late_sound_different() -> void:
+	var s := _sound()
+	var n: int = s._bell_pool.size()
+	s.bell("village", true, "early")
+	var early: AudioStreamPlayer = s._bell_pool[(s._next[0] - 1 + n) % n]
+	check(early.pitch_scale > 1.02, "an early clank is pitched up (%.3f)" % early.pitch_scale)
+	s.bell("village", false, "late")
+	var late: AudioStreamPlayer = s._bell_pool[(s._next[0] - 1 + n) % n]
+	check(late.pitch_scale < 0.98, "a late clank is pitched down (%.3f)" % late.pitch_scale)
+	check(s._bells["village"][4].has(early.stream) or s._bells["village"][5].has(early.stream), "early uses the ok clank")
+	s.bell("village", true, "perfect")
+	var p: AudioStreamPlayer = s._bell_pool[(s._next[0] - 1 + n) % n]
+	check(absf(p.pitch_scale - 1.0) <= 0.0026, "a perfect ring is only humanized, not detuned")
+	await _settle()
+
+
+func test_hold_fades_are_click_free_in_the_mixer() -> void:
+	# Record Godot's own mix of the Sfx bus while a drone fades in and out, and check
+	# that no sample-to-sample step at the edges is bigger than the drone's own steps.
+	var s := _sound()
+	var bus := AudioServer.get_bus_index("Sfx")
+	var cap := AudioEffectCapture.new()
+	cap.buffer_length = 3.0
+	AudioServer.add_bus_effect(bus, cap)
+	s.set_key(62)
+	await tree.create_timer(0.2).timeout
+	cap.clear_buffer()
+	s.hold_start(0)
+	await tree.create_timer(0.35).timeout
+	s.hold_stop(0)
+	await tree.create_timer(0.35).timeout
+	var buf := cap.get_buffer(cap.get_frames_available())
+	AudioServer.remove_bus_effect(bus, AudioServer.get_bus_effect_count(bus) - 1)
+	if not check(buf.size() > 20000, "the mixer ran headless (%d frames)" % buf.size()):
+		return
+	# envelope: the peak of each 256-sample block and its neighbours
+	var blocks := PackedFloat32Array()
+	blocks.resize((buf.size() >> 8) + 1)
+	for i in buf.size():
+		blocks[i >> 8] = maxf(blocks[i >> 8], absf(buf[i].x))
+	var loud := 0.0
+	for b in blocks:
+		loud = maxf(loud, b)
+	var steady := 0.0
+	var edge := 0.0
+	for i in range(1, buf.size()):
+		var k := i >> 8
+		var env := maxf(blocks[k], maxf(blocks[maxi(k - 1, 0)], blocks[mini(k + 1, blocks.size() - 1)]))
+		var d := absf(buf[i].x - buf[i - 1].x)
+		# "edges" are blocks where the drone is fading; "steady" where it is near full
+		if env > loud * 0.8:
+			steady = maxf(steady, d)
+		elif env < loud * 0.6:
+			edge = maxf(edge, d)
+	check(loud > 0.05, "the drone was heard (peak %.3f)" % loud)
+	check(edge <= steady * 1.05, "no click while fading: largest step %.4f vs %.4f while steady" % [edge, steady])
+	await _settle()

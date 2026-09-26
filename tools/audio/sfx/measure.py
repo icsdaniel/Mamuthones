@@ -65,7 +65,8 @@ def rise_ms(x, sr):
     spread out in time the strikes are (a tight row is short, a ragged row long)."""
     y = mono(x)
     w = int(0.005 * sr)
-    env = np.sqrt(np.convolve(y ** 2, np.ones(w) / w, "same"))
+    c = np.concatenate([[0.0], np.cumsum(y ** 2)])
+    env = np.sqrt(np.maximum(c[w:] - c[:-w], 0) / w)
     pk = env.max()
     a = np.argmax(env >= 0.1 * pk)
     b = np.argmax(env >= 0.9 * pk)
@@ -77,7 +78,8 @@ def flatness(x, sr):
     y = mono(x)
     w = int(0.3 * sr)
     if len(y) > w:
-        e = np.convolve(y ** 2, np.ones(w), "valid")
+        c = np.concatenate([[0.0], np.cumsum(y ** 2)])
+        e = c[w:] - c[:-w]
         i = int(np.argmax(e))
         y = y[i:i + w]
     S = np.abs(np.fft.rfft(y * np.hanning(len(y)))) ** 2 + 1e-20
@@ -245,9 +247,12 @@ def main():
         m = re.match(r"(bells/row_(tight|loose)|voice/call|fx/rope|steps/tone|steps/foot)", rel)
         if m:
             groups.setdefault(m.group(1), []).append(r)
-    summary = {g: dict(rise_ms=round(float(np.mean([r["rise_ms"] for r in v])), 1),
-                       flatness=round(float(np.mean([r.get("flatness", np.nan) for r in v])), 3),
-                       seconds=round(float(np.mean([r["seconds"] for r in v])), 2)) for g, v in groups.items()}
+    summary = {}
+    for g, v in groups.items():
+        summary[g] = dict(rise_ms=round(float(np.mean([r["rise_ms"] for r in v])), 1),
+                          seconds=round(float(np.mean([r["seconds"] for r in v])), 2))
+        if "flatness" in v[0]:
+            summary[g]["flatness"] = round(float(np.mean([r["flatness"] for r in v])), 3)
     report = dict(total_mbytes=round(total / 1e6, 2), files=len(rows), problems=problems,
                   groups=summary,
                   tone_pitch_worst_cents=tone_pitch_worst_cents,

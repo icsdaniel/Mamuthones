@@ -3,7 +3,7 @@ extends Node
 ## the count-in, carved-wood UI sounds and the looping ambiences.
 ##
 ## Everything is loaded once in _ready and played through fixed pools of
-## AudioStreamPlayers, so the calls made during play (step, bell, row_bells, call,
+## AudioStreamPlayers, so the calls made during play (step, bell, row_bells, call_out,
 ## rope, hold_start, hold_stop) do no loading and create no objects.
 ## The samples are synthesized by tools/audio/sfx/build_all.py (modal bell model,
 ## source-filter voices); tools/audio/sfx/measurements.json has their measurements.
@@ -29,7 +29,8 @@ const ROW_DB: Array[float] = [-80.0, -17.0, -13.0, -9.0, -6.0, -3.0]
 const HOLD_FADE_IN := 0.03
 const HOLD_FADE_OUT := 0.09
 const AMBIENCE_FADE := 1.5
-const SILENT_DB := -60.0
+const SILENT_DB := -80.0
+const SEMITONE := 1.0594630943592953
 
 # bells: set id -> Array of 8 Arrays (quality * 2 + (0 up / 1 down)) of takes
 var _bells := {}
@@ -56,7 +57,6 @@ var _next := PackedInt32Array([0, 0, 0, 0, 0])  # round-robin index per pool
 
 var _key_pc := 2
 var _tone_pitch := 1.0  # odd keys play the tone a semitone below, resampled up
-const SEMITONE := 1.0594630943592953
 var _unison := 0
 var _last_take := {}
 # hold fades: gain in [0, 1] and the direction it moves in (+1 in, -1 out, 0 still)
@@ -87,7 +87,7 @@ func set_key(midi_root: int) -> void:
 		var p := _hold_players[lane]
 		if p.stream != _drones[lane][pc] or not p.playing:
 			p.stream = _drones[lane][pc]
-			p.volume_db = linear_to_db(maxf(_hold_gain[lane], 0.001))
+			p.volume_db = linear_to_db(_hold_gain[lane]) if _hold_gain[lane] > 0.001 else SILENT_DB
 			p.play()
 
 
@@ -105,22 +105,32 @@ func set_volume(bus: String, linear: float) -> void:
 func step(lane: int) -> void:
 	lane = clampi(lane, 0, LANES - 1)
 	_play(_foot_pool, 2, _pick(_feet[lane], lane), randf_range(-1.5, 0.5))
-	_play(_tone_pool, 3, _tones[lane][_key_pc / 2], 0.0, _tone_pitch)
+	_play(_tone_pool, 3, _tones[lane][_key_pc >> 1], 0.0, _tone_pitch)
 
 
-## Rings the player's bell load. quality: perfect, good, ok, miss (also silence, free,
-## early, late). The rest of the row joins in at the level set by row_bells().
+## Rings the player's bell load. quality: perfect, good, ok, miss (Session.ring's
+## silence and free too; early and late ring the ok clank pitched up or down). The rest
+## of the row joins in at the level set by row_bells().
 func bell(set_id: String, up: bool, quality: String) -> void:
 	var sets: Array = _bells[set_id] if _bells.has(set_id) else _bells[_alias(set_id)]
 	var q := _quality_index(quality)
 	var takes: Array = sets[q * 2 + (0 if up else 1)]
-	_play(_bell_pool, 0, _pick(takes, 100 + q * 2 + (0 if up else 1)), randf_range(-0.8, 0.0))
+	# A tiny random pitch (+-0.25 %, what a load swinging at walking pace does by
+	# Doppler) so no two rings are identical. If the caller passes the judgement word
+	# "early" or "late", the clank is also nudged up or down (+-3.5 %): early sounds
+	# thin and hurried, late heavy and dragging, so the ear learns which way it was off.
+	var pitch := randf_range(0.9975, 1.0025)
+	if quality == "early":
+		pitch *= 1.035
+	elif quality == "late":
+		pitch *= 0.965
+	_play(_bell_pool, 0, _pick(takes, 100 + q * 2 + (0 if up else 1)), randf_range(-0.8, 0.0), pitch)
 	if _unison > 0 and q <= 2:
 		# the row rings with you: tight and loud at high unison, ragged and far at low
 		var tight := 1 if _unison >= 3 and q <= 1 else 0
 		var gain: float = ROW_DB[_unison] - (6.0 if q == 2 else 0.0)
 		var rt: Array = _row[tight][0 if up else 1]
-		_play(_row_pool, 1, _pick(rt, 200 + tight * 2 + (0 if up else 1)), gain + randf_range(-1.0, 0.0))
+		_play(_row_pool, 1, _pick(rt, 200 + tight * 2 + (0 if up else 1)), gain + randf_range(-1.0, 0.0), randf_range(0.996, 1.004))
 
 
 ## Unison level 0..5 (Session.unison_level): how much of the row rings with your bells.
@@ -148,6 +158,11 @@ func hold_start(lane: int) -> void:
 		_hold_gain[lane] = 0.0
 		p.volume_db = SILENT_DB
 		p.play()
+	# start the fade in this same audio block (Godot ramps the volume across the mix
+	# block, so the jump to -20 dB is smooth); _process takes it the rest of the way
+	if _hold_gain[lane] < 0.1:
+		_hold_gain[lane] = 0.1
+		p.volume_db = linear_to_db(0.1)
 	_hold_dir[lane] = 1
 
 
@@ -249,7 +264,7 @@ func _process(delta: float) -> void:
 			g = 0.0
 			_hold_dir[lane] = 0
 		_hold_gain[lane] = g
-		_hold_players[lane].volume_db = linear_to_db(g) if g > 0.001 else -80.0
+		_hold_players[lane].volume_db = linear_to_db(g) if g > 0.001 else SILENT_DB
 	for i in AMBIENCES.size():
 		var tgt := _amb_target[i]
 		var g := _amb_gain[i]

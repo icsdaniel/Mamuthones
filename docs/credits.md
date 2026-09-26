@@ -16,6 +16,12 @@ The procession bells in the music and the Piazza tracks use the game's own bell 
 
 ## Sound
 
+- Every bell, step, drone, call, rope, UI sound and ambience is synthesized from scratch by the game's
+  own tools (`tools/audio/sfx/`: a modal model of hammered sheet-iron cowbells, a source-filter voice
+  model, filtered-noise fire, wind and crowd). No recordings or third-party samples are used.
+- The bells are stand-ins: real field recordings of Mamoiada bells, made or licensed with the
+  community's consent, are meant to replace them before launch.
+
 ## Art
 
 - **IM Fell English SC** (titles), by Igino Marini, from the Fell Types revival. SIL Open Font

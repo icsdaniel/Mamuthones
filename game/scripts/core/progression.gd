@@ -7,7 +7,8 @@ extends RefCounted
 ## and all_bests()); by default it uses the Profile autoload.
 ##
 ## Rules:
-## - Story stops unlock in order: stop n+1 when stop n is finished with at least 1 bell (any level).
+## - Story stops unlock in order: stop n+1 when stop n is finished with at least 1 bell (any level);
+##   the Workshop also counts as finished when the tutorial is done.
 ## - A stop's remix unlocks when the stop is finished at Hard or Expert with at least 2 bells.
 ## - Piazza tracks unlock when the Workshop (stop 1) is finished.
 ## - Bell sets: Light from the start, Village when stop 3 is reached, Full load when stop 6 is reached.
@@ -51,7 +52,14 @@ static func best_bells(song_key: String, difficulties: Array = [], profile: Vari
 	return most
 
 
+## A stop is finished with 1 bell at any level. The Workshop (tutorial) is also finished once
+## the tutorial is done (Profile flag "tutorial_done"), since it is played lesson by lesson.
 static func cleared(song_id: String, profile: Variant = null) -> bool:
+	var s := SongLibrary.get_song(song_id)
+	if s != null and s.kind == "tutorial":
+		var p: Variant = _profile(profile)
+		if p != null and p.has_method("has_flag") and p.has_flag("tutorial_done"):
+			return true
 	return best_bells(song_id, [], profile) >= CLEAR_BELLS
 
 

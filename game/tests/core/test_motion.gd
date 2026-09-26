@@ -300,3 +300,94 @@ func test_motion_log_replays() -> void:
 		worst = maxf(worst, absf(again[i] - direct[i]))
 	check(worst < 0.001, "replay rings at the same times (%.5f)" % worst)
 	DirAccess.remove_absolute(ProjectSettings.globalize_path(path))
+
+
+func _held_run(det: BellDetector, sy: Synth, t1: float, hz: float, fps: float) -> Array:
+	var rings := []
+	var touched := {}
+	for f in sy.held_frames(0.0, t1, hz, fps):
+		for e in sy.events:
+			if e.kind == "tap" and e.t0 <= f[0] and not touched.has(e.t0):
+				touched[e.t0] = true
+				det.note_touch(e.t0)
+		if det.feed(f[0], f[1], f[2]):
+			rings.append(det.last_t)
+	return rings
+
+
+func test_sensor_rates_and_frame_rates() -> void:
+	# Phones deliver sensors at 50-200 Hz while the game draws at 60-120 fps.
+	for hz: float in [50.0, 100.0, 200.0]:
+		for fps: float in [60.0, 90.0, 120.0]:
+			for mode: String in ["gyro", "accel"]:
+				var what := "%s %d Hz / %d fps" % [mode, hz, fps]
+				# Flicks while walking.
+				var sy := Synth.new(int(hz + fps))
+				sy.acc_noise = 0.3
+				sy.gyro_noise = 5.0
+				sy.walk_acc = 1.5
+				sy.walk_gyro = 25.0
+				var starts := []
+				for i in 12:
+					starts.append(1.0 + i * 0.6)
+					sy.flick(starts[-1], i % 2 == 0, 400, 12, 0.2)
+				var rings := _held_run(_detector(100.0, mode), sy, 9.0, hz, fps)
+				check_eq(rings.size(), 12, "%s: 12 flicks while walking ring 12 times" % what)
+				if rings.size() == 12:
+					var worst := 0.0
+					for i in 12:
+						worst = maxf(worst, absf(rings[i] - starts[i]))
+					check(worst < 0.035, "%s: ring times within 35 ms (%.3f)" % [what, worst])
+				# Hard taps, one sample (5 ms) or smeared (12 ms).
+				var ty := Synth.new(int(hz * fps))
+				ty.acc_noise = 0.3
+				ty.gyro_noise = 5.0
+				for i in 30:
+					ty.tap(0.5 + i * 0.2, 30.0, 0.005 if i % 2 == 0 else 0.012, 60.0 if mode == "gyro" else 30.0)
+				check_eq(_held_run(_detector(120.0, mode), ty, 7.0, hz, fps).size(), 0, "%s: 30 hard taps ring nothing" % what)
+
+
+func test_slow_flicks_at_fast_tempo_ring_once() -> void:
+	for bpm: float in [68.0, 100.0, 140.0, 160.0]:
+		for dur: float in [0.2, 0.3, 0.4, 0.5]:
+			for mode: String in ["gyro", "accel"]:
+				var sy := Synth.new(3)
+				sy.gyro_noise = 5.0
+				sy.acc_noise = 0.3
+				var beat := 60.0 / bpm
+				for i in 8:
+					sy.flick(1.0 + i * beat * 2.0, i % 2 == 0, 400, 12, dur)
+				var rings := _run(_detector(bpm, mode), sy, 1.0 + 17 * beat)
+				check_eq(rings.size(), 8, "%s at %d bpm, %.1f s flicks: 8 flicks, 8 rings" % [mode, bpm, dur])
+
+
+func test_body_turn_does_not_ring() -> void:
+	var sy := Synth.new(15)
+	sy.gyro_noise = 5.0
+	sy.turn(0.5, 250.0, 0.5)
+	sy.turn(1.5, -300.0, 0.4)
+	sy.turn(2.5, 400.0, 0.6)
+	check_eq(_run(_detector(120.0, "gyro"), sy, 4.0).size(), 0, "turning the body (yaw) does not ring")
+	var walk := Synth.new(16)
+	walk.walk_acc = 3.0
+	walk.walk_gyro = 60.0
+	check_eq(_run(_detector(120.0, "gyro"), walk, 10.0).size(), 0, "walking sway does not ring (gyro)")
+	check_eq(_run(_detector(120.0, "accel"), walk, 10.0).size(), 0, "walking bounce does not ring (accel)")
+
+
+func test_held_readings_are_stamped_earlier() -> void:
+	# A 50 Hz sensor at 120 fps: readings are held for ~2.4 frames, so each is ~10 ms old on average.
+	var sy := Synth.new(17)
+	sy.jitter = 0.0
+	for i in 10:
+		sy.flick(1.0 + i * 0.7, i % 2 == 0, 400, 12, 0.2)
+	var det := _detector(100.0)
+	var fast := _run(_detector(100.0), sy, 8.0)   # 60 fps, instant readings
+	var held := _held_run(det, sy, 8.0, 50.0, 120.0)
+	check(det.sample_interval > 0.015 and det.sample_interval < 0.025, "measures the 20 ms sensor interval (%.4f)" % det.sample_interval)
+	var err_fast := 0.0
+	var err_held := 0.0
+	for i in 10:
+		err_fast += (fast[i] - (1.0 + i * 0.7)) / 10.0
+		err_held += (held[i] - (1.0 + i * 0.7)) / 10.0
+	check(absf(err_held - err_fast) < 0.012, "held-sample rings land where instant ones do (%.4f vs %.4f)" % [err_held, err_fast])

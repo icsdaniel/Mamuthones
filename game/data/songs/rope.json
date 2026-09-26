@@ -6,6 +6,7 @@
   "bpm": 116,
   "offset": 2.569,
   "audio": "res://audio/music/rope.ogg",
+  "remix": {"id": "rope_remix", "bpm": 116, "offset": 2.569, "audio": "res://audio/music/rope_remix.ogg"},
   "length": 140.983,
   "preview": 110.16,
   "key_root": 64,

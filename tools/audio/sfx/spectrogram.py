@@ -20,8 +20,9 @@ W, H = 600, 260
 FILES = [
     "bells/light_down_perfect_1.wav", "bells/village_down_perfect_1.wav", "bells/full_down_perfect_1.wav",
     "bells/full_up_perfect_1.wav", "bells/full_down_good_1.wav", "bells/full_down_ok_1.wav",
-    "bells/full_down_miss_1.wav", "bells/row_tight_down_1.ogg", "bells/row_loose_down_1.ogg",
-    "voice/call_1.wav", "fx/rope_1.wav", "steps/tone_1_02.wav",
+    "bells/full_down_miss_1.wav", "bells/row_tight_down_1.wav", "bells/row_loose_down_1.wav",
+    "voice/call_1.wav", "voice/call_3.wav", "fx/rope_1.wav", "steps/tone_1_02.wav", "steps/foot_1_1.wav",
+    "ui/carve_1.wav", "ui/unlock.ogg", "ui/result.ogg", "fx/count_hi.wav",
 ]
 
 

@@ -14,6 +14,9 @@ var acc_noise := 0.0
 var gyro_noise := 0.0
 var fps := 60.0
 var jitter := 0.002
+## Walking: vertical bounce (m/s², on y) and sway (°/s, about y and z) at step rate.
+var walk_acc := 0.0
+var walk_gyro := 0.0
 
 
 func _init(p_seed := 1) -> void:
@@ -24,6 +27,11 @@ func _init(p_seed := 1) -> void:
 func flick(t0: float, up: bool, rot_peak := 400.0, acc_peak := 12.0, dur := 0.2, acc_consistent := true) -> void:
 	var acc_sign := 1.0 if acc_consistent or rng.randf() < 0.5 else -1.0
 	events.append({"kind": "flick", "t0": t0, "sign": 1.0 if up else -1.0, "rot": rot_peak, "acc": acc_peak, "dur": dur, "acc_sign": acc_sign})
+
+
+## A body turn (yaw, about the screen's z axis) peaking at `rate` °/s, lasting dur seconds.
+func turn(t0: float, rate := 250.0, dur := 0.5) -> void:
+	events.append({"kind": "turn", "t0": t0, "rot": rate, "dur": dur})
 
 
 ## A hard thumb tap at t0: `acc` m/s² spike on z lasting `dur` seconds, with `rot` °/s of rotation.
@@ -75,8 +83,45 @@ func sample(t: float) -> Array:
 			acc.z += e.acc
 			acc.x += e.acc * 0.15
 			gyro.y += e.rot
+		elif e.kind == "turn":
+			if dt < 0.0 or dt > e.dur:
+				continue
+			gyro.z += e.rot * sin(PI * dt / e.dur)
+			acc.x += 3.0 * sin(PI * dt / e.dur)
+	if walk_acc > 0.0 or walk_gyro > 0.0:
+		acc.y += walk_acc * sin(TAU * 1.8 * t)
+		gyro.y += walk_gyro * sin(TAU * 0.9 * t)
+		gyro.z += walk_gyro * 0.7 * sin(TAU * 0.9 * t + 1.0)
 	if acc_noise > 0.0:
 		acc += Vector3(rng.randfn(0, acc_noise), rng.randfn(0, acc_noise), rng.randfn(0, acc_noise))
 	if gyro_noise > 0.0:
 		gyro += Vector3(rng.randfn(0, gyro_noise), rng.randfn(0, gyro_noise), rng.randfn(0, gyro_noise))
 	return [acc, gyro]
+
+
+## Frames at `fps`, each showing the latest reading of a sensor sampled at `hz` (sample-and-hold,
+## the way phones deliver sensors to a game). Worst case for taps: a tap's spike is always caught by
+## a sensor sample. Returns [[frame_t, acc, gyro], ...]; the noise is drawn per sensor sample.
+func held_frames(t0: float, t1: float, hz: float, p_fps: float) -> Array:
+	var out := []
+	var period := 1.0 / hz
+	var phase := rng.randf() * period
+	var last_k := -INF
+	var reading := [Vector3.ZERO, Vector3.ZERO]
+	var t := t0
+	while t < t1:
+		var k := floorf((t - phase) / period)
+		var ts := phase + k * period
+		var caught := false
+		for e in events:
+			if e.kind == "tap" and e.t0 > ts - period and e.t0 <= t and e.t0 > last_k:
+				# the sensor sample that fell inside this spike
+				reading = sample(e.t0 + e.dur * 0.5)
+				last_k = e.t0
+				caught = true
+		if not caught and ts > last_k:
+			reading = sample(ts)
+			last_k = ts
+		out.append([t, reading[0], reading[1]])
+		t += 1.0 / p_fps + rng.randf_range(-jitter, jitter)
+	return out

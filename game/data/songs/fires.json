@@ -6,6 +6,7 @@
   "bpm": 68,
   "offset": 4.0294,
   "audio": "res://audio/music/fires.ogg",
+  "remix": {"id": "fires_remix", "bpm": 68, "offset": 4.0294, "audio": "res://audio/music/fires_remix.ogg"},
   "length": 154.206,
   "preview": 102.85,
   "key_root": 57,

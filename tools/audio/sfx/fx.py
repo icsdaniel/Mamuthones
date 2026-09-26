@@ -70,10 +70,10 @@ def rope(take: int) -> np.ndarray:
         amp = pre * 0.6 + post
         fc = np.where(t < crack_t, 600 + 1400 * t / crack_t, 2000 * np.exp(-np.clip(t - crack_t, 0, None) / 0.12) + 450)
         bw = 0.9
-        g = np.exp(-((np.log2(f[None, :] / fc[:, None])) ** 2) / (2 * bw ** 2))
+        g = np.exp(-((np.log2(np.maximum(f[None, :], 1.0) / fc[:, None])) ** 2) / (2 * bw ** 2))
         return amp[:, None] * g
 
-    out = shaped_noise(n, rng, shape) * 0.5
+    out = shaped_noise(n, rng, shape) * 1.3
     # doppler-ish flutter of the rope's twist
     tt = np.arange(n) / SR
     out *= 1 + 0.35 * np.sin(2 * np.pi * rng.uniform(22, 30) * tt)
@@ -84,7 +84,7 @@ def rope(take: int) -> np.ndarray:
     add_at(out, burst * 1.6, k)
     tug_n = int(0.08 * SR)
     tt2 = np.arange(tug_n) / SR
-    add_at(out, np.sin(2 * np.pi * 130 * tt2) * np.exp(-tt2 / 0.018) * 0.7, k)
+    add_at(out, np.sin(2 * np.pi * 130 * tt2) * np.exp(-tt2 / 0.018) * 0.4, k)
     # fibres creaking as the rope tightens (stick-slip)
     cr_n = int(0.06 * SR)
     imp = np.zeros(cr_n)

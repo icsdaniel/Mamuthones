@@ -38,6 +38,13 @@ const FLAGS: Array[String] = ["language_chosen", "headphones_seen", "calibrated"
 const FLEECES: Array[String] = ["black", "dark_brown"]
 const STRAPS: Array[String] = ["natural", "dark"]
 const MAX_PIAZZA_PLAYERS := 6
+## Allowed ranges for number settings; values outside are clamped.
+const RANGES := {
+	"audio_offset": Vector2(-0.5, 0.5),
+	"note_speed": Vector2(0.5, 3.0),
+	"music_volume": Vector2(0.0, 1.0),
+	"sfx_volume": Vector2(0.0, 1.0),
+}
 
 ## Set to another node with submit(board_id, score) to capture ladder submissions (tests).
 var leaderboards: Node = null
@@ -81,6 +88,8 @@ func set_setting(key: String, value: Variant) -> void:
 		else:
 			push_warning("Profile: setting %s wants %s" % [key, type_string(typeof(DEFAULT_SETTINGS[key]))])
 			return
+	if RANGES.has(key):
+		value = clampf(value, RANGES[key].x, RANGES[key].y)
 	if _settings.get(key) == value:
 		return
 	_settings[key] = value
@@ -216,7 +225,8 @@ func record_result(session: Session) -> Dictionary:
 		e.bells = maxi(int(prev.get("bells", 0)), session.bells())
 		e.max_unison = maxi(int(prev.get("max_unison", 0)), int(session.stats.max_unison))
 		_bests[key] = e
-		if session.daily != "":
+		# Only the real procession of that day counts as a daily.
+		if Daily.matches(session):
 			var d := daily_best(session.daily)
 			if d.is_empty() or session.score > int(d.get("score", 0)):
 				_daily[session.daily] = {"score": session.score, "song_id": session.song_key(), "difficulty": session.difficulty, "bells": session.bells(), "slam": session.slam}
@@ -224,8 +234,8 @@ func record_result(session: Session) -> Dictionary:
 			var lb := _leaderboards()
 			if lb != null:
 				lb.submit(board_id(session.song_key(), session.difficulty), session.score)
-				if session.daily != "":
-					lb.submit(Daily.board_id(), session.score)
+				if Daily.matches(session):
+					lb.submit(Daily.BOARD_ID + "." + session.daily, session.score)
 	var after := Progression.snapshot(self)
 	for k in after:
 		if before.has(k):
@@ -266,31 +276,35 @@ func reset() -> void:
 func load_profile(p_path := PATH) -> void:
 	path = p_path
 	reset()
-	if not FileAccess.file_exists(path):
-		load_status = "new"
-		changed.emit()
-		return
-	var cfg := ConfigFile.new()
-	var err := cfg.load(path)
-	if err != OK or not cfg.has_section("meta"):
-		_set_aside(path, ".corrupt.cfg")
-		cfg = ConfigFile.new()
-		if FileAccess.file_exists(_bak(path)) and cfg.load(_bak(path)) == OK and cfg.has_section("meta"):
-			load_status = "backup"
-			push_warning("Profile: %s was damaged; restored the last good copy" % path)
-		else:
-			load_status = "corrupt"
-			push_warning("Profile: %s was damaged; starting a fresh profile" % path)
+	var tmp := path + ".tmp"
+	var main_exists := FileAccess.file_exists(path)
+	var cfg := _open_checked(path)
+	if cfg != null:
+		load_status = "ok"
+	else:
+		if main_exists:
+			_set_aside(path, ".corrupt.cfg")
+		# A save interrupted before its final rename leaves a complete .tmp; else the last good copy.
+		for candidate in [tmp, _bak(path)]:
+			cfg = _open_checked(candidate)
+			if cfg != null:
+				load_status = "backup"
+				push_warning("Profile: %s was damaged or missing; restored %s" % [path, candidate])
+				break
+		if cfg == null:
+			load_status = "corrupt" if main_exists else "new"
+			if main_exists:
+				push_warning("Profile: %s was damaged; starting a fresh profile" % path)
 			changed.emit()
 			return
-	else:
-		load_status = "ok"
-	var version := int(cfg.get_value("meta", "version", 0)) if typeof(cfg.get_value("meta", "version", 0)) in [TYPE_INT, TYPE_FLOAT] else 0
+	var version := _version(cfg)
 	if version > VERSION:
 		# Written by a newer build: keep a copy so a later update can pick it up again.
 		load_status = "future"
 		_set_aside(path, ".v%d.cfg" % version, true)
 	_read(cfg, version)
+	if load_status == "backup":
+		save()
 	changed.emit()
 
 
@@ -307,17 +321,60 @@ func save() -> bool:
 	cfg.set_value("piazza", "players", Array(_piazza_players))
 	cfg.set_value("piazza", "bests", _piazza_bests)
 	cfg.set_value("stats", "plays", _plays)
+	seal(cfg)
 	var tmp := path + ".tmp"
-	if cfg.save(tmp) != OK:
+	if cfg.save(tmp) != OK or _open_checked(tmp) == null:
 		push_warning("Profile: could not write %s" % tmp)
 		return false
+	# The main file always exists: the good old copy is copied (not moved) to .bak, then the new
+	# file is renamed over the main one in one step. A damaged main file never replaces the .bak.
 	var abs_path := ProjectSettings.globalize_path(path)
-	if FileAccess.file_exists(path):
-		DirAccess.remove_absolute(ProjectSettings.globalize_path(_bak(path)))
-		DirAccess.rename_absolute(abs_path, ProjectSettings.globalize_path(_bak(path)))
+	if _open_checked(path) != null:
+		DirAccess.copy_absolute(abs_path, ProjectSettings.globalize_path(_bak(path)))
 	var err := DirAccess.rename_absolute(ProjectSettings.globalize_path(tmp), abs_path)
+	if err != OK:
+		# Platforms whose rename will not replace an existing file.
+		DirAccess.remove_absolute(abs_path)
+		err = DirAccess.rename_absolute(ProjectSettings.globalize_path(tmp), abs_path)
 	_dirty = false
 	return err == OK
+
+
+## Adds the checksum that load_profile() checks. A file that parses but was cut short or edited
+## no longer matches it.
+static func seal(cfg: ConfigFile) -> void:
+	cfg.set_value("meta", "checksum", _checksum(cfg))
+
+
+static func _checksum(cfg: ConfigFile) -> String:
+	var parts := PackedStringArray()
+	for section in cfg.get_sections():
+		if section == "meta":
+			continue
+		for key in cfg.get_section_keys(section):
+			parts.append("%s/%s=%s" % [section, key, var_to_str(cfg.get_value(section, key))])
+	parts.append("version=%s" % var_to_str(cfg.get_value("meta", "version", 0)))
+	return "\n".join(parts).sha256_text()
+
+
+static func _version(cfg: ConfigFile) -> int:
+	var v = cfg.get_value("meta", "version", 0)
+	return int(v) if typeof(v) in [TYPE_INT, TYPE_FLOAT] else 0
+
+
+# The file at p, or null when it is missing, does not parse, or fails its checksum (files from a
+# newer version are trusted as long as they parse).
+static func _open_checked(p: String) -> ConfigFile:
+	if not FileAccess.file_exists(p):
+		return null
+	var cfg := ConfigFile.new()
+	if cfg.load(p) != OK or not cfg.has_section("meta"):
+		return null
+	if _version(cfg) > VERSION:
+		return cfg
+	if str(cfg.get_value("meta", "checksum", "")) != _checksum(cfg):
+		return null
+	return cfg
 
 
 func _touch() -> void:
@@ -340,6 +397,8 @@ func _read(cfg: ConfigFile, version: int) -> void:
 		for k in DEFAULT_SETTINGS:
 			if s.has(k) and (typeof(s[k]) == typeof(DEFAULT_SETTINGS[k]) or (typeof(DEFAULT_SETTINGS[k]) == TYPE_FLOAT and typeof(s[k]) == TYPE_INT)):
 				_settings[k] = float(s[k]) if typeof(DEFAULT_SETTINGS[k]) == TYPE_FLOAT else s[k]
+				if RANGES.has(k):
+					_settings[k] = clampf(_settings[k], RANGES[k].x, RANGES[k].y)
 	var f = cfg.get_value("flags", "values", {})
 	if f is Dictionary:
 		for k in f:
