@@ -68,8 +68,10 @@ Other rules:
 - Full ring: judged as one note on the later of its two inputs, both must land within the Early/Late
   window, and a Perfect full ring gives 450.
 - Ringing during a stand-still: −100 for every ring (rings closer than 150 ms count once) and the unison
-  drops one level. Keeping still through a stand-still is worth chasing: 150 × unison × weight, it counts
-  as 4 hits toward the next unison level, and the row visibly settles when it is kept.
+  drops one level. Keeping still through a stand-still is worth chasing: 75 × unison × weight for every beat
+  it lasts, it counts as 2 hits per beat (up to 8) toward the next unison level, and the row visibly
+  settles when it is kept. Stand-stills last at least 2 beats, sit on real halts in the music, and are
+  often tempted by a call or a bell cue just before or inside them.
 - Score = sum over notes of points × unison × weight, minus stand-still penalties, never below 0.
 - Smaller rules chosen while building: a Good full ring gives 225 and an Early/Late one 75. Early/Late
   keeps the unison level but restarts the run of 12. Letting go of a hold early breaks the streak and
