@@ -281,7 +281,7 @@ class Charter:
                 crowd = sum(1 for b in step_bs if 1e-6 < abs(b - bl.b) < clear - 1e-6)
                 on_beat = any(abs(b - bl.b) < 1e-6 for b in step_bs)
                 weak = bl.rank > 1 and bl.tag not in ("ring", "triple")
-                if sec is not None and sec.energy >= 3 and crowd >= 2 and weak and not on_beat:
+                if sec is not None and sec.energy >= 3 and crowd + on_beat >= 2 and weak:
                     continue
                 keep_b.append(bl)
             gone = set(id(x) for x in bells) - set(id(x) for x in keep_b)
@@ -351,9 +351,9 @@ class Charter:
             if n.k == "rest":
                 acc.append(n)
                 continue
-            i = bisect.bisect_left(beats, n.b - gap + 1e-6)
+            i = bisect.bisect_left(beats, n.b - gap + 1e-3)
             ok = True
-            while i < len(beats) and beats[i] < n.b + gap - 1e-6:
+            while i < len(beats) and beats[i] < n.b + gap - 1e-3:
                 if abs(beats[i] - n.b) > 1e-6:
                     ok = False
                     break

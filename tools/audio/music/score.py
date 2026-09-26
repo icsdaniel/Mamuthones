@@ -124,8 +124,8 @@ class Song:
         frac = pos - int(pos)
         if self.sub == 2 and abs(frac - 0.5) < 1e-6:
             return 4
-        if self.sub == 3 and (abs(frac - 1 / 3) < 1e-6 or abs(frac - 2 / 3) < 1e-6):
-            return 4
+        if abs(frac - 1 / 3) < 1e-6 or abs(frac - 2 / 3) < 1e-6:
+            return 4    # triplet eighths: compound meter, or a triplet passage in a straight song
         return 5
 
     # ------------------------------------------------------------ structure
