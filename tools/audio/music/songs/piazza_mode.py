@@ -1,8 +1,10 @@
 """Piazza mode tracks: bells, crowd, fire and the Issohadores' calls only - no melody.
 
 Each round is the row of Mamuthones jumping in the square. Before every stroke the row's small
-bells shake (the cue), then the whole load crashes on the beat: that crash is the player's bell.
-Phrases grow from one stroke a bar to syncopated patterns; a caller announces each new phrase.
+bells shake (the cue), then the row lands with a stomp on the beat. The bell crash itself is not in
+the music: it is the player's own tilt, so a missed stroke is heard as a missing bell. A soft stomp
+keeps every beat; phrases grow from one stroke a bar to syncopated patterns, and a caller announces
+each new phrase.
 """
 from score import Song
 
@@ -33,6 +35,8 @@ def build(sid):
     s.ev("crowd", -4, 400, None, crowd)
     # intro: the caller, the crowd answers
     b = s.sec("intro", 2, 0)
+    for i in range(8):
+        s.ev("stomp", b + i, 1.0, None, 0.3, hit="hit")
     s.ev("calls", b + 1, 0.6, None, 0.9, kind="ohi")
     s.ev("calls", b + 5, 0.6, None, 0.9, kind="aio")
     s.ev("crowd", b + 5.5, 2, None, 0.5, cheer=True)
@@ -44,13 +48,14 @@ def build(sid):
             s.ev("calls", b - 1.0, 0.6, None, 0.85, kind=["ohi", "hei", "oo"][pi % 3], shift=(pi % 4) - 1)
         for bar in range(2):
             for i, ch in enumerate(pat):
-                if ch != "x":
-                    continue
                 bb = b + bar * 4 + i
-                # the cue: the small bells shake half a beat before
+                if ch != "x":
+                    s.ev("stomp", bb, 1.0, None, 0.3 + 0.05 * energy, hit="hit")
+                    continue
+                # the cue: the small bells shake half a beat before; the row lands on the beat
                 s.ev("bells", bb - 0.5, 0.5, None, 0.22, count=3, spread=0.02, width=0.4)
-                s.ev("bells", bb, 1.0, None, 0.9 + 0.1 * (i == 0), count=14 + 4 * energy, spread=0.03)
-                s.cand(bb, "bell", "bells", rank=1)
+                s.ev("stomp", bb, 1.0, None, 0.75 + 0.1 * (i == 0), hit="hit")
+                s.cand(bb, "bell", "stomp", rank=1)
         if pi in (3, 7):
             s.ev("crowd", b + 7.3, 2, None, 0.6, cheer=True)
     # ending: three big strokes and the cheer
@@ -58,8 +63,10 @@ def build(sid):
     s.ev("calls", b - 1, 0.6, None, 1.0, kind="aio")
     for i in (0, 2, 4):
         s.ev("bells", b + i - 0.5, 0.5, None, 0.25, count=3, spread=0.02, width=0.4)
-        s.ev("bells", b + i, 1.0, None, 1.0, count=24, spread=0.035)
-        s.cand(b + i, "bell", "bells", rank=1)
+        s.ev("stomp", b + i, 1.0, None, 1.0, hit="hit")
+        s.cand(b + i, "bell", "stomp", rank=1)
+    # after the last stroke the whole row rings together once the player has
+    s.ev("bells", b + 4.5, 2.0, None, 0.35, count=24, spread=0.08)
     s.ev("crowd", b + 4.3, 4, None, 0.8, cheer=True)
     s.preview = s.time(s.sections[2].b)
     return s

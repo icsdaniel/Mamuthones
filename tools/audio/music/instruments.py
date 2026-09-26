@@ -56,9 +56,9 @@ VOWELS = {
 VOICE = {
     # mult: glottal f0 / sung pitch (2 = period doubled, the pitch heard is the subharmonic)
     "bassu": dict(mult=2.0, dbl=0.62, oq=0.32, fs=0.90, breath=0.015, jit=0.006, vib=0.0, gain=1.0,
-                  lp=5000, rasp=(1400, 5.0, 1.2)),
+                  lp=6500, rasp=(1400, 5.0, 1.2), close=0.04, buzz=0.08, edge=0.5),
     "contra": dict(mult=2.0, dbl=0.32, oq=0.36, fs=0.95, breath=0.012, jit=0.004, vib=0.0, gain=0.9,
-                   lp=6000, rasp=(1900, 4.0, 1.5)),
+                   lp=7000, rasp=(1900, 4.0, 1.5), close=0.05, buzz=0.06, edge=0.45),
     "mesu": dict(mult=1.0, dbl=0.0, oq=0.5, fs=1.0, breath=0.02, jit=0.003, vib=6.0, gain=0.8,
                  lp=7000, rasp=None),
     "boghe": dict(mult=1.0, dbl=0.0, oq=0.42, fs=1.04, breath=0.018, jit=0.003, vib=22.0, gain=1.0,
@@ -70,10 +70,11 @@ VOICE = {
 }
 
 
-def glottal(frac, oq):
-    """Rosenberg glottal flow pulse over one period (frac in [0, 1))."""
-    tp = oq * 0.66
-    tn = oq * 0.34
+def glottal(frac, oq, close=0.34):
+    """Rosenberg glottal flow pulse over one period (frac in [0, 1)). A short closing phase
+    (small close) is a pressed, buzzy voice: the sudden closure is rich in high harmonics."""
+    tp = oq * (1 - close)
+    tn = oq * close
     g = np.zeros_like(frac)
     m1 = frac < tp
     g[m1] = 0.5 * (1 - np.cos(np.pi * frac[m1] / tp))
@@ -191,7 +192,7 @@ def _voice_segment(f0, amp, weights, vib, prof, kind, r):
     phase = np.cumsum(freq / SR)
     frac = phase % 1.0
     cyc = np.floor(phase).astype(np.int64)
-    g = glottal(frac, prof["oq"])
+    g = glottal(frac, prof["oq"], prof.get("close", 0.34))
     src = np.diff(g, prepend=0.0) / np.maximum(freq, 50) * 200
     if prof["dbl"] > 0:
         # period doubling: every other glottal cycle weaker, heard as the pitch an octave down
@@ -199,6 +200,9 @@ def _voice_segment(f0, amp, weights, vib, prof, kind, r):
     shimmer = 1 + smooth_noise(n, 40, r) * prof["jit"] * 4
     src *= shimmer
     src += bandpass(r.standard_normal(n), 800, 6000) * prof["breath"]
+    # throat buzz: noise that pulses with the glottal cycle (the rattle of the false folds)
+    if prof.get("buzz"):
+        src += bandpass(r.standard_normal(n), 1500, 7000) * g * prof["buzz"]
     total = np.zeros(n)
     wsum = sum(weights.values()) + 1e-9
     for v, wv in weights.items():
@@ -215,6 +219,9 @@ def _voice_segment(f0, amp, weights, vib, prof, kind, r):
     if prof["rasp"]:
         fc, gdb, q = prof["rasp"]
         total = peaking(total, fc, gdb, q)
+    if prof.get("edge"):
+        # the cascade rolls the top off; the buzzy edge of the source goes around it
+        total += highpass(src, 1800) * prof["edge"]
     total = lowpass(highpass(total, 60 if kind != "bassu" else 35), prof["lp"])
     out = total * uniform_filter1d(amp, 64) * prof["gain"]
     return out / 3.0
@@ -602,14 +609,25 @@ def render_crowd(song, evs, n):
 # ------------------------------------------------------------------ remix kit
 
 
-def kick(vel, r, style="808"):
+def low_hz(midi):
+    """A pitch folded into the kick's range (35-70 Hz)."""
+    f = 440.0 * 2 ** ((midi - 69) / 12)
+    while f >= 70:
+        f /= 2
+    while f < 35:
+        f *= 2
+    return f
+
+
+def kick(vel, r, style="808", hz=None):
+    """808: a long, tuned boom (hz is the chord root); punch: a short thump tuned to the key."""
     if style == "808":
         t = _t(0.9)
-        f = 46 + 110 * np.exp(-t / 0.035)
+        f = (hz or 46) + 110 * np.exp(-t / 0.035)
         y = np.sin(2 * np.pi * np.cumsum(f / SR)) * np.exp(-t / 0.45)
     else:
         t = _t(0.35)
-        f = 52 + 140 * np.exp(-t / 0.02)
+        f = (hz or 52) + 140 * np.exp(-t / 0.02)
         y = np.sin(2 * np.pi * np.cumsum(f / SR)) * np.exp(-t / 0.14)
     y += lowpass(r.standard_normal(len(t)), 4000) * np.exp(-t / 0.002) * 0.5
     return np.tanh(y * 1.6) * vel
@@ -642,7 +660,11 @@ def render_kit(inst):
         for e in evs:
             st = e.p.get("style", "")
             if inst == "kick":
-                y = kick(e.vel, r, st or "808")
+                if (st or "808") == "808":
+                    hz = low_hz(song.pitch(song.root_at(e.b)))
+                else:
+                    hz = low_hz(song.key_root)
+                y = kick(e.vel, r, st or "808", hz)
             elif inst == "snare":
                 y = snare(e.vel, r, st or "snare")
             elif inst == "hat":

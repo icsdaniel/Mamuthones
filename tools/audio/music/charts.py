@@ -8,6 +8,10 @@ per difficulty, which layers of the music the player follows; then rules refine 
 - holds on long sung or piped notes; stand-stills exactly where the music stops;
 - lanes follow the melody's contour inside each phrase (low left, high right), so a phrase and its
   answer mirror each other when the music does; each song's signature motif has hand-set lanes;
+- but the thumbs come first: no one-thumb jacks (same-lane runs are broken up whatever the pitch),
+  each two-bar phrase keeps both hands busy (35-65 percent left), chained holds alternate hands;
+- a bell tilts the whole phone, so steps keep clear of it (half a beat, 150 ms at Expert);
+- Easy walks one lane at a time, with a home lane per phrase that moves with the tune;
 - difficulty gates from design section 4, and the song's own mechanics (stop order);
 - readability: overall and per-hand gaps, bells half a beat apart, nothing under a hold's lane;
 - the first appearance of every mechanic is isolated from the other extras.
@@ -65,6 +69,9 @@ TARGET = {
 }
 # how a section's density follows the song's shape (energy 0 calm .. 3 climax)
 ENERGY_FACTOR = {0: 0.6, 1: 0.85, 2: 1.05, 3: 1.4}
+# Easy is capped by its walking beat (never two inputs closer than 0.6 s), so its build-ups sit
+# lower to leave the climaxes room to rise
+ENERGY_FACTOR_EASY = {0: 0.5, 1: 0.7, 2: 0.8, 3: 1.4}
 EXPERT_PEAK = 4.3   # expert climaxes reach at least this (notes per second) when the music allows
 
 PRIO = {"rest": 0, "swipe": 1, "ring": 2, "bell": 3, "hold": 4, "call": 5, "step": 6}
@@ -329,6 +336,16 @@ class Charter:
         # 10. density follows the song's shape and the story's curve
         if not tutorial:
             notes = self.fit_density(notes, diff)
+            if diff != "easy":
+                # thinning and hand fixes can tip a phrase to one side: balance it again
+                laned = sorted([n for n in notes if n.k in ("step", "hold", "ring")], key=lambda n: n.b)
+                groups = {}
+                for n in laned:
+                    sec = s.section_at(n.b)
+                    groups.setdefault((sec.name, int((n.b - sec.b + 1e-6) // (s.bpb * 2))), []).append(n)
+                self.balance(groups)
+                self.break_jacks(laned)
+                notes = self.fix_hands(notes, diff)
 
         notes.sort(key=lambda n: (n.b, PRIO[n.k]))
         # bells alternate automatically; make sure no bell pair is too close
@@ -437,19 +454,16 @@ class Charter:
             return
         keys = sorted(groups, key=lambda k: groups[k][0].b)
         means = {k: sum(n.pitch for n in groups[k]) / len(groups[k]) for k in keys}
+        order = sorted(means.values())
         prev_home = None
         for idx, k in enumerate(keys):
             g = [n for n in groups[k] if n.tag != "fixed" and n.sig is None]
             if not g:
                 continue
             sec = s.section_at(g[0].b)
-            pool = [means[x] for x in keys if x[0] == k[0]]
-            lo_m, hi_m = min(pool), max(pool)
-            if hi_m - lo_m >= 2:
-                x = (means[k] - lo_m) / (hi_m - lo_m)
-                home = 0 if x < 0.34 else (1 if x < 0.67 else 2)
-            else:
-                home = [1, 0, 1, 2][idx % 4]
+            # where this phrase sits among all the song's phrases (low, middle or high third)
+            x = sum(1 for m in order if m < means[k] - 1e-6) / max(1, len(order) - 1)
+            home = 0 if x < 0.34 else (1 if x < 0.67 else 2)
             if prev_home is not None and home == prev_home:
                 home = [1, 0, 1, 2][idx % 4] if [1, 0, 1, 2][idx % 4] != prev_home else (1 if prev_home != 1 else (0 if idx % 2 else 2))
             if prev_home is not None and abs(home - prev_home) == 2:
@@ -540,7 +554,8 @@ class Charter:
             if h2.b - (h1.b + h1.len) >= 1.5:
                 continue
             if diff in ("medium", "hard") and h2.b - h1.b >= 3.0:
-                h1.len = max(1.0, min(h1.len, int((h2.b - h1.b - 2.0) * 2) / 2))
+                room = 2.5 if diff == "medium" else 2.0
+                h1.len = max(1.0, min(h1.len, int((h2.b - h1.b - room) * 2) / 2))
             if h2.lane == h1.lane:
                 h2.lane = 2 - h1.lane if h1.lane != 1 else (0 if int(h2.b) % 2 else 2)
 
@@ -549,6 +564,15 @@ class Charter:
         notes.sort(key=lambda n: (n.b, PRIO[n.k]))
         # holds: at easy/medium nothing else during a hold; at hard+ the other hand plays on
         holds = [n for n in notes if n.k == "hold"]
+        # below Expert a bell never lands on a held note: the hold lets go a beat before the bell
+        if diff != "expert":
+            bell_bs = [n.b for n in notes if n.k in ("bell", "ring")]
+            for h in holds:
+                nxt = [b for b in bell_bs if h.b + 1e-6 < b <= h.b + h.len + 1.0 + 1e-6]
+                if nxt:
+                    ln = int((min(nxt) - 1.0 - h.b) * 2) / 2
+                    if ln >= 1.0:
+                        h.len = min(h.len, ln)
         keep = []
         for n in notes:
             bad = False
@@ -645,7 +669,8 @@ class Charter:
         for sec in s.sections:
             if sec.opts.get("chart", "default") is None:
                 continue
-            tgt = base * ENERGY_FACTOR[min(3, sec.energy)] * sec.opts.get("density", 1.0)
+            ef = ENERGY_FACTOR_EASY if diff == "easy" else ENERGY_FACTOR
+            tgt = base * ef[min(3, sec.energy)] * sec.opts.get("density", 1.0)
             if diff == "expert" and sec.energy >= 3:
                 tgt = max(tgt, EXPERT_PEAK)
             dur = sec.len * s.spb
@@ -654,7 +679,8 @@ class Charter:
             if excess <= 0:
                 continue
             # candidates to drop: plain steps, weakest first, spread through the section
-            pool = [n for n in inside if n.k == "step" and not n.call and n.sig is None and n.tag != "triple_step"]
+            pool = [n for n in inside if n.k == "step" and not n.call and (n.sig is None or diff == "easy")
+                    and n.tag != "triple_step"]
             # the same place in every two-bar phrase is thinned the same way, so music that
             # repeats keeps a repeating pattern (phrases echo each other)
             span = 2 * s.bpb

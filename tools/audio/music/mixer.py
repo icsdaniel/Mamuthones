@@ -28,6 +28,26 @@ MIX = {
 # instruments that keep sounding through a stand-still (sustains without new onsets)
 THROUGH = {"fire", "crowd", "tumbu"}
 DUCKED = {"pad", "sub"}
+# ...but the drone drops out during the stand-still so the rest is heard as a rest
+STOP_DUCKED = {"tumbu": -30.0}
+
+
+def stop_gain(song, n, db):
+    """Gain curve that falls to db inside every stand-still (short ramps at both ends)."""
+    g = np.ones(n)
+    low = 10 ** (db / 20)
+    ramp = int(0.05 * SR)
+    for (sb, sl) in song.stops:
+        a = int(round(song.time(sb) * SR))
+        b = int(round(song.time(sb + sl) * SR)) - int(0.03 * SR)
+        a0 = max(0, a - ramp)
+        if b <= a or a0 >= n:
+            continue
+        g[a0:a] = np.minimum(g[a0:a], np.linspace(1, low, a - a0))
+        g[a:b] = low
+        b1 = min(n, b + ramp)
+        g[b:b1] = np.minimum(g[b:b1], np.linspace(low, 1, b1 - b))
+    return g
 
 
 def apply_stops(song):
@@ -84,6 +104,8 @@ def mix(song, stems, n):
         st = y * g if y.ndim == 2 else dsp.pan(y * g, p if p is not None else 0.0)
         if kick_env is not None and inst in DUCKED:
             st = st * (1 - 0.6 * kick_env)[:, None]
+        if inst in STOP_DUCKED and song.stops:
+            st = st * stop_gain(song, len(st), STOP_DUCKED[inst])[:, None]
         dry += st
         wet_in += st * send
     rv = song.reverb
@@ -94,6 +116,8 @@ def mix(song, stems, n):
     out = dsp.highpass(out, 28)
     # leave room for the player's bells and steps: a gentle, wide dip where they live
     out = dsp.peaking(out, 2300, -2.0, 0.8)
+    # a little air on top: the reeds' and bells' shimmer, the voices' breath
+    out = dsp.peaking(out, 7500, 2.5, 0.6)
     # keep the tail tidy
     fade = int(min(song.tail, 2.5) * SR)
     out[-fade:] *= np.linspace(1, 0, fade)[:, None] ** 2

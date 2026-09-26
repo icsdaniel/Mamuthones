@@ -69,7 +69,7 @@ def build():
 
     # ---- B1: the circle turns slowly - long tenore chords (holds), the boghe answers above
     b = s.sec("turn1", 8, 1, chart={"medium": dict(steps=[("pulse", 3), ("mel", 3)], holds=3, bells="phrase"),
-                                     "hard": dict(steps=[("pulse", 2), ("mel", 3)], holds=4, bells="bar"),
+                                     "hard": dict(steps=[("pulse", 3), ("mel", 4), ("perc", 4)], holds=4, bells="bar"),
                                      "expert": dict(steps=[("pulse", 3), ("mel", 4), ("perc", 4)], holds=5)})
     harm_b(b // 4)
     for i in range(4):
@@ -96,7 +96,7 @@ def build():
 
     # ---- B2: the turn again, fuller, holds with the drum under them
     b = s.sec("turn2", 8, 2, chart={"medium": dict(steps=[("pulse", 3), ("mel", 3)], holds=3, bells="phrase"),
-                                     "hard": dict(steps=[("pulse", 3), ("mel", 3)], holds=4, bells="bar"),
+                                     "hard": dict(steps=[("pulse", 3), ("mel", 4), ("perc", 4)], holds=4, bells="bar"),
                                      "expert": dict(holds=5)})
     harm_b(b // 4)
     for i in range(4):

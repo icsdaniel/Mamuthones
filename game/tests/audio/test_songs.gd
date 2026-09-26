@@ -63,7 +63,10 @@ func test_audio_exists_and_matches_length() -> void:
 		if check(stream != null, "%s audio loads" % f):
 			check_near(stream.get_length(), float(s["length"]), 0.2, "%s audio length" % f)
 			var secs := float(s["length"])
-			check(secs >= 60.0 and secs <= 160.0, "%s lasts 1-2.7 minutes (%.1fs)" % [f, secs])
+			if s["kind"] == "piazza":
+				check(secs >= 60.0 and secs <= 90.0, "%s piazza round lasts 60-90 s (%.1fs)" % [f, secs])
+			else:
+				check(secs >= 90.0 and secs <= 150.0, "%s song lasts 90-150 s (%.1fs)" % [f, secs])
 		if s.has("remix"):
 			var r: Dictionary = s["remix"]
 			check(ResourceLoader.exists(r.get("audio", "")), "%s remix audio exists" % f)
