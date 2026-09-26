@@ -39,6 +39,9 @@ var stop := 1
 		framed = v
 		if _frame:
 			_frame.queue_redraw()
+## The small ember arc under your own Mamuthone's feet. Off for illustrations (the stop cards).
+## Set it before the scene enters the tree or before set_stop().
+@export var show_player_mark := true
 
 var mask: Dictionary = MaskSpec.default()
 var fleece := "black"
@@ -326,7 +329,7 @@ func _make_walker(line: int, slot: int, isso: bool) -> _Walker:
 	else:
 		w.back = _cell(func(ci): Figures.mamuthone_back(ci, _hf, lit_of.call(), detail), Vector2.ZERO, Rect2(-0.42, -1.0, 0.84, 0.72))
 		w.body = _cell(func(ci):
-			if mine.call():
+			if mine.call() and show_player_mark:
 				_paint_player_mark(ci)
 			Figures.mamuthone_body(ci, _hf, fleece if mine.call() else _npc_fleece(w), straps if mine.call() else "natural", lit_of.call(), detail), Vector2.ZERO, Rect2(-0.27, -0.85, 0.54, 0.91))
 		w.head = _cell(func(ci): Figures.mamuthone_head(ci, _hf, mask if mine.call() else _npc_mask(w), straps if mine.call() else "natural", detail), Vector2.ZERO, Rect2(-0.17, -1.0, 0.34, 0.22))

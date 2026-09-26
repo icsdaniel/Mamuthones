@@ -27,3 +27,13 @@ player-facing text avoids these details or uses plain words.
   musicians could record the real thing.
 
 ## Items added by the build
+- The rope (soha): the in-scene rope should look like the real one, a natural rush or hemp rope (the
+  red rope stays only as the swipe note's symbol). Confirm its material and how it's thrown.
+- Issohadore costume: shawl or sash, cap shape, white trousers with dark leggings, the bandolier of
+  small bells.
+- Mamuthone dress: kerchief colour and knot, strap layout, whether small bells are worn on the front,
+  how the bell load is arranged on the back, the leggings.
+- Settings: the church and bell tower are generic, not Mamoiada's; houses and crowd are generic; where
+  the Sant'Antonio bonfire stands; the workshop details (masks on a shelf, hanging bells, sheepskin).
+- Mask option names ("grimace", "knotted", "aquiline"...) are descriptive English/Italian, not local
+  terms.

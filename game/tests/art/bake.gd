@@ -79,6 +79,7 @@ func _card(n: int) -> void:
 		WoodcutDraw.fill(ci, PackedVector2Array([Vector2.ZERO, Vector2(sz.x, 0), sz, Vector2(0, sz.y)]), Color.WHITE, Palette.tex("paper"), 1.0 / 512.0)))
 	var scene := ProcessionScene.new()
 	scene.framed = false
+	scene.show_player_mark = false
 	scene.position = Vector2(inset, inset)
 	scene.size = sz - Vector2(inset, inset) * 2.0
 	scene.set_stop(n)
