@@ -3,11 +3,11 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no">
-<title>Bell Shake Test</title>
+<title>The Weight of Bells</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Alegreya+SC:wght@700;800&family=Alegreya+Sans:wght@400;500;700&family=IBM+Plex+Mono:wght@400;600&display=swap">
 <style>
-  /* Deliberately single-theme: firelit night, woodcut black / bone / red. */
+  /* Single dark theme on purpose: firelit night, woodcut black / bone / red. */
   :root {
     color-scheme: dark;
     --ground: #141110;
@@ -33,8 +33,10 @@
     font-size: 16px;
     line-height: 1.45;
     -webkit-tap-highlight-color: transparent;
+    padding-top: env(safe-area-inset-top, 0px);
+    padding-bottom: env(safe-area-inset-bottom, 0px);
   }
-  .wrap {
+  .screen {
     max-width: 560px;
     margin: 0 auto;
     padding-inline: 16px;
@@ -43,17 +45,18 @@
     flex-direction: column;
     gap: 16px;
   }
-  h1 {
+  h1, h2 {
     font-family: var(--display);
     font-weight: 800;
-    font-size: 1.9rem;
     line-height: 1.05;
     margin: 0;
-    letter-spacing: 0.01em;
     text-wrap: balance;
   }
-  h1 span { color: var(--red); }
-  .lede { margin: 0; color: var(--ash); max-width: 60ch; }
+  h1 { font-size: 2.1rem; }
+  h2 { font-size: 1.6rem; }
+  h1 span, h2 span { color: var(--red); }
+  p { margin: 0; }
+  .muted { color: var(--ash); }
   .label {
     font-family: var(--mono);
     font-size: 0.72rem;
@@ -61,37 +64,20 @@
     letter-spacing: 0.08em;
     color: var(--ash);
   }
+  button { font-family: var(--body); }
+  .primary, .secondary {
+    font-weight: 700;
+    font-size: 1.05rem;
+    padding: 14px 18px;
+    border-radius: 12px;
+    cursor: pointer;
+  }
+  .primary { border: none; background: var(--red); color: var(--bone); }
+  .secondary { border: 1px solid var(--ash); background: transparent; color: var(--bone); }
+  button:focus-visible, input:focus-visible { outline: 2px solid var(--ember); outline-offset: 2px; }
+  .row { display: flex; gap: 10px; flex-wrap: wrap; }
+  .row > button { flex: 1 1 140px; }
 
-  /* Beat row: three steps and the bell jolt */
-  .beats {
-    display: grid;
-    grid-template-columns: repeat(2, 1fr);
-    gap: 10px;
-  }
-  .beat {
-    aspect-ratio: 1;
-    max-width: 100%;
-    border: 2px solid var(--wood-2);
-    border-radius: 50%;
-    display: grid;
-    place-items: center;
-    font-family: var(--display);
-    font-size: 1.1rem;
-    color: var(--ash);
-    transition: background 60ms, border-color 60ms, color 60ms;
-  }
-  .beat.jolt { border-color: var(--red-soft); color: var(--red); }
-  .beat.now { background: var(--bone); color: var(--ground); border-color: var(--bone); }
-  .beat.jolt.now { background: var(--red); color: var(--bone); border-color: var(--red); }
-  .verdict {
-    min-height: 1.6em;
-    text-align: center;
-    font-family: var(--display);
-    font-size: 1.5rem;
-  }
-  .verdict .ms { font-family: var(--mono); font-size: 1rem; color: var(--ash); margin-left: 8px; }
-
-  /* One-handed play area: beats on the open side, two step pads under the thumb. */
   .hand {
     display: grid;
     grid-template-columns: 1fr 1fr;
@@ -100,7 +86,8 @@
     overflow: hidden;
   }
   .hand button {
-    font: 700 0.95rem var(--body);
+    font-weight: 700;
+    font-size: 0.95rem;
     padding: 10px;
     border: none;
     background: var(--wood);
@@ -108,20 +95,77 @@
     cursor: pointer;
   }
   .hand button[aria-pressed="true"] { background: var(--bone); color: var(--ground); }
+
+  .note {
+    background: var(--red-soft);
+    color: var(--bone);
+    border-radius: 10px;
+    padding: 10px 12px;
+  }
+  .how { margin: 0; padding-left: 1.2em; color: var(--ash); display: grid; gap: 4px; }
+  .how b { color: var(--bone); }
+
+  /* Calibration */
+  .calib-prompt {
+    font-family: var(--display);
+    font-size: 2.4rem;
+    text-align: center;
+    padding-block: 12px;
+  }
+  .dots { display: flex; justify-content: center; gap: 12px; }
+  .dot {
+    width: 34px; height: 34px;
+    border-radius: 50%;
+    border: 2px solid var(--wood-2);
+    display: grid; place-items: center;
+    font-size: 1rem;
+    color: var(--ash);
+  }
+  .dot.done { background: var(--red); border-color: var(--red); color: var(--bone); }
+  .meter { height: 12px; border-radius: 6px; background: var(--wood); overflow: hidden; }
+  .meter i { display: block; height: 100%; width: 0; background: var(--ember); transition: width 60ms linear; }
+  .facts {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 1px;
+    background: var(--wood-2);
+    border: 1px solid var(--wood-2);
+    border-radius: 12px;
+    overflow: hidden;
+  }
+  .fact { background: var(--wood); padding: 10px 12px; display: flex; flex-direction: column; gap: 2px; }
+  .fact b { font-family: var(--mono); font-weight: 600; font-size: 1.2rem; font-variant-numeric: tabular-nums; }
+
+  /* Game */
+  #game { gap: 10px; padding-block: 10px 12px; }
+  .hud { display: flex; justify-content: space-between; align-items: baseline; gap: 12px; }
+  .hud b { font-family: var(--mono); font-size: 1.4rem; font-variant-numeric: tabular-nums; }
+  .hud .combo { color: var(--ember); }
+  .progress { height: 4px; background: var(--wood); border-radius: 2px; overflow: hidden; }
+  .progress i { display: block; height: 100%; width: 0; background: var(--bone); }
   .play {
     display: flex;
-    gap: 12px;
-    align-items: stretch;
+    gap: 10px;
+    height: 72vh;
+    min-height: 380px;
     touch-action: none;
     user-select: none;
     -webkit-user-select: none;
   }
   .play.left { flex-direction: row-reverse; }
-  .track { flex: 1 1 auto; display: flex; flex-direction: column; justify-content: center; gap: 12px; min-width: 0; }
-  .zones { flex: 0 0 44%; display: grid; grid-template-rows: 1fr 1fr; gap: 10px; }
-  .zone {
-    height: 22vh;
-    min-height: 120px;
+  .lane-wrap { flex: 1 1 auto; position: relative; min-width: 0; }
+  canvas#lanes { width: 100%; height: 100%; display: block; border-radius: 12px; background: var(--wood); }
+  .judge {
+    position: absolute;
+    left: 0; right: 0; top: 38%;
+    text-align: center;
+    font-family: var(--display);
+    font-size: 1.7rem;
+    pointer-events: none;
+    text-shadow: 0 2px 8px #000;
+  }
+  .pads { flex: 0 0 42%; display: grid; grid-template-rows: 1fr 1fr; gap: 10px; }
+  .pad {
     border-radius: 14px;
     background: var(--wood);
     border: 2px solid var(--wood-2);
@@ -131,448 +175,535 @@
     font-family: var(--display);
     font-size: 1.15rem;
     color: var(--ash);
-    cursor: pointer;
-    transition: border-color 60ms;
   }
-  .zone.cue { border-color: var(--ember); }
-  .zone.hit { background: var(--wood-2); border-color: var(--bone); color: var(--bone); }
+  .pad.hit { background: var(--wood-2); border-color: var(--bone); color: var(--bone); }
 
-  button.primary {
-    font: 700 1.05rem var(--body);
-    padding: 14px 18px;
-    border-radius: 12px;
-    border: none;
-    background: var(--red);
-    color: var(--bone);
-    cursor: pointer;
-  }
-  button.primary:focus-visible, select:focus-visible, input:focus-visible, summary:focus-visible {
-    outline: 2px solid var(--ember);
-    outline-offset: 2px;
-  }
-
-  /* Stats */
-  .stats {
-    display: grid;
-    grid-template-columns: repeat(2, 1fr);
-    gap: 1px;
-    background: var(--wood-2);
-    border: 1px solid var(--wood-2);
-    border-radius: 12px;
-    overflow: hidden;
-  }
-  .stat { background: var(--wood); padding: 10px 12px; display: flex; flex-direction: column; gap: 2px; }
-  .stat b {
+  /* Results */
+  .score-big {
     font-family: var(--mono);
+    font-size: 3rem;
     font-weight: 600;
-    font-size: 1.25rem;
     font-variant-numeric: tabular-nums;
+    line-height: 1;
   }
-  .stat small { color: var(--ash); font-size: 0.8rem; }
-  .warn b { color: var(--ember); }
-
-  canvas { width: 100%; height: 90px; display: block; background: var(--wood); border-radius: 10px; }
-
-  details { background: var(--wood); border-radius: 12px; padding: 10px 14px; }
-  summary { cursor: pointer; font-weight: 700; }
-  .controls { display: grid; gap: 14px; padding-top: 12px; }
-  .controls label { display: grid; gap: 4px; }
-  .controls .row { display: flex; justify-content: space-between; gap: 8px; }
-  .controls output { font-family: var(--mono); font-variant-numeric: tabular-nums; }
-  input[type=range] { width: 100%; accent-color: var(--red); }
-  select {
-    font: 500 1rem var(--body);
-    background: var(--wood-2);
-    color: var(--bone);
-    border: 1px solid var(--ash);
-    border-radius: 8px;
-    padding: 8px;
-  }
-  .note {
-    background: var(--red-soft);
-    color: var(--bone);
-    border-radius: 10px;
-    padding: 10px 12px;
-    margin: 0;
-  }
-  .how { margin: 0; padding-left: 1.2em; color: var(--ash); display: grid; gap: 4px; }
-  .how b { color: var(--bone); }
-  @media (prefers-reduced-motion: reduce) { .beat, .zone { transition: none; } }
+  .grade { font-family: var(--display); font-size: 1.4rem; color: var(--ember); }
+  a { color: var(--ember); }
+  @media (prefers-reduced-motion: reduce) { .meter i { transition: none; } }
 </style>
 </head>
 <body>
 
-<div class="wrap">
-  <header style="display:grid;gap:8px">
-    <div class="label">Mamuthones prototype · bell test</div>
-    <h1>Step, step, step, <span>bell</span></h1>
-    <p class="lede">Checks whether your phone can time a shake as well as a tap. Hold the phone in one hand. Your thumb taps the steps, and a quick shake of the phone rings the bell.</p>
-  </header>
-
+<!-- Intro -->
+<section class="screen" id="intro">
+  <div class="label">Mamuthones prototype</div>
+  <h1>The Weight of <span>Bells</span></h1>
+  <p class="muted">A 45-second procession. Hold the phone in one hand: your thumb taps the steps, and shaking the phone up or down rings your bells. Headphones recommended.</p>
   <ol class="how">
-    <li><b>Beats 1–3:</b> tap the top step, then bottom, then top, on the click. The pad to hit glows.</li>
-    <li><b>Beat 4:</b> shake the phone up or down sharply to ring the bell. Don't tap.</li>
-    <li>The first bar is a count-in and isn't scored.</li>
+    <li><b>Calibrate:</b> shake the phone 3 times up and 3 times down, so the game learns your shake.</li>
+    <li><b>Play:</b> hit each note as it reaches the line. Grey bars mean stand still: shaking there costs points.</li>
   </ol>
-
-  <p class="note" id="sensorNote" hidden></p>
-
-  <button class="primary" id="startBtn">Start</button>
-
-  <div class="hand" role="group" aria-label="Playing hand">
-    <button id="handR" aria-pressed="true">Right hand</button>
-    <button id="handL" aria-pressed="false">Left hand</button>
-  </div>
-
-  <div class="play" id="play">
-    <div class="track">
-      <div class="beats" aria-hidden="true">
-        <div class="beat" data-i="0">1</div>
-        <div class="beat" data-i="1">2</div>
-        <div class="beat" data-i="2">3</div>
-        <div class="beat jolt" data-i="3">bell</div>
-      </div>
-      <div class="verdict" id="verdict" aria-live="polite">&nbsp;</div>
-    </div>
-    <div class="zones">
-      <div class="zone" id="zoneT" role="button" aria-label="Top step">Top<br>step</div>
-      <div class="zone" id="zoneB" role="button" aria-label="Bottom step">Bottom<br>step</div>
-    </div>
-  </div>
-
   <div>
-    <div class="label" style="margin-bottom:6px">Motion strength (red line = shake threshold)</div>
-    <canvas id="graph" width="560" height="90"></canvas>
-  </div>
-
-  <div class="stats">
-    <div class="stat"><span class="label">Tap timing</span><b id="tapAvg">–</b><small id="tapSpread">average offset · spread</small></div>
-    <div class="stat"><span class="label">Bell timing</span><b id="joltAvg">–</b><small id="joltSpread">average offset · spread</small></div>
-    <div class="stat"><span class="label">Bells caught</span><b id="joltHit">–</b><small>bell beats with a shake in time</small></div>
-    <div class="stat warn"><span class="label">False shakes</span><b id="falseJ">0</b><small>shakes set off by a tap</small></div>
-    <div class="stat"><span class="label">Sensor rate</span><b id="rate">–</b><small>readings per second</small></div>
-    <div class="stat"><span class="label">Peak motion</span><b id="peak">–</b><small>strongest shake, m/s²</small></div>
-  </div>
-
-  <details>
-    <summary>Settings</summary>
-    <div class="controls">
-      <label for="mode">Pattern
-        <select id="mode">
-          <option value="mixed">Steps and bell (3 taps + 1 shake)</option>
-          <option value="taps">Taps only</option>
-          <option value="jolts">Shake on every beat</option>
-        </select>
-      </label>
-      <label for="bpm"><span class="row"><span>Tempo</span><output id="bpmOut">76 bpm</output></span>
-        <input type="range" id="bpm" min="50" max="130" value="76">
-      </label>
-      <label for="thr"><span class="row"><span>Shake threshold</span><output id="thrOut">10 m/s²</output></span>
-        <input type="range" id="thr" min="3" max="30" step="0.5" value="10">
-      </label>
-      <label for="win"><span class="row"><span>Hit window</span><output id="winOut">±120 ms</output></span>
-        <input type="range" id="win" min="40" max="250" step="10" value="120">
-      </label>
+    <div class="label" style="margin-bottom:6px">Playing hand</div>
+    <div class="hand" role="group" aria-label="Playing hand">
+      <button id="handR" aria-pressed="true">Right hand</button>
+      <button id="handL" aria-pressed="false">Left hand</button>
     </div>
-  </details>
-</div>
+  </div>
+  <p class="note" id="sensorNote" hidden></p>
+  <div class="row">
+    <button class="primary" id="introPlay">Calibrate and play</button>
+    <button class="secondary" id="introSkip" hidden>Play with saved calibration</button>
+  </div>
+  <p class="muted" id="bestLine" hidden></p>
+  <p class="muted" style="font-size:0.9rem">Just want the raw sensor numbers? Open the <a href="test.html">shake test</a>.</p>
+</section>
+
+<!-- Calibration -->
+<section class="screen" id="calib" hidden>
+  <div class="label">Calibration</div>
+  <h2 id="calibTitle">Shake <span>up</span></h2>
+  <p class="muted" id="calibText">Hold the phone as you'll play, then give it a sharp shake upward, like snapping the bells on your back. Three times.</p>
+  <div class="calib-prompt" id="calibArrow" aria-hidden="true">↑</div>
+  <div class="dots" id="dots"></div>
+  <div>
+    <div class="label" style="margin-bottom:6px">Live motion</div>
+    <div class="meter"><i id="meter"></i></div>
+  </div>
+  <div class="facts" id="calibFacts" hidden>
+    <div class="fact"><span class="label">Bell sensitivity</span><b id="factThr">–</b><small class="muted">m/s² needed to ring</small></div>
+    <div class="fact"><span class="label">Up / down</span><b id="factDir">–</b><small class="muted">can the phone tell them apart</small></div>
+  </div>
+  <div class="row">
+    <button class="primary" id="calibGo" hidden>Start the procession</button>
+    <button class="secondary" id="calibRedo">Start over</button>
+    <button class="secondary" id="calibSkip">Skip, steps only</button>
+  </div>
+</section>
+
+<!-- Game -->
+<section class="screen" id="game" hidden>
+  <div class="hud">
+    <div><div class="label">Score</div><b id="score">0</b></div>
+    <div style="text-align:right"><div class="label">Combo</div><b class="combo" id="combo">×1</b></div>
+  </div>
+  <div class="progress"><i id="prog"></i></div>
+  <div class="play" id="play">
+    <div class="lane-wrap">
+      <canvas id="lanes"></canvas>
+      <div class="judge" id="judge" aria-live="polite"></div>
+    </div>
+    <div class="pads">
+      <div class="pad" id="padT" role="button" aria-label="Top step">Top<br>step</div>
+      <div class="pad" id="padB" role="button" aria-label="Bottom step">Bottom<br>step</div>
+    </div>
+  </div>
+</section>
+
+<!-- Results -->
+<section class="screen" id="results" hidden>
+  <div class="label">Procession complete</div>
+  <div class="score-big" id="resScore">0</div>
+  <div class="grade" id="resGrade"></div>
+  <div class="facts">
+    <div class="fact"><span class="label">Accuracy</span><b id="resAcc">–</b></div>
+    <div class="fact"><span class="label">Best combo</span><b id="resCombo">–</b></div>
+    <div class="fact"><span class="label">Perfect / good</span><b id="resPG">–</b></div>
+    <div class="fact"><span class="label">Missed</span><b id="resMiss">–</b></div>
+    <div class="fact"><span class="label">Wrong way / pad</span><b id="resWrong">–</b></div>
+    <div class="fact"><span class="label">Rang in silence</span><b id="resSilence">–</b></div>
+    <div class="fact"><span class="label">Step timing</span><b id="resTapOff">–</b></div>
+    <div class="fact"><span class="label">Bell timing</span><b id="resBellOff">–</b></div>
+  </div>
+  <p class="muted" id="resBest"></p>
+  <div class="row">
+    <button class="primary" id="again">Play again</button>
+    <button class="secondary" id="recal">Recalibrate</button>
+  </div>
+</section>
 
 <script>
 (() => {
   const $ = id => document.getElementById(id);
-  const beatEls = [...document.querySelectorAll('.beat')];
-  const graph = $('graph'), g = graph.getContext('2d');
-
-  const settings = { bpm: 76, thr: 10, win: 120, mode: 'mixed' };
-  const bind = (id, key, fmt) => {
-    const el = $(id), out = $(id + 'Out');
-    el.addEventListener('input', () => {
-      settings[key] = key === 'mode' ? el.value : Number(el.value);
-      if (out) out.textContent = fmt(settings[key]);
-    });
+  const store = {
+    get(k) { try { return JSON.parse(localStorage.getItem(k)); } catch (_) { return null; } },
+    set(k, v) { try { localStorage.setItem(k, JSON.stringify(v)); } catch (_) {} }
   };
-  bind('bpm', 'bpm', v => v + ' bpm');
-  bind('thr', 'thr', v => v + ' m/s²');
-  bind('win', 'win', v => '±' + v + ' ms');
-  bind('mode', 'mode', v => v);
+  const screens = ['intro', 'calib', 'game', 'results'];
+  function go(name) { screens.forEach(s => $(s).hidden = s !== name); window.scrollTo(0, 0); }
 
-  let ctx = null, running = false, nextBeatTime = 0, beatIndex = 0, timer = null;
-  const beats = [];          // {t: perf ms, kind: 'tap'|'jolt', judged, idx, countIn}
-  const tapOffsets = [], joltOffsets = [];
-  let lastDir = '', armed = true, joltBeats = 0, joltCaught = 0, falseJolts = 0, lastTapAt = -1e9, lastJoltAt = -1e9, peak = 0;
-  let samples = [], sampleCount = 0, rateWindowStart = performance.now(), gotMotion = false;
+  /* ---------- Hand ---------- */
+  function setHand(side) {
+    $('play').classList.toggle('left', side === 'left');
+    $('handL').setAttribute('aria-pressed', side === 'left');
+    $('handR').setAttribute('aria-pressed', side !== 'left');
+    store.set('hand', side);
+  }
+  $('handL').addEventListener('click', () => setHand('left'));
+  $('handR').addEventListener('click', () => setHand('right'));
+  setHand(store.get('hand') === 'left' ? 'left' : 'right');
 
-  // Map an AudioContext time to performance.now() time, including output latency when the browser reports it.
+  /* ---------- Audio ---------- */
+  let ctx = null;
+  function audio() {
+    ctx = ctx || new (window.AudioContext || window.webkitAudioContext)();
+    return ctx.resume();
+  }
+  function click(time, vol = 0.25, freq = 880) {
+    const o = ctx.createOscillator(), g = ctx.createGain();
+    o.type = 'triangle'; o.frequency.value = freq;
+    g.gain.setValueAtTime(0.0001, time);
+    g.gain.exponentialRampToValueAtTime(vol, time + 0.002);
+    g.gain.exponentialRampToValueAtTime(0.0001, time + 0.05);
+    o.connect(g).connect(ctx.destination); o.start(time); o.stop(time + 0.07);
+  }
+  function drum(time, vol = 0.6) {
+    const o = ctx.createOscillator(), g = ctx.createGain();
+    o.type = 'sine';
+    o.frequency.setValueAtTime(120, time);
+    o.frequency.exponentialRampToValueAtTime(48, time + 0.25);
+    g.gain.setValueAtTime(0.0001, time);
+    g.gain.exponentialRampToValueAtTime(vol, time + 0.004);
+    g.gain.exponentialRampToValueAtTime(0.0001, time + 0.35);
+    o.connect(g).connect(ctx.destination); o.start(time); o.stop(time + 0.4);
+  }
+  // Hoof-like step: a short filtered noise knock, higher for the top pad.
+  let noiseBuf = null;
+  function step(high) {
+    if (!ctx) return;
+    if (!noiseBuf) {
+      noiseBuf = ctx.createBuffer(1, ctx.sampleRate * 0.1, ctx.sampleRate);
+      const d = noiseBuf.getChannelData(0);
+      for (let i = 0; i < d.length; i++) d[i] = (Math.random() * 2 - 1) * Math.pow(1 - i / d.length, 3);
+    }
+    const t = ctx.currentTime, src = ctx.createBufferSource(), bp = ctx.createBiquadFilter(), g = ctx.createGain();
+    src.buffer = noiseBuf;
+    bp.type = 'bandpass'; bp.frequency.value = high ? 1500 : 700; bp.Q.value = 4;
+    g.gain.value = 0.9;
+    src.connect(bp).connect(g).connect(ctx.destination); src.start(t);
+  }
+  // Cowbell cluster; an up shake rings higher than a down shake.
+  function bell(up, vol = 0.32) {
+    if (!ctx) return;
+    const t = ctx.currentTime, k = up === false ? 0.75 : 1;
+    const bp = ctx.createBiquadFilter(), g = ctx.createGain();
+    bp.type = 'bandpass'; bp.frequency.value = 950 * k; bp.Q.value = 2.2;
+    g.gain.setValueAtTime(0.0001, t);
+    g.gain.exponentialRampToValueAtTime(vol, t + 0.004);
+    g.gain.exponentialRampToValueAtTime(0.0001, t + 0.9);
+    bp.connect(g).connect(ctx.destination);
+    [540, 812, 1180, 1630].forEach(f => {
+      const o = ctx.createOscillator();
+      o.type = 'square'; o.frequency.value = f * k * (1 + Math.random() * 0.01);
+      o.connect(bp); o.start(t); o.stop(t + 0.95);
+    });
+  }
   function perfOf(ctxTime) {
     if (ctx.getOutputTimestamp) {
       const ts = ctx.getOutputTimestamp();
       if (ts.performanceTime) return ts.performanceTime + (ctxTime - ts.contextTime) * 1000;
     }
-    const lat = (ctx.outputLatency || ctx.baseLatency || 0);
+    const lat = ctx.outputLatency || ctx.baseLatency || 0;
     return performance.now() + (ctxTime - ctx.currentTime + lat) * 1000;
   }
 
-  function kindFor(i) {
-    if (settings.mode === 'taps') return 'tap';
-    if (settings.mode === 'jolts') return 'jolt';
-    return (i % 4 === 3) ? 'jolt' : 'tap';
-  }
+  /* ---------- Motion ---------- */
+  const ua = navigator.userAgent;
+  const isIOS = /iPhone|iPad|iPod/.test(ua) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+  const inApp = (isIOS && !/Safari\//.test(ua)) || /; wv\)|FBAN|FBAV|Instagram|Line\/|GSA\//.test(ua);
+  function help(msg) { $('sensorNote').textContent = msg; $('sensorNote').hidden = false; }
+  if (!window.isSecureContext) help('This page must be opened over https for motion access.');
+  else if (typeof DeviceMotionEvent === 'undefined') help('This browser has no motion sensor support. Try Safari on iPhone or Chrome on Android.');
+  else if (inApp) help("You seem to be inside an app's built-in browser, which usually blocks motion. Open the link in Safari or Chrome.");
 
-  function click(time, accent) {
-    const o = ctx.createOscillator(), gn = ctx.createGain();
-    o.type = 'triangle';
-    o.frequency.value = accent ? 1320 : 880;
-    gn.gain.setValueAtTime(0.0001, time);
-    gn.gain.exponentialRampToValueAtTime(0.5, time + 0.002);
-    gn.gain.exponentialRampToValueAtTime(0.0001, time + 0.06);
-    o.connect(gn).connect(ctx.destination);
-    o.start(time); o.stop(time + 0.08);
-  }
-
-  // A rough cowbell: two detuned square waves through a band-pass, long decay.
-  function bell(time, vol = 0.35) {
-    const bp = ctx.createBiquadFilter();
-    bp.type = 'bandpass'; bp.frequency.value = 900; bp.Q.value = 2.5;
-    const gn = ctx.createGain();
-    gn.gain.setValueAtTime(0.0001, time);
-    gn.gain.exponentialRampToValueAtTime(vol, time + 0.004);
-    gn.gain.exponentialRampToValueAtTime(0.0001, time + 0.7);
-    bp.connect(gn).connect(ctx.destination);
-    [540, 812, 1180].forEach(f => {
-      const o = ctx.createOscillator();
-      o.type = 'square'; o.frequency.value = f + Math.random() * 8;
-      o.connect(bp); o.start(time); o.stop(time + 0.75);
-    });
-  }
-
-  function schedule() {
-    const spb = 60 / settings.bpm;
-    while (nextBeatTime < ctx.currentTime + 0.12) {
-      const i = beatIndex, kind = kindFor(i), countIn = i < 4;
-      if (kind === 'jolt' && !countIn) bell(nextBeatTime, 0.18); else click(nextBeatTime, i % 4 === 0);
-      const b = { t: perfOf(nextBeatTime), kind, judged: false, idx: i, countIn };
-      beats.push(b);
-      if (beats.length > 64) beats.shift();
-      setTimeout(() => light(b), Math.max(0, b.t - performance.now()));
-      nextBeatTime += spb; beatIndex++;
-    }
-    // Jolt beats that passed without a jolt count as missed.
-    const now = performance.now();
-    for (const b of beats) {
-      if (!b.judged && !b.countIn && now - b.t > settings.win) {
-        b.judged = true;
-        if (b.kind === 'jolt') { joltBeats++; show('Missed bell', null, 'var(--ember)'); }
-        else show('Missed step', null, 'var(--ash)');
-        renderStats();
-      }
-    }
-  }
-
-  function light(b) {
-    beatEls.forEach(el => el.classList.remove('now'));
-    const el = beatEls[b.idx % 4];
-    el.classList.toggle('jolt', b.kind === 'jolt');
-    el.textContent = b.kind === 'jolt' ? 'bell' : String(b.idx % 4 + 1);
-    el.classList.add('now');
-    const pad = b.kind === 'tap' ? (b.idx % 2 === 0 ? $('zoneT') : $('zoneB')) : null;
-    if (pad && !b.countIn) { pad.classList.add('cue'); setTimeout(() => pad.classList.remove('cue'), 160); }
-    setTimeout(() => el.classList.remove('now'), 120);
-  }
-
-  function show(word, ms, color) {
-    const v = $('verdict');
-    v.innerHTML = '';
-    const w = document.createElement('span');
-    w.textContent = word; w.style.color = color;
-    v.appendChild(w);
-    if (ms !== null) {
-      const m = document.createElement('span');
-      m.className = 'ms';
-      m.textContent = (ms > 0 ? '+' : '') + Math.round(ms) + ' ms';
-      v.appendChild(m);
-    }
-  }
-
-  function judge(kind, t) {
-    let best = null, bestD = Infinity;
-    for (const b of beats) {
-      if (b.judged || b.countIn) continue;
-      const d = t - b.t;
-      if (Math.abs(d) < Math.abs(bestD)) { best = b; bestD = d; }
-    }
-    if (!best || Math.abs(bestD) > settings.win) { if (running) show(kind === 'jolt' ? 'Stray shake' : 'Off beat', null, 'var(--ash)'); return; }
-    if (best.kind !== kind) {
-      best.judged = true;
-      if (best.kind === 'jolt') joltBeats++;
-      show(kind === 'tap' ? 'Tapped a bell beat' : 'Shook on a step', bestD, 'var(--ember)');
-      renderStats(); return;
-    }
-    best.judged = true;
-    (kind === 'tap' ? tapOffsets : joltOffsets).push(bestD);
-    if (kind === 'jolt') { joltBeats++; joltCaught++; }
-    const a = Math.abs(bestD);
-    show((a < 35 ? 'Perfect' : a < 70 ? 'Good' : 'Late-ish') + (kind === 'jolt' ? lastDir : ''), bestD, a < 35 ? 'var(--good)' : a < 70 ? 'var(--bone)' : 'var(--ash)');
-    renderStats();
-  }
-
-  function summary(arr) {
-    if (!arr.length) return null;
-    const recent = arr.slice(-24);
-    const mean = recent.reduce((s, x) => s + x, 0) / recent.length;
-    const sd = Math.sqrt(recent.reduce((s, x) => s + (x - mean) ** 2, 0) / recent.length);
-    return { mean, sd, n: arr.length };
-  }
-  const fmt = v => (v > 0 ? '+' : '') + Math.round(v) + ' ms';
-  function renderStats() {
-    const t = summary(tapOffsets), j = summary(joltOffsets);
-    $('tapAvg').textContent = t ? fmt(t.mean) : '–';
-    $('tapSpread').textContent = t ? `spread ±${Math.round(t.sd)} ms · ${t.n} taps` : 'average offset · spread';
-    $('joltAvg').textContent = j ? fmt(j.mean) : '–';
-    $('joltSpread').textContent = j ? `spread ±${Math.round(j.sd)} ms · ${j.n} shakes` : 'average offset · spread';
-    $('joltHit').textContent = joltBeats ? `${joltCaught} / ${joltBeats}` : '–';
-    $('falseJ').textContent = falseJolts;
-    $('peak').textContent = peak ? peak.toFixed(1) : '–';
-  }
-
-  // Taps
-  function tap(zone, e) {
-    e.preventDefault();
-    const t = performance.now();
-    lastTapAt = t;
-    zone.classList.add('hit');
-    setTimeout(() => zone.classList.remove('hit'), 90);
-    if (running) judge('tap', t);
-  }
-  [$('zoneT'), $('zoneB')].forEach(z => z.addEventListener('pointerdown', e => tap(z, e)));
-
-  // Handedness: mirror the pads to the thumb's side, and remember the choice on this phone.
-  function setHand(side) {
-    $('play').classList.toggle('left', side === 'left');
-    $('handL').setAttribute('aria-pressed', side === 'left');
-    $('handR').setAttribute('aria-pressed', side !== 'left');
-    try { localStorage.setItem('hand', side); } catch (_) {}
-  }
-  $('handL').addEventListener('click', () => setHand('left'));
-  $('handR').addEventListener('click', () => setHand('right'));
-  try { if (localStorage.getItem('hand') === 'left') setHand('left'); } catch (_) {}
-
-  // Jolts
+  let gravity = null, motionHandler = null, gotMotion = false;
+  // Linear acceleration (gravity removed), from the browser when it offers it, else from a low-pass estimate.
   function onMotion(e) {
     const t = performance.now();
-    let m;
+    let v;
     const a = e.acceleration;
-    if (a && a.x !== null) m = Math.hypot(a.x, a.y, a.z);
+    if (a && a.x !== null) v = [a.x, a.y, a.z];
     else {
       const ag = e.accelerationIncludingGravity;
       if (!ag || ag.x === null) return;
-      m = Math.abs(Math.hypot(ag.x, ag.y, ag.z) - 9.81);
+      const raw = [ag.x, ag.y, ag.z];
+      gravity = gravity ? gravity.map((gv, i) => gv * 0.9 + raw[i] * 0.1) : raw;
+      v = raw.map((r, i) => r - gravity[i]);
     }
     gotMotion = true;
-    samples.push(m); if (samples.length > 240) samples.shift();
-    sampleCount++;
-    if (t - rateWindowStart > 1000) {
-      $('rate').textContent = Math.round(sampleCount * 1000 / (t - rateWindowStart));
-      sampleCount = 0; rateWindowStart = t;
-    }
-    // A flick's down-and-up swing makes two peaks. After a flick, stay locked for
-    // half a beat and until the motion settles below half the threshold.
-    const lockout = 30000 / settings.bpm;
-    if (!armed && t - lastJoltAt > lockout && m < settings.thr * 0.5) armed = true;
-    if (m > settings.thr) peak = Math.max(peak, m);
-    if (armed && m > settings.thr) {
-      armed = false;
-      lastJoltAt = t;
-      lastDir = (a && a.y !== null && Math.abs(a.y) > 2) ? (a.y > 0 ? ' ↑' : ' ↓') : '';
-      if (t - lastTapAt < 120) { falseJolts++; renderStats(); return; }
-      if (ctx) bell(ctx.currentTime, 0.3);
-      if (running) judge('jolt', t);
-    }
+    if (motionHandler) motionHandler(v, Math.hypot(v[0], v[1], v[2]), t);
   }
-
-  function draw() {
-    const w = graph.width, h = graph.height;
-    g.clearRect(0, 0, w, h);
-    const max = 30, y = v => h - Math.min(v, max) / max * (h - 6) - 3;
-    g.strokeStyle = '#c0392b'; g.lineWidth = 1.5;
-    g.beginPath(); g.moveTo(0, y(settings.thr)); g.lineTo(w, y(settings.thr)); g.stroke();
-    g.strokeStyle = '#ede6da'; g.lineWidth = 2;
-    g.beginPath();
-    const n = samples.length, step = w / 239;
-    samples.forEach((v, i) => { const x = w - (n - 1 - i) * step; i ? g.lineTo(x, y(v)) : g.moveTo(x, y(v)); });
-    g.stroke();
-    requestAnimationFrame(draw);
-  }
-  draw();
-
-  // Where is the page running, and what can it read? Shown so a failure names its cause.
-  const ua = navigator.userAgent;
-  const isIOS = /iPhone|iPad|iPod/.test(ua) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
-  const isAndroid = /Android/.test(ua);
-  const inApp = (isIOS && !/Safari\//.test(ua)) || /; wv\)|FBAN|FBAV|Instagram|Line\/|GSA\//.test(ua);
-  function help(kind) {
-    const note = $('sensorNote');
-    const lines = {
-      insecure: 'This page must be opened over https for motion access.',
-      unsupported: 'This browser has no motion sensor support. Try Safari on iPhone or Chrome on Android.',
-      inapp: 'You seem to be inside an app\'s built-in browser, which usually refuses motion access. Copy the link and open it in Safari (iPhone) or Chrome (Android).',
-      denied: isIOS
-        ? 'Motion access was refused. iPhone remembers this until Safari is restarted: close Safari completely (swipe it away in the app switcher), reopen this page and tap Allow. If there is no prompt, go to Settings, Apps, Safari, Advanced, Website Data, remove github.io, and try again.'
-        : 'Motion access was refused. In Chrome, tap the icon left of the address, open Permissions or Site settings, set Motion sensors to Allow, then reload.',
-      blocked: isIOS
-        ? 'The motion permission prompt could not open. Open this page directly in Safari rather than inside another app, then tap Start.'
-        : 'This view blocked motion access. Open the page directly in Chrome.',
-      silent: isAndroid
-        ? 'No motion readings yet. In Chrome, go to Settings, Site settings, Motion sensors and allow them, for this site too, then reload.'
-        : 'No motion readings yet. On a laptop this is expected. On a phone, open the page directly in the browser, not inside another app.'
-    };
-    note.textContent = lines[kind];
-    note.hidden = false;
-  }
-  if (!window.isSecureContext) help('insecure');
-  else if (typeof DeviceMotionEvent === 'undefined') help('unsupported');
-  else if (inApp) help('inapp');
-  else if (navigator.permissions?.query) {
-    navigator.permissions.query({ name: 'accelerometer' })
-      .then(r => { if (r.state === 'denied') help('denied'); })
-      .catch(() => {});
-  }
-
-  async function start() {
-    const note = $('sensorNote');
-    if (running) { stop(); return; }
-    // iOS needs requestPermission() called straight from this tap, before any other await.
+  async function enableMotion() {
     if (typeof DeviceMotionEvent !== 'undefined' && typeof DeviceMotionEvent.requestPermission === 'function') {
       try {
         const res = await DeviceMotionEvent.requestPermission();
-        if (res !== 'granted') help('denied');
-      } catch (err) {
-        help('blocked');
-      }
+        if (res !== 'granted') help(isIOS
+          ? 'Motion access was refused. Close Safari completely (swipe it away), reopen this page and tap Allow.'
+          : 'Motion access was refused. Allow motion sensors for this site in the browser settings, then reload.');
+      } catch (_) { help('The motion permission prompt could not open. Open this page directly in Safari.'); }
     }
     window.addEventListener('devicemotion', onMotion);
-    ctx = ctx || new (window.AudioContext || window.webkitAudioContext)();
-    await ctx.resume();
+    setTimeout(() => { if (!gotMotion) help('No motion readings yet. On Android Chrome, check Settings, Site settings, Motion sensors. Taps still work.'); }, 2500);
+  }
+
+  /* ---------- Calibration ---------- */
+  // Saved as { thr, axis, upSign, dirOK }.
+  let cal = store.get('cal');
+  if (cal) $('introSkip').hidden = false;
+  const best = store.get('best');
+  if (best) { $('bestLine').textContent = 'Your best: ' + best.toLocaleString() + ' points.'; $('bestLine').hidden = false; }
+
+  const CAL_THR = 4, PER_DIR = 3;
+  let calShakes = [], calArmed = true, calLast = 0, capture = null;
+  function renderDots() {
+    const dots = $('dots'); dots.innerHTML = '';
+    for (let i = 0; i < PER_DIR * 2; i++) {
+      const d = document.createElement('div');
+      d.className = 'dot' + (i < calShakes.length ? ' done' : '');
+      d.textContent = i < PER_DIR ? '↑' : '↓';
+      dots.appendChild(d);
+    }
+  }
+  function calPhase() {
+    const up = calShakes.length < PER_DIR;
+    $('calibTitle').innerHTML = up ? 'Shake <span>up</span>' : 'Shake <span>down</span>';
+    $('calibArrow').textContent = up ? '↑' : '↓';
+    $('calibText').textContent = up
+      ? "Hold the phone as you'll play, then give it a sharp shake upward, like snapping the bells on your back. Three times."
+      : 'Now three sharp shakes downward.';
+  }
+  function startCalib() {
+    calShakes = []; calArmed = true; capture = null;
+    $('calibFacts').hidden = true; $('calibGo').hidden = true;
+    $('calibArrow').hidden = false; $('dots').hidden = false;
+    renderDots(); calPhase(); go('calib');
+    motionHandler = (v, m, t) => {
+      $('meter').style.width = Math.min(100, m / 30 * 100) + '%';
+      if (calShakes.length >= PER_DIR * 2) return;
+      if (capture) {
+        if (m > capture.peak) capture.peak = m;
+        if (t - capture.t0 > 150) {
+          calShakes.push({ vec: capture.vec, peak: capture.peak, up: calShakes.length < PER_DIR });
+          capture = null; calLast = t;
+          bell(calShakes[calShakes.length - 1].up);
+          renderDots();
+          if (calShakes.length === PER_DIR * 2) finishCalib(); else calPhase();
+        }
+        return;
+      }
+      if (!calArmed && m < CAL_THR * 0.5 && t - calLast > 300) calArmed = true;
+      if (calArmed && m > CAL_THR) { calArmed = false; capture = { t0: t, peak: m, vec: v.slice() }; }
+    };
+  }
+  function finishCalib() {
+    const peaks = calShakes.map(s => s.peak).sort((a, b) => a - b);
+    const median = peaks[Math.floor(peaks.length / 2)];
+    const thr = Math.min(25, Math.max(4, median * 0.45));
+    // Which axis carries the shake, and which sign means "up" on it.
+    const sums = [0, 1, 2].map(i => calShakes.reduce((s, c) => s + Math.abs(c.vec[i]), 0));
+    const axis = sums.indexOf(Math.max(...sums));
+    const upVals = calShakes.filter(s => s.up).map(s => Math.sign(s.vec[axis]));
+    const downVals = calShakes.filter(s => !s.up).map(s => Math.sign(s.vec[axis]));
+    const upSign = Math.sign(upVals.reduce((a, b) => a + b, 0)) || 1;
+    const agree = upVals.filter(x => x === upSign).length + downVals.filter(x => x === -upSign).length;
+    const dirOK = agree >= 5;
+    cal = { thr, axis, upSign, dirOK };
+    store.set('cal', cal);
+    $('introSkip').hidden = false;
+    $('factThr').textContent = thr.toFixed(1);
+    $('factDir').textContent = dirOK ? 'Yes' : 'Not reliably';
+    $('calibFacts').hidden = false;
+    $('calibArrow').hidden = true;
+    $('calibTitle').innerHTML = 'Calibrated';
+    $('calibText').textContent = dirOK
+      ? `Your phone told ${agree} of 6 shakes apart correctly. Up and down notes will count their direction.`
+      : `Only ${agree} of 6 shakes were read the right way, so any shake will ring the bell for now. You can start over and try crisper shakes.`;
+    $('calibGo').hidden = false;
+  }
+  $('calibRedo').addEventListener('click', startCalib);
+  // Without a working motion sensor the procession still plays; bell notes just can't be hit.
+  $('calibSkip').addEventListener('click', () => { if (!cal) cal = null; startGame(); });
+  $('calibGo').addEventListener('click', startGame);
+
+  async function begin(calibrate) {
+    await enableMotion();
+    await audio();
     try { await navigator.wakeLock?.request('screen'); } catch (_) {}
-    beats.length = 0; tapOffsets.length = 0; joltOffsets.length = 0;
-    joltBeats = joltCaught = falseJolts = 0; peak = 0; beatIndex = 0;
-    renderStats();
-    nextBeatTime = ctx.currentTime + 0.3;
-    running = true;
-    timer = setInterval(schedule, 25);
-    $('startBtn').textContent = 'Stop';
-    show('Count-in…', null, 'var(--ash)');
-    setTimeout(() => {
-      if (running && !gotMotion) help('silent');
-    }, 2500);
+    if (calibrate || !cal) startCalib(); else startGame();
   }
-  function stop() {
-    running = false; clearInterval(timer);
-    $('startBtn').textContent = 'Start again';
-    show('Stopped', null, 'var(--ash)');
+  // iOS wants the permission request directly inside the tap, so both buttons call begin() straight away.
+  $('introPlay').addEventListener('click', () => begin(true));
+  $('introSkip').addEventListener('click', () => begin(false));
+
+  /* ---------- The procession ---------- */
+  // One symbol per beat: T top step, B bottom step, U bell up, D bell down, - stand still.
+  const BPM = 84;
+  const CHART = [
+    'TBTU', 'TBTD', 'TBTU', 'TBT-',
+    'TTBU', 'T-TD', 'TBBU', 'TBTD',
+    'TBUD', 'TBU-', 'BTDU', 'TBUD',
+    'TTBB', 'UDUD', 'TBTU', 'U---'
+  ].join('');
+  const WIN = { perfect: 45, good: 90, ok: 140 };
+  let notes = [], score = 0, combo = 0, maxCombo = 0, stats, gameRunning = false, endAt = 0, lastShakeAt = 0, armed = true;
+
+  const canvas = $('lanes'), g2 = canvas.getContext('2d');
+  function sizeCanvas() {
+    const r = canvas.getBoundingClientRect(), dpr = window.devicePixelRatio || 1;
+    canvas.width = Math.round(r.width * dpr); canvas.height = Math.round(r.height * dpr);
+    g2.setTransform(dpr, 0, 0, dpr, 0, 0);
   }
-  $('startBtn').addEventListener('click', start);
+  window.addEventListener('resize', () => { if (!$('game').hidden) sizeCanvas(); });
+
+  function startGame() {
+    go('game');
+    sizeCanvas();
+    const spb = 60 / BPM, lead = ctx.currentTime + 0.4;
+    // Count-in: four clicks, then the chart.
+    for (let i = 0; i < 4; i++) click(lead + i * spb, 0.35, i === 0 ? 1320 : 880);
+    const start = lead + 4 * spb;
+    notes = [];
+    for (let i = 0; i < CHART.length; i++) {
+      const tc = start + i * spb;
+      if (i % 4 === 0) drum(tc, 0.55); else click(tc, 0.12, 660);
+      notes.push({ kind: CHART[i], t: perfOf(tc), done: false });
+    }
+    endAt = notes[notes.length - 1].t + 1200;
+    score = 0; combo = 0; maxCombo = 0; armed = true; lastShakeAt = 0;
+    stats = { perfect: 0, good: 0, ok: 0, miss: 0, wrong: 0, silence: 0, tapOff: [], bellOff: [] };
+    renderHud(); $('judge').textContent = '';
+    gameRunning = true;
+    motionHandler = onGameMotion;
+    requestAnimationFrame(frame);
+  }
+
+  function renderHud() {
+    $('score').textContent = score.toLocaleString();
+    $('combo').textContent = '×' + mult().toFixed(1).replace('.0', '');
+  }
+  // Keeping the row in unison: the multiplier grows every 8 clean hits, up to ×3.
+  const mult = () => Math.min(3, 1 + Math.floor(combo / 8) * 0.5);
+
+  let judgeTimer = 0;
+  function flash(text, color) {
+    const j = $('judge'); j.textContent = text; j.style.color = color;
+    clearTimeout(judgeTimer); judgeTimer = setTimeout(() => j.textContent = '', 450);
+  }
+  function hit(note, off, wrong) {
+    note.done = true;
+    if (wrong) { stats.wrong++; combo = 0; flash(wrong, 'var(--ember)'); renderHud(); return; }
+    const a = Math.abs(off);
+    let pts, word, color;
+    if (a <= WIN.perfect) { pts = 300; word = 'Perfect'; color = 'var(--good)'; stats.perfect++; }
+    else if (a <= WIN.good) { pts = 150; word = 'Good'; color = 'var(--bone)'; stats.good++; }
+    else { pts = 50; word = off < 0 ? 'Early' : 'Late'; color = 'var(--ash)'; stats.ok++; }
+    combo++; maxCombo = Math.max(maxCombo, combo);
+    score += Math.round(pts * mult());
+    (note.kind === 'T' || note.kind === 'B' ? stats.tapOff : stats.bellOff).push(off);
+    note.flash = performance.now();
+    flash(word, color); renderHud();
+  }
+  function miss(note) {
+    note.done = true; stats.miss++; combo = 0;
+    flash('Miss', 'var(--ash)'); renderHud();
+  }
+  function nearest(t, kinds) {
+    let best = null, d = Infinity;
+    for (const n of notes) {
+      if (n.done || !kinds.includes(n.kind)) continue;
+      const off = t - n.t;
+      if (Math.abs(off) < Math.abs(d)) { best = n; d = off; }
+      if (n.t - t > WIN.ok) break;
+    }
+    return best && Math.abs(d) <= WIN.ok ? [best, d] : [null, 0];
+  }
+
+  function onTap(pad, e) {
+    e.preventDefault();
+    const t = performance.now(), top = pad.id === 'padT';
+    step(top);
+    pad.classList.add('hit'); setTimeout(() => pad.classList.remove('hit'), 90);
+    if (!gameRunning) return;
+    const [n, off] = nearest(t, 'TB');
+    if (!n) return;
+    const want = n.kind === 'T';
+    hit(n, off, want === top ? null : 'Wrong step');
+  }
+  [$('padT'), $('padB')].forEach(p => p.addEventListener('pointerdown', e => onTap(p, e)));
+
+  function onGameMotion(v, m, t) {
+    if (!cal || !gameRunning) return;
+    const lockout = 30000 / BPM;
+    if (!armed && t - lastShakeAt > lockout && m < cal.thr * 0.5) armed = true;
+    if (!armed || m <= cal.thr) return;
+    armed = false; lastShakeAt = t;
+    const up = Math.sign(v[cal.axis]) === cal.upSign;
+    bell(cal.dirOK ? up : true);
+    // A shake on a stand-still beat breaks the silence.
+    const [rest] = nearest(t, '-');
+    const [n, off] = nearest(t, 'UD');
+    if (n && (!rest || Math.abs(n.t - t) <= Math.abs(rest.t - t))) {
+      const wantUp = n.kind === 'U';
+      hit(n, off, (!cal.dirOK || wantUp === up) ? null : 'Wrong way');
+    } else if (rest) {
+      rest.done = true; stats.silence++; combo = 0;
+      score = Math.max(0, score - 100);
+      flash('Silence!', 'var(--red)'); renderHud();
+    }
+  }
+
+  function frame() {
+    if (!gameRunning) return;
+    const now = performance.now();
+    for (const n of notes) {
+      if (n.done) continue;
+      if (now - n.t > WIN.ok) {
+        if (n.kind === '-') n.done = true;   // stood still: fine
+        else miss(n);
+      }
+    }
+    draw(now);
+    const first = notes[0].t, last = notes[notes.length - 1].t;
+    $('prog').style.width = Math.max(0, Math.min(1, (now - first) / (last - first))) * 100 + '%';
+    if (now > endAt) return finish();
+    requestAnimationFrame(frame);
+  }
+
+  function draw(now) {
+    const w = canvas.clientWidth, h = canvas.clientHeight;
+    g2.clearRect(0, 0, w, h);
+    const hitY = h * 0.84, ahead = 2000;   // ms of notes visible above the line
+    const lanes = { T: 0, B: 1, U: 2, D: 2 };
+    const lw = w / 3;
+    // lane guides
+    g2.fillStyle = '#2e2620';
+    g2.fillRect(lw - 0.5, 0, 1, h); g2.fillRect(lw * 2 - 0.5, 0, 1, h);
+    g2.fillStyle = '#a89c8c';
+    g2.font = '600 11px "IBM Plex Mono", monospace';
+    g2.textAlign = 'center';
+    ['TOP', 'BOTTOM', 'BELL'].forEach((s, i) => g2.fillText(s, lw * i + lw / 2, h - 10));
+    // hit line
+    g2.fillStyle = '#ede6da';
+    g2.fillRect(6, hitY - 1.5, w - 12, 3);
+    const r = Math.min(lw * 0.34, 22);
+    for (const n of notes) {
+      const dt = n.t - now;
+      if (dt > ahead || dt < -300) continue;
+      const y = hitY - dt / ahead * hitY;
+      if (n.kind === '-') {
+        if (n.done && n.t < now - 150) continue;
+        g2.fillStyle = 'rgba(168,156,140,0.35)';
+        g2.fillRect(8, y - 4, w - 16, 8);
+        continue;
+      }
+      if (n.done && !n.flash) continue;
+      if (n.flash) {
+        const age = now - n.flash;
+        if (age > 220) continue;
+        g2.globalAlpha = 1 - age / 220;
+      }
+      const x = lw * lanes[n.kind] + lw / 2;
+      const isBell = n.kind === 'U' || n.kind === 'D';
+      g2.beginPath(); g2.arc(x, n.flash ? hitY : y, r, 0, Math.PI * 2);
+      g2.fillStyle = isBell ? '#c0392b' : (n.kind === 'T' ? '#ede6da' : '#a89c8c');
+      g2.fill();
+      if (isBell) {
+        g2.fillStyle = '#ede6da';
+        g2.font = `800 ${Math.round(r * 1.2)}px "Alegreya SC", Georgia, serif`;
+        g2.textBaseline = 'middle';
+        g2.fillText(cal && !cal.dirOK ? '•' : (n.kind === 'U' ? '↑' : '↓'), x, (n.flash ? hitY : y) + 1);
+        g2.textBaseline = 'alphabetic';
+      }
+      g2.globalAlpha = 1;
+    }
+  }
+
+  function finish() {
+    gameRunning = false; motionHandler = null;
+    const total = notes.filter(n => n.kind !== '-').length;
+    const hits = stats.perfect + stats.good + stats.ok;
+    const acc = total ? (stats.perfect + stats.good * 0.7 + stats.ok * 0.3) / total : 0;
+    const avg = a => a.length ? Math.round(a.reduce((s, x) => s + x, 0) / a.length) : null;
+    const fmt = v => v === null ? '–' : (v > 0 ? '+' : '') + v + ' ms';
+    $('resScore').textContent = score.toLocaleString();
+    $('resGrade').textContent = acc > 0.9 ? 'The whole row rang as one' : acc > 0.7 ? 'A proud procession' : acc > 0.45 ? 'Keep walking with the row' : 'The Issohadores are waiting for you';
+    $('resAcc').textContent = Math.round(acc * 100) + '%';
+    $('resCombo').textContent = maxCombo;
+    $('resPG').textContent = stats.perfect + ' / ' + stats.good;
+    $('resMiss').textContent = stats.miss;
+    $('resWrong').textContent = stats.wrong;
+    $('resSilence').textContent = stats.silence;
+    $('resTapOff').textContent = fmt(avg(stats.tapOff));
+    $('resBellOff').textContent = fmt(avg(stats.bellOff));
+    const prev = store.get('best') || 0;
+    if (score > prev) { store.set('best', score); $('resBest').textContent = prev ? `New best, up from ${prev.toLocaleString()}.` : 'Your first procession is saved as your best.'; }
+    else $('resBest').textContent = `Your best is ${prev.toLocaleString()}.`;
+    $('bestLine').textContent = 'Your best: ' + Math.max(prev, score).toLocaleString() + ' points.'; $('bestLine').hidden = false;
+    go('results');
+  }
+  if (location.hash === '#debug') window.__notes = () => notes;
+  $('again').addEventListener('click', startGame);
+  $('recal').addEventListener('click', startCalib);
 })();
 </script>
-
 </body>
 </html>
