@@ -69,6 +69,11 @@ Other rules:
   window, and a Perfect full ring gives 450.
 - Ringing during a stand-still: −100 and the unison drops one level.
 - Score = sum over notes of points × unison × weight, minus stand-still penalties, never below 0.
+- Smaller rules chosen while building: a Good full ring gives 225 and an Early/Late one 75. Early/Late
+  keeps the unison level but restarts the run of 12. Letting go of a hold early breaks the streak but
+  doesn't lower unison. A wrong-way swipe uses up the note. A tap only counts as a wrong step when
+  another lane's note is in its window; stray taps are free. Each stand-still is charged at most once.
+  In slam mode, Left + Right within 80 ms is the bell.
 - **Accuracy** = (Perfect + 0.7·Good + 0.3·Early/Late) / notes. Grades from accuracy: the row's own
   words, from "The Issohadores are waiting for you" to "The whole row rang as one", plus a letter-free
   1 to 3 bell rating (≥ 70 %, ≥ 85 %, ≥ 95 %). Bells are the stars of the game.

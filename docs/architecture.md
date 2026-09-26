@@ -120,9 +120,9 @@ sensor access, so headless tests can drive them.
 ## Audio API (`scripts/audio/sound.gd`, autoload `Sound`)
 
 `set_key(midi_root)`, `set_volume(bus, linear)` for `music|bells|sfx|ambience`,
-`step(lane)`, `bell(set_id, up, quality)`, `row_bells(unison_level)`, `call()`, `rope()`,
+`step(lane)`, `bell(set_id, up, quality)`, `row_bells(unison_level)`, `call_out()` (not `call`, which would override Object.call), `rope()`,
 `hold_start(lane)`, `hold_stop(lane)`, `ui(name)` (`tap`, `back`, `unlock`, `carve`, `result`),
-`ambience(name)` / `stop_ambience()` (`fire`, `crowd`, `wind`), `count_in(bpm)`. Low latency: short
+`ambience(name)` / `stop_ambience()` (`fire`, `crowd`, `wind`, or layered like `fire+crowd`), `count_in(bpm) -> float` (its length in seconds). Low latency: short
 samples preloaded, a pool of players, no allocation on the hot path.
 
 ## Art API (`scripts/art/`)
