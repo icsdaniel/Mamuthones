@@ -114,6 +114,7 @@ func _shots() -> Array:
 		{"file": "play_countin", "screen": "play", "args": {"song_id": fires_id, "difficulty": "hard", "bell_set": "light"}, "setup": "moment:countin", "wait": 0.05},
 		{"file": "play_ready", "screen": "play", "args": {"song_id": fires_id, "difficulty": "hard", "bell_set": "light"}, "setup": "moment:ready", "wait": 0.05},
 		{"file": "play_resume", "screen": "play", "args": {"song_id": fires_id, "difficulty": "hard", "bell_set": "light"}, "setup": "resume", "wait": 0.0},
+		{"file": "play_early", "screen": "play", "args": {"song_id": fires_id, "difficulty": "hard", "bell_set": "light", "autoplay": true}, "setup": "moment:early", "wait": 0.08},
 		{"file": "play_wrong", "screen": "play", "args": {"song_id": fires_id, "difficulty": "hard", "bell_set": "light", "autoplay": true}, "setup": "moment:wrong", "wait": 0.05},
 		{"file": "play_tutorial", "screen": "play", "args": {"song_id": tut_id, "difficulty": "easy", "bell_set": "light", "autoplay": true}, "setup": "advance:0.25"},
 		{"file": "pause", "screen": "play", "args": {"song_id": fires_id, "difficulty": "medium", "bell_set": "light", "autoplay": true}, "setup": "pause"},
@@ -229,6 +230,11 @@ func _moment(screen: Node, what: String) -> void:
 			target = song_time_of(s, -2.35)
 		"ready":
 			target = minf(song_time_of(s, 0.4), s.notes[0].t - 0.2)
+		"early":
+			for n in s.notes:
+				if n.t >= from and n.kind == Note.Kind.STEP:
+					target = n.t - 0.05
+					break
 		"wrong":
 			for i in s.notes.size():
 				var n: Note = s.notes[i]
@@ -267,6 +273,12 @@ func _moment(screen: Node, what: String) -> void:
 	for i in steps:
 		c.advance(step)
 		await process_frame
+	if what == "early":
+		for n in s.notes:
+			if not n.done and n.kind == Note.Kind.STEP and n.t > c.song_time():
+				s.tap(n.lane, c.song_time(), 7)
+				screen.call("_on_stepped", n.lane)
+				break
 	if what == "wrong":
 		# The player's thumb lands on the left button while the right lane's note is due.
 		s.tap(0, c.song_time(), 7)

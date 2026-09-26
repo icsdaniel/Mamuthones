@@ -103,14 +103,14 @@ func _badge(b: Button, bells: int, score: String) -> void:
 	row.alignment = BoxContainer.ALIGNMENT_END
 	row.add_theme_constant_override("separation", 10)
 	row.set_anchors_and_offsets_preset(Control.PRESET_RIGHT_WIDE)
-	row.offset_right = -14.0
+	row.offset_right = -24.0
 	row.grow_horizontal = Control.GROW_DIRECTION_BEGIN
 	if score != "":
 		var l := UIKit.label(score, UIKit.CAPTION, false)
 		l.name = "Score"
 		l.size_flags_vertical = Control.SIZE_SHRINK_CENTER
 		row.add_child(l)
-	var marks := BellMarks.new(bells, 24.0)
+	var marks := BellMarks.new(bells, 26.0)
 	marks.size_flags_vertical = Control.SIZE_SHRINK_CENTER
 	row.add_child(marks)
 	b.add_child(row)
