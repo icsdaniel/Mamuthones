@@ -97,6 +97,29 @@ func test_bell_set_window_scaling() -> void:
 	check_eq(v.tap(1, _bt(1) + 0.041, 0).judgement, "good", "41 ms is Good with village")
 
 
+func test_results_carry_direction() -> void:
+	# Sound pitches the Ok clank up (early) or down (late); the UI shows which way the player was off.
+	var s := Session.new(make([{"b": 0, "k": "bell"}, {"b": 2, "k": "bell"}, {"b": 4, "k": "bell"}, {"b": 6, "k": "bell"}]), "easy")
+	var e := s.ring(_bt(0) - 0.120)
+	check_eq(e.quality, "early", "an Ok ring 120 ms early rings the early clank")
+	check_eq(e.side, "early", "with its side")
+	check_eq(s.ring(_bt(2) + 0.120).quality, "late", "an Ok ring 120 ms late rings the late clank")
+	var g := s.ring(_bt(4) + 0.030)
+	check_eq(g.quality, "perfect", "a Perfect ring keeps its own quality")
+	check_eq(g.side, "late", "but still says it was late")
+	check_eq(s.ring(_bt(6) + 0.005).side, "", "within 10 ms there is no side")
+	var t := Session.new(make(steps(3)), "easy")
+	var a := t.tap(1, _bt(0) - 0.060, 0)
+	check_eq(a.judgement, "good", "Good tap")
+	check_eq(a.side, "early", "tap result carries the side")
+	check_near(a.offset, -0.060, 1e-6, "and the signed offset")
+	check_eq(t.tap(1, _bt(1) + 0.110, 0).judgement, "late", "Ok band tap reads late")
+	check_eq(t.tap(1, _bt(2) - 0.110, 0).judgement, "early", "Ok band tap reads early")
+	var w := Session.new(make([{"b": 0, "k": "swipe", "dir": 1}]), "easy")
+	var sw := w.swipe(1, _bt(0) + 0.020)
+	check_eq(sw.side, "late", "swipe result carries the side")
+
+
 func test_tilt_and_swipe_windows() -> void:
 	var s := Session.new(make([{"b": 0, "k": "bell"}, {"b": 2, "k": "bell"}, {"b": 4, "k": "bell"}, {"b": 6, "k": "bell"}]), "easy")
 	check_eq(s.ring(_bt(0) + 0.058).quality, "perfect", "tilts get +15 ms: 58 ms is Perfect")

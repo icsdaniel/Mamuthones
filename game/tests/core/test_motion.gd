@@ -385,9 +385,13 @@ func test_held_readings_are_stamped_earlier() -> void:
 	var fast := _run(_detector(100.0), sy, 8.0)   # 60 fps, instant readings
 	var held := _held_run(det, sy, 8.0, 50.0, 120.0)
 	check(det.sample_interval > 0.015 and det.sample_interval < 0.025, "measures the 20 ms sensor interval (%.4f)" % det.sample_interval)
+	check_eq(fast.size(), 10, "instant readings ring every flick")
+	check_eq(held.size(), 10, "held readings ring every flick")
+	if fast.size() != 10 or held.size() != 10:
+		return
 	var err_fast := 0.0
 	var err_held := 0.0
 	for i in 10:
-		err_fast += (fast[i] - (1.0 + i * 0.7)) / 10.0
-		err_held += (held[i] - (1.0 + i * 0.7)) / 10.0
+		err_fast += (float(fast[i][0]) - (1.0 + i * 0.7)) / 10.0
+		err_held += (float(held[i]) - (1.0 + i * 0.7)) / 10.0
 	check(absf(err_held - err_fast) < 0.012, "held-sample rings land where instant ones do (%.4f vs %.4f)" % [err_held, err_fast])

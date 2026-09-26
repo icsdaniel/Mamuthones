@@ -105,8 +105,7 @@ func test_profile_corruption_and_versions() -> void:
 	cfg.set_value("bests", "values", {"s1:easy": "nonsense", "s2:easy": {"score": 1000, "bells": 2}})
 	cfg.set_value("look", "values", [1, 2, 3])
 	cfg.set_value("stats", "plays", "many")
-	ProfileScript.seal(cfg)
-	cfg.save(P)
+	ProfileScript.write_sealed(cfg, P)
 	var w := _fresh_profile()
 	check_eq(w.load_status, "ok", "loads")
 	check_eq(w.get_setting("note_speed"), 1.0, "bad field -> default")
@@ -120,8 +119,7 @@ func test_profile_corruption_and_versions() -> void:
 	cfg.set_value("meta", "version", 99)
 	cfg.set_value("settings", "values", {"note_speed": 1.75})
 	cfg.set_value("future", "stuff", {"x": 1})
-	ProfileScript.seal(cfg)
-	cfg.save(P)
+	ProfileScript.write_sealed(cfg, P)
 	var v := _fresh_profile()
 	check_eq(v.load_status, "future", "newer version recognised")
 	check_eq(v.get_setting("note_speed"), 1.75, "known fields still read")
@@ -427,6 +425,20 @@ func test_profile_crash_safety_and_checksum() -> void:
 	s.save()
 	check_eq(FileAccess.get_file_as_string(P.get_basename() + ".bak.cfg"), good_bak, ".bak untouched by a save over a damaged file")
 	s.free()
+	# A real save cut short at any point: never trusted, never parsed.
+	var whole := FileAccess.get_file_as_bytes(P)
+	var caught := 0
+	for cut in [whole.size() - 1, whole.size() - 20, whole.size() >> 1, 80, 70, 10]:
+		f = FileAccess.open(P, FileAccess.WRITE)
+		f.store_buffer(whole.slice(0, cut))
+		f.close()
+		if ProfileScript._open_checked(P) == null:
+			caught += 1
+	check_eq(caught, 6, "every truncation of a sealed file is caught")
+	f = FileAccess.open(P, FileAccess.WRITE)
+	f.store_buffer(whole)
+	f.close()
+	check(ProfileScript._open_checked(P) != null, "the whole file still passes")
 	# An edited value breaks the checksum too.
 	var t := _fresh_profile()
 	t.save()
@@ -458,8 +470,7 @@ func test_profile_settings_are_clamped() -> void:
 	var cfg := ConfigFile.new()
 	cfg.set_value("meta", "version", 1)
 	cfg.set_value("settings", "values", {"audio_offset": 99.0, "note_speed": 1.2})
-	ProfileScript.seal(cfg)
-	cfg.save(P)
+	ProfileScript.write_sealed(cfg, P)
 	var q := _fresh_profile()
 	check_eq(q.get_setting("audio_offset"), 0.5, "clamped on load too")
 	check_eq(q.get_setting("note_speed"), 1.2, "good values kept")

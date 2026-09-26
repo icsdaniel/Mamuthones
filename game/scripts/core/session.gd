@@ -277,12 +277,14 @@ func upcoming_bell(t: float) -> Note:
 # ---------------------------------------------------------------- input
 
 
-## A step button went down. Returns {judgement, note, ring}; judgement is "" when the tap hit
-## nothing (a stray tap), "wrong" when it hit the wrong lane, and "" with a note for the first half
-## of a full ring. ring is non-empty when a slam rang the bell.
+## A step button went down. Returns {judgement, note, ring, offset, side}; judgement is "" when the
+## tap hit nothing (a stray tap), "wrong" when it hit the wrong lane, and "" with a note for the
+## first half of a full ring. The Ok band is reported as its direction, "early" or "late". offset
+## (s, signed) and side ("early"/"late", "" within 10 ms) describe any timed tap. ring is non-empty
+## when a slam rang the bell.
 func tap(lane: int, t: float, touch_id: int = 0) -> Dictionary:
 	input_log.append([t, "tap", lane, touch_id])
-	var res := {"judgement": "", "note": null, "ring": {}}
+	var res := {"judgement": "", "note": null, "ring": {}, "offset": 0.0, "side": ""}
 	# A touch id still holding a note means its release was lost: that hold was let go.
 	if _holds.has(touch_id):
 		var old: Note = _holds[touch_id]
@@ -295,6 +297,8 @@ func tap(lane: int, t: float, touch_id: int = 0) -> Dictionary:
 	if n != null:
 		res.note = n
 		var off := t - n.t
+		res.offset = off
+		res.side = _side(off)
 		match n.kind:
 			Note.Kind.STEP:
 				_hit(n, t, _grade(off, win_touch), off, POINTS)
@@ -340,10 +344,10 @@ func release(t: float, touch_id: int = 0) -> void:
 
 
 ## A rope swipe across the buttons, dir 1 = to the right, t = when the finger went down.
-## Returns {judgement, note}.
+## Returns {judgement, note, offset, side} (as tap).
 func swipe(dir: int, t: float) -> Dictionary:
 	input_log.append([t, "swipe", dir])
-	var res := {"judgement": "", "note": null}
+	var res := {"judgement": "", "note": null, "offset": 0.0, "side": ""}
 	if piazza:
 		return res
 	var n := _find_open(Note.Kind.SWIPE, t, win_swipe.z)
@@ -351,6 +355,8 @@ func swipe(dir: int, t: float) -> Dictionary:
 		return res
 	res.note = n
 	var off := t - n.t
+	res.offset = off
+	res.side = _side(off)
 	if (1 if dir >= 0 else -1) != n.dir:
 		n.done = true
 		n.finished = true
@@ -364,9 +370,10 @@ func swipe(dir: int, t: float) -> Dictionary:
 
 
 ## The bell rang (a tilt, or with tilt = false a slam or the keyboard). Returns
-## {up, quality, judgement, offset, note}; quality is perfect|good|ok|miss|silence|free so the
-## bell sound can match: miss = close to a bell but outside its window, silence = during a
-## stand-still, free = no bell expected.
+## {up, quality, judgement, offset, side, note}; quality is perfect|good|early|late|miss|silence|free
+## so the bell sound can match: early/late = the Ok band with its direction (the clank is pitched
+## up or down), miss = close to a bell but outside its window, silence = during a stand-still,
+## free = no bell expected. side is "early"/"late" for any timed hit off by more than 10 ms, else "".
 func ring(t: float, tilt: bool = true) -> Dictionary:
 	input_log.append([t, "ring", tilt])
 	if slam:
@@ -385,7 +392,8 @@ func ring(t: float, tilt: bool = true) -> Dictionary:
 			if not is_nan(best.step_at):
 				_finish_ring(best)
 		# judgement stays "" for a full ring still waiting for its step half.
-		return {"up": best.up, "quality": _quality(g), "judgement": best.judgement, "offset": off, "note": best}
+		return {"up": best.up, "quality": _quality(g), "judgement": best.judgement, "offset": off,
+				"side": _side(off), "note": best}
 	var up := _next_free_up
 	_next_free_up = not up
 	var rest := _rest_at(t)
@@ -403,9 +411,9 @@ func ring(t: float, tilt: bool = true) -> Dictionary:
 			_refresh_score(t)
 			judged.emit(rest, "silence", t - rest.t)
 		_last_silence = t
-		return {"up": up, "quality": "silence", "judgement": "silence", "offset": 0.0, "note": rest}
+		return {"up": up, "quality": "silence", "judgement": "silence", "offset": 0.0, "side": "", "note": rest}
 	var near := _find_bell(t, 2.0 * w.z) != null
-	return {"up": up, "quality": "miss" if near else "free", "judgement": "", "offset": 0.0, "note": null}
+	return {"up": up, "quality": "miss" if near else "free", "judgement": "", "offset": 0.0, "side": "", "note": null}
 
 
 ## Call every frame with the current song time.
@@ -453,12 +461,18 @@ func _grade(off: float, w: Vector3) -> String:
 	return "early" if off < 0.0 else "late"
 
 
+static func _side(off: float) -> String:
+	if absf(off) <= SIDE_DEAD_ZONE:
+		return ""
+	return "early" if off < 0.0 else "late"
+
+
 static func _quality(judgement: String) -> String:
 	match judgement:
 		"perfect", "good":
 			return judgement
 		"early", "late":
-			return "ok"
+			return judgement   # the Ok band, with its direction: Sound pitches the clank up or down
 	return "miss"
 
 
@@ -542,7 +556,7 @@ func _hit(n: Note, t: float, g: String, off: float, table: Dictionary) -> void:
 	n.done = true
 	n.hit_at = t
 	n.judgement = g
-	n.side = "" if absf(off) <= SIDE_DEAD_ZONE else ("early" if off < 0.0 else "late")
+	n.side = _side(off)
 	if n.kind != Note.Kind.HOLD:
 		n.finished = true
 	stats[g] += 1

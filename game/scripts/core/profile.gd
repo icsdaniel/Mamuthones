@@ -2,7 +2,9 @@ extends Node
 ## Autoload `Profile`: everything the player keeps on the phone, in a versioned user://profile.cfg.
 ## A damaged file never crashes the game: it is set aside (profile.corrupt.cfg), the last good copy
 ## (profile.bak.cfg) is tried, and otherwise the player starts fresh. Writes go to a temp file first
-## and are renamed into place, so a crash mid-save cannot leave half a file.
+## and are renamed into place, so a crash mid-save cannot leave half a file. Every file starts with
+## a SHA-256 of the rest ("; checksum ..."), checked on the raw bytes before parsing, so a file cut
+## short or scrambled is detected even when what is left still parses.
 ##
 ## API (UI codes against these names):
 ##   signal changed
@@ -321,9 +323,8 @@ func save() -> bool:
 	cfg.set_value("piazza", "players", Array(_piazza_players))
 	cfg.set_value("piazza", "bests", _piazza_bests)
 	cfg.set_value("stats", "plays", _plays)
-	seal(cfg)
 	var tmp := path + ".tmp"
-	if cfg.save(tmp) != OK or _open_checked(tmp) == null:
+	if write_sealed(cfg, tmp) != OK or _open_checked(tmp) == null:
 		push_warning("Profile: could not write %s" % tmp)
 		return false
 	# The main file always exists: the good old copy is copied (not moved) to .bak, then the new
@@ -340,21 +341,32 @@ func save() -> bool:
 	return err == OK
 
 
-## Adds the checksum that load_profile() checks. A file that parses but was cut short or edited
-## no longer matches it.
-static func seal(cfg: ConfigFile) -> void:
-	cfg.set_value("meta", "checksum", _checksum(cfg))
+const CHECK_PREFIX := "; checksum "
+
+## The file text load_profile() accepts: a first line "; checksum <sha256 of the rest>" and then
+## the ConfigFile text. A file that was cut short, edited or scrambled no longer matches, and is
+## rejected before it is ever parsed.
+static func sealed_text(cfg: ConfigFile) -> String:
+	var body := cfg.encode_to_text()
+	return CHECK_PREFIX + _hash(body.to_utf8_buffer()) + "\n" + body
 
 
-static func _checksum(cfg: ConfigFile) -> String:
-	var parts := PackedStringArray()
-	for section in cfg.get_sections():
-		if section == "meta":
-			continue
-		for key in cfg.get_section_keys(section):
-			parts.append("%s/%s=%s" % [section, key, var_to_str(cfg.get_value(section, key))])
-	parts.append("version=%s" % var_to_str(cfg.get_value("meta", "version", 0)))
-	return "\n".join(parts).sha256_text()
+## Writes cfg to p as sealed_text(cfg).
+static func write_sealed(cfg: ConfigFile, p: String) -> Error:
+	var f := FileAccess.open(p, FileAccess.WRITE)
+	if f == null:
+		return FileAccess.get_open_error()
+	f.store_string(sealed_text(cfg))
+	var err := f.get_error()
+	f.close()
+	return err
+
+
+static func _hash(bytes: PackedByteArray) -> String:
+	var h := HashingContext.new()
+	h.start(HashingContext.HASH_SHA256)
+	h.update(bytes)
+	return h.finish().hex_encode()
 
 
 static func _version(cfg: ConfigFile) -> int:
@@ -362,17 +374,21 @@ static func _version(cfg: ConfigFile) -> int:
 	return int(v) if typeof(v) in [TYPE_INT, TYPE_FLOAT] else 0
 
 
-# The file at p, or null when it is missing, does not parse, or fails its checksum (files from a
-# newer version are trusted as long as they parse).
+# The file at p, or null when it is missing, fails its checksum (checked on the raw bytes, so a
+# damaged file never reaches the parser) or does not parse.
 static func _open_checked(p: String) -> ConfigFile:
 	if not FileAccess.file_exists(p):
 		return null
-	var cfg := ConfigFile.new()
-	if cfg.load(p) != OK or not cfg.has_section("meta"):
+	var bytes := FileAccess.get_file_as_bytes(p)
+	var nl := bytes.find(10)
+	if nl < 0:
 		return null
-	if _version(cfg) > VERSION:
-		return cfg
-	if str(cfg.get_value("meta", "checksum", "")) != _checksum(cfg):
+	var head := bytes.slice(0, nl).get_string_from_ascii()
+	var body := bytes.slice(nl + 1)
+	if not head.begins_with(CHECK_PREFIX) or head.substr(CHECK_PREFIX.length()) != _hash(body):
+		return null
+	var cfg := ConfigFile.new()
+	if cfg.parse(body.get_string_from_utf8()) != OK or not cfg.has_section("meta"):
 		return null
 	return cfg
 
