@@ -107,3 +107,36 @@ func test_pause_resume_keeps_the_song_time() -> void:
 	check(not play.get("paused"), "the song resumes after the count-in")
 	UIHarness.free_app(app)
 	UIHarness.restore_profile()
+
+
+## The first played note comes well under a minute after launch: seven taps (language, headphones,
+## buttons-or-tilt, skip delay, try), and the only waits the game itself adds are the screen
+## transitions and the tutorial's one-bar lead-in. Reading time is the player's; this checks the
+## game leaves most of the minute for it.
+func test_first_note_within_a_minute() -> void:
+	UIHarness.fresh_profile(false)
+	Profile.set_setting("language", "")
+	var app := UIHarness.make_app(tree)
+	await UIHarness.frames(tree, 2)
+	var t0 := Time.get_ticks_msec()
+	for b in ["Lang_en", "Continue", "UseSlam", "Skip", "Try"]:
+		check(UIHarness.press(app, b), "first run: %s" % b)
+		await UIHarness.settle(tree)
+	var play: Node = null
+	for n in app.current().find_children("*", "", true, false):
+		if n.get("session") is Session and n.get("conductor") is Conductor:
+			play = n
+	check(play != null, "the first lesson is playing")
+	if play != null:
+		var s: Session = play.get("session")
+		var c: Conductor = play.get("conductor")
+		var first := INF
+		for n in s.notes:
+			first = minf(first, n.t)
+		while c.song_time() < first and Time.get_ticks_msec() - t0 < 60000:
+			await tree.process_frame
+		var secs := (Time.get_ticks_msec() - t0) / 1000.0
+		check(c.song_time() >= first, "the first note arrives")
+		check(secs < 15.0, "the game's own waits before the first note stay short (%.1f s)" % secs)
+	UIHarness.free_app(app)
+	UIHarness.restore_profile()

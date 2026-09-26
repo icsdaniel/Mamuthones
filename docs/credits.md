@@ -36,3 +36,9 @@ The procession bells in the music and the Piazza tracks use the game's own bell 
   `game/shaders/`); no photographs or third-party images are used.
 
 ## UI
+
+- All screens, layouts, widgets (lane view, HUD, unison meter, judgement words, tilt-phone and lesson
+  pictures, tendency histogram) and the Italian and English text are original work written for this
+  game, released under the project's license.
+- No downloaded images, icons, fonts or sounds are used by the UI. Fonts, textures, icons and the
+  woodcut theme come from the Art area and are credited above; every sound comes from the Sound area.
