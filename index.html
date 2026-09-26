@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no">
-<title>Bell Flick Test</title>
+<title>Bell Shake Test</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Alegreya+SC:wght@700;800&family=Alegreya+Sans:wght@400;500;700&family=IBM+Plex+Mono:wght@400;600&display=swap">
 <style>
@@ -65,7 +65,7 @@
   /* Beat row: three steps and the bell jolt */
   .beats {
     display: grid;
-    grid-template-columns: repeat(4, 1fr);
+    grid-template-columns: repeat(2, 1fr);
     gap: 10px;
   }
   .beat {
@@ -91,28 +91,50 @@
   }
   .verdict .ms { font-family: var(--mono); font-size: 1rem; color: var(--ash); margin-left: 8px; }
 
-  /* Tap zones */
-  .zones {
+  /* One-handed play area: beats on the open side, two step pads under the thumb. */
+  .hand {
     display: grid;
     grid-template-columns: 1fr 1fr;
-    gap: 10px;
+    border: 1px solid var(--wood-2);
+    border-radius: 10px;
+    overflow: hidden;
+  }
+  .hand button {
+    font: 700 0.95rem var(--body);
+    padding: 10px;
+    border: none;
+    background: var(--wood);
+    color: var(--ash);
+    cursor: pointer;
+  }
+  .hand button[aria-pressed="true"] { background: var(--bone); color: var(--ground); }
+  .play {
+    display: flex;
+    gap: 12px;
+    align-items: stretch;
     touch-action: none;
     user-select: none;
     -webkit-user-select: none;
   }
+  .play.left { flex-direction: row-reverse; }
+  .track { flex: 1 1 auto; display: flex; flex-direction: column; justify-content: center; gap: 12px; min-width: 0; }
+  .zones { flex: 0 0 44%; display: grid; grid-template-rows: 1fr 1fr; gap: 10px; }
   .zone {
-    height: 30vh;
-    min-height: 160px;
+    height: 22vh;
+    min-height: 120px;
     border-radius: 14px;
     background: var(--wood);
     border: 2px solid var(--wood-2);
     display: grid;
     place-items: center;
+    text-align: center;
     font-family: var(--display);
-    font-size: 1.2rem;
+    font-size: 1.15rem;
     color: var(--ash);
     cursor: pointer;
+    transition: border-color 60ms;
   }
+  .zone.cue { border-color: var(--ember); }
   .zone.hit { background: var(--wood-2); border-color: var(--bone); color: var(--bone); }
 
   button.primary {
@@ -182,14 +204,14 @@
 
 <div class="wrap">
   <header style="display:grid;gap:8px">
-    <div class="label">Mamuthones prototype · flick test</div>
-    <h1>Step, step, step, <span>flick</span></h1>
-    <p class="lede">Checks whether your phone can time a sharp wrist flick as well as a tap. Hold the phone firmly in both hands and play seated or standing.</p>
+    <div class="label">Mamuthones prototype · bell test</div>
+    <h1>Step, step, step, <span>bell</span></h1>
+    <p class="lede">Checks whether your phone can time a shake as well as a tap. Hold the phone in one hand. Your thumb taps the steps, and a quick shake of the phone rings the bell.</p>
   </header>
 
   <ol class="how">
-    <li><b>Beats 1–3:</b> tap the left zone, then right, then left, on the click.</li>
-    <li><b>Beat 4:</b> flick both wrists sharply, like a Mamuthone snapping the bells on their back. Don't tap.</li>
+    <li><b>Beats 1–3:</b> tap the top step, then bottom, then top, on the click. The pad to hit glows.</li>
+    <li><b>Beat 4:</b> shake the phone up or down sharply to ring the bell. Don't tap.</li>
     <li>The first bar is a count-in and isn't scored.</li>
   </ol>
 
@@ -197,31 +219,39 @@
 
   <button class="primary" id="startBtn">Start</button>
 
-  <div class="beats" aria-hidden="true">
-    <div class="beat" data-i="0">1</div>
-    <div class="beat" data-i="1">2</div>
-    <div class="beat" data-i="2">3</div>
-    <div class="beat jolt" data-i="3">flick</div>
+  <div class="hand" role="group" aria-label="Playing hand">
+    <button id="handR" aria-pressed="true">Right hand</button>
+    <button id="handL" aria-pressed="false">Left hand</button>
   </div>
-  <div class="verdict" id="verdict" aria-live="polite">&nbsp;</div>
 
-  <div class="zones">
-    <div class="zone" id="zoneL" role="button" aria-label="Left tap zone">Left</div>
-    <div class="zone" id="zoneR" role="button" aria-label="Right tap zone">Right</div>
+  <div class="play" id="play">
+    <div class="track">
+      <div class="beats" aria-hidden="true">
+        <div class="beat" data-i="0">1</div>
+        <div class="beat" data-i="1">2</div>
+        <div class="beat" data-i="2">3</div>
+        <div class="beat jolt" data-i="3">bell</div>
+      </div>
+      <div class="verdict" id="verdict" aria-live="polite">&nbsp;</div>
+    </div>
+    <div class="zones">
+      <div class="zone" id="zoneT" role="button" aria-label="Top step">Top<br>step</div>
+      <div class="zone" id="zoneB" role="button" aria-label="Bottom step">Bottom<br>step</div>
+    </div>
   </div>
 
   <div>
-    <div class="label" style="margin-bottom:6px">Motion strength (red line = flick threshold)</div>
+    <div class="label" style="margin-bottom:6px">Motion strength (red line = shake threshold)</div>
     <canvas id="graph" width="560" height="90"></canvas>
   </div>
 
   <div class="stats">
     <div class="stat"><span class="label">Tap timing</span><b id="tapAvg">–</b><small id="tapSpread">average offset · spread</small></div>
-    <div class="stat"><span class="label">Flick timing</span><b id="joltAvg">–</b><small id="joltSpread">average offset · spread</small></div>
-    <div class="stat"><span class="label">Flicks caught</span><b id="joltHit">–</b><small>flick beats with a flick in time</small></div>
-    <div class="stat warn"><span class="label">False flicks</span><b id="falseJ">0</b><small>flicks set off by a tap</small></div>
+    <div class="stat"><span class="label">Bell timing</span><b id="joltAvg">–</b><small id="joltSpread">average offset · spread</small></div>
+    <div class="stat"><span class="label">Bells caught</span><b id="joltHit">–</b><small>bell beats with a shake in time</small></div>
+    <div class="stat warn"><span class="label">False shakes</span><b id="falseJ">0</b><small>shakes set off by a tap</small></div>
     <div class="stat"><span class="label">Sensor rate</span><b id="rate">–</b><small>readings per second</small></div>
-    <div class="stat"><span class="label">Peak motion</span><b id="peak">–</b><small>strongest flick, m/s²</small></div>
+    <div class="stat"><span class="label">Peak motion</span><b id="peak">–</b><small>strongest shake, m/s²</small></div>
   </div>
 
   <details>
@@ -229,15 +259,15 @@
     <div class="controls">
       <label for="mode">Pattern
         <select id="mode">
-          <option value="mixed">Steps and flick (3 taps + 1 flick)</option>
+          <option value="mixed">Steps and bell (3 taps + 1 shake)</option>
           <option value="taps">Taps only</option>
-          <option value="jolts">Flick on every beat</option>
+          <option value="jolts">Shake on every beat</option>
         </select>
       </label>
       <label for="bpm"><span class="row"><span>Tempo</span><output id="bpmOut">76 bpm</output></span>
         <input type="range" id="bpm" min="50" max="130" value="76">
       </label>
-      <label for="thr"><span class="row"><span>Flick threshold</span><output id="thrOut">10 m/s²</output></span>
+      <label for="thr"><span class="row"><span>Shake threshold</span><output id="thrOut">10 m/s²</output></span>
         <input type="range" id="thr" min="3" max="30" step="0.5" value="10">
       </label>
       <label for="win"><span class="row"><span>Hit window</span><output id="winOut">±120 ms</output></span>
@@ -269,7 +299,7 @@
   let ctx = null, running = false, nextBeatTime = 0, beatIndex = 0, timer = null;
   const beats = [];          // {t: perf ms, kind: 'tap'|'jolt', judged, idx, countIn}
   const tapOffsets = [], joltOffsets = [];
-  let armed = true, joltBeats = 0, joltCaught = 0, falseJolts = 0, lastTapAt = -1e9, lastJoltAt = -1e9, peak = 0;
+  let lastDir = '', armed = true, joltBeats = 0, joltCaught = 0, falseJolts = 0, lastTapAt = -1e9, lastJoltAt = -1e9, peak = 0;
   let samples = [], sampleCount = 0, rateWindowStart = performance.now(), gotMotion = false;
 
   // Map an AudioContext time to performance.now() time, including output latency when the browser reports it.
@@ -331,7 +361,7 @@
     for (const b of beats) {
       if (!b.judged && !b.countIn && now - b.t > settings.win) {
         b.judged = true;
-        if (b.kind === 'jolt') { joltBeats++; show('Missed flick', null, 'var(--ember)'); }
+        if (b.kind === 'jolt') { joltBeats++; show('Missed bell', null, 'var(--ember)'); }
         else show('Missed step', null, 'var(--ash)');
         renderStats();
       }
@@ -342,8 +372,10 @@
     beatEls.forEach(el => el.classList.remove('now'));
     const el = beatEls[b.idx % 4];
     el.classList.toggle('jolt', b.kind === 'jolt');
-    el.textContent = b.kind === 'jolt' ? 'flick' : String(b.idx % 4 + 1);
+    el.textContent = b.kind === 'jolt' ? 'bell' : String(b.idx % 4 + 1);
     el.classList.add('now');
+    const pad = b.kind === 'tap' ? (b.idx % 2 === 0 ? $('zoneT') : $('zoneB')) : null;
+    if (pad && !b.countIn) { pad.classList.add('cue'); setTimeout(() => pad.classList.remove('cue'), 160); }
     setTimeout(() => el.classList.remove('now'), 120);
   }
 
@@ -368,18 +400,18 @@
       const d = t - b.t;
       if (Math.abs(d) < Math.abs(bestD)) { best = b; bestD = d; }
     }
-    if (!best || Math.abs(bestD) > settings.win) { if (running) show(kind === 'jolt' ? 'Stray flick' : 'Off beat', null, 'var(--ash)'); return; }
+    if (!best || Math.abs(bestD) > settings.win) { if (running) show(kind === 'jolt' ? 'Stray shake' : 'Off beat', null, 'var(--ash)'); return; }
     if (best.kind !== kind) {
       best.judged = true;
       if (best.kind === 'jolt') joltBeats++;
-      show(kind === 'tap' ? 'Tapped a flick beat' : 'Flicked on a step', bestD, 'var(--ember)');
+      show(kind === 'tap' ? 'Tapped a bell beat' : 'Shook on a step', bestD, 'var(--ember)');
       renderStats(); return;
     }
     best.judged = true;
     (kind === 'tap' ? tapOffsets : joltOffsets).push(bestD);
     if (kind === 'jolt') { joltBeats++; joltCaught++; }
     const a = Math.abs(bestD);
-    show(a < 35 ? 'Perfect' : a < 70 ? 'Good' : 'Late-ish', bestD, a < 35 ? 'var(--good)' : a < 70 ? 'var(--bone)' : 'var(--ash)');
+    show((a < 35 ? 'Perfect' : a < 70 ? 'Good' : 'Late-ish') + (kind === 'jolt' ? lastDir : ''), bestD, a < 35 ? 'var(--good)' : a < 70 ? 'var(--bone)' : 'var(--ash)');
     renderStats();
   }
 
@@ -396,7 +428,7 @@
     $('tapAvg').textContent = t ? fmt(t.mean) : '–';
     $('tapSpread').textContent = t ? `spread ±${Math.round(t.sd)} ms · ${t.n} taps` : 'average offset · spread';
     $('joltAvg').textContent = j ? fmt(j.mean) : '–';
-    $('joltSpread').textContent = j ? `spread ±${Math.round(j.sd)} ms · ${j.n} flicks` : 'average offset · spread';
+    $('joltSpread').textContent = j ? `spread ±${Math.round(j.sd)} ms · ${j.n} shakes` : 'average offset · spread';
     $('joltHit').textContent = joltBeats ? `${joltCaught} / ${joltBeats}` : '–';
     $('falseJ').textContent = falseJolts;
     $('peak').textContent = peak ? peak.toFixed(1) : '–';
@@ -411,7 +443,18 @@
     setTimeout(() => zone.classList.remove('hit'), 90);
     if (running) judge('tap', t);
   }
-  [$('zoneL'), $('zoneR')].forEach(z => z.addEventListener('pointerdown', e => tap(z, e)));
+  [$('zoneT'), $('zoneB')].forEach(z => z.addEventListener('pointerdown', e => tap(z, e)));
+
+  // Handedness: mirror the pads to the thumb's side, and remember the choice on this phone.
+  function setHand(side) {
+    $('play').classList.toggle('left', side === 'left');
+    $('handL').setAttribute('aria-pressed', side === 'left');
+    $('handR').setAttribute('aria-pressed', side !== 'left');
+    try { localStorage.setItem('hand', side); } catch (_) {}
+  }
+  $('handL').addEventListener('click', () => setHand('left'));
+  $('handR').addEventListener('click', () => setHand('right'));
+  try { if (localStorage.getItem('hand') === 'left') setHand('left'); } catch (_) {}
 
   // Jolts
   function onMotion(e) {
@@ -439,6 +482,7 @@
     if (armed && m > settings.thr) {
       armed = false;
       lastJoltAt = t;
+      lastDir = (a && a.y !== null && Math.abs(a.y) > 2) ? (a.y > 0 ? ' ↑' : ' ↓') : '';
       if (t - lastTapAt < 120) { falseJolts++; renderStats(); return; }
       if (ctx) bell(ctx.currentTime, 0.3);
       if (running) judge('jolt', t);
