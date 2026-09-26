@@ -29,6 +29,11 @@ func _init() -> void:
 			for f in test.failures:
 				printerr("FAIL %s:%s: %s" % [path.get_file(), name, f])
 			total_failures += test.failures.size()
+	# Let any sound a test started finish, so nothing is left in use at exit.
+	var sound := root.get_node_or_null("Sound")
+	if sound != null and sound.has_method("stop_all"):
+		sound.stop_all()
+	await create_timer(0.5).timeout
 	print("%d checks, %d failed" % [total_checks, total_failures])
 	quit(1 if total_failures > 0 else 0)
 

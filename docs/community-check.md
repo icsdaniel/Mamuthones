@@ -39,3 +39,7 @@ player-facing text avoids these details or uses plain words.
   terms.
 - Whether a halo or sunburst behind a mask (the workshop card, the logo) is appropriate.
 - Which mask finishes are acceptable (the game keeps them black to dark brown-black).
+- Bells: the clapper material, and the number and sizes of bells in one Mamuthone's load (the game uses
+  5, 8 or 13 depending on the set).
+- The Issohadores' calls: the game's call is invented and uses vowels only. How do they really call?
+- The launeddas-style drone used for held notes.
