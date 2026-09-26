@@ -6,14 +6,19 @@ extends RefCounted
 ## Times are seconds of song time. Call update(t) every frame (it times out missed notes, ends holds
 ## and stand-stills). Inputs carry their own time stamps, so they may arrive a little after the fact.
 ##
-## Options: slam (L+R together rings the bell, no tilt allowance), piazza (bells only, ±200 ms),
+## Options: slam (the bell from the buttons: see _slam_bell; full rings judged on their step alone;
+## no tilt allowance), piazza (bells only, ±200 ms),
 ## remix (remix offset), mirror (lanes 0<->2 and swipes flipped), from_beat/to_beat (only notes in
 ## [from, to), for tutorial lessons and practice), daily ("YYYY-MM-DD", recorded on the daily ladder).
 ##
 ## Additions beyond the architecture doc: tap()/swipe() return a result Dictionary; ring() takes an
 ## optional `tilt` flag and returns extra keys (judgement, offset, note); running_accuracy(),
 ## mean_offset(), median_offset(), hit_offsets, score_breakdown(), end_time(), progress(t),
-## song_key(), ladder_ok(), passed(), upcoming_bell(t), window(kind), stats keys listed in _init.
+## song_key(), ladder_ok(), passed(), upcoming_bell(t), window(kind), stats keys listed in _init,
+## Note.side ("early"/"late"/"" for every judged hit, so a Perfect can still say which side it was).
+##
+## Matching uses note-lock: an input goes to the EARLIEST open note whose window contains it, so a
+## late player in a fast stream reads as late instead of drifting onto the next note.
 
 signal judged(note: Note, judgement: String, offset: float)
 signal unison_changed(level: int)
@@ -32,10 +37,14 @@ const RING_POINTS := {"perfect": 450, "good": 225, "early": 75, "late": 75}
 const HOLD_BONUS := 150
 const HOLD_GRACE := 0.120    ## a hold released up to 120 ms before its end still counts as kept
 const STILL_PENALTY := 100
+const STILL_BONUS := 50      ## a stand-still kept to its end: 50 × unison × weight
+const SILENCE_DEBOUNCE := 0.150  ## rings in a stand-still closer than this count once
+const SIDE_DEAD_ZONE := 0.010    ## hits this close to the beat are neither early nor late
 const UNISON_MULTS: Array[float] = [1.0, 1.5, 2.0, 2.5, 3.0, 4.0]
 const UNISON_STEP := 12      ## Good-or-better hits in a row per unison level
 const MISS_DROP := 2
 const SILENCE_DROP := 1
+const LET_GO_DROP := 1
 const SLAM_GAP := 0.080      ## Left and Right pressed within 80 ms of each other = one slam bell
 
 var song: SongData
@@ -58,7 +67,7 @@ var max_combo := 0
 var stats: Dictionary = {}
 ## Every input as [t, "tap", lane, touch_id] / [t, "release", touch_id] / [t, "swipe", dir] / [t, "ring", tilt].
 var input_log: Array = []
-## (time, score) after every change of score.
+## (time, shown score) after every change of score.
 var score_timeline: Array[Vector2] = []
 ## Signed offsets (s, negative = early) of every judged hit, for the early/late tendency.
 var hit_offsets := PackedFloat32Array()
@@ -68,12 +77,14 @@ var win_tilt := Vector3.ZERO    ## same for tilted bells
 var win_swipe := Vector3.ZERO
 
 var _raw := 0.0
-var _breakdown := {"base": 0.0, "unison": 0.0, "weight": 0.0, "holds": 0.0, "penalties": 0.0}
+var _breakdown := {"base": 0.0, "unison": 0.0, "weight": 0.0, "holds": 0.0, "stills": 0.0, "penalties": 0.0}
 var _weight := 1.0
 var _first_open := 0
 var _holds: Dictionary = {}        # touch_id -> Note
 var _ring_windows: Dictionary = {} # note index -> Vector3 used by that ring's bell half
 var _slam_press: Dictionary = {}   # lane (0 or 2) -> [t, free: bool, used: bool]
+var _down: Dictionary = {}         # touch_id -> lane, buttons held right now
+var _last_silence := -INF
 var _next_free_up := true
 var _end_time := 0.0
 var _max_window := 0.0
@@ -120,7 +131,7 @@ func _init(p_song: SongData, p_difficulty: String, p_bell_set: String = "light",
 
 	stats = {
 		"perfect": 0, "good": 0, "early": 0, "late": 0, "miss": 0, "wrong": 0,
-		"held": 0, "let_go": 0, "silence": 0, "still_kept": 0,
+		"held": 0, "let_go": 0, "silence": 0, "still_kept": 0, "early_hits": 0, "late_hits": 0,
 		"rests": 0, "holds": 0, "notes": 0, "total": 0, "max_unison": 0,
 	}
 	var last_end := 0.0
@@ -185,11 +196,13 @@ static func bells_for(acc: float) -> int:
 	return 0
 
 
-## Where the score came from: base points, extra from unison, extra from weight, hold bonuses and
-## stand-still penalties. total == score (before rounding).
+## Where the score came from: base points, extra from unison, extra from weight, hold bonuses,
+## kept stand-still bonuses and stand-still penalties (positive). total = base + unison + weight +
+## holds + stills - penalties; the score shown is max(0, total), rounded.
 func score_breakdown() -> Dictionary:
 	var d := _breakdown.duplicate()
 	d.total = _raw
+	d.shown = score
 	return d
 
 
@@ -266,11 +279,19 @@ func upcoming_bell(t: float) -> Note:
 
 ## A step button went down. Returns {judgement, note, ring}; judgement is "" when the tap hit
 ## nothing (a stray tap), "wrong" when it hit the wrong lane, and "" with a note for the first half
-## of a full ring. ring is non-empty when a slam (Left + Right) rang the bell.
+## of a full ring. ring is non-empty when a slam rang the bell.
 func tap(lane: int, t: float, touch_id: int = 0) -> Dictionary:
 	input_log.append([t, "tap", lane, touch_id])
 	var res := {"judgement": "", "note": null, "ring": {}}
+	# A touch id still holding a note means its release was lost: that hold was let go.
+	if _holds.has(touch_id):
+		var old: Note = _holds[touch_id]
+		_holds.erase(touch_id)
+		if old.holding:
+			_end_hold(old, t, t >= old.end_t - HOLD_GRACE)
 	var n: Note = null if piazza else _find_lane_note(lane, t)
+	if n != null and slam and lane != 1 and _bell_nearer(n, t):
+		n = null   # in slam an outer press nearer a due bell is a bell press
 	if n != null:
 		res.note = n
 		var off := t - n.t
@@ -284,24 +305,32 @@ func tap(lane: int, t: float, touch_id: int = 0) -> Dictionary:
 				_holds[touch_id] = n
 				hold_started.emit(n.lane)
 			Note.Kind.RING:
-				n.step_at = t
-				if not is_nan(n.bell_at):
-					_finish_ring(n)
+				if slam:
+					# No tilt in slam mode: a full ring is judged on its step alone.
+					_hit(n, t, _grade(off, win_touch), off, RING_POINTS)
+				else:
+					n.step_at = t
+					if not is_nan(n.bell_at):
+						_finish_ring(n)
 		res.judgement = n.judgement
-	elif not piazza and not (slam and lane != 1):
+	elif not piazza and not (slam and lane != 1) and _find_open(Note.Kind.SWIPE, t, win_swipe.z) == null:
+		# The touch that starts a rope swipe is not a wrong step.
 		var other := _find_other_lane_note(lane, t)
 		if other != null:
 			_wrong(other, t, t - other.t)
 			res.judgement = "wrong"
 			res.note = other
 	if slam and (lane == 0 or lane == 2):
-		res.ring = _slam_check(lane, t, n == null)
+		res.ring = _slam_bell(lane, t, touch_id, n == null)
+	if slam:
+		_down[touch_id] = lane
 	return res
 
 
 ## A step button went up.
 func release(t: float, touch_id: int = 0) -> void:
 	input_log.append([t, "release", touch_id])
+	_down.erase(touch_id)
 	if not _holds.has(touch_id):
 		return
 	var n: Note = _holds[touch_id]
@@ -310,33 +339,27 @@ func release(t: float, touch_id: int = 0) -> void:
 		_end_hold(n, t, t >= n.end_t - HOLD_GRACE)
 
 
-## A rope swipe across the buttons, dir 1 = to the right. Returns {judgement, note}.
+## A rope swipe across the buttons, dir 1 = to the right, t = when the finger went down.
+## Returns {judgement, note}.
 func swipe(dir: int, t: float) -> Dictionary:
 	input_log.append([t, "swipe", dir])
 	var res := {"judgement": "", "note": null}
 	if piazza:
 		return res
-	var best: Note = null
-	for i in range(_first_open, notes.size()):
-		var n := notes[i]
-		if n.t - win_swipe.z > t:
-			break
-		if n.kind == Note.Kind.SWIPE and not n.done and absf(t - n.t) <= win_swipe.z:
-			if best == null or absf(t - n.t) < absf(t - best.t):
-				best = n
-	if best == null:
+	var n := _find_open(Note.Kind.SWIPE, t, win_swipe.z)
+	if n == null:
 		return res
-	res.note = best
-	var off := t - best.t
-	if (1 if dir >= 0 else -1) != best.dir:
-		best.done = true
-		best.finished = true
-		best.hit_at = t
+	res.note = n
+	var off := t - n.t
+	if (1 if dir >= 0 else -1) != n.dir:
+		n.done = true
+		n.finished = true
+		n.hit_at = t
 		stats.notes += 1
-		_wrong(best, t, off)
+		_wrong(n, t, off)
 	else:
-		_hit(best, t, _grade(off, win_swipe), off, POINTS)
-	res.judgement = best.judgement
+		_hit(n, t, _grade(off, win_swipe), off, POINTS)
+	res.judgement = n.judgement
 	return res
 
 
@@ -349,17 +372,7 @@ func ring(t: float, tilt: bool = true) -> Dictionary:
 	if slam:
 		tilt = false
 	var w := win_tilt if tilt else win_touch
-	var best: Note = null
-	for i in range(_first_open, notes.size()):
-		var n := notes[i]
-		if n.t - w.z > t:
-			break
-		if n.done or not n.is_bell() or absf(t - n.t) > w.z:
-			continue
-		if n.kind == Note.Kind.RING and not is_nan(n.bell_at):
-			continue
-		if best == null or absf(t - n.t) < absf(t - best.t):
-			best = n
+	var best := _find_bell(t, w.z)
 	if best != null:
 		var off := t - best.t
 		var g := _grade(off, w)
@@ -377,27 +390,21 @@ func ring(t: float, tilt: bool = true) -> Dictionary:
 	_next_free_up = not up
 	var rest := _rest_at(t)
 	if rest != null:
-		if rest.judgement != "silence":
+		# Every ring costs, but one shake that rings twice within 150 ms counts once.
+		if t - _last_silence >= SILENCE_DEBOUNCE:
 			rest.judgement = "silence"
 			rest.hit_at = t
 			stats.silence += 1
 			combo = 0
 			unison_streak = 0
-			var before := _raw
-			_raw = maxf(0.0, _raw - STILL_PENALTY)
-			_breakdown.penalties += before - _raw
+			_raw -= STILL_PENALTY
+			_breakdown.penalties += STILL_PENALTY
 			_set_unison(unison_level - SILENCE_DROP)
 			_refresh_score(t)
 			judged.emit(rest, "silence", t - rest.t)
+		_last_silence = t
 		return {"up": up, "quality": "silence", "judgement": "silence", "offset": 0.0, "note": rest}
-	var near := false
-	for i in range(_first_open, notes.size()):
-		var n := notes[i]
-		if n.t - 2.0 * w.z > t:
-			break
-		if n.is_bell() and not n.done and absf(t - n.t) <= 2.0 * w.z:
-			near = true
-			break
+	var near := _find_bell(t, 2.0 * w.z) != null
 	return {"up": up, "quality": "miss" if near else "free", "judgement": "", "offset": 0.0, "note": null}
 
 
@@ -416,6 +423,10 @@ func update(t: float) -> void:
 					if n.judgement != "silence":
 						n.judgement = "still"
 						stats.still_kept += 1
+						var v := STILL_BONUS * unison_mult() * _weight
+						_raw += v
+						_breakdown.stills += v
+						_refresh_score(n.end_t)
 			Note.Kind.HOLD:
 				if n.holding:
 					if t >= n.end_t:
@@ -456,14 +467,14 @@ func _timeout(n: Note) -> float:
 		Note.Kind.BELL:
 			return win_tilt.z
 		Note.Kind.RING:
-			return maxf(win_touch.z, win_tilt.z)
+			return win_touch.z if slam else maxf(win_touch.z, win_tilt.z)
 		Note.Kind.SWIPE:
 			return win_swipe.z
 	return win_touch.z
 
 
+# Note-lock: the earliest open note on the lane whose window contains t.
 func _find_lane_note(lane: int, t: float) -> Note:
-	var best: Note = null
 	for i in range(_first_open, notes.size()):
 		var n := notes[i]
 		if n.t - win_touch.z > t:
@@ -472,9 +483,33 @@ func _find_lane_note(lane: int, t: float) -> Note:
 			continue
 		if n.kind == Note.Kind.RING and not is_nan(n.step_at):
 			continue
-		if best == null or absf(t - n.t) < absf(t - best.t):
-			best = n
-	return best
+		return n
+	return null
+
+
+# The earliest open bell (or full ring still missing its bell half) within `reach` of t.
+# In slam mode full rings take no bell.
+func _find_bell(t: float, reach: float) -> Note:
+	for i in range(_first_open, notes.size()):
+		var n := notes[i]
+		if n.t - reach > t:
+			break
+		if n.done or not n.is_bell() or absf(t - n.t) > reach:
+			continue
+		if n.kind == Note.Kind.RING and (slam or not is_nan(n.bell_at)):
+			continue
+		return n
+	return null
+
+
+func _find_open(kind: Note.Kind, t: float, reach: float) -> Note:
+	for i in range(_first_open, notes.size()):
+		var n := notes[i]
+		if n.t - reach > t:
+			break
+		if n.kind == kind and not n.done and absf(t - n.t) <= reach:
+			return n
+	return null
 
 
 func _find_other_lane_note(lane: int, t: float) -> Note:
@@ -485,6 +520,12 @@ func _find_other_lane_note(lane: int, t: float) -> Note:
 		if not n.done and n.uses_lane() and n.lane != lane and absf(t - n.t) <= win_touch.z:
 			return n
 	return null
+
+
+# Slam: is a due bell closer to t than lane note n?
+func _bell_nearer(n: Note, t: float) -> bool:
+	var b := _find_bell(t, win_touch.z)
+	return b != null and absf(t - b.t) < absf(t - n.t)
 
 
 func _rest_at(t: float) -> Note:
@@ -501,10 +542,15 @@ func _hit(n: Note, t: float, g: String, off: float, table: Dictionary) -> void:
 	n.done = true
 	n.hit_at = t
 	n.judgement = g
+	n.side = "" if absf(off) <= SIDE_DEAD_ZONE else ("early" if off < 0.0 else "late")
 	if n.kind != Note.Kind.HOLD:
 		n.finished = true
 	stats[g] += 1
 	stats.notes += 1
+	if n.side == "early":
+		stats.early_hits += 1
+	elif n.side == "late":
+		stats.late_hits += 1
 	hit_offsets.append(off)
 	_add_points(table[g], t)
 	combo += 1
@@ -566,6 +612,7 @@ func _end_hold(n: Note, t: float, kept: bool) -> void:
 		stats.let_go += 1
 		combo = 0
 		unison_streak = 0
+		_set_unison(unison_level - LET_GO_DROP)
 		judged.emit(n, "let_go", t - n.end_t)
 	hold_ended.emit(n.lane, kept)
 
@@ -579,8 +626,9 @@ func _add_points(pts: int, t: float) -> void:
 	_refresh_score(t)
 
 
+# The running total keeps penalties in full; only the score shown stops at 0.
 func _refresh_score(t: float) -> void:
-	score = int(round(_raw))
+	score = maxi(0, int(round(_raw)))
 	score_timeline.append(Vector2(t, score))
 
 
@@ -593,14 +641,21 @@ func _set_unison(level: int) -> void:
 	unison_changed.emit(level)
 
 
-# Slam: Left and Right within SLAM_GAP ring the bell at the mean of both times. A pair where both
-# presses hit notes is a chord, not a slam.
-func _slam_check(lane: int, t: float, free: bool) -> Dictionary:
+# Slam: the bell comes from the outer buttons. A press on Left or Right that hits no note rings
+# (a) at the mean time when the other outer button went down within 80 ms (a pair where both
+# presses hit notes is a chord, not a bell), or (b) at once when another button is already held,
+# so one thumb can keep a hold while the other rings.
+func _slam_bell(lane: int, t: float, touch_id: int, free: bool) -> Dictionary:
 	var other := 2 - lane
 	var p: Array = _slam_press.get(other, [])
 	if not p.is_empty() and not p[2] and t - p[0] <= SLAM_GAP and (free or p[1]):
 		p[2] = true
 		_slam_press[lane] = [t, free, true]
 		return ring((t + p[0]) * 0.5, false)
+	if free:
+		for id in _down:
+			if id != touch_id:
+				_slam_press[lane] = [t, free, true]
+				return ring(t, false)
 	_slam_press[lane] = [t, free, false]
 	return {}

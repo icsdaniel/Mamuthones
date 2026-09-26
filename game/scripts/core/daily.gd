@@ -5,7 +5,8 @@ extends RefCounted
 ## Uses its own FNV-1a hash (not Godot's hash(), which may change between engine versions) and
 ## the UTC date, so friends in different time zones share it.
 ##
-## Additions beyond the architecture doc: today(), key(date), board_id(), session_options(date),
+## Additions beyond the architecture doc: today(), key(date), board_id(date), matches(session),
+## session_options(date),
 ## and "key" in the for_date() result.
 
 const BOARD_ID := "daily"
@@ -71,8 +72,22 @@ static func key(date: Dictionary) -> String:
 	return "%04d-%02d-%02d" % [int(date.get("year", 1970)), int(date.get("month", 1)), int(date.get("day", 1))]
 
 
-static func board_id() -> String:
-	return BOARD_ID
+## The ladder of one day's procession: "daily.YYYY-MM-DD" (today when no date is given). Online,
+## Leaderboards sends every daily.* board to the platform's one recurring "daily" board.
+static func board_id(date: Dictionary = {}) -> String:
+	return "%s.%s" % [BOARD_ID, key(date if not date.is_empty() else Time.get_date_dict_from_system(true))]
+
+
+## Whether a session is the procession of the day it claims (song, difficulty and mirror match).
+static func matches(session: Session) -> bool:
+	if session.daily == "":
+		return false
+	var parts := session.daily.split("-")
+	if parts.size() != 3:
+		return false
+	var d := for_date({"year": parts[0].to_int(), "month": parts[1].to_int(), "day": parts[2].to_int()})
+	return d.key == session.daily and d.song_id == session.song.id and not session.remix \
+		and d.difficulty == session.difficulty and d.mirror == session.mirror
 
 
 ## Session options for a day's procession: {"mirror": .., "daily": "YYYY-MM-DD"}.
@@ -88,11 +103,6 @@ static func _pool() -> Array[SongData]:
 			out.append(s)
 	out.sort_custom(func(a: SongData, b: SongData) -> bool: return a.id < b.id)
 	return out
-
-
-static func _shift(date: Dictionary, days: int) -> Dictionary:
-	var unix := Time.get_unix_time_from_datetime_dict({"year": int(date.get("year", 1970)), "month": int(date.get("month", 1)), "day": int(date.get("day", 1)), "hour": 12, "minute": 0, "second": 0})
-	return Time.get_date_dict_from_unix_time(unix + days * 86400)
 
 
 ## 32-bit FNV-1a over the UTF-8 bytes, then an avalanche so nearby dates spread out.

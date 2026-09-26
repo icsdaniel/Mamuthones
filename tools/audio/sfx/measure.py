@@ -60,6 +60,32 @@ def edt(x, sr):
     return float(i10 / sr * 6)
 
 
+def rise_ms(x, sr):
+    """Time from the first onset (10 % of the peak 5 ms-RMS envelope) to 90 %: how
+    spread out in time the strikes are (a tight row is short, a ragged row long)."""
+    y = mono(x)
+    w = int(0.005 * sr)
+    env = np.sqrt(np.convolve(y ** 2, np.ones(w) / w, "same"))
+    pk = env.max()
+    a = np.argmax(env >= 0.1 * pk)
+    b = np.argmax(env >= 0.9 * pk)
+    return float((b - a) / sr * 1000)
+
+
+def flatness(x, sr):
+    """Spectral flatness (0 = pure tones, 1 = white noise) of the loudest 300 ms."""
+    y = mono(x)
+    w = int(0.3 * sr)
+    if len(y) > w:
+        e = np.convolve(y ** 2, np.ones(w), "valid")
+        i = int(np.argmax(e))
+        y = y[i:i + w]
+    S = np.abs(np.fft.rfft(y * np.hanning(len(y)))) ** 2 + 1e-20
+    f = np.fft.rfftfreq(len(y), 1 / sr)
+    S = S[(f > 100) & (f < 10000)]
+    return float(np.exp(np.mean(np.log(S))) / np.mean(S))
+
+
 def hf_click_score(x, sr):
     """Largest sample-to-sample jump of the >6 kHz residual, relative to its local RMS
     (10 ms). Isolated steps (clicks) score high; noise and strikes stay moderate."""
@@ -118,6 +144,9 @@ def main():
         m = np.abs(mono(x))
         r["onset_ms"] = round(float(np.argmax(m >= 0.1 * peak)) / sr * 1000, 2)
         r["hf_click"] = round(hf_click_score(x, sr), 1)
+        r["rise_ms"] = round(rise_ms(x, sr), 1)
+        if rel.startswith(("voice/", "fx/", "steps/", "ui/")):
+            r["flatness"] = round(flatness(x, sr), 3)
         if is_loop:
             r["seam_ratio"] = round(seam(x), 2)
             r["seam_hf"] = round(seam_hf(x, sr), 2)
@@ -189,7 +218,7 @@ def main():
         for pc in range(12):
             rel = f"steps/tone_{lane}_{pc:02d}.wav"
             if rel not in rows:
-                continue
+                continue  # odd keys are the tone below at pitch_scale 2^(1/12): exact
             x, sr = sf.read(os.path.join(OUT, rel))
             want = mtof(base_midi(pc) + LANE_INTERVALS[lane])
             # instantaneous frequency of the fundamental (band-passed +-1 semitone),
@@ -211,12 +240,21 @@ def main():
         problems.append(f"step tone pitch off by {worst:.1f} cents")
     tone_pitch_worst_cents = round(float(worst), 2)
     total = sum(os.path.getsize(p) for p in glob.glob(os.path.join(OUT, "**", "*"), recursive=True) if os.path.isfile(p))
+    groups = {}
+    for rel, r in rows.items():
+        m = re.match(r"(bells/row_(tight|loose)|voice/call|fx/rope|steps/tone|steps/foot)", rel)
+        if m:
+            groups.setdefault(m.group(1), []).append(r)
+    summary = {g: dict(rise_ms=round(float(np.mean([r["rise_ms"] for r in v])), 1),
+                       flatness=round(float(np.mean([r.get("flatness", np.nan) for r in v])), 3),
+                       seconds=round(float(np.mean([r["seconds"] for r in v])), 2)) for g, v in groups.items()}
     report = dict(total_mbytes=round(total / 1e6, 2), files=len(rows), problems=problems,
+                  groups=summary,
                   tone_pitch_worst_cents=tone_pitch_worst_cents,
                   bell_sets=bells, bell_set_differences=diffs, per_file=rows)
     with open(os.path.join(ROOT, "tools", "audio", "sfx", "measurements.json"), "w") as f:
         json.dump(report, f, indent=1)
-    print(json.dumps({k: report[k] for k in ("total_mbytes", "files", "problems", "tone_pitch_worst_cents", "bell_set_differences")}, indent=1))
+    print(json.dumps({k: report[k] for k in ("total_mbytes", "files", "problems", "tone_pitch_worst_cents", "groups", "bell_set_differences")}, indent=1))
     for s in order:
         for k, v in bells.get(s, {}).items():
             print(s, k, v)

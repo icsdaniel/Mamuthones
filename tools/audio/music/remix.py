@@ -151,7 +151,13 @@ def build(song: Song, stems: dict) -> Song:
                 if not in_stop(b):
                     r.ev("pad", b, 0.35, None, 0.8, notes=notes, attack=0.005)
         else:
-            r.ev("pad", hb, hl, None, 0.6 if energy(hb) < 3 else 0.8, notes=notes, attack=0.2)
+            # a chord is held until a stand-still cuts it, then comes back after the rest
+            cuts = sorted([hb, hb + hl] + [x for (sb, sl) in song.stops for x in (sb, sb + sl)
+                                           if hb < x < hb + hl])
+            for a, z in zip(cuts, cuts[1:]):
+                if z - a > 0.25 and not in_stop(a):
+                    r.ev("pad", a, z - a, None, 0.6 if energy(a) < 3 else 0.8, notes=notes,
+                         attack=0.2 if a == hb else 0.05)
 
     # ---- 4. melodies: the lead sings the boghe and the mancosedda; the mancosa becomes an arp
     for e in song.events:

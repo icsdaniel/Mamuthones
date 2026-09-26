@@ -30,14 +30,11 @@ var done := false        ## judged (for holds: the head was judged)
 var holding := false     ## a hold being held right now
 var finished := false    ## holds/rests: over, nothing more can happen
 var hit_at := NAN        ## input time that judged it
-var judgement := ""      ## perfect|good|early|late|miss|wrong|silence ("" while open)
+var judgement := ""      ## perfect|good|early|late|miss|wrong|silence|still ("" while open)
+var side := ""           ## hits: "early" or "late" (more than 10 ms off), "" when dead on
 var step_at := NAN       ## full rings: time of the step half
 var bell_at := NAN       ## full rings: time of the bell half
 var touch_id := -1       ## holds: the touch holding it
-
-
-func is_judgeable() -> bool:
-	return kind != Kind.REST
 
 
 func uses_lane() -> bool:

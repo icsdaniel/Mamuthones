@@ -13,7 +13,9 @@ extends Node
 ##   show(board_id := "")          platform ladder when online, else emits show_requested(board_id)
 ##   local_scores(board_id) -> Array of {score, date}, best first
 ##   best(board_id) -> int
-##   board_id(song_key, difficulty) -> "song.<key>.<difficulty>"; the daily board is "daily"
+##   board_id(song_key, difficulty) -> "song.<key>.<difficulty>"
+##   Daily boards are "daily.YYYY-MM-DD" (Daily.board_id(date)): kept per day on the phone (the last
+##   DAILY_KEEP days), and sent online to the platform's single recurring board "daily".
 ##   set_backend(obj)              anything with available(), submit(platform_id, score), show(platform_id)
 ##   platform_ids: Dictionary      board_id -> the id configured in App Store Connect / Play Console
 ##
@@ -25,6 +27,8 @@ signal submitted(board_id: String, score: int, rank: int)
 
 const PATH := "user://leaderboards.cfg"
 const KEEP := 10
+const DAILY_KEEP := 14
+const DAILY_PREFIX := "daily."
 
 var path := PATH
 var backend: Object = null
@@ -72,18 +76,39 @@ func submit(id: String, score: int) -> int:
 		if list.size() > KEEP:
 			list.resize(KEEP)
 		_boards[id] = list
+		if id.begins_with(DAILY_PREFIX):
+			_prune_daily()
 		_save()
 	if online():
-		backend.submit(platform_ids.get(id, id), score)
+		backend.submit(platform_id(id), score)
 	submitted.emit(id, score, rank)
 	return rank
 
 
 func show(id := "") -> void:
 	if online():
-		backend.show(platform_ids.get(id, id))
+		backend.show(platform_id(id))
 	else:
 		show_requested.emit(id)
+
+
+## The id a board has on Game Center / Play Games.
+func platform_id(id: String) -> String:
+	if platform_ids.has(id):
+		return platform_ids[id]
+	if id.begins_with(DAILY_PREFIX):
+		return platform_ids.get("daily", "daily")
+	return id
+
+
+func _prune_daily() -> void:
+	var days := []
+	for k in _boards:
+		if str(k).begins_with(DAILY_PREFIX):
+			days.append(k)
+	days.sort()
+	while days.size() > DAILY_KEEP:
+		_boards.erase(days.pop_front())
 
 
 func local_scores(id: String) -> Array:

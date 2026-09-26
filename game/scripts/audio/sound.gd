@@ -36,7 +36,7 @@ var _bells := {}
 # row: [tight][down] -> takes
 var _row: Array = []
 var _feet: Array = []   # [lane] -> takes
-var _tones: Array = []  # [lane] -> 12 streams, one per pitch class
+var _tones: Array = []  # [lane] -> 6 streams, for pitch classes 0, 2, .. 10
 var _drones: Array = [] # [lane] -> 12 looping streams
 var _calls: Array[AudioStream] = []
 var _ropes: Array[AudioStream] = []
@@ -55,6 +55,8 @@ var _amb_players: Array[AudioStreamPlayer] = []
 var _next := PackedInt32Array([0, 0, 0, 0, 0])  # round-robin index per pool
 
 var _key_pc := 2
+var _tone_pitch := 1.0  # odd keys play the tone a semitone below, resampled up
+const SEMITONE := 1.0594630943592953
 var _unison := 0
 var _last_take := {}
 # hold fades: gain in [0, 1] and the direction it moves in (+1 in, -1 out, 0 still)
@@ -75,15 +77,17 @@ func _ready() -> void:
 # ---------------------------------------------------------------------------- API
 
 ## Sets the song's key: step tones and hold drones play root, fifth and octave of it.
+## Call it when a song starts: it also starts the three drones, silent, so a hold
+## later only fades one in (starting an Ogg stream costs ~0.7 ms; fading costs nothing).
 func set_key(midi_root: int) -> void:
 	var pc := posmod(midi_root, 12)
-	if pc == _key_pc:
-		return
 	_key_pc = pc
+	_tone_pitch = SEMITONE if pc % 2 == 1 else 1.0
 	for lane in LANES:
 		var p := _hold_players[lane]
-		if p.playing:
-			p.stream = _drones[lane][_key_pc]
+		if p.stream != _drones[lane][pc] or not p.playing:
+			p.stream = _drones[lane][pc]
+			p.volume_db = linear_to_db(maxf(_hold_gain[lane], 0.001))
 			p.play()
 
 
@@ -101,7 +105,7 @@ func set_volume(bus: String, linear: float) -> void:
 func step(lane: int) -> void:
 	lane = clampi(lane, 0, LANES - 1)
 	_play(_foot_pool, 2, _pick(_feet[lane], lane), randf_range(-1.5, 0.5))
-	_play(_tone_pool, 3, _tones[lane][_key_pc], 0.0)
+	_play(_tone_pool, 3, _tones[lane][_key_pc / 2], 0.0, _tone_pitch)
 
 
 ## Rings the player's bell load. quality: perfect, good, ok, miss (also silence, free,
@@ -134,11 +138,12 @@ func rope() -> void:
 	_play(_sfx_pool, 4, _pick(_ropes, 301), randf_range(-1.0, 0.0))
 
 
-## Starts the lane's drone (a launeddas-style reed at the lane's pitch), looping.
+## Fades in the lane's drone (a launeddas-style reed at the lane's pitch), looping.
 func hold_start(lane: int) -> void:
 	lane = clampi(lane, 0, LANES - 1)
 	var p := _hold_players[lane]
 	if not p.playing or p.stream != _drones[lane][_key_pc]:
+		# set_key() was not called (or stop_all() ran): start it now
 		p.stream = _drones[lane][_key_pc]
 		_hold_gain[lane] = 0.0
 		p.volume_db = SILENT_DB
@@ -146,10 +151,11 @@ func hold_start(lane: int) -> void:
 	_hold_dir[lane] = 1
 
 
-## Fades the lane's drone out (no click) and stops it.
+## Fades the lane's drone out (no click). It keeps running silently, ready for the
+## next hold.
 func hold_stop(lane: int) -> void:
 	lane = clampi(lane, 0, LANES - 1)
-	if _hold_players[lane].playing:
+	if _hold_gain[lane] > 0.0 or _hold_dir[lane] > 0:
 		_hold_dir[lane] = -1
 
 
@@ -242,9 +248,8 @@ func _process(delta: float) -> void:
 		elif g <= 0.0:
 			g = 0.0
 			_hold_dir[lane] = 0
-			_hold_players[lane].stop()
 		_hold_gain[lane] = g
-		_hold_players[lane].volume_db = linear_to_db(maxf(g, 0.001))
+		_hold_players[lane].volume_db = linear_to_db(g) if g > 0.001 else -80.0
 	for i in AMBIENCES.size():
 		var tgt := _amb_target[i]
 		var g := _amb_gain[i]
@@ -259,7 +264,7 @@ func _process(delta: float) -> void:
 			p.stop()
 
 
-func _play(pool: Array[AudioStreamPlayer], which: int, stream: AudioStream, gain_db: float) -> void:
+func _play(pool: Array[AudioStreamPlayer], which: int, stream: AudioStream, gain_db: float, pitch := 1.0) -> void:
 	if stream == null:
 		return
 	# round robin, but prefer a free player so a ringing tail is not cut
@@ -275,6 +280,7 @@ func _play(pool: Array[AudioStreamPlayer], which: int, stream: AudioStream, gain
 	_next[which] = (start + 1) % n
 	p.stream = stream
 	p.volume_db = gain_db
+	p.pitch_scale = pitch
 	p.play()
 
 
@@ -343,14 +349,15 @@ func _load_all() -> void:
 	for tight in ["loose", "tight"]:
 		var by_dir: Array = []
 		for dir in ["up", "down"]:
-			by_dir.append(_load_takes("bells/row_%s_%s_%%d.ogg" % [tight, dir], TAKES))
+			by_dir.append(_load_takes("bells/row_%s_%s_%%d.wav" % [tight, dir], TAKES))
 		_row.append(by_dir)
 	for lane in LANES:
 		_feet.append(_load_takes("steps/foot_%d_%%d.wav" % lane, TAKES))
 		var tones: Array = []
 		var drones: Array = []
 		for pc in 12:
-			tones.append(_load("steps/tone_%d_%02d.wav" % [lane, pc]))
+			if pc % 2 == 0:
+				tones.append(_load("steps/tone_%d_%02d.wav" % [lane, pc]))
 			var d := _load("loops/drone_%d_%02d.ogg" % [lane, pc])
 			_set_loop(d)
 			drones.append(d)

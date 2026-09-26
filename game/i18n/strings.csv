@@ -42,6 +42,13 @@ cal_fail_too_soft,Those tilts were too gentle,Movimenti troppo leggeri
 cal_fail_too_soft_body,"Flick a little harder and snap straight back, as if shaking the bells.","Dai un colpo un po' più deciso e torna subito indietro, come per scuotere i campanacci."
 cal_fail_no_sensor,No motion sensor found,Nessun sensore di movimento
 cal_fail_no_sensor_body,"This device can't feel tilts. You can ring the bells by pressing Left and Right together (slam mode). On a computer, the space bar rings them.",Questo dispositivo non rileva i movimenti. Puoi suonare i campanacci premendo insieme Sinistra e Destra (modalità colpo). Al computer si suonano con la barra spaziatrice.
+cal_up_label,Toward you,Verso di te
+cal_down_label,Away from you,Lontano da te
+motion_ok,Motion sensors: gyroscope and accelerometer.,Sensori di movimento: giroscopio e accelerometro.
+motion_no_gyro,"No gyroscope: the tilt is read from the accelerometer, a little less precisely.","Niente giroscopio: il colpo viene letto dall'accelerometro, con un po' meno precisione."
+motion_no_sensor,No motion sensor: use slam mode (Left + Right) to ring the bells.,Nessun sensore di movimento: usa la modalità colpo (Sinistra + Destra) per suonare i campanacci.
+motion_waiting,Checking the motion sensors…,Controllo dei sensori di movimento…
+motion_uncalibrated,Not calibrated yet.,Taratura non ancora fatta.
 lat_step,Setup 2 of 2,Preparazione 2 di 2
 lat_title,Sound delay,Ritardo dell'audio
 lat_intro,Tap the drum along with the clicks you hear. This measures how late the sound reaches you.,Batti sul tamburo insieme ai clic che senti. Così misuriamo quanto arriva in ritardo il suono.
@@ -72,15 +79,17 @@ story_locked,Earn a bell at the stop before to open it,Guadagna un campanaccio n
 story_next,next,la prossima
 story_cleared,cleared,superata
 story_remix_open,remix open,remix sbloccato
-goal_song,%s: finish %s with at least 1 bell,%s: finisci «%s» con almeno 1 campanaccio
-goal_hard,%s: %d bells on %s at Hard or Expert (so far: %d),%s: %d campanacci in «%s» a Difficile o Esperto (finora: %d)
-goal_points,%s: %d carving points (you have %d),%s: %d punti d'intaglio (ne hai %d)
-goal_points_stop,%s: reach stop %d and %d carving points (you have %d),%s: arriva alla tappa %d e a %d punti d'intaglio (ne hai %d)
-goal_stop,%s: reach stop %d,%s: arriva alla tappa %d
+goal_song,Unlock %s: finish %s with at least 1 bell,Per sbloccare «%s»: finisci «%s» con almeno 1 campanaccio
+goal_hard,Unlock %s: %d bells on %s at Hard or Expert (best so far: %d),Per sbloccare %s: %d campanacci in «%s» a Difficile o Esperto (finora: %d)
+goal_points,Carve the %s: reach %d carving points (you have %d),Intaglio «%s»: arriva a %d punti d'intaglio (ne hai %d)
+goal_points_stop,Carve the %s: reach stop %d and %d carving points (you have %d),Intaglio «%s»: arriva alla tappa %d e a %d punti d'intaglio (ne hai %d)
+goal_stop,Unlock %s: reach stop %d,Per sbloccare %s: arriva alla tappa %d
+name_remix,the %s remix,il remix di «%s»
+name_bells,the %s bells,i campanacci «%s»
 unlock_song,New stop: %s,Nuova tappa: %s
-unlock_remix,Remix: %s,Remix: %s
-unlock_bells,Bell set: %s,Campanacci: %s
-unlock_mask,"Carving: %s, %s","Intaglio: %s, %s"
+unlock_remix,Now open: %s,Ora aperto: %s
+unlock_bells,Now open: %s,Ora aperti: %s
+unlock_mask,New carving: %s,Nuovo intaglio: %s
 stop_n,Stop %d,Tappa %d
 stop_lessons,Play the lessons,Fai le lezioni
 stop_difficulty,Difficulty,Difficoltà
@@ -229,6 +238,7 @@ res_meter_early,early,presto
 res_meter_late,late,tardi
 res_unlocked,Unlocked!,Sbloccato!
 res_carving,+%d carving points,+%d punti d'intaglio
+res_remix,remix,remix
 res_tip,Next time,La prossima volta
 res_again,Play again,Rigioca
 res_next,Next stop: %s,Prossima tappa: %s

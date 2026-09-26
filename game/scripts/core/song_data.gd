@@ -132,10 +132,6 @@ func length_for(use_remix := false) -> float:
 	return float(remix.get("length", length)) if use_remix and has_remix() else length
 
 
-func beat_seconds() -> float:
-	return 60.0 / bpm
-
-
 ## Seconds of song time of a beat. The remix shares the beat grid but has its own offset.
 func time_of(beat: float, use_remix := false) -> float:
 	return offset_for(use_remix) + beat * 60.0 / bpm

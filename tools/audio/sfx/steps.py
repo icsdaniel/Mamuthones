@@ -3,8 +3,10 @@
 A step is two layers played together by the Sound autoload:
   * steps/foot_{lane}_{take}.wav: a leather-soled footfall on stone (heel thump, grit,
     scuff), different for each lane and three takes each;
-  * steps/tone_{lane}_{pc}.wav: a short tuned wooden knock at the lane's pitch for
-    every key (pc = pitch class 0..11 of the song's key_root).
+  * steps/tone_{lane}_{pc}.wav: a short tuned wooden knock at the lane's pitch, for the
+    even pitch classes 0, 2, .. 10 of the song's key_root; the Sound autoload plays an
+    odd key's tone from the one a semitone below at pitch_scale 2^(1/12) (a 6 % resample
+    of a 0.34 s knock is inaudible, and it halves the files).
 Lanes are root, fifth and octave: Left = root, Middle = fifth, Right = octave.
 
 Hold drones: loops/drone_{lane}_{pc}.ogg, a launeddas-style double reed drone at the
@@ -129,7 +131,7 @@ def main() -> None:
             write_wav(f"steps/foot_{lane}_{k + 1}.wav", x * db(-3) / np.max(np.abs(x)))
     tones = {}
     for lane in range(3):
-        for pc in range(12):
+        for pc in range(0, 12, 2):
             tones[(lane, pc)] = tone(lane, pc)
     for (lane, pc), x in tones.items():
         # equal loudness across pitches: normalise RMS, higher lanes a little softer

@@ -45,7 +45,7 @@ func test_every_sample_loads() -> void:
 			if check(st != null, "%s/%s loads" % [path, f]):
 				check(st.get_length() > 0.05, "%s/%s has length" % [path, f])
 				count += 1
-	check(count >= 170, "found all samples (%d)" % count)
+	check(count >= 168, "found all samples (%d)" % count)
 
 
 func test_bell_matrix_complete() -> void:
@@ -143,18 +143,18 @@ func test_steps_follow_key() -> void:
 	var s := _sound()
 	s.set_key(60)
 	s.step(1)
-	var p: AudioStreamPlayer = null
-	for q in s._tone_pool:
-		if q.stream == s._tones[1][0]:
-			p = q
-	check(p != null, "the middle step plays the tone for C")
-	s.set_key(69)
+	var n: int = s._tone_pool.size()
+	var p: AudioStreamPlayer = s._tone_pool[(s._next[3] - 1 + n) % n]
+	check(p.stream == s._tones[1][0] and is_equal_approx(p.pitch_scale, 1.0), "the middle step in C plays the C tone")
+	s.set_key(69)  # A (pitch class 9) is played from the G# tone (8) a semitone up
 	s.step(2)
-	var found := false
-	for q in s._tone_pool:
-		found = found or q.stream == s._tones[2][9]
-	check(found, "the right step plays the tone for A")
+	p = s._tone_pool[(s._next[3] - 1 + n) % n]
+	check(p.stream == s._tones[2][4], "the right step in A uses the tone recorded a semitone below")
+	check_near(p.pitch_scale, pow(2.0, 1.0 / 12.0), 1e-6, "and raises it by exactly one semitone")
+	for lane in 3:
+		check(s._hold_players[lane].playing and s._hold_players[lane].stream == s._drones[lane][9], "drone %d runs silently in the new key" % lane)
 	await _settle()
+
 
 func test_takes_do_not_repeat() -> void:
 	var s := _sound()
@@ -186,3 +186,33 @@ func test_stop_ambience_table() -> void:
 	for i in range(1, 8):
 		for part in s.STOP_AMBIENCE[i].split("+"):
 			check(s.AMBIENCES.has(part), "stop %d ambience %s exists" % [i, part])
+
+
+func test_loop_seams_in_godot_decoder() -> void:
+	# Decode through Godot's own playback past the loop point. The step across the seam
+	# must look like any other step nearby (no click), and the second pass must start
+	# exactly like the first.
+	var paths := ["res://audio/sfx/loops/drone_0_02.ogg", "res://audio/sfx/loops/drone_1_07.ogg",
+		"res://audio/sfx/loops/drone_2_11.ogg", "res://audio/sfx/ambience/fire.ogg",
+		"res://audio/sfx/ambience/crowd.ogg", "res://audio/sfx/ambience/wind.ogg"]
+	for path in paths:
+		var st := load(path) as AudioStreamOggVorbis
+		st.loop = true
+		var frames := int(round(st.get_length() * 44100.0))
+		var pb := st.instantiate_playback()
+		pb.start(0.0)
+		var buf := PackedVector2Array()
+		while buf.size() < frames + 4096:
+			buf.append_array(pb.mix_audio(1.0, 4096))
+		# Godot's resampler puts the first sample at index 2
+		var seam := frames + 2
+		var near := 0.0
+		for i in range(seam - 2000, seam - 1):
+			near = maxf(near, absf(buf[i + 1].x - buf[i].x))
+		var jump := absf(buf[seam].x - buf[seam - 1].x)
+		check(jump <= near * 1.5 + 1e-4, "%s: seam step %.5f vs nearby steps up to %.5f" % [path.get_file(), jump, near])
+		var same := true
+		for i in 512:
+			if not buf[seam + i].is_equal_approx(buf[2 + i]):
+				same = false
+		check(same, "%s: the loop restarts sample-exactly" % path.get_file())

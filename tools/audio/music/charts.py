@@ -493,23 +493,28 @@ class Charter:
         return False
 
     def isolate_firsts(self, notes, diff):
-        """The first time each extra appears, the other extras keep away (two beats around it)."""
+        """The first time each extra (bell, hold, rest-free extras, ring, swipe, call) appears,
+        no other extra is within two beats of it, so it is met alone before it is combined."""
+        def mech(n):
+            return "call" if n.call else n.k
+
         notes.sort(key=lambda n: n.b)
         seen = set()
         remove = set()
         for n in notes:
-            m = "call" if n.call else n.k
-            if m == "step" or m in seen:
+            m = mech(n)
+            if id(n) in remove or m in ("step", "rest") or m in seen:
                 continue
             seen.add(m)
-            lo, hi = n.b - 2, n.b + max(2.0, n.len if n.k == "hold" else 0) + (0 if n.k != "hold" else 1)
+            lo = n.b - 2.0
+            hi = n.b + (n.len if n.k == "hold" else 0.0) + 2.0
             for o in notes:
                 if o is n or id(o) in remove:
                     continue
-                om = "call" if o.call else o.k
-                if om in ("step", m, "rest") or om in seen and False:
+                om = mech(o)
+                if om in ("step", "rest") or om == m:
                     continue
-                if lo <= o.b <= hi and om not in seen:
+                if lo - 1e-6 <= o.b <= hi + 1e-6:
                     remove.add(id(o))
         return [n for n in notes if id(n) not in remove]
 

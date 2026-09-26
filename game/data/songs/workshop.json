@@ -6,6 +6,7 @@
   "bpm": 80,
   "offset": 3.5,
   "audio": "res://audio/music/workshop.ogg",
+  "remix": {"id": "workshop_remix", "bpm": 80, "offset": 3.5, "audio": "res://audio/music/workshop_remix.ogg"},
   "length": 139.0,
   "preview": 99.5,
   "key_root": 62,
