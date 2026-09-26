@@ -269,7 +269,7 @@
   let ctx = null, running = false, nextBeatTime = 0, beatIndex = 0, timer = null;
   const beats = [];          // {t: perf ms, kind: 'tap'|'jolt', judged, idx, countIn}
   const tapOffsets = [], joltOffsets = [];
-  let joltBeats = 0, joltCaught = 0, falseJolts = 0, lastTapAt = -1e9, lastJoltAt = -1e9, peak = 0;
+  let armed = true, joltBeats = 0, joltCaught = 0, falseJolts = 0, lastTapAt = -1e9, lastJoltAt = -1e9, peak = 0;
   let samples = [], sampleCount = 0, rateWindowStart = performance.now(), gotMotion = false;
 
   // Map an AudioContext time to performance.now() time, including output latency when the browser reports it.
@@ -431,14 +431,17 @@
       $('rate').textContent = Math.round(sampleCount * 1000 / (t - rateWindowStart));
       sampleCount = 0; rateWindowStart = t;
     }
-    if (m > settings.thr && t - lastJoltAt > 250) {
+    // A flick's down-and-up swing makes two peaks. After a flick, stay locked for
+    // half a beat and until the motion settles below half the threshold.
+    const lockout = 30000 / settings.bpm;
+    if (!armed && t - lastJoltAt > lockout && m < settings.thr * 0.5) armed = true;
+    if (m > settings.thr) peak = Math.max(peak, m);
+    if (armed && m > settings.thr) {
+      armed = false;
       lastJoltAt = t;
-      peak = Math.max(peak, m);
       if (t - lastTapAt < 120) { falseJolts++; renderStats(); return; }
       if (ctx) bell(ctx.currentTime, 0.3);
       if (running) judge('jolt', t);
-    } else if (m > settings.thr) {
-      peak = Math.max(peak, m);
     }
   }
 
