@@ -201,6 +201,22 @@
   .pad.cue { border-color: var(--ember); }
   .pad.hit { background: var(--wood-2); border-color: var(--bone); color: var(--bone); }
 
+  /* Song picker */
+  .song-list { display: grid; gap: 10px; }
+  .song {
+    display: grid;
+    gap: 4px;
+    text-align: left;
+    padding: 14px 16px;
+    border-radius: 12px;
+    border: 1px solid var(--wood-2);
+    background: var(--wood);
+    color: var(--bone);
+    cursor: pointer;
+  }
+  .song-title { font-family: var(--display); font-size: 1.35rem; font-weight: 800; }
+  .song-meta { font-family: var(--mono); font-size: 0.8rem; color: var(--ash); }
+
   /* Results */
   .score-big {
     font-family: var(--mono);
@@ -223,14 +239,13 @@
   <p class="muted">A 45-second procession. Hold the phone in both hands: your thumbs tap the three step buttons, and a sharp tilt up or down rings your bells. Headphones recommended.</p>
   <ol class="how">
     <li><b>Calibrate:</b> tilt the phone sharply 3 times up and 3 times down, so the game learns your move.</li>
-    <li><b>Play:</b> hit each note as it reaches the line. Grey bars mean stand still: ringing there costs points.</li>
+    <li><b>Play:</b> pick a song and hit each note as it reaches the line. Grey bars mean stand still: ringing there costs points.</li>
   </ol>
   <p class="note" id="sensorNote" hidden></p>
   <div class="row">
     <button class="primary" id="introPlay">Calibrate and play</button>
     <button class="secondary" id="introSkip" hidden>Play with saved calibration</button>
   </div>
-  <p class="muted" id="bestLine" hidden></p>
   <p class="muted" style="font-size:0.9rem">Just want the raw sensor numbers? Open the <a href="test.html">shake test</a>.</p>
 </section>
 
@@ -250,10 +265,18 @@
     <div class="fact"><span class="label">Up / down</span><b id="factDir">–</b><small class="muted">can the phone tell them apart</small></div>
   </div>
   <div class="row">
-    <button class="primary" id="calibGo" hidden>Start the procession</button>
+    <button class="primary" id="calibGo" hidden>Choose a song</button>
     <button class="secondary" id="calibRedo">Start over</button>
     <button class="secondary" id="calibSkip">Skip, steps only</button>
   </div>
+</section>
+
+<!-- Song picker -->
+<section class="screen" id="songs" hidden>
+  <div class="label">Choose a song</div>
+  <h2>The <span>procession</span></h2>
+  <div class="song-list" id="songList"></div>
+  <p class="muted" style="font-size:0.9rem">Bells alternate up and down, so only their timing counts. Ember notes are the Issohadore's calls, off the beat.</p>
 </section>
 
 <!-- Game -->
@@ -279,7 +302,7 @@
 
 <!-- Results -->
 <section class="screen" id="results" hidden>
-  <div class="label">Procession complete</div>
+  <div class="label" id="resSong">Procession complete</div>
   <div class="score-big" id="resScore">0</div>
   <div class="grade" id="resGrade"></div>
   <div class="facts">
@@ -287,14 +310,17 @@
     <div class="fact"><span class="label">Best combo</span><b id="resCombo">–</b></div>
     <div class="fact"><span class="label">Perfect / good</span><b id="resPG">–</b></div>
     <div class="fact"><span class="label">Missed</span><b id="resMiss">–</b></div>
-    <div class="fact"><span class="label">Wrong way / side</span><b id="resWrong">–</b></div>
+    <div class="fact"><span class="label">Wrong step / way</span><b id="resWrong">–</b></div>
     <div class="fact"><span class="label">Rang in silence</span><b id="resSilence">–</b></div>
+    <div class="fact"><span class="label">Holds kept</span><b id="resHolds">–</b></div>
+    <div class="fact"><span class="label">Songs</span><b>2</b></div>
     <div class="fact"><span class="label">Step timing</span><b id="resTapOff">–</b></div>
     <div class="fact"><span class="label">Bell timing</span><b id="resBellOff">–</b></div>
   </div>
   <p class="muted" id="resBest"></p>
   <div class="row">
     <button class="primary" id="again">Play again</button>
+    <button class="secondary" id="toSongs">Songs</button>
     <button class="secondary" id="recal">Recalibrate</button>
   </div>
 </section>
@@ -306,7 +332,7 @@
     get(k) { try { return JSON.parse(localStorage.getItem(k)); } catch (_) { return null; } },
     set(k, v) { try { localStorage.setItem(k, JSON.stringify(v)); } catch (_) {} }
   };
-  const screens = ['intro', 'calib', 'game', 'results'];
+  const screens = ['intro', 'calib', 'songs', 'game', 'results'];
   function go(name) { screens.forEach(s => $(s).hidden = s !== name); window.scrollTo(0, 0); }
 
   /* ---------- Audio ---------- */
@@ -335,13 +361,17 @@
   }
   // Hoof-like step: a short filtered noise knock, pitched by pad (left low, right high).
   let noiseBuf = null;
-  function step(pitch) {
-    if (!ctx) return;
+  function noise() {
     if (!noiseBuf) {
       noiseBuf = ctx.createBuffer(1, ctx.sampleRate * 0.1, ctx.sampleRate);
       const d = noiseBuf.getChannelData(0);
       for (let i = 0; i < d.length; i++) d[i] = (Math.random() * 2 - 1) * Math.pow(1 - i / d.length, 3);
     }
+    return noiseBuf;
+  }
+  function step(pitch) {
+    if (!ctx) return;
+    noise();
     const t = ctx.currentTime, src = ctx.createBufferSource(), bp = ctx.createBiquadFilter(), g = ctx.createGain();
     src.buffer = noiseBuf;
     bp.type = 'bandpass'; bp.frequency.value = pitch; bp.Q.value = 4;
@@ -363,6 +393,52 @@
       o.type = 'square'; o.frequency.value = f * k * (1 + Math.random() * 0.01);
       o.connect(bp); o.start(t); o.stop(t + 0.95);
     });
+  }
+  // Launeddas-like drone while a note is held.
+  let drone = null;
+  function startDrone(lane) {
+    stopDrone();
+    if (!ctx) return;
+    const f = { L: 147, M: 196, R: 262 }[lane];
+    const g = ctx.createGain(), lp = ctx.createBiquadFilter();
+    lp.type = 'lowpass'; lp.frequency.value = 1400;
+    g.gain.setValueAtTime(0.0001, ctx.currentTime);
+    g.gain.exponentialRampToValueAtTime(0.12, ctx.currentTime + 0.03);
+    const oscs = [f, f * 1.5, f * 2.005].map((fr, k) => {
+      const o = ctx.createOscillator(); o.type = 'sawtooth'; o.frequency.value = fr;
+      const og = ctx.createGain(); og.gain.value = [1, 0.4, 0.25][k];
+      o.connect(og).connect(lp); o.start(); return o;
+    });
+    lp.connect(g).connect(ctx.destination);
+    drone = { g, oscs };
+  }
+  function stopDrone() {
+    if (!drone || !ctx) { drone = null; return; }
+    const t = ctx.currentTime, d = drone; drone = null;
+    d.g.gain.cancelScheduledValues(t);
+    d.g.gain.setValueAtTime(d.g.gain.value, t);
+    d.g.gain.exponentialRampToValueAtTime(0.0001, t + 0.08);
+    d.oscs.forEach(o => o.stop(t + 0.1));
+  }
+  // The Issohadore's call: a short rising shout.
+  function call() {
+    if (!ctx) return;
+    const t = ctx.currentTime, o = ctx.createOscillator(), bp = ctx.createBiquadFilter(), g = ctx.createGain();
+    o.type = 'sawtooth';
+    o.frequency.setValueAtTime(260, t); o.frequency.exponentialRampToValueAtTime(420, t + 0.12);
+    bp.type = 'bandpass'; bp.frequency.value = 900; bp.Q.value = 3;
+    g.gain.setValueAtTime(0.0001, t); g.gain.exponentialRampToValueAtTime(0.35, t + 0.01); g.gain.exponentialRampToValueAtTime(0.0001, t + 0.18);
+    o.connect(bp).connect(g).connect(ctx.destination); o.start(t); o.stop(t + 0.2);
+  }
+  // The rope: a noise sweep.
+  function whoosh() {
+    if (!ctx) return;
+    const t = ctx.currentTime, src = ctx.createBufferSource(), bp = ctx.createBiquadFilter(), g = ctx.createGain();
+    src.buffer = noise(); src.playbackRate.value = 0.35;
+    bp.type = 'bandpass'; bp.Q.value = 1.5;
+    bp.frequency.setValueAtTime(400, t); bp.frequency.exponentialRampToValueAtTime(2400, t + 0.25);
+    g.gain.value = 1.2;
+    src.connect(bp).connect(g).connect(ctx.destination); src.start(t);
   }
   function perfOf(ctxTime) {
     if (ctx.getOutputTimestamp) {
@@ -419,8 +495,6 @@
   // Saved as { mode: 'rot' | 'acc', thr, axis, upSign, dirOK }.
   let cal = store.get('cal2');
   if (cal) $('introSkip').hidden = false;
-  const best = store.get('best');
-  if (best) { $('bestLine').textContent = 'Your best: ' + best.toLocaleString() + ' points.'; $('bestLine').hidden = false; }
 
   const CAL_THR = 4, CAL_ROT = 80, PER_DIR = 3;
   let calShakes = [], calArmed = true, calLast = 0, capture = null;
@@ -514,30 +588,85 @@
   }
   $('calibRedo').addEventListener('click', startCalib);
   // Without a working motion sensor the procession still plays; bell notes just can't be hit.
-  $('calibSkip').addEventListener('click', () => { if (!cal) cal = null; startGame(); });
-  $('calibGo').addEventListener('click', startGame);
+  $('calibSkip').addEventListener('click', () => showSongs());
+  $('calibGo').addEventListener('click', () => showSongs());
 
   async function begin(calibrate) {
     await enableMotion();
     await audio();
     try { await navigator.wakeLock?.request('screen'); } catch (_) {}
-    if (calibrate || !cal) startCalib(); else startGame();
+    if (calibrate || !cal) startCalib(); else showSongs();
   }
   // iOS wants the permission request directly inside the tap, so both buttons call begin() straight away.
   $('introPlay').addEventListener('click', () => begin(true));
   $('introSkip').addEventListener('click', () => begin(false));
 
-  /* ---------- The procession ---------- */
-  // One symbol per beat: L / M / R step, U bell up, D bell down, - stand still.
-  const BPM = 84;
-  const CHART = [
-    'LMRU', 'RMLD', 'LMRU', 'LRM-',
-    'LLMU', 'R-MD', 'LMRU', 'RMLD',
-    'LMUD', 'RMU-', 'MLDU', 'LRUD',
-    'LMRM', 'UDUD', 'LMRU', 'U---'
-  ].join('');
-  const WIN = { perfect: 45, good: 90, ok: 140 };
+  /* ---------- Songs ---------- */
+  // Charts are written on an eighth-note grid, 8 symbols per bar:
+  //   L M R  step on that button (on an odd eighth it is an Issohadore call, off the beat)
+  //   l m r  hold that button; each following '=' extends the hold by one eighth
+  //   X      bell: tilt the phone. Bells always alternate up, down, up, down.
+  //   > <    rope swipe across the buttons, left-to-right or right-to-left
+  //   -      stand still        .  nothing
+  const SONGS = [
+    {
+      id: 'steps', title: 'The First Steps', bpm: 84,
+      about: 'Steps on the beat and alternating bells.',
+      chart: [
+        'L.M.R.X.', 'R.M.L.X.', 'L.M.R.X.', 'L.R.M.-.',
+        'L.L.M.X.', 'R.-.M.X.', 'L.M.R.X.', 'R.M.L.X.',
+        'L.M.X.X.', 'R.M.X.-.', 'M.L.X.X.', 'L.R.X.X.',
+        'L.M.R.M.', 'X.X.X.X.', 'L.M.R.X.', 'X.-.-.-.'
+      ]
+    },
+    {
+      id: 'rope', title: 'The Rope', bpm: 92,
+      about: 'New: held notes, off-beat Issohadore calls and the rope swipe.',
+      chart: [
+        'm===X.L.', 'R.M.X...', 'l===X.R.', 'M.L.X.-.',
+        'L.M.R.X.', 'L..M..X.', 'R..M.L..', 'X...-...',
+        'L.M.>...', 'X...R.M.', 'L.M.<...', 'X...r===',
+        'L.M.R.M.', 'L..R..X.', '>...m===', 'X.......'
+      ]
+    }
+  ];
+  const WIN = { perfect: 45, good: 90, ok: 140, swipe: 170 };
+  let song = SONGS[0];
   let notes = [], score = 0, combo = 0, maxCombo = 0, stats, gameRunning = false, endAt = 0, lastShakeAt = 0, armed = true;
+  const heldBy = new Map();   // pointerId -> hold note being held
+
+  function showSongs() {
+    const list = $('songList'); list.innerHTML = '';
+    SONGS.forEach(sg => {
+      const b = document.createElement('button');
+      b.className = 'song';
+      const best = store.get('best:' + sg.id);
+      b.innerHTML = `<span class="song-title"></span><span class="muted song-about"></span><span class="song-meta"></span>`;
+      b.querySelector('.song-title').textContent = sg.title;
+      b.querySelector('.song-about').textContent = sg.about;
+      b.querySelector('.song-meta').textContent = `${sg.bpm} bpm · ${Math.round(sg.chart.length * 4 * 60 / sg.bpm)} s` + (best ? ` · best ${best.toLocaleString()}` : '');
+      b.addEventListener('click', () => { song = sg; startGame(); });
+      list.appendChild(b);
+    });
+    go('songs');
+  }
+
+  function parseChart(sg, start, spe) {
+    const cells = sg.chart.join(''), out = [];
+    let bellUp = true;
+    for (let i = 0; i < cells.length; i++) {
+      const c = cells[i], t = perfOf(start + i * spe);
+      if ('LMR'.includes(c)) out.push({ type: 'step', lane: c, t, call: i % 2 === 1 });
+      else if ('lmr'.includes(c)) {
+        let j = i; while (cells[j + 1] === '=') j++;
+        out.push({ type: 'hold', lane: c.toUpperCase(), t, end: perfOf(start + j * spe) });
+      }
+      else if (c === 'X') { out.push({ type: 'bell', up: bellUp, t }); bellUp = !bellUp; }
+      else if (c === '>' || c === '<') out.push({ type: 'swipe', right: c === '>', t });
+      else if (c === '-') out.push({ type: 'rest', t });
+    }
+    return out;
+  }
 
   const canvas = $('lanes'), g2 = canvas.getContext('2d');
   function sizeCanvas() {
@@ -551,19 +680,18 @@
     go('game');
     $('countin').textContent = '';
     sizeCanvas();
-    const spb = 60 / BPM, lead = ctx.currentTime + 0.4;
+    const spb = 60 / song.bpm, lead = ctx.currentTime + 0.4;
     // Count-in: four clicks, then the chart.
     for (let i = 0; i < 4; i++) click(lead + i * spb, 0.35, i === 0 ? 1320 : 880);
-    const start = lead + 4 * spb;
-    notes = [];
-    for (let i = 0; i < CHART.length; i++) {
+    const start = lead + 4 * spb, beats = song.chart.length * 4;
+    for (let i = 0; i < beats; i++) {
       const tc = start + i * spb;
       if (i % 4 === 0) drum(tc, 0.55); else click(tc, 0.12, 660);
-      notes.push({ kind: CHART[i], t: perfOf(tc), done: false });
     }
-    endAt = notes[notes.length - 1].t + 1200;
-    score = 0; combo = 0; maxCombo = 0; armed = true; lastShakeAt = 0;
-    stats = { perfect: 0, good: 0, ok: 0, miss: 0, wrong: 0, silence: 0, tapOff: [], bellOff: [] };
+    notes = parseChart(song, start, spb / 2);
+    endAt = perfOf(start + beats * spb) + 600;
+    score = 0; combo = 0; maxCombo = 0; armed = true; lastShakeAt = 0; heldBy.clear(); stopDrone();
+    stats = { perfect: 0, good: 0, ok: 0, miss: 0, wrong: 0, silence: 0, holds: 0, kept: 0, tapOff: [], bellOff: [] };
     renderHud(); $('judge').textContent = '';
     gameRunning = true;
     motionHandler = onGameMotion;
@@ -585,7 +713,7 @@
   }
   function hit(note, off, wrong) {
     note.done = true;
-    if (wrong) { stats.wrong++; combo = 0; flash(wrong, 'var(--ember)'); renderHud(); return; }
+    if (wrong) { stats.wrong++; combo = 0; flash(wrong, 'var(--ember)'); renderHud(); return false; }
     const a = Math.abs(off);
     let pts, word, color;
     if (a <= WIN.perfect) { pts = 300; word = 'Perfect'; color = 'var(--good)'; stats.perfect++; }
@@ -593,58 +721,106 @@
     else { pts = 50; word = off < 0 ? 'Early' : 'Late'; color = 'var(--ash)'; stats.ok++; }
     combo++; maxCombo = Math.max(maxCombo, combo);
     score += Math.round(pts * mult());
-    ('LMR'.includes(note.kind) ? stats.tapOff : stats.bellOff).push(off);
+    (note.type === 'bell' ? stats.bellOff : stats.tapOff).push(off);
     try { navigator.vibrate?.(12); } catch (_) {}
     note.flash = performance.now();
+    if (note.call) { call(); word = word === 'Perfect' ? 'Hey!' : word; }
     flash(word, color); renderHud();
+    return true;
   }
   function miss(note) {
     note.done = true; stats.miss++; combo = 0;
     flash('Miss', 'var(--ash)'); renderHud();
   }
-  function nearest(t, kinds) {
+  function nearest(t, test, win = WIN.ok) {
     let best = null, d = Infinity;
     for (const n of notes) {
-      if (n.done || !kinds.includes(n.kind)) continue;
+      if (n.t - t > win) break;
+      if (n.done || !test(n)) continue;
       const off = t - n.t;
       if (Math.abs(off) < Math.abs(d)) { best = n; d = off; }
-      if (n.t - t > WIN.ok) break;
     }
-    return best && Math.abs(d) <= WIN.ok ? [best, d] : [null, 0];
+    return best && Math.abs(d) <= win ? [best, d] : [null, 0];
   }
 
+  /* Taps and holds */
   const PAD_KIND = { padL: 'L', padM: 'M', padR: 'R' };
   const PAD_PITCH = { L: 650, M: 1000, R: 1500 };
   function onTap(pad, e) {
     e.preventDefault();
-    const t = performance.now(), kind = PAD_KIND[pad.id];
-    step(PAD_PITCH[kind]);
+    const t = performance.now(), lane = PAD_KIND[pad.id];
+    step(PAD_PITCH[lane]);
     pad.classList.add('hit'); setTimeout(() => pad.classList.remove('hit'), 90);
     if (!gameRunning) return;
-    const [n, off] = nearest(t, 'LMR');
+    const [n, off] = nearest(t, x => x.type === 'step' || x.type === 'hold');
     if (!n) return;
-    hit(n, off, n.kind === kind ? null : 'Wrong step');
+    const ok = hit(n, off, n.lane === lane ? null : 'Wrong step');
+    if (ok && n.type === 'hold') {
+      stats.holds++;
+      n.holding = true;
+      heldBy.set(e.pointerId, n);
+      startDrone(lane);
+    }
+  }
+  function endHold(n, kept) {
+    n.holding = false; n.finished = true;
+    stopDrone();
+    if (kept) {
+      stats.kept++; combo++; maxCombo = Math.max(maxCombo, combo);
+      score += Math.round(150 * mult());
+      flash('Held', 'var(--good)');
+    } else {
+      combo = 0; flash('Let go', 'var(--ember)');
+    }
+    renderHud();
+  }
+  function release(e) {
+    const n = heldBy.get(e.pointerId);
+    if (!n) return;
+    heldBy.delete(e.pointerId);
+    if (n.holding) endHold(n, performance.now() >= n.end - 120);
   }
   ['padL', 'padM', 'padR'].forEach(id => $(id).addEventListener('pointerdown', e => onTap($(id), e)));
+  window.addEventListener('pointerup', release);
+  window.addEventListener('pointercancel', release);
 
+  /* Rope swipe: a finger that travels across at least 40% of the button row */
+  const padsEl = document.querySelector('.pads');
+  const swipes = new Map();   // pointerId -> { x, fired }
+  padsEl.addEventListener('pointerdown', e => {
+    swipes.set(e.pointerId, { x: e.clientX, fired: false });
+  });
+  padsEl.addEventListener('pointermove', e => {
+    const s = swipes.get(e.pointerId);
+    if (!s || s.fired) return;
+    const dx = e.clientX - s.x;
+    if (Math.abs(dx) < padsEl.clientWidth * 0.4) return;
+    s.fired = true;
+    whoosh();
+    if (!gameRunning) return;
+    const [n, off] = nearest(performance.now(), x => x.type === 'swipe', WIN.swipe);
+    if (n) hit(n, off, n.right === dx > 0 ? null : 'Wrong way');
+  });
+  const endSwipe = e => swipes.delete(e.pointerId);
+  padsEl.addEventListener('pointerup', endSwipe);
+  padsEl.addEventListener('pointercancel', endSwipe);
+
+  /* Bells */
   function onGameMotion(v, m, t, r, rm) {
     if (!cal || !gameRunning) return;
     const rot = cal.mode === 'rot';
     const val = rot ? rm : m, vec = rot ? r : v;
     if (!vec) return;
-    const lockout = 30000 / BPM;
+    const lockout = 30000 / song.bpm;
     if (!armed && t - lastShakeAt > lockout && val < cal.thr * 0.5) armed = true;
     if (!armed || val <= cal.thr) return;
     armed = false; lastShakeAt = t;
-    const up = Math.sign(vec[cal.axis]) === cal.upSign;
-    bell(cal.dirOK ? up : true);
-    // A shake on a stand-still beat breaks the silence.
-    const [rest] = nearest(t, '-');
-    const [n, off] = nearest(t, 'UD');
-    if (n && (!rest || Math.abs(n.t - t) <= Math.abs(rest.t - t))) {
-      const wantUp = n.kind === 'U';
-      hit(n, off, (!cal.dirOK || wantUp === up) ? null : 'Wrong way');
-    } else if (rest) {
+    // Bells alternate, so the game already knows the direction: only the timing is judged.
+    const [rest] = nearest(t, x => x.type === 'rest');
+    const [n, off] = nearest(t, x => x.type === 'bell');
+    bell(n ? n.up : true);
+    if (n && (!rest || Math.abs(n.t - t) <= Math.abs(rest.t - t))) hit(n, off, null);
+    else if (rest) {
       rest.done = true; stats.silence++; combo = 0;
       score = Math.max(0, score - 100);
       flash('Silence!', 'var(--red)'); renderHud();
@@ -655,21 +831,26 @@
     if (!gameRunning) return;
     const now = performance.now();
     for (const n of notes) {
+      if (n.holding && now >= n.end) {
+        for (const [id, h] of heldBy) if (h === n) heldBy.delete(id);
+        endHold(n, true);
+      }
       if (n.done) continue;
-      if (now - n.t > WIN.ok) {
-        if (n.kind === '-') n.done = true;   // stood still: fine
-        else miss(n);
+      const win = n.type === 'swipe' ? WIN.swipe : WIN.ok;
+      if (now - n.t > win) {
+        if (n.type === 'rest') n.done = true;   // stood still: fine
+        else { miss(n); if (n.type === 'hold') n.finished = true; }
       }
     }
     draw(now);
-    // Count-in numbers over the lanes, and a glow on the pad whose note is about to land.
-    const spbMs = 60000 / BPM, toFirst = notes[0].t - now;
+    // Count-in numbers over the lanes, and a glow on the button whose note is about to land.
+    const spbMs = 60000 / song.bpm, toFirst = notes[0].t - now;
     $('countin').textContent = toFirst > 0 && toFirst < spbMs * 4 ? String(Math.ceil(toFirst / spbMs)) : '';
     const cue = { L: false, M: false, R: false };
     for (const n of notes) {
-      if (n.done) continue;
       if (n.t - now > 160) break;
-      if (n.kind in cue) cue[n.kind] = true;
+      if (!n.done && n.lane) cue[n.lane] = true;
+      if (n.holding) cue[n.lane] = true;
     }
     $('padL').classList.toggle('cue', cue.L);
     $('padM').classList.toggle('cue', cue.M);
@@ -684,8 +865,9 @@
     const w = canvas.clientWidth, h = canvas.clientHeight;
     g2.clearRect(0, 0, w, h);
     const hitY = h * 0.84, ahead = 2000;   // ms of notes visible above the line
+    const yOf = t => hitY - (t - now) / ahead * hitY;
     const lanes = { L: 0, M: 1, R: 2 };
-    const lw = w / 3;
+    const lw = w / 3, laneX = l => lw * lanes[l] + lw / 2;
     // Firelight rising from the hit line.
     const glow = g2.createLinearGradient(0, hitY - h * 0.5, 0, h);
     glow.addColorStop(0, 'rgba(224,162,74,0)');
@@ -704,11 +886,13 @@
     g2.fillStyle = '#ede6da';
     g2.fillRect(4, hitY - 1.5, w - 8, 3);
     const r = Math.min(lw * 0.36, 24);
-    for (const n of notes) {
-      const dt = n.t - now;
-      if (dt > ahead || dt < -300) continue;
-      const y = hitY - dt / ahead * hitY;
-      if (n.kind === '-') {
+    // Draw from the far end so nearer notes sit on top.
+    for (let i = notes.length - 1; i >= 0; i--) {
+      const n = notes[i];
+      const tailT = n.type === 'hold' ? n.end : n.t;
+      if (n.t - now > ahead || tailT - now < -300) continue;
+      const y = yOf(n.t);
+      if (n.type === 'rest') {
         if (n.done && n.t < now - 150) continue;
         g2.fillStyle = 'rgba(168,156,140,0.35)';
         g2.fillRect(8, y - 4, w - 16, 8);
@@ -716,6 +900,16 @@
         g2.font = '600 10px "IBM Plex Mono", monospace';
         g2.fillText('STILL', w / 2, y - 8);
         continue;
+      }
+      if (n.type === 'hold' && !n.finished) {
+        // The held sound: a bar up to where the note ends, drawn from the line once it's held.
+        const x = laneX(n.lane), top = yOf(n.end), bottom = n.holding ? hitY : y;
+        if (!n.done || n.holding) {
+          g2.fillStyle = n.holding ? 'rgba(224,162,74,0.85)' : 'rgba(237,230,218,0.55)';
+          g2.fillRect(x - r * 0.35, top, r * 0.7, Math.max(0, bottom - top));
+          g2.beginPath(); g2.arc(x, top, r * 0.35, 0, Math.PI * 2); g2.fill();
+        }
+        if (n.done) continue;
       }
       if (n.done && !n.flash) continue;
       let yy = y, scale = 1;
@@ -725,36 +919,54 @@
         g2.globalAlpha = 1 - age / 240;
         yy = hitY; scale = 1 + age / 240 * 0.6;
       }
-      const isBell = n.kind === 'U' || n.kind === 'D';
-      const x = isBell ? w / 2 : lw * lanes[n.kind] + lw / 2, rr = r * scale;
-      if (isBell) {
+      const rr = r * scale;
+      if (n.type === 'bell') {
         // A bell spans every lane (it's a tilt, not a tap), with the direction in the middle.
         g2.fillStyle = 'rgba(192,57,43,0.55)';
         g2.fillRect(8, yy - rr * 0.35, w - 16, rr * 0.7);
         g2.fillStyle = '#c0392b';
-        g2.beginPath(); g2.arc(x, yy, rr, 0, Math.PI * 2); g2.fill();
+        g2.beginPath(); g2.arc(w / 2, yy, rr, 0, Math.PI * 2); g2.fill();
         g2.fillStyle = '#ede6da';
         g2.font = `800 ${Math.round(rr * 1.25)}px "Alegreya SC", Georgia, serif`;
         g2.textBaseline = 'middle';
-        g2.fillText(cal && !cal.dirOK ? '•' : (n.kind === 'U' ? '↑' : '↓'), x, yy + 1);
+        g2.fillText(n.up ? '↑' : '↓', w / 2, yy + 1);
         g2.textBaseline = 'alphabetic';
+      } else if (n.type === 'swipe') {
+        // The Issohadore's rope: a red cord across the lanes, arrow showing the throw.
+        g2.strokeStyle = '#c0392b'; g2.lineWidth = 5;
+        g2.beginPath();
+        for (let k = 0; k <= 24; k++) {
+          const px = 10 + (w - 20) * k / 24;
+          const py = yy + Math.sin(k / 24 * Math.PI * 3) * 5;
+          k ? g2.lineTo(px, py) : g2.moveTo(px, py);
+        }
+        g2.stroke();
+        const ax = n.right ? w - 14 : 14, dir = n.right ? 1 : -1;
+        g2.fillStyle = '#c0392b';
+        g2.beginPath(); g2.moveTo(ax + dir * 8, yy); g2.lineTo(ax - dir * 10, yy - 11); g2.lineTo(ax - dir * 10, yy + 11); g2.fill();
+        g2.fillStyle = '#ede6da';
+        g2.font = '600 10px "IBM Plex Mono", monospace';
+        g2.fillText(n.right ? 'SWIPE →' : '← SWIPE', w / 2, yy - 12);
       } else {
-        // A step: a bone-white hoof ring.
-        g2.strokeStyle = '#ede6da'; g2.lineWidth = Math.max(3, rr * 0.28);
+        // A step: a hoof ring. Off-beat Issohadore calls are ember-coloured.
+        const x = laneX(n.lane);
+        const col = n.call ? '#e0a24a' : '#ede6da';
+        g2.strokeStyle = col; g2.lineWidth = Math.max(3, rr * 0.28);
         g2.beginPath(); g2.arc(x, yy, rr * 0.82, 0, Math.PI * 2); g2.stroke();
-        g2.fillStyle = 'rgba(237,230,218,0.18)'; g2.fill();
+        g2.fillStyle = n.call ? 'rgba(224,162,74,0.25)' : 'rgba(237,230,218,0.18)'; g2.fill();
+        if (n.type === 'hold') { g2.fillStyle = col; g2.beginPath(); g2.arc(x, yy, rr * 0.3, 0, Math.PI * 2); g2.fill(); }
       }
       g2.globalAlpha = 1;
     }
   }
 
   function finish() {
-    gameRunning = false; motionHandler = null;
-    const total = notes.filter(n => n.kind !== '-').length;
-    const hits = stats.perfect + stats.good + stats.ok;
+    gameRunning = false; motionHandler = null; stopDrone(); heldBy.clear();
+    const total = notes.filter(n => n.type !== 'rest').length;
     const acc = total ? (stats.perfect + stats.good * 0.7 + stats.ok * 0.3) / total : 0;
     const avg = a => a.length ? Math.round(a.reduce((s, x) => s + x, 0) / a.length) : null;
     const fmt = v => v === null ? '–' : (v > 0 ? '+' : '') + v + ' ms';
+    $('resSong').textContent = song.title;
     $('resScore').textContent = score.toLocaleString();
     $('resGrade').textContent = acc > 0.9 ? 'The whole row rang as one' : acc > 0.7 ? 'A proud procession' : acc > 0.45 ? 'Keep walking with the row' : 'The Issohadores are waiting for you';
     $('resAcc').textContent = Math.round(acc * 100) + '%';
@@ -763,16 +975,17 @@
     $('resMiss').textContent = stats.miss;
     $('resWrong').textContent = stats.wrong;
     $('resSilence').textContent = stats.silence;
+    $('resHolds').textContent = notes.some(n => n.type === 'hold') ? `${stats.kept} / ${notes.filter(n => n.type === 'hold').length}` : '–';
     $('resTapOff').textContent = fmt(avg(stats.tapOff));
     $('resBellOff').textContent = fmt(avg(stats.bellOff));
-    const prev = store.get('best') || 0;
-    if (score > prev) { store.set('best', score); $('resBest').textContent = prev ? `New best, up from ${prev.toLocaleString()}.` : 'Your first procession is saved as your best.'; }
-    else $('resBest').textContent = `Your best is ${prev.toLocaleString()}.`;
-    $('bestLine').textContent = 'Your best: ' + Math.max(prev, score).toLocaleString() + ' points.'; $('bestLine').hidden = false;
+    const key = 'best:' + song.id, prev = store.get(key) || 0;
+    if (score > prev) { store.set(key, score); $('resBest').textContent = prev ? `New best, up from ${prev.toLocaleString()}.` : 'Saved as your best for this song.'; }
+    else $('resBest').textContent = `Your best on this song is ${prev.toLocaleString()}.`;
     go('results');
   }
-  if (location.hash === '#debug') window.__notes = () => notes;
+  if (location.hash === '#debug') { window.__notes = () => notes; window.__song = id => { song = SONGS.find(s => s.id === id); }; }
   $('again').addEventListener('click', startGame);
+  $('toSongs').addEventListener('click', showSongs);
   $('recal').addEventListener('click', startCalib);
 })();
 </script>
