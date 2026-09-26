@@ -144,16 +144,17 @@
   .progress { height: 4px; background: var(--wood); border-radius: 2px; overflow: hidden; }
   .progress i { display: block; height: 100%; width: 0; background: var(--bone); }
   .play {
-    display: grid;
-    grid-template-columns: 24% 1fr 24%;
+    display: flex;
+    flex-direction: column;
     gap: 8px;
-    height: 74vh;
-    min-height: 380px;
+    height: 76vh;
+    min-height: 400px;
     touch-action: none;
     user-select: none;
     -webkit-user-select: none;
   }
-  .lane-wrap { position: relative; min-width: 0; }
+  .pads { flex: 0 0 18%; display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }
+  .lane-wrap { flex: 1 1 auto; position: relative; min-height: 0; }
   canvas#lanes { width: 100%; height: 100%; display: block; border-radius: 12px; background: var(--wood); }
   .judge {
     position: absolute;
@@ -184,9 +185,8 @@
     display: flex;
     flex-direction: column;
     align-items: center;
-    justify-content: flex-end;
-    gap: 4px;
-    padding-bottom: 18px;
+    justify-content: center;
+    gap: 6px;
     text-align: center;
     font-family: var(--display);
     font-size: 1.05rem;
@@ -194,11 +194,9 @@
     transition: border-color 80ms, background 80ms;
   }
   .pad .hoof {
-    width: 38px; height: 38px;
+    width: 30px; height: 30px;
     border-radius: 50%;
     border: 3px solid currentColor;
-    margin-bottom: auto;
-    margin-top: 40%;
   }
   .pad.cue { border-color: var(--ember); }
   .pad.hit { background: var(--wood-2); border-color: var(--bone); color: var(--bone); }
@@ -222,7 +220,7 @@
 <section class="screen" id="intro">
   <div class="label">Mamuthones prototype</div>
   <h1>The Weight of <span>Bells</span></h1>
-  <p class="muted">A 45-second procession. Hold the phone in both hands: your thumbs tap the left and right steps, and a sharp tilt up or down rings your bells. Headphones recommended.</p>
+  <p class="muted">A 45-second procession. Hold the phone in both hands: your thumbs tap the three step buttons, and a sharp tilt up or down rings your bells. Headphones recommended.</p>
   <ol class="how">
     <li><b>Calibrate:</b> tilt the phone sharply 3 times up and 3 times down, so the game learns your move.</li>
     <li><b>Play:</b> hit each note as it reaches the line. Grey bars mean stand still: ringing there costs points.</li>
@@ -266,13 +264,16 @@
   </div>
   <div class="progress"><i id="prog"></i></div>
   <div class="play" id="play">
-    <div class="pad" id="padL" role="button" aria-label="Left step"><span class="hoof" aria-hidden="true"></span>Left</div>
     <div class="lane-wrap">
       <canvas id="lanes"></canvas>
       <div class="judge" id="judge" aria-live="polite"></div>
       <div class="countin" id="countin"></div>
     </div>
-    <div class="pad" id="padR" role="button" aria-label="Right step"><span class="hoof" aria-hidden="true"></span>Right</div>
+    <div class="pads">
+      <div class="pad" id="padL" role="button" aria-label="Left step"><span class="hoof" aria-hidden="true"></span>Left</div>
+      <div class="pad" id="padM" role="button" aria-label="Middle step"><span class="hoof" aria-hidden="true"></span>Middle</div>
+      <div class="pad" id="padR" role="button" aria-label="Right step"><span class="hoof" aria-hidden="true"></span>Right</div>
+    </div>
   </div>
 </section>
 
@@ -332,9 +333,9 @@
     g.gain.exponentialRampToValueAtTime(0.0001, time + 0.35);
     o.connect(g).connect(ctx.destination); o.start(time); o.stop(time + 0.4);
   }
-  // Hoof-like step: a short filtered noise knock, higher for the right pad.
+  // Hoof-like step: a short filtered noise knock, pitched by pad (left low, right high).
   let noiseBuf = null;
-  function step(high) {
+  function step(pitch) {
     if (!ctx) return;
     if (!noiseBuf) {
       noiseBuf = ctx.createBuffer(1, ctx.sampleRate * 0.1, ctx.sampleRate);
@@ -343,7 +344,7 @@
     }
     const t = ctx.currentTime, src = ctx.createBufferSource(), bp = ctx.createBiquadFilter(), g = ctx.createGain();
     src.buffer = noiseBuf;
-    bp.type = 'bandpass'; bp.frequency.value = high ? 1500 : 700; bp.Q.value = 4;
+    bp.type = 'bandpass'; bp.frequency.value = pitch; bp.Q.value = 4;
     g.gain.value = 0.9;
     src.connect(bp).connect(g).connect(ctx.destination); src.start(t);
   }
@@ -527,13 +528,13 @@
   $('introSkip').addEventListener('click', () => begin(false));
 
   /* ---------- The procession ---------- */
-  // One symbol per beat: L left step, R right step, U bell up, D bell down, - stand still.
+  // One symbol per beat: L / M / R step, U bell up, D bell down, - stand still.
   const BPM = 84;
   const CHART = [
-    'LRLU', 'LRLD', 'LRLU', 'LRL-',
-    'LLRU', 'L-LD', 'LRRU', 'LRLD',
-    'LRUD', 'LRU-', 'RLDU', 'LRUD',
-    'LLRR', 'UDUD', 'LRLU', 'U---'
+    'LMRU', 'RMLD', 'LMRU', 'LRM-',
+    'LLMU', 'R-MD', 'LMRU', 'RMLD',
+    'LMUD', 'RMU-', 'MLDU', 'LRUD',
+    'LMRM', 'UDUD', 'LMRU', 'U---'
   ].join('');
   const WIN = { perfect: 45, good: 90, ok: 140 };
   let notes = [], score = 0, combo = 0, maxCombo = 0, stats, gameRunning = false, endAt = 0, lastShakeAt = 0, armed = true;
@@ -592,7 +593,7 @@
     else { pts = 50; word = off < 0 ? 'Early' : 'Late'; color = 'var(--ash)'; stats.ok++; }
     combo++; maxCombo = Math.max(maxCombo, combo);
     score += Math.round(pts * mult());
-    (note.kind === 'L' || note.kind === 'R' ? stats.tapOff : stats.bellOff).push(off);
+    ('LMR'.includes(note.kind) ? stats.tapOff : stats.bellOff).push(off);
     try { navigator.vibrate?.(12); } catch (_) {}
     note.flash = performance.now();
     flash(word, color); renderHud();
@@ -612,17 +613,19 @@
     return best && Math.abs(d) <= WIN.ok ? [best, d] : [null, 0];
   }
 
+  const PAD_KIND = { padL: 'L', padM: 'M', padR: 'R' };
+  const PAD_PITCH = { L: 650, M: 1000, R: 1500 };
   function onTap(pad, e) {
     e.preventDefault();
-    const t = performance.now(), right = pad.id === 'padR';
-    step(right);
+    const t = performance.now(), kind = PAD_KIND[pad.id];
+    step(PAD_PITCH[kind]);
     pad.classList.add('hit'); setTimeout(() => pad.classList.remove('hit'), 90);
     if (!gameRunning) return;
-    const [n, off] = nearest(t, 'LR');
+    const [n, off] = nearest(t, 'LMR');
     if (!n) return;
-    hit(n, off, (n.kind === 'R') === right ? null : 'Wrong side');
+    hit(n, off, n.kind === kind ? null : 'Wrong step');
   }
-  [$('padL'), $('padR')].forEach(p => p.addEventListener('pointerdown', e => onTap(p, e)));
+  ['padL', 'padM', 'padR'].forEach(id => $(id).addEventListener('pointerdown', e => onTap($(id), e)));
 
   function onGameMotion(v, m, t, r, rm) {
     if (!cal || !gameRunning) return;
@@ -662,14 +665,15 @@
     // Count-in numbers over the lanes, and a glow on the pad whose note is about to land.
     const spbMs = 60000 / BPM, toFirst = notes[0].t - now;
     $('countin').textContent = toFirst > 0 && toFirst < spbMs * 4 ? String(Math.ceil(toFirst / spbMs)) : '';
-    let cueL = false, cueR = false;
+    const cue = { L: false, M: false, R: false };
     for (const n of notes) {
       if (n.done) continue;
       if (n.t - now > 160) break;
-      if (n.kind === 'L') cueL = true; else if (n.kind === 'R') cueR = true;
+      if (n.kind in cue) cue[n.kind] = true;
     }
-    $('padL').classList.toggle('cue', cueL);
-    $('padR').classList.toggle('cue', cueR);
+    $('padL').classList.toggle('cue', cue.L);
+    $('padM').classList.toggle('cue', cue.M);
+    $('padR').classList.toggle('cue', cue.R);
     const first = notes[0].t, last = notes[notes.length - 1].t;
     $('prog').style.width = Math.max(0, Math.min(1, (now - first) / (last - first))) * 100 + '%';
     if (now > endAt) return finish();
@@ -680,7 +684,7 @@
     const w = canvas.clientWidth, h = canvas.clientHeight;
     g2.clearRect(0, 0, w, h);
     const hitY = h * 0.84, ahead = 2000;   // ms of notes visible above the line
-    const lanes = { L: 0, U: 1, D: 1, R: 2 };
+    const lanes = { L: 0, M: 1, R: 2 };
     const lw = w / 3;
     // Firelight rising from the hit line.
     const glow = g2.createLinearGradient(0, hitY - h * 0.5, 0, h);
@@ -688,15 +692,12 @@
     glow.addColorStop(0.75, 'rgba(224,162,74,0.10)');
     glow.addColorStop(1, 'rgba(192,57,43,0.06)');
     g2.fillStyle = glow; g2.fillRect(0, 0, w, h);
-    // Bell lane is the middle one; mark it with a faint red wash.
-    g2.fillStyle = 'rgba(192,57,43,0.07)';
-    g2.fillRect(lw, 0, lw, h);
     g2.fillStyle = '#2e2620';
     g2.fillRect(lw - 0.5, 0, 1, h); g2.fillRect(lw * 2 - 0.5, 0, 1, h);
     g2.fillStyle = '#a89c8c';
     g2.font = '600 11px "IBM Plex Mono", monospace';
     g2.textAlign = 'center';
-    ['LEFT', 'BELL', 'RIGHT'].forEach((s, i) => g2.fillText(s, lw * i + lw / 2, h - 10));
+    ['LEFT', 'MIDDLE', 'RIGHT'].forEach((s, i) => g2.fillText(s, lw * i + lw / 2, h - 10));
     // Hit line with a soft ember glow.
     g2.fillStyle = 'rgba(224,162,74,0.25)';
     g2.fillRect(4, hitY - 6, w - 8, 12);
@@ -724,9 +725,12 @@
         g2.globalAlpha = 1 - age / 240;
         yy = hitY; scale = 1 + age / 240 * 0.6;
       }
-      const x = lw * lanes[n.kind] + lw / 2, rr = r * scale;
-      if (n.kind === 'U' || n.kind === 'D') {
-        // A bell: rounded body with a clapper, pointing the way to tilt.
+      const isBell = n.kind === 'U' || n.kind === 'D';
+      const x = isBell ? w / 2 : lw * lanes[n.kind] + lw / 2, rr = r * scale;
+      if (isBell) {
+        // A bell spans every lane (it's a tilt, not a tap), with the direction in the middle.
+        g2.fillStyle = 'rgba(192,57,43,0.55)';
+        g2.fillRect(8, yy - rr * 0.35, w - 16, rr * 0.7);
         g2.fillStyle = '#c0392b';
         g2.beginPath(); g2.arc(x, yy, rr, 0, Math.PI * 2); g2.fill();
         g2.fillStyle = '#ede6da';
