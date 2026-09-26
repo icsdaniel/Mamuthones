@@ -1,0 +1,466 @@
+{
+ "id": "s1",
+ "title": {
+  "en": "Stop 1",
+  "it": "Tappa 1"
+ },
+ "stop": 1,
+ "kind": "tutorial",
+ "bpm": 120,
+ "offset": 1.0,
+ "audio": "res://audio/music/missing_s1.ogg",
+ "length": 16.0,
+ "preview": 2.0,
+ "key_root": 60,
+ "sections": [
+  {
+   "name": "all",
+   "b": 0,
+   "len": 28
+  }
+ ],
+ "charts": {
+  "easy": [
+   {
+    "b": 0,
+    "k": "step",
+    "lane": 0
+   },
+   {
+    "b": 1,
+    "k": "step",
+    "lane": 1
+   },
+   {
+    "b": 2,
+    "k": "step",
+    "lane": 2
+   },
+   {
+    "b": 3,
+    "k": "step",
+    "lane": 0
+   },
+   {
+    "b": 4,
+    "k": "step",
+    "lane": 1
+   },
+   {
+    "b": 5,
+    "k": "step",
+    "lane": 2
+   },
+   {
+    "b": 6,
+    "k": "step",
+    "lane": 0
+   },
+   {
+    "b": 7,
+    "k": "step",
+    "lane": 1
+   },
+   {
+    "b": 8,
+    "k": "step",
+    "lane": 2
+   },
+   {
+    "b": 9,
+    "k": "step",
+    "lane": 0
+   },
+   {
+    "b": 10,
+    "k": "step",
+    "lane": 1
+   },
+   {
+    "b": 11,
+    "k": "step",
+    "lane": 2
+   },
+   {
+    "b": 12,
+    "k": "step",
+    "lane": 0
+   },
+   {
+    "b": 13,
+    "k": "step",
+    "lane": 1
+   },
+   {
+    "b": 14,
+    "k": "step",
+    "lane": 2
+   },
+   {
+    "b": 15,
+    "k": "step",
+    "lane": 0
+   },
+   {
+    "b": 16,
+    "k": "bell"
+   },
+   {
+    "b": 18,
+    "k": "rest",
+    "len": 2
+   },
+   {
+    "b": 21,
+    "k": "bell"
+   }
+  ],
+  "medium": [
+   {
+    "b": 0,
+    "k": "step",
+    "lane": 0
+   },
+   {
+    "b": 1,
+    "k": "step",
+    "lane": 1
+   },
+   {
+    "b": 2,
+    "k": "step",
+    "lane": 2
+   },
+   {
+    "b": 3,
+    "k": "step",
+    "lane": 0
+   },
+   {
+    "b": 4,
+    "k": "step",
+    "lane": 1
+   },
+   {
+    "b": 5,
+    "k": "step",
+    "lane": 2
+   },
+   {
+    "b": 6,
+    "k": "step",
+    "lane": 0
+   },
+   {
+    "b": 7,
+    "k": "step",
+    "lane": 1
+   },
+   {
+    "b": 8,
+    "k": "step",
+    "lane": 2
+   },
+   {
+    "b": 9,
+    "k": "step",
+    "lane": 0
+   },
+   {
+    "b": 10,
+    "k": "step",
+    "lane": 1
+   },
+   {
+    "b": 11,
+    "k": "step",
+    "lane": 2
+   },
+   {
+    "b": 12,
+    "k": "step",
+    "lane": 0
+   },
+   {
+    "b": 13,
+    "k": "step",
+    "lane": 1
+   },
+   {
+    "b": 14,
+    "k": "step",
+    "lane": 2
+   },
+   {
+    "b": 15,
+    "k": "step",
+    "lane": 0
+   },
+   {
+    "b": 16,
+    "k": "bell"
+   },
+   {
+    "b": 18,
+    "k": "rest",
+    "len": 2
+   },
+   {
+    "b": 21,
+    "k": "bell"
+   },
+   {
+    "b": 22,
+    "k": "hold",
+    "lane": 1,
+    "len": 2
+   }
+  ],
+  "hard": [
+   {
+    "b": 0,
+    "k": "step",
+    "lane": 0
+   },
+   {
+    "b": 1,
+    "k": "step",
+    "lane": 1
+   },
+   {
+    "b": 2,
+    "k": "step",
+    "lane": 2
+   },
+   {
+    "b": 3,
+    "k": "step",
+    "lane": 0
+   },
+   {
+    "b": 4,
+    "k": "step",
+    "lane": 1
+   },
+   {
+    "b": 5,
+    "k": "step",
+    "lane": 2
+   },
+   {
+    "b": 6,
+    "k": "step",
+    "lane": 0
+   },
+   {
+    "b": 7,
+    "k": "step",
+    "lane": 1
+   },
+   {
+    "b": 8,
+    "k": "step",
+    "lane": 2
+   },
+   {
+    "b": 9,
+    "k": "step",
+    "lane": 0
+   },
+   {
+    "b": 10,
+    "k": "step",
+    "lane": 1
+   },
+   {
+    "b": 11,
+    "k": "step",
+    "lane": 2
+   },
+   {
+    "b": 12,
+    "k": "step",
+    "lane": 0
+   },
+   {
+    "b": 13,
+    "k": "step",
+    "lane": 1
+   },
+   {
+    "b": 14,
+    "k": "step",
+    "lane": 2
+   },
+   {
+    "b": 15,
+    "k": "step",
+    "lane": 0
+   },
+   {
+    "b": 16,
+    "k": "bell"
+   },
+   {
+    "b": 18,
+    "k": "rest",
+    "len": 2
+   },
+   {
+    "b": 21,
+    "k": "bell"
+   },
+   {
+    "b": 22,
+    "k": "hold",
+    "lane": 1,
+    "len": 2
+   },
+   {
+    "b": 25,
+    "k": "swipe",
+    "dir": 1
+   },
+   {
+    "b": 26,
+    "k": "ring",
+    "lane": 0
+   },
+   {
+    "b": 27,
+    "k": "step",
+    "lane": 2,
+    "call": true
+   }
+  ],
+  "expert": [
+   {
+    "b": 0,
+    "k": "step",
+    "lane": 0
+   },
+   {
+    "b": 1,
+    "k": "step",
+    "lane": 1
+   },
+   {
+    "b": 2,
+    "k": "step",
+    "lane": 2
+   },
+   {
+    "b": 3,
+    "k": "step",
+    "lane": 0
+   },
+   {
+    "b": 4,
+    "k": "step",
+    "lane": 1
+   },
+   {
+    "b": 5,
+    "k": "step",
+    "lane": 2
+   },
+   {
+    "b": 6,
+    "k": "step",
+    "lane": 0
+   },
+   {
+    "b": 7,
+    "k": "step",
+    "lane": 1
+   },
+   {
+    "b": 8,
+    "k": "step",
+    "lane": 2
+   },
+   {
+    "b": 9,
+    "k": "step",
+    "lane": 0
+   },
+   {
+    "b": 10,
+    "k": "step",
+    "lane": 1
+   },
+   {
+    "b": 11,
+    "k": "step",
+    "lane": 2
+   },
+   {
+    "b": 12,
+    "k": "step",
+    "lane": 0
+   },
+   {
+    "b": 13,
+    "k": "step",
+    "lane": 1
+   },
+   {
+    "b": 14,
+    "k": "step",
+    "lane": 2
+   },
+   {
+    "b": 15,
+    "k": "step",
+    "lane": 0
+   },
+   {
+    "b": 16,
+    "k": "bell"
+   },
+   {
+    "b": 18,
+    "k": "rest",
+    "len": 2
+   },
+   {
+    "b": 21,
+    "k": "bell"
+   },
+   {
+    "b": 22,
+    "k": "hold",
+    "lane": 1,
+    "len": 2
+   },
+   {
+    "b": 25,
+    "k": "swipe",
+    "dir": 1
+   },
+   {
+    "b": 26,
+    "k": "ring",
+    "lane": 0
+   },
+   {
+    "b": 27,
+    "k": "step",
+    "lane": 2,
+    "call": true
+   }
+  ]
+ },
+ "lessons": [
+  {
+   "topic": "steps",
+   "b": 0,
+   "len": 16
+  },
+  {
+   "topic": "bells",
+   "b": 16,
+   "len": 8
+  }
+ ]
+}

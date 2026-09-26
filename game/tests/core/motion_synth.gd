@@ -1,0 +1,82 @@
+extends RefCounted
+## Synthetic phone motion for the calibration and detection tests, sampled like Godot reads
+## sensors: once per frame (60 fps with a little jitter), each reading the value at that instant.
+##
+## A tilt ("flick") rotates the phone about its x axis: a first lobe in the tilt's direction, then a
+## return lobe the other way (so one flick has two lobes). The top edge moving toward or away from
+## the player also gives linear acceleration, mostly on z and y.
+## A thumb tap is a short sharp spike, mostly on the screen's z axis, lasting a few ms, with little
+## rotation.
+
+var rng := RandomNumberGenerator.new()
+var events: Array = []   # {kind, t0, sign, rot, acc, dur, acc_axis_sign}
+var acc_noise := 0.0
+var gyro_noise := 0.0
+var fps := 60.0
+var jitter := 0.002
+
+
+func _init(p_seed := 1) -> void:
+	rng.seed = p_seed
+
+
+## A flick starting at t0. up = true tilts the top edge toward the player.
+func flick(t0: float, up: bool, rot_peak := 400.0, acc_peak := 12.0, dur := 0.2, acc_consistent := true) -> void:
+	var acc_sign := 1.0 if acc_consistent or rng.randf() < 0.5 else -1.0
+	events.append({"kind": "flick", "t0": t0, "sign": 1.0 if up else -1.0, "rot": rot_peak, "acc": acc_peak, "dur": dur, "acc_sign": acc_sign})
+
+
+## A hard thumb tap at t0: `acc` m/s² spike on z lasting `dur` seconds, with `rot` °/s of rotation.
+func tap(t0: float, acc := 25.0, dur := 0.005, rot := 25.0) -> void:
+	events.append({"kind": "tap", "t0": t0, "acc": acc, "dur": dur, "rot": rot})
+
+
+## Frame times from t0 to t1.
+func frames(t0: float, t1: float) -> Array[float]:
+	var out: Array[float] = []
+	var t := t0
+	while t < t1:
+		out.append(t)
+		t += 1.0 / fps + rng.randf_range(-jitter, jitter)
+	return out
+
+
+## Frame times guaranteed to include each tap's spike (worst case for tap rejection).
+func frames_hitting_taps(t0: float, t1: float) -> Array[float]:
+	var out := frames(t0, t1)
+	for e in events:
+		if e.kind == "tap":
+			out.append(e.t0 + e.dur * 0.5)
+	out.sort()
+	return out
+
+
+## [acc: Vector3 m/s², gyro: Vector3 °/s] at time t.
+func sample(t: float) -> Array:
+	var acc := Vector3.ZERO
+	var gyro := Vector3.ZERO
+	for e in events:
+		var dt: float = t - e.t0
+		if e.kind == "flick":
+			if dt < 0.0 or dt > e.dur:
+				continue
+			var d1: float = e.dur * 0.45
+			var lobe := 0.0
+			if dt < d1:
+				lobe = sin(PI * dt / d1)
+			else:
+				lobe = -0.75 * sin(PI * (dt - d1) / (e.dur - d1))
+			gyro.x += e.sign * e.rot * lobe
+			acc.z += e.sign * e.acc_sign * e.acc * lobe
+			acc.y += e.sign * e.acc_sign * e.acc * 0.4 * lobe
+		elif e.kind == "tap":
+			if dt < 0.0 or dt > e.dur:
+				continue
+			acc.z += e.acc
+			acc.x += e.acc * 0.15
+			gyro.y += e.rot
+	if acc_noise > 0.0:
+		acc += Vector3(rng.randfn(0, acc_noise), rng.randfn(0, acc_noise), rng.randfn(0, acc_noise))
+	if gyro_noise > 0.0:
+		gyro += Vector3(rng.randfn(0, gyro_noise), rng.randfn(0, gyro_noise), rng.randfn(0, gyro_noise))
+	return [acc, gyro]

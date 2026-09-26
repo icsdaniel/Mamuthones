@@ -14,7 +14,7 @@ func _init() -> void:
 		if only != "" and not path.begins_with("res://tests/%s/" % only):
 			continue
 		var script: Script = load(path)
-		if script == null:
+		if script == null or not script.can_instantiate():
 			printerr("FAIL: could not load %s" % path)
 			total_failures += 1
 			continue
