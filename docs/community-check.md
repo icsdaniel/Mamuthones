@@ -37,3 +37,5 @@ player-facing text avoids these details or uses plain words.
   the Sant'Antonio bonfire stands; the workshop details (masks on a shelf, hanging bells, sheepskin).
 - Mask option names ("grimace", "knotted", "aquiline"...) are descriptive English/Italian, not local
   terms.
+- Whether a halo or sunburst behind a mask (the workshop card, the logo) is appropriate.
+- Which mask finishes are acceptable (the game keeps them black to dark brown-black).
