@@ -237,3 +237,13 @@ func test_focus_loss_during_the_count_in_pauses_again() -> void:
 	await _wait_count(play)
 	check(not c.is_paused(), "then plays")
 	_close(app)
+
+
+func test_bell_cue_is_on_for_easy_and_medium_by_default() -> void:
+	UIHarness.fresh_profile()
+	var script: GDScript = load(App.SCREENS["play"])
+	check(script.bell_cue_on("easy") and script.bell_cue_on("medium"), "the bell cue is on for Easy and Medium")
+	check(not script.bell_cue_on("hard") and not script.bell_cue_on("expert"), "and off for Hard and Expert")
+	Profile.set_setting("bell_cue", false)
+	check(not script.bell_cue_on("easy"), "Settings can turn it off")
+	UIHarness.restore_profile()

@@ -271,6 +271,8 @@ tut_why_holds,Long notes held to the end: %d of %d,Note lunghe tenute fino in fo
 res_closest,Closest unlock,Sblocco più vicino
 res_top_time,Time at %s,Tempo a %s
 set_note_warning,%s s to read,%s s per leggere
+set_bell_cue,Bell cue on Easy and Medium,Avviso dei campanacci in Facile e Media
+set_bell_cue_note,A soft tick half a beat before each bell.,Un tocco leggero mezzo battito prima di ogni campanaccio.
 res_again,Play again,Rigioca
 res_next,Next stop: %s,Prossima tappa: %s
 res_done,Back,Indietro

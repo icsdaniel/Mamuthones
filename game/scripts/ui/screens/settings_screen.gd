@@ -30,6 +30,7 @@ func build() -> void:
 	preview.note_speed = speed.value
 	box.add_child(preview)
 	speed.value_changed.connect(func(v: float) -> void: preview.note_speed = v)
+	_toggle(box, "bell_cue", tr("set_bell_cue"), tr("set_bell_cue_note"))
 	_toggle(box, "vibration", tr("set_vibration"))
 	_toggle(box, "slam", tr("set_slam"), tr("set_slam_note"))
 	_toggle(box, "reduced_motion", tr("set_reduced_motion"))
@@ -105,7 +106,9 @@ func _slider(box: Container, key: String, title: String, lo: float, hi: float, s
 func _toggle(box: Container, key: String, title: String, note := "") -> CheckButton:
 	var t := CheckButton.new()
 	t.text = title
-	t.button_pressed = bool(Profile.get_setting(key))
+	var v: Variant = Profile.get_setting(key)
+	# A setting Profile has no default for yet ("bell_cue") starts on.
+	t.button_pressed = true if v == null else bool(v)
 	t.custom_minimum_size.y = UIKit.TOUCH
 	t.focus_mode = Control.FOCUS_NONE
 	t.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART

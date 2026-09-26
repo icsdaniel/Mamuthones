@@ -43,6 +43,8 @@ var _bell_set := "light"
 var _first_t := 0.0
 var _spb := 0.5
 var _sched := 0                  ## next note to check for calls and rope throws
+var _bell_sched := 0             ## next note to check for the bell cue
+var _bell_cue := false           ## a soft tick half a beat before each bell (Easy and Medium)
 var _pause_panel: Control
 var count_view: CountInView
 var _resume_at := -1.0           ## real time when a count-in ends and the music starts (-1: none)
@@ -185,6 +187,7 @@ func build() -> void:
 	count_view.name = "CountIn"
 	scene.add_child(count_view)
 
+	_bell_cue = bell_cue_on(difficulty)
 	Sound.set_key(song.key_root)
 	Sound.row_bells(0)
 	Sound.ambience("crowd+fire" if session.piazza else UIKit.ambience_for(song.stop))
@@ -214,6 +217,12 @@ func _start() -> void:
 	_audio_count = start <= song.time_of(-4.0, session.remix) + 0.01
 	conductor.play(song, session.remix, start)
 	_played = true
+
+
+## Whether the soft bell cue plays: the "bell_cue" setting (on unless turned off), Easy and Medium only.
+static func bell_cue_on(difficulty: String) -> bool:
+	var v: Variant = Profile.get_setting("bell_cue")
+	return (v == null or bool(v)) and difficulty in ["easy", "medium"]
 
 
 ## Song time of the bar line one bar before the bar of the first note (bars of four beats from beat 0).
@@ -294,6 +303,19 @@ func _schedule(t: float) -> void:
 		if n.kind == Note.Kind.SWIPE:
 			scene.throw_rope()
 		_sched += 1
+	# The bell cue: on Easy and Medium the music's rim clicks come before many beats with no bell, so
+	# a soft tick of its own comes half a beat before each bell or full ring (heard on time, like the
+	# call), telling the player this one is a bell.
+	while _bell_sched < notes.size():
+		var n := notes[_bell_sched]
+		if not n.is_bell():
+			_bell_sched += 1
+			continue
+		if n.t - 0.5 * _spb - lead > t:
+			break
+		if _bell_cue and not n.done and n.t > t:
+			Sound.ui("tap")
+		_bell_sched += 1
 	var still := false
 	for i in range(maxi(_sched - 8, 0), mini(_sched + 8, notes.size())):
 		var n := notes[i]
