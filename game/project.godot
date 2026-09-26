@@ -29,6 +29,9 @@ window/handheld/orientation=1
 
 pointing/emulate_touch_from_mouse=true
 buffering/agile_event_flushing=true
+sensors/enable_accelerometer=true
+sensors/enable_gravity=true
+sensors/enable_gyroscope=true
 
 [audio]
 
