@@ -2,7 +2,7 @@
 
 E Dorian, 116 bpm, 4/4. A skipping launeddas tune over the drone, light frame drum, the crowd,
 the Issohadores' calls and the crack of the rope, the tenore answering the boghe.
-Signature: the tune's skipping figure (dotted eighth, sixteenth: B C# B G), lanes 1 2 1 0.
+Signature: the tune's skipping figure (dotted eighth, sixteenth: B C# B G), lanes 2 0 2 1: a left-right bounce like the rope.
 Chart mechanics introduced here: rope swipes and off-beat calls (Hard and Expert).
 """
 from score import Song
@@ -24,7 +24,7 @@ def build():
     s.reverb = {"t60": 1.2, "wet": 0.15, "predelay": 0.02, "bright": 7000,
                 "early": ((0.035, 0.2), (0.058, 0.15))}
     s.mechanics = {"step", "bell", "rest", "hold", "ring", "swipe", "call"}
-    s.signature = {"medium": [1, 2, 1, 0], "hard": [1, 2, 1, 0], "expert": [1, 2, 1, 0]}
+    s.signature = {"medium": [2, 0, 2, 1], "hard": [2, 0, 2, 1], "expert": [2, 0, 2, 1]}
     s.countin()
     tumbu = s.key_root - 24
     s.ev("crowd", -4, 400, None, 0.35)

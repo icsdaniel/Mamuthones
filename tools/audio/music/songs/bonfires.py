@@ -3,7 +3,7 @@
 G Mixolydian, 100 dotted-quarter beats per minute, four beats (twelve eighths) to the bar.
 The tenore sings the ballu's long-short lilt on nonsense syllables, the boghe the dance tune,
 the frame drum and the dancers' feet keep the circle turning.
-Signature: the tune's turning hook D E D C B C D ("round the fire"), lanes 1 2 1 0 0 1 2.
+Signature: the tune's turning hook D E D C B C D ("round the fire"), lanes 0 1 2 1 0 2 1: a climb and a turn.
 Chart mechanic introduced here: holds (the tenore's long chords in the B sections).
 """
 from score import Song
@@ -23,7 +23,7 @@ def build():
              sub=3)
     s.reverb = {"t60": 1.4, "wet": 0.18, "predelay": 0.02, "bright": 6000}
     s.mechanics = {"step", "bell", "rest", "hold"}
-    s.signature = {"medium": [1, 2, 1, 0, 0, 1, 2], "hard": [1, 2, 1, 0, 0, 1, 2], "expert": [1, 2, 1, 0, 0, 1, 2]}
+    s.signature = {"medium": [0, 1, 2, 1, 0, 2, 1], "hard": [0, 1, 2, 1, 0, 2, 1], "expert": [0, 1, 2, 1, 0, 2, 1]}
     s.countin()
     s.ev("fire", -4, 240, None, 0.3)
     hard_mid = "default"

@@ -190,7 +190,7 @@ class Charter:
                 for g in groups.values():
                     chosen.append(min(g, key=lambda c: (c.rank, c.b)))
             for c in chosen:
-                notes.append(N(c.b, "bell", c.rank, "bell", None, c.stem, tag="ring" if c.ring else c.tag, src=c))
+                notes.append(N(c.b, "bell", c.rank, "bell", None, c.stem, tag=c.tag if c.tag == "triple" else ("ring" if c.ring else c.tag), src=c))
             # holds
             hk = sp.get("holds", 0)
             if hk and allowed(s, diff, "hold", sp):
@@ -267,9 +267,26 @@ class Charter:
         for sw in [n for n in notes if n.k == "swipe"]:
             notes = [n for n in notes if n is sw or n.k == "rest" or abs(n.b - sw.b) >= clear - 1e-6]
 
-        # 4. bells against steps, by difficulty
+        # 4. bells against steps, by difficulty. A bell tilts the phone, so both thumbs leave the
+        # buttons: steps keep clear of it (half a beat at Medium and Hard, 150 ms at Expert).
         bells = [n for n in notes if n.k == "bell"]
         ring_ok = allowed(s, diff, "ring", {}) or (tutorial and self._ring_in_lesson())
+        clear = {"easy": 1.0, "medium": 0.5, "hard": 0.5}.get(diff) or V.RULES["bell_clear_s"]["expert"] / s.spb
+        # in a climax the steps are the point: a weak bell crowded by steps gives way to them
+        if lv >= 2 and not tutorial:
+            step_bs = [n.b for n in notes if n.k in ("step", "hold")]
+            keep_b = []
+            for bl in bells:
+                sec = s.section_at(bl.b)
+                crowd = sum(1 for b in step_bs if 1e-6 < abs(b - bl.b) < clear - 1e-6)
+                on_beat = any(abs(b - bl.b) < 1e-6 for b in step_bs)
+                weak = bl.rank > 1 and bl.tag not in ("ring", "triple")
+                if sec is not None and sec.energy >= 3 and crowd >= 2 and weak and not on_beat:
+                    continue
+                keep_b.append(bl)
+            gone = set(id(x) for x in bells) - set(id(x) for x in keep_b)
+            notes = [n for n in notes if id(n) not in gone]
+            bells = keep_b
         out = []
         bell_bs = {n.b: n for n in bells}
         for n in notes:
@@ -291,9 +308,7 @@ class Charter:
                         n.tag = "triple_step"
                     continue
                 continue  # the bell takes the beat
-            if diff in ("easy", "medium") and near < (1.0 if diff == "easy" else 0.5) - 1e-6:
-                continue
-            if diff == "hard" and near < 0.25 - 1e-6:
+            if near < clear - 1e-6:
                 continue
             out.append(n)
         notes = out
@@ -400,32 +415,12 @@ class Charter:
             for n in laned:
                 if n.sig is not None and n.k in ("step", "ring"):
                     n.lane = sig_lanes[n.sig % len(sig_lanes)]
-        # easy: one lane at a time - a lane stays for two notes before it moves, and no 0<->2 leaps
         if diff == "easy":
-            prev = None
-            run = 0
-            for n in laned:
-                if n.tag == "fixed":
-                    prev, run = n.lane, 1
-                    continue
-                if prev is not None and n.lane != prev and run < 2 and s.kind != "tutorial":
-                    n.lane = prev
-                if prev is not None and abs(n.lane - prev) == 2:
-                    n.lane = 1
-                run = run + 1 if n.lane == prev else 1
-                prev = n.lane
-        # avoid long runs on one lane at medium+ when the melody repeats a note (keeps hands moving)
-        if diff in ("medium", "hard", "expert"):
-            run = 0
-            for i in range(1, len(laned)):
-                a, c = laned[i - 1], laned[i]
-                if c.lane == a.lane and c.sig is None and (c.pitch == a.pitch):
-                    run += 1
-                    if run >= 3:
-                        c.lane = 1 if a.lane != 1 else (0 if (i // 4) % 2 == 0 else 2)
-                        run = 0
-                else:
-                    run = 0
+            self.easy_lanes(laned, groups)
+        else:
+            self.balance(groups)
+            self.break_jacks(laned)
+        self.hold_chains(laned, diff)
         # triple ring: its extra step sits on a different lane from the ring
         for n in laned:
             if n.tag == "triple_step":
@@ -433,9 +428,124 @@ class Charter:
                 if ring is not None and ring.lane == n.lane:
                     n.lane = 2 if ring.lane == 0 else 0
 
+    def easy_lanes(self, laned, groups):
+        """Easy: one lane at a time. Each phrase has a home lane that follows where the phrase sits
+        in the tune (low, middle, high) and moves from one phrase to the next; inside a phrase the
+        melody's highest and lowest notes may step one lane off home, after two notes, never 0<->2."""
+        s = self.s
+        if s.kind == "tutorial":
+            return
+        keys = sorted(groups, key=lambda k: groups[k][0].b)
+        means = {k: sum(n.pitch for n in groups[k]) / len(groups[k]) for k in keys}
+        prev_home = None
+        for idx, k in enumerate(keys):
+            g = [n for n in groups[k] if n.tag != "fixed" and n.sig is None]
+            if not g:
+                continue
+            sec = s.section_at(g[0].b)
+            pool = [means[x] for x in keys if x[0] == k[0]]
+            lo_m, hi_m = min(pool), max(pool)
+            if hi_m - lo_m >= 2:
+                x = (means[k] - lo_m) / (hi_m - lo_m)
+                home = 0 if x < 0.34 else (1 if x < 0.67 else 2)
+            else:
+                home = [1, 0, 1, 2][idx % 4]
+            if prev_home is not None and home == prev_home:
+                home = [1, 0, 1, 2][idx % 4] if [1, 0, 1, 2][idx % 4] != prev_home else (1 if prev_home != 1 else (0 if idx % 2 else 2))
+            if prev_home is not None and abs(home - prev_home) == 2:
+                home = 1
+            ps = [n.pitch for n in g]
+            lo, hi = min(ps), max(ps)
+            for n in g:
+                off = 0
+                if hi - lo >= 3 and sec.energy >= 2:
+                    x = (n.pitch - lo) / (hi - lo)
+                    off = -1 if x < 0.2 else (1 if x > 0.8 else 0)
+                n.lane = max(0, min(2, home + off))
+            prev_home = home
+        prev = None
+        run = 0
+        for n in laned:
+            if n.tag == "fixed":
+                prev, run = n.lane, 1
+                continue
+            if prev is not None and n.lane != prev and run < 2:
+                n.lane = prev
+            if prev is not None and abs(n.lane - prev) == 2:
+                n.lane = 1
+            run = run + 1 if n.lane == prev else 1
+            prev = n.lane
+
+    def balance(self, groups):
+        """Each two-bar phrase keeps its hands balanced: the left share (lane 0, half of lane 1)
+        stays between 35 and 65 percent. Notes nearest the middle of the phrase's range move first."""
+        for g in groups.values():
+            free = [n for n in g if n.tag != "fixed" and n.sig is None and n.k in ("step", "ring")]
+            if len(g) < 4:
+                continue
+            for _ in range(len(g) * 2):
+                left = sum(1.0 if n.lane == 0 else (0.5 if n.lane == 1 else 0.0) for n in g) / len(g)
+                if 0.35 - 1e-9 <= left <= 0.65 + 1e-9:
+                    break
+                heavy, toward = (0, 1) if left > 0.65 else (2, -1)
+                cand = [n for n in free if n.lane == heavy] or [n for n in free if n.lane == 1]
+                if not cand:
+                    break
+                mid = sum(n.pitch for n in g) / len(g)
+                n = min(cand, key=lambda n: (abs(n.pitch - mid), n.b))
+                n.lane += toward
+
+    def break_jacks(self, laned):
+        """No one-thumb jacks, whatever the melody does: a lane never takes two notes closer than
+        125 ms, three in a row closer than 180 ms, or four in a row closer than 300 ms. The note that
+        would extend the run moves to a neighbouring lane (outer runs go to the middle, where the
+        other thumb can take it; middle runs step out following the melody)."""
+        spb = self.s.spb
+        taps = sorted([n for n in laned if n.k in ("step", "ring", "hold")], key=lambda n: n.b)
+        flip = 0
+        for _ in range(3):
+            changed = False
+            run = {125: 1, 180: 1, 300: 1}
+            for i in range(1, len(taps)):
+                a, c = taps[i - 1], taps[i]
+                dt = (c.b - a.b) * spb * 1000
+                if dt < 1e-3:
+                    continue
+                same = c.lane == a.lane
+                bad = False
+                for lim, cap in ((125, 1), (180, 2), (300, 3)):
+                    if same and dt < lim:
+                        if run[lim] + 1 > cap:
+                            bad = True
+                if bad and c.tag != "fixed" and c.sig is None and c.tag != "triple_step":
+                    if a.lane == 1:
+                        up = c.pitch is not None and a.pitch is not None and c.pitch > a.pitch
+                        down = c.pitch is not None and a.pitch is not None and c.pitch < a.pitch
+                        c.lane = 2 if up else (0 if down else (0 if flip % 2 else 2))
+                        flip += 1
+                    else:
+                        c.lane = 1
+                    changed = True
+                    same = False
+                for lim in run:
+                    run[lim] = run[lim] + 1 if (same and dt < lim) else 1
+            if not changed:
+                break
+
+    def hold_chains(self, laned, diff):
+        """Holds that follow each other closely alternate hands, and at Medium and Hard they are
+        cut to leave room for steps in between, so no thumb is trapped for bars on end."""
+        holds = sorted([n for n in laned if n.k == "hold"], key=lambda n: n.b)
+        for h1, h2 in zip(holds, holds[1:]):
+            if h2.b - (h1.b + h1.len) >= 1.5:
+                continue
+            if diff in ("medium", "hard") and h2.b - h1.b >= 3.0:
+                h1.len = max(1.0, min(h1.len, int((h2.b - h1.b - 2.0) * 2) / 2))
+            if h2.lane == h1.lane:
+                h2.lane = 2 - h1.lane if h1.lane != 1 else (0 if int(h2.b) % 2 else 2)
+
     def fix_hands(self, notes, diff):
         s = self.s
-        hg = (V.RULES["hand_gap_third"] if self.third else V.RULES["hand_gap"])[diff]
         notes.sort(key=lambda n: (n.b, PRIO[n.k]))
         # holds: at easy/medium nothing else during a hold; at hard+ the other hand plays on
         holds = [n for n in notes if n.k == "hold"]
@@ -460,24 +570,32 @@ class Charter:
                 keep.append(n)
         notes = keep
         # repeated passes: move or drop notes the hands cannot reach
-        for _ in range(6):
-            dicts = [x.json() for x in notes]
-            probs = V.assign_hands(dicts, hg)
+        meta = {"bpm": s.bpm, "kind": s.kind, "stop": s.stop_no,
+                "sections": [{"name": x.name, "b": x.b, "len": x.len} for x in s.sections]}
+
+        def problems(ns):
+            d = [x.json() for x in ns]
+            _, hand, clear = V.rule_fns(meta, diff, d)
+            return V.assign_hands(d, hand, clear) + V.jacks(d, s.spb)
+
+        for _ in range(8):
+            probs = problems(notes)
             if not probs:
                 break
             drop = set()
             for (i, msg) in probs:
+                if i in drop:
+                    continue
                 n = notes[i]
-                if n.k == "step" and n.sig is None:
-                    # try the other outer lanes first
+                if n.k == "step" and n.sig is None and "bell" not in msg:
+                    # try the other lanes first
                     moved = False
                     for alt in ([1, 0, 2] if n.lane != 1 else [0, 2]):
                         if alt == n.lane:
                             continue
                         old = n.lane
                         n.lane = alt
-                        test = [x.json() for x in notes]
-                        if not any(j == i for (j, _) in V.assign_hands(test, hg)) and not self.hidden(notes, n):
+                        if not any(j == i for (j, _) in problems(notes)) and not self.hidden(notes, n):
                             moved = True
                             break
                         n.lane = old
@@ -551,10 +669,7 @@ class Charter:
         for n in notes:
             if n.k in ("bell", "ring"):
                 if n.b - last < V.RULES["bell_gap"] - 1e-6:
-                    if n.k == "ring":
-                        n.k = "step"
-                    else:
-                        continue
+                    continue
                 else:
                     last = n.b
             out.append(n)

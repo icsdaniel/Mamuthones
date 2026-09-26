@@ -31,9 +31,21 @@ RULES = {
     # min gap between any two inputs (not counting notes on the same beat)
     "overall_gap": {"easy": 1.0, "medium": 0.5, "hard": 0.25, "expert": 0.25},
     "overall_gap_third": {"easy": 1.0, "medium": 1 / 3, "hard": 1 / 3, "expert": 1 / 6},
+    # (straight or triplet feel is decided per section: a section is "third" when any of its notes
+    # sits on a triplet position)
     # min gap between two inputs of the same hand
     "hand_gap": {"easy": 1.0, "medium": 0.5, "hard": 0.5, "expert": 0.25},
-    "hand_gap_third": {"easy": 1.0, "medium": 2 / 3, "hard": 1 / 3, "expert": 1 / 6},
+    "hand_gap_third": {"easy": 1.0, "medium": 2 / 3, "hard": 1 / 3, "expert": 1 / 3},
+    # a bell is a tilt of the whole phone: both thumbs leave the buttons. Clearance around a bell
+    # (before and after, not counting a step on the bell's own beat): beats, or seconds at Expert
+    "bell_clear": {"medium": 0.5, "hard": 0.5},
+    "bell_clear_s": {"expert": 0.15},
+    # one-thumb jacks: same-lane notes never closer than jack_min_s, and at most jack_run notes in a
+    # row closer than jack_fast_s
+    "jack_min_s": 0.12,
+    "jack_fast_s": 0.15,
+    "jack_run": 3,
+    "expert_peak_nps": 4.0,          # every story Expert chart reaches this somewhere
     "bell_gap": 0.5,                 # bells at least half a beat apart
     "easy_min_gap_s": 0.6,           # easy never asks for two inputs closer than this
     "easy_peak_nps": 1.5,            # easy stays beginner friendly
@@ -71,29 +83,66 @@ def res_to_path(res: str) -> str:
 
 # ------------------------------------------------------------------ helpers
 
+def on_third(b) -> bool:
+    f = b % 1
+    return any(abs(f - x) < 0.01 for x in (1 / 3, 2 / 3, 1 / 6, 5 / 6))
+
+
 def is_third_grid(notes) -> bool:
-    """True when the chart uses triplet positions (compound meter or triplet passages)."""
-    for n in notes:
-        f = n["b"] % 1
-        if abs(f - 1 / 3) < 0.01 or abs(f - 2 / 3) < 0.01 or abs(f - 1 / 6) < 0.01 or abs(f - 5 / 6) < 0.01:
-            return True
-    return False
+    """True when the notes use triplet positions (compound meter or triplet passages)."""
+    return any(on_third(n["b"]) for n in notes)
 
 
-def assign_hands(notes, hand_gap):
+def feel_of(sections, notes):
+    """Straight or triplet feel per section: returns a function beat -> True for triplet feel."""
+    spans = []
+    for s in sections or []:
+        b0, b1 = s["b"], s["b"] + s["len"]
+        if any(b0 - EPS <= n["b"] < b1 - EPS and on_third(n["b"]) for n in notes):
+            spans.append((b0, b1))
+    outside = [n for n in notes if not any(s["b"] - EPS <= n["b"] < s["b"] + s["len"] - EPS for s in sections or [])]
+    out_third = is_third_grid(outside)
+
+    def third(b):
+        for s in sections or []:
+            if s["b"] - EPS <= b < s["b"] + s["len"] - EPS:
+                return any(b0 - EPS <= b < b1 - EPS for b0, b1 in spans)
+        return out_third
+    return third
+
+
+def _val(x, b):
+    return x(b) if callable(x) else x
+
+
+def assign_hands(notes, hand_gap, bell_clear=None):
     """Greedy hand assignment: lane 0 left, lane 2 right, lane 1 and swipes whichever hand is free.
-    Returns a list of (note index, message) for inputs no hand can play in time."""
+    hand_gap (and bell_clear) are beats, or functions of the beat. A bell or full ring tilts the
+    phone: no other input may sit closer than bell_clear to it (a step on its own beat is part of a
+    full or triple ring). Returns a list of (note index, message) for inputs no hand can play."""
     last = {"L": -1e9, "R": -1e9}
+    last_i = {"L": None, "R": None}
     busy = {"L": -1e9, "R": -1e9}   # a hold keeps its hand down until this beat
+    last_bell = -1e9
     used_at = {}
     problems = []
     order = sorted(range(len(notes)), key=lambda i: (notes[i]["b"], {0: 0, 2: 1}.get(notes[i].get("lane", 1), 2)))
     for i in order:
         n = notes[i]
         k = n["k"]
-        if k in ("bell", "rest"):
+        if k == "rest":
             continue
         b = n["b"]
+        clear = _val(bell_clear, b) if bell_clear is not None else 0.0
+        if k in ("bell", "ring") and clear > 0:
+            for h in ("L", "R"):
+                if EPS < b - last[h] < clear - EPS and last_i[h] is not None:
+                    problems.append((last_i[h], f"input at b={last[h]} too close before the bell at b={b}"))
+            last_bell = b
+        if k == "bell":
+            continue
+        if clear > 0 and EPS < b - last_bell < clear - EPS:
+            problems.append((i, f"input at b={b} too close after the bell at b={last_bell}"))
         lane = n.get("lane", 1)
         taken = used_at.get(round(b, 3), set())
         if k == "swipe" or lane == 1:
@@ -105,15 +154,63 @@ def assign_hands(notes, hand_gap):
         if h in taken:
             problems.append((i, f"two inputs for one hand at b={b}"))
             continue
+        gap = _val(hand_gap, b)
         if busy[h] > b + EPS:
             problems.append((i, f"hand {h} is holding a note at b={b}"))
-        elif b - last[h] < hand_gap - EPS:
-            problems.append((i, f"hand {h} too fast at b={b} (gap {b - last[h]:.3f} < {hand_gap:.3f} beats)"))
+        elif b - last[h] < gap - EPS:
+            problems.append((i, f"hand {h} too fast at b={b} (gap {b - last[h]:.3f} < {gap:.3f} beats)"))
         last[h] = b
+        last_i[h] = i
         used_at.setdefault(round(b, 3), set()).add(h)
         if k == "hold":
             busy[h] = b + n.get("len", 0)
     return problems
+
+
+def jacks(notes, spb):
+    """One-thumb jacks: same-lane taps too close, or too many close ones in a row.
+    Returns a list of (note index, message)."""
+    probs = []
+    by_lane = {}
+    for i, n in enumerate(notes):
+        if n["k"] in ("step", "hold", "ring"):
+            by_lane.setdefault(n["lane"], []).append(i)
+    for lane, idx in by_lane.items():
+        idx.sort(key=lambda i: notes[i]["b"])
+        run = 1
+        for a, c in zip(idx, idx[1:]):
+            dt = (notes[c]["b"] - notes[a]["b"]) * spb
+            if dt < RULES["jack_min_s"] - 1e-4:
+                probs.append((c, f"lane {lane} jack {dt * 1000:.0f} ms at b={notes[c]['b']}"))
+            run = run + 1 if dt < RULES["jack_fast_s"] - 1e-4 else 1
+            if run > RULES["jack_run"]:
+                probs.append((c, f"lane {lane}: {run} notes in a row under {RULES['jack_fast_s'] * 1000:.0f} ms "
+                                 f"at b={notes[c]['b']}"))
+    return probs
+
+
+def rule_fns(song, name, notes):
+    """Per-beat overall gap, hand gap and bell clearance for one chart (beats)."""
+    spb = 60.0 / song["bpm"]
+    third = feel_of(song.get("sections"), notes)
+    tutorial = song.get("kind") == "tutorial"
+    if name not in DIFFS:
+        return (lambda b: 0.5), (lambda b: 0.5), (lambda b: 0.0)
+
+    def overall(b):
+        g = RULES["overall_gap_third" if third(b) else "overall_gap"][name]
+        if name == "easy" and not tutorial:
+            g = max(g, RULES["easy_min_gap_s"] / spb - EPS)
+        return g
+
+    def hand(b):
+        return RULES["hand_gap_third" if third(b) else "hand_gap"][name]
+
+    if name in RULES["bell_clear_s"]:
+        cb = RULES["bell_clear_s"][name] / spb
+    else:
+        cb = RULES["bell_clear"].get(name, 0.0)
+    return overall, hand, (lambda b: cb)
 
 
 def nps_stats(notes, bpm, offset, window):
@@ -205,11 +302,7 @@ def check_chart(song: dict, name: str, notes: list, audio_len: float | None):
     if end_t > song.get("length", 1e9) + 1e-3:
         errs.append(f"{name}: last note ends at {end_t:.2f}s after song length {song.get('length')}")
 
-    third = is_third_grid(notes) or song.get("_third", False)
-    rules_gap = RULES["overall_gap_third" if third else "overall_gap"][name] if name in DIFFS else 0.5
-    hand_gap = RULES["hand_gap_third" if third else "hand_gap"][name] if name in DIFFS else 0.5
-    if name == "easy":
-        rules_gap = max(rules_gap, RULES["easy_min_gap_s"] / spb - EPS) if not tutorial else rules_gap
+    overall_fn, hand_fn, clear_fn = rule_fns(song, name, notes)
 
     # same-beat groups
     groups = {}
@@ -237,8 +330,9 @@ def check_chart(song: dict, name: str, notes: list, audio_len: float | None):
     # overall spacing between distinct beats
     beats = sorted(b for b, lst in groups.items() if any(n["k"] != "rest" for n in lst))
     for a, c in zip(beats, beats[1:]):
-        if c - a < rules_gap - EPS:
-            errs.append(f"{name}: inputs {c - a:.3f} beats apart at b={a} (min {rules_gap:.3f})")
+        g = max(overall_fn(a), overall_fn(c))
+        if c - a < g - EPS:
+            errs.append(f"{name}: inputs {c - a:.3f} beats apart at b={a} (min {g:.3f})")
 
     # bells half a beat apart
     bell_bs = [n["b"] for n in notes if n["k"] in ("bell", "ring")]
@@ -262,8 +356,27 @@ def check_chart(song: dict, name: str, notes: list, audio_len: float | None):
                     errs.append(f"{name}: hold runs into the stand-still at b={rb}")
 
     # hands
-    for (i, msg) in assign_hands(notes, hand_gap):
+    for (i, msg) in assign_hands(notes, hand_fn, clear_fn):
         errs.append(f"{name}: {msg}")
+    for (i, msg) in jacks(notes, spb):
+        errs.append(f"{name}: {msg}")
+
+    # bells per level (design section 4)
+    bells = [n for n in notes if n["k"] in ("bell", "ring")]
+    if not tutorial and name in ("easy", "medium") and kind == "story":
+        bpb = 4
+        span = bpb * (2 if name == "easy" else 1)
+        per = {}
+        for n in bells:
+            f = n["b"] % 1
+            strong = f < EPS or f > 1 - EPS
+            if not strong:
+                errs.append(f"{name}: bell off the beat at b={n['b']} ({name} bells sit on strong beats)")
+            per.setdefault(int(n["b"] // span + EPS), []).append(n)
+        for key, lst in per.items():
+            if len(lst) > 1:
+                errs.append(f"{name}: {len(lst)} bells within {span} beats at b={lst[0]['b']} "
+                            f"({'one per phrase' if name == 'easy' else 'one per bar'})")
 
     # mechanics per level (story songs; the tutorial teaches everything at every level)
     mech = mechanics_of(notes)
@@ -275,6 +388,14 @@ def check_chart(song: dict, name: str, notes: list, audio_len: float | None):
     count, avg, peak = nps_stats(notes, bpm, song["offset"], RULES["peak_window_s"])
     if name == "easy" and not tutorial and peak > RULES["easy_peak_nps"] + EPS:
         errs.append(f"easy: peak {peak:.2f} notes/s is above {RULES['easy_peak_nps']}")
+    if name == "expert" and kind == "story" and peak < RULES["expert_peak_nps"] - EPS:
+        errs.append(f"expert: peak {peak:.2f} notes/s is below {RULES['expert_peak_nps']}")
+    # the finale (stop 7): Expert has triplets and triple rings
+    if name == "expert" and kind == "story" and song.get("stop") == 7:
+        if not mech.get("triple"):
+            errs.append("expert: the finale needs triple rings")
+        if not is_third_grid(notes):
+            errs.append("expert: the finale needs triplets")
     summary = {"notes": count, "avg_nps": round(avg, 2), "peak_nps": round(peak, 2), "mechanics": mech}
     return errs, summary
 

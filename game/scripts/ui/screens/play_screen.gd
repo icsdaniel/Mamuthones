@@ -280,11 +280,8 @@ func _on_rang(result: Dictionary) -> void:
 	if q == "ok" and str(result.get("side", "")) != "":
 		q = str(result.side)
 	var strength := float(result.get("strength", 0.5))
-	# Sound.bell grows a 4th argument (how hard the flick was); pass it once it is there.
-	if Sound.get_method_argument_count("bell") >= 4:
-		Sound.callv("bell", [_bell_set, bool(result.get("up", true)), q, strength])
-	else:
-		Sound.bell(_bell_set, bool(result.get("up", true)), q)
+	# Strength is how hard the flick was; harder flicks ring heavier.
+	Sound.bell(_bell_set, bool(result.get("up", true)), q, strength)
 	scene.jolt("bell")
 	if q == "free" or q == "silence":
 		UIKit.vibrate(12)
@@ -444,5 +441,4 @@ func _exit_tree() -> void:
 func _end_sound() -> void:
 	for lane in 3:
 		Sound.hold_stop(lane)
-	if Sound.has_method("end_song"):
-		Sound.call("end_song")
+	Sound.end_song()
