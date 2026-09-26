@@ -179,8 +179,12 @@ def write_ogg(rel: str, x: np.ndarray, quality: float = 0.4) -> str:
     os.makedirs(os.path.dirname(path), exist_ok=True)
     # Leave headroom for Vorbis overshoot.
     assert np.max(np.abs(x)) <= db(-1.5) + 1e-6, f"{rel} peak too high"
-    sf.write(path, x.astype(np.float32), SR, format="OGG", subtype="VORBIS",
-             compression_level=1.0 - quality)
+    # written in blocks: libsndfile's Vorbis writer crashes on very large single writes
+    y = x.astype(np.float32)
+    with sf.SoundFile(path, "w", SR, 1 if y.ndim == 1 else y.shape[1], format="OGG",
+                      subtype="VORBIS", compression_level=1.0 - quality) as f:
+        for i in range(0, len(y), 32768):
+            f.write(y[i:i + 32768])
     return path
 
 

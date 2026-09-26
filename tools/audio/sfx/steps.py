@@ -46,16 +46,22 @@ def footfall(lane: int, take: int) -> np.ndarray:
     f = (78, 70, 88)[lane] * rng.uniform(0.94, 1.06)
     fr = f * (1 + 0.8 * np.exp(-t / 0.012))
     thump = np.sin(2 * np.pi * np.cumsum(fr) / SR) * np.exp(-t / 0.03)
-    out += thump * (0.9, 1.0, 0.75)[lane]
+    out += thump * (0.9, 1.0, 0.75)[lane] * 0.6
     # sole contact: band-limited noise, the stone's hard slap
     slap = bandpass(rng.standard_normal(n), 250, 2600, 2) * np.exp(-t / 0.012)
-    out += slap * 0.55
+    out += slap * 0.75
+    # the hard leather heel on stone: a short knock at 1.2-3 kHz (what a phone
+    # speaker can play)
+    hn = int(0.03 * SR)
+    he = rng.standard_normal(hn) * np.exp(-np.arange(hn) / (0.0025 * SR))
+    heel = resonator(he, rng.uniform(1300, 1700) * (1.0, 0.9, 1.15)[lane], 4) + 0.6 * resonator(he, rng.uniform(2500, 3100), 5)
+    out[:hn] += heel * 0.9 / (np.max(np.abs(heel)) + 1e-9) * np.max(np.abs(thump))
     # grit crunching under the sole: sparse tiny impulses in the first 40 ms
     grit = np.zeros(n)
     for _ in range(int(rng.integers(10, 22))):
         k = int(rng.uniform(0.001, 0.045) * SR)
         grit[k] += rng.uniform(-1, 1)
-    grit = resonator(highpass(grit, 1800, 2), rng.uniform(3000, 5000), 1.5) * 0.35
+    grit = resonator(highpass(grit, 1800, 2), rng.uniform(3000, 5000), 1.5) * 0.6
     out += grit
     # leather scuff (the foot rolls forward), stronger on the right lane (toe push)
     sc_len = int(0.09 * SR)
@@ -77,7 +83,10 @@ def tone(lane: int, pc: int) -> np.ndarray:
     n = int(dur * SR)
     t = np.arange(n) / SR
     rng = np.random.default_rng([41, lane, pc])
-    partials = [(1.0, 1.0, 0.24), (2.0, 0.32, 0.13), (3.0, 0.10, 0.08), (3.93, 0.14, 0.035), (5.4, 0.05, 0.02)]
+    # harmonics 2-6 carry the pitch on a phone speaker (which has nothing under
+    # ~500 Hz): the ear hears the fundamental from them
+    partials = [(1.0, 0.75, 0.2), (2.0, 0.65, 0.14), (3.0, 0.5, 0.10), (4.0, 0.38, 0.07),
+                (5.0, 0.22, 0.05), (6.0, 0.12, 0.035), (3.93, 0.10, 0.03)]
     out = np.zeros(n)
     for r, a, d in partials:
         fr = f * r
@@ -87,6 +96,11 @@ def tone(lane: int, pc: int) -> np.ndarray:
     # soft mallet: slightly slower attack than the footfall (2 ms)
     att = np.clip(t / 0.002, 0, 1)
     out *= att
+    # the mallet's contact: a short woody tick at 1-3 kHz
+    m = int(0.02 * SR)
+    tick = rng.standard_normal(m) * np.exp(-np.arange(m) / (0.003 * SR))
+    tick = resonator(tick, 1600, 2.5) + 0.6 * resonator(tick, 2700, 3)
+    out[:m] += tick * 0.35 * np.max(np.abs(out[:m])) / (np.max(np.abs(tick)) + 1e-9)
     ir = make_ir(0.4, 0.45, np.random.default_rng(6), stereo=False,
                  early=[(0.009, 0.3), (0.016, 0.2), (0.027, 0.12)], bright=5000)
     out = out + convolve_ir(out, ir)[:n] * db(-16)

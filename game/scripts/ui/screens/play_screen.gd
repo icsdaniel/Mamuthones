@@ -279,7 +279,12 @@ func _on_rang(result: Dictionary) -> void:
 	var q := str(result.get("quality", "free"))
 	if q == "ok" and str(result.get("side", "")) != "":
 		q = str(result.side)
-	Sound.bell(_bell_set, bool(result.get("up", true)), q)
+	var strength := float(result.get("strength", 0.5))
+	# Sound.bell grows a 4th argument (how hard the flick was); pass it once it is there.
+	if Sound.get_method_argument_count("bell") >= 4:
+		Sound.callv("bell", [_bell_set, bool(result.get("up", true)), q, strength])
+	else:
+		Sound.bell(_bell_set, bool(result.get("up", true)), q)
 	scene.jolt("bell")
 	if q == "free" or q == "silence":
 		UIKit.vibrate(12)
@@ -360,8 +365,10 @@ func _on_pause_choice(what: String) -> void:
 			var length := Sound.count_in(song.bpm)
 			_resume_at = _clock + (length if length > 0.0 else 4.0 * _spb)
 		"restart":
+			_end_sound()
 			app.replace("play", args)
 		"quit":
+			_end_sound()
 			Sound.stop_ambience()
 			if bool(args.get("embedded", false)):
 				finished.emit(null)
@@ -429,6 +436,13 @@ func _finish() -> void:
 func _exit_tree() -> void:
 	if conductor != null:
 		conductor.pause()
-	# A hold still sounding when the screen goes (quit mid-hold) must not drone on.
+	_end_sound()
+
+
+## A hold still sounding when the screen goes (quit or restart mid-hold) must not drone on, and
+## Sound.end_song() also stops the silent hold drones kept ready for the song.
+func _end_sound() -> void:
 	for lane in 3:
 		Sound.hold_stop(lane)
+	if Sound.has_method("end_song"):
+		Sound.call("end_song")

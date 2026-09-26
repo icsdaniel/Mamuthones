@@ -141,7 +141,12 @@ QUALITY = {
     "good":    dict(spread=0.022, part=0.92, strength=0.80, fc=4200, second=0.40, damp=0.92, clanks=0, settle=0.5, gain=-2.5, level=-3.0),
     "ok":      dict(spread=0.090, part=0.45, strength=0.55, fc=3000, second=0.15, damp=0.30, clanks=3, settle=0.3, gain=-6.0, level=-7.5),
     "miss":    dict(spread=0.030, part=0.60, strength=0.35, fc=650,  second=0.00, damp=0.035, clanks=0, settle=0.0, gain=-11.0, level=-11.0),
+    # early: the jolt comes before the body is set, so the small bells lead and are
+    # choked against the sheepskin; late: a heavy flam, the big bells dragging behind
+    "early":   dict(spread=0.015, part=0.85, strength=0.70, fc=6000, second=0.10, damp=0.22, clanks=1, settle=0.0, gain=-5.0, level=-5.0),
+    "late":    dict(spread=0.020, part=1.00, strength=0.80, fc=2800, second=0.00, damp=0.75, clanks=0, settle=0.3, gain=-4.0, level=-4.0),
 }
+TAKES = {"perfect": 3, "good": 3, "ok": 3, "miss": 3, "early": 2, "late": 2}
 
 
 def body_thump(rng: np.random.Generator, level: float, f: float = 85.0, dur: float = 0.18) -> np.ndarray:
@@ -162,9 +167,9 @@ def render_ring(set_id: str, up: bool, quality: str, take: int, bells: list[Bell
     bells = bells or make_load(set_id)
     rng = np.random.default_rng([cfg["seed"], int(up), list(QUALITY).index(quality), take])
     n = int(cfg["dur"] * SR)
-    # perfect and good rings are stereo (the load spread across your back, for
-    # headphones); the ok clank and the miss knock are mono and smaller
-    stereo = quality in ("perfect", "good")
+    # the perfect ring is stereo (the load spread across your back, for headphones);
+    # the others are mono and narrower, which also tells them apart
+    stereo = quality == "perfect"
     out = np.zeros((n, 2)) if stereo else np.zeros(n)
     place = (lambda x, p: pan(x, p)) if stereo else (lambda x, p: x)
     nb = len(bells)
@@ -179,12 +184,20 @@ def render_ring(set_id: str, up: bool, quality: str, take: int, bells: list[Bell
         lag = q["spread"] * (u ** 1.5) if quality in ("perfect", "good") else q["spread"] * u
         if up and quality in ("perfect", "good"):
             lag += 0.008 * bells[i].size  # big bells answer a little later on the upswing
+        if quality == "late":
+            lag += 0.045 * bells[i].size ** 1.5  # the big bells drag
+        elif quality == "early":
+            lag += 0.03 * bells[i].size  # the small ones are already ringing
         lags[i] = lag
     first = min(lags.values())  # the ring starts at sample 0: no added latency
     for i in ringers:
         b = bells[i]
         lag = lags[i] - first
         emph = (0.55 + 0.9 * b.size) if not up else (1.25 - 0.55 * b.size)
+        if quality == "early":
+            emph = 1.4 - 0.9 * b.size
+        elif quality == "late":
+            emph = 0.45 + 1.1 * b.size
         st = q["strength"] * emph * rng.uniform(0.8, 1.1)
         # heavier bells carry heavier clappers: a longer contact excites fewer high modes
         fc = q["fc"] * cfg["hard"] * (1.25 if up else 0.9) * rng.uniform(0.85, 1.15)
@@ -193,7 +206,12 @@ def render_ring(set_id: str, up: bool, quality: str, take: int, bells: list[Bell
         m = n - start
         buf = np.zeros(m)
         buf += strike_response(b, m, st, fc, rng, damp)
-        if rng.random() < q["second"]:
+        if quality == "late" and b.size > 0.3:
+            # the flam: the big clappers hit twice, 25-45 ms apart, nearly as hard
+            d2 = int(rng.uniform(0.025, 0.045) * SR)
+            ramp_damp(buf, d2, 0.8)
+            buf[d2:] += strike_response(b, m - d2, st * rng.uniform(0.7, 0.9), fc, rng, damp)
+        elif rng.random() < q["second"]:
             d2 = int(rng.uniform(0.035, 0.11) * SR * (0.7 + 0.6 * b.size))
             if d2 < m:
                 ramp_damp(buf, d2, rng.uniform(0.55, 0.85))
@@ -222,7 +240,13 @@ def render_ring(set_id: str, up: bool, quality: str, take: int, bells: list[Bell
     th = cfg["thump"] * (1.0 if not up else 0.35)
     if quality == "miss":
         th = cfg["thump"] * 2.2
-        out = lowpass(out, 1400, 2)
+        out = lowpass(out, 2600, 2)
+        # the muffled clappers knock on iron: a short dull clack at 1-2.5 kHz, so the
+        # knock still reads on a phone speaker that has no bass
+        kn = int(0.05 * SR)
+        e = rng.standard_normal(kn) * np.exp(-np.arange(kn) / (0.006 * SR))
+        clack = resonator(e, rng.uniform(1100, 1400), 5) + 0.7 * resonator(e, rng.uniform(1900, 2400), 6)
+        add_at(out, clack * 0.9 * np.max(np.abs(out)) / (np.max(np.abs(clack)) + 1e-9), int(0.002 * SR))
     elif quality == "ok":
         th *= 1.2
     tf = {"light": 110.0, "village": 92.0, "full": 74.0}[set_id]
@@ -237,12 +261,48 @@ def render_ring(set_id: str, up: bool, quality: str, take: int, bells: list[Bell
     return out
 
 
-def render_set(set_id: str, takes: int = 3) -> dict[str, np.ndarray]:
+def render_accent(set_id: str, up: bool, take: int, bells: list[Bell]) -> np.ndarray:
+    """The extra weight of a hard flick, layered over the ring: the big bells slammed by
+    their clappers with a hard, bright contact, and a heavier body jolt. Short and mono."""
+    cfg = SETS[set_id]
+    rng = np.random.default_rng([cfg["seed"], 77, int(up), take])
+    n = int(0.7 * SR)
+    out = np.zeros(n)
+    for b in bells:
+        if b.size < 0.4:
+            continue
+        start = int(rng.uniform(0, 0.006) * SR)
+        x = strike_response(b, n - start, 1.2 * (0.5 + b.size), 9000 * cfg["hard"], rng, 0.45)
+        add_at(out, x, start)
+    add_at(out, body_thump(rng, cfg["thump"] * 2.5 * np.max(np.abs(out)), {"light": 120.0, "village": 98.0, "full": 80.0}[set_id]), 0)
+    return fade(out, 0.0008, 0.12)
+
+
+def render_jangle(set_id: str, bells: list[Bell]) -> np.ndarray:
+    """The load keeps jangling after a streak: sparse, soft clapper taps on every bell,
+    thinning out over about 1.8 s. Starts almost silent (it plays under a ring)."""
+    cfg = SETS[set_id]
+    rng = np.random.default_rng([cfg["seed"], 88])
+    n = int(2.2 * SR)
+    out = np.zeros(n)
+    for b in bells:
+        t = rng.uniform(0.09, 0.2)
+        for k in range(int(rng.integers(2, 5))):
+            if t > 1.6:
+                break
+            start = int(t * SR)
+            st = rng.uniform(0.1, 0.25) * np.exp(-t / 0.7)
+            add_at(out, strike_response(b, n - start, st, 2500 * cfg["hard"], rng, 0.6), start)
+            t += rng.uniform(0.12, 0.35) * (0.8 + 0.5 * b.size) * cfg["settle_t"]
+    return fade(out, 0.02, 0.2)
+
+
+def render_set(set_id: str) -> dict[str, np.ndarray]:
     bells = make_load(set_id)
     res = {}
     for up in (True, False):
         for quality in QUALITY:
-            for k in range(takes):
+            for k in range(TAKES[quality]):
                 res[f"{set_id}_{'up' if up else 'down'}_{quality}_{k + 1}"] = render_ring(set_id, up, quality, k, bells)
     # Level each (direction, quality) group to a fixed loudness offset from the perfect
     # down ring (RMS of the first 300 ms). Up rings are a touch lighter than down rings.
@@ -258,6 +318,11 @@ def render_set(set_id: str, takes: int = 3) -> dict[str, np.ndarray]:
             target = ref * db(qd["level"] + (-1.0 if up == "up" else 0.0))
             for k in keys:
                 res[k] = res[k] * (target / cur)
+        for k in range(2):
+            x = render_accent(set_id, up == "up", k, bells)
+            res[f"{set_id}_{up}_accent_{k + 1}"] = x * (ref * db(-5.0) / loud(x))
+    j = render_jangle(set_id, bells)
+    res[f"{set_id}_jangle_1"] = j * (ref * db(-12.0) / (np.sqrt(np.mean(j ** 2)) + 1e-12))
     # Then the whole set to a loudness target (heavier loads a little louder) and a
     # look-ahead limiter on the few strike peaks that would pass -1.5 dBFS, so light
     # sets are not left quiet by their spiky attacks.

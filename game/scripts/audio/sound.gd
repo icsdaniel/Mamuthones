@@ -8,13 +8,20 @@ extends Node
 ## The samples are synthesized by tools/audio/sfx/build_all.py (modal bell model,
 ## source-filter voices); tools/audio/sfx/measurements.json has their measurements.
 ##
-## Buses: Music, Bells, Sfx and Ambience are created here (under Master, which gets a
-## -1 dB limiter so a stack of bells never clips).
+## Buses, created here: Music, Bells, Sfx and Ambience under Master (which gets a -1 dB
+## limiter). Bells and Sfx sit 5 dB down so bells, steps and the row together leave
+## headroom for the music; Bells has its own compressor and limiter. Three small
+## buses feed Bells: BellsSoft (a soft flick: darker), BellsEarly and BellsLate (a
+## little left and right, so a player can hear which way they were off).
 
 const SFX_DIR := "res://audio/sfx/"
 const BUS_NAMES: Array[String] = ["Music", "Bells", "Sfx", "Ambience"]
+## Fixed trim under each bus's user volume (set_volume adds it).
+const BUS_TRIM_DB := {"Music": 0.0, "Bells": -5.0, "Sfx": -5.0, "Ambience": 0.0}
 const BELL_SETS: Array[String] = ["light", "village", "full"]
-const QUALITIES: Array[String] = ["perfect", "good", "ok", "miss"]
+## Index = quality slot used by bell(): perfect, good, ok, miss, early, late.
+const QUALITIES: Array[String] = ["perfect", "good", "ok", "miss", "early", "late"]
+const QUALITY_TAKES: Array[int] = [3, 3, 3, 3, 2, 2]
 const TAKES := 3
 const LANES := 3
 const UI_NAMES: Array[String] = ["tap", "back", "unlock", "carve", "result"]
@@ -25,15 +32,26 @@ const AMBIENCES: Array[String] = ["fire", "crowd", "wind"]
 const STOP_AMBIENCE: Array[String] = ["", "fire+wind", "fire+crowd", "fire+crowd", "crowd", "crowd", "crowd+fire", "crowd+wind"]
 
 ## Row-bell gain per unison level (0..5): silent alone, the whole row at full unison.
-const ROW_DB: Array[float] = [-80.0, -17.0, -13.0, -9.0, -6.0, -3.0]
+const ROW_DB: Array[float] = [-80.0, -20.0, -16.0, -12.0, -9.0, -6.0]
+## After this many perfect/good rings in a row the load keeps jangling between rings.
+const JANGLE_STREAK := 4
 const HOLD_FADE_IN := 0.03
 const HOLD_FADE_OUT := 0.09
+## A drone left silent this long is stopped (hold_start restarts it).
+const DRONE_IDLE_STOP := 4.0
 const AMBIENCE_FADE := 1.5
+const JANGLE_CHOKE := 0.12
 const SILENT_DB := -80.0
 const SEMITONE := 1.0594630943592953
+const BUS_BELLS := &"Bells"
+const BUS_SOFT := &"BellsSoft"
+const BUS_EARLY := &"BellsEarly"
+const BUS_LATE := &"BellsLate"
 
-# bells: set id -> Array of 8 Arrays (quality * 2 + (0 up / 1 down)) of takes
+# bells: set id -> Array of 12 Arrays (quality slot * 2 + (0 up / 1 down)) of takes
 var _bells := {}
+var _accents := {}      # set id -> [up takes, down takes]: the extra weight of a hard flick
+var _jangles := {}      # set id -> the load jangling on after a streak
 # row: [tight][down] -> takes
 var _row: Array = []
 var _feet: Array = []   # [lane] -> takes
@@ -53,15 +71,19 @@ var _tone_pool: Array[AudioStreamPlayer] = []
 var _sfx_pool: Array[AudioStreamPlayer] = []
 var _hold_players: Array[AudioStreamPlayer] = []
 var _amb_players: Array[AudioStreamPlayer] = []
-var _next := PackedInt32Array([0, 0, 0, 0, 0])  # round-robin index per pool
+var _jangle_player: AudioStreamPlayer
+var _next := PackedInt32Array([0, 0, 0, 0, 0])  # the player after the last one used, per pool
 
 var _key_pc := 2
 var _tone_pitch := 1.0  # odd keys play the tone a semitone below, resampled up
 var _unison := 0
+var _streak := 0
+var _jangle_choking := false
 var _last_take := {}
 # hold fades: gain in [0, 1] and the direction it moves in (+1 in, -1 out, 0 still)
 var _hold_gain := PackedFloat32Array([0.0, 0.0, 0.0])
 var _hold_dir := PackedInt32Array([0, 0, 0])
+var _hold_idle := PackedFloat32Array([0.0, 0.0, 0.0])
 var _amb_gain := PackedFloat32Array([0.0, 0.0, 0.0])
 var _amb_target := PackedFloat32Array([0.0, 0.0, 0.0])
 var _missing: Array[String] = []
@@ -79,58 +101,98 @@ func _ready() -> void:
 ## Sets the song's key: step tones and hold drones play root, fifth and octave of it.
 ## Call it when a song starts: it also starts the three drones, silent, so a hold
 ## later only fades one in (starting an Ogg stream costs ~0.7 ms; fading costs nothing).
+## Call end_song() when the song is over.
 func set_key(midi_root: int) -> void:
 	var pc := posmod(midi_root, 12)
 	_key_pc = pc
 	_tone_pitch = SEMITONE if pc % 2 == 1 else 1.0
 	for lane in LANES:
 		var p := _hold_players[lane]
+		_hold_idle[lane] = 0.0
 		if p.stream != _drones[lane][pc] or not p.playing:
 			p.stream = _drones[lane][pc]
 			p.volume_db = linear_to_db(_hold_gain[lane]) if _hold_gain[lane] > 0.001 else SILENT_DB
 			p.play()
 
 
+## The song is over: stops the drones and the jangle, and forgets the unison level
+## and the streak. (Ambience is left alone; stop it with stop_ambience().)
+func end_song() -> void:
+	for lane in LANES:
+		_hold_players[lane].stop()
+		_hold_gain[lane] = 0.0
+		_hold_dir[lane] = 0
+		_hold_idle[lane] = 0.0
+	_jangle_player.stop()
+	_jangle_choking = false
+	_unison = 0
+	_streak = 0
+
+
 ## bus is music, bells, sfx, ambience (or master); linear 0..1 (above 1 boosts).
 func set_volume(bus: String, linear: float) -> void:
-	var idx := AudioServer.get_bus_index(bus.capitalize())
+	var bus_name := bus.capitalize()
+	var idx := AudioServer.get_bus_index(bus_name)
 	if idx < 0:
 		push_warning("Sound.set_volume: unknown bus '%s'" % bus)
 		return
 	AudioServer.set_bus_mute(idx, linear <= 0.0001)
-	AudioServer.set_bus_volume_db(idx, linear_to_db(maxf(linear, 0.0001)))
+	AudioServer.set_bus_volume_db(idx, linear_to_db(maxf(linear, 0.0001)) + BUS_TRIM_DB.get(bus_name, 0.0))
 
 
 ## A footfall on stone and the lane's tuned knock (Left root, Middle fifth, Right octave).
 func step(lane: int) -> void:
 	lane = clampi(lane, 0, LANES - 1)
-	_play(_foot_pool, 2, _pick(_feet[lane], lane), randf_range(-1.5, 0.5))
+	# the footfall wanders +-3 % in pitch so no two steps are the same foot
+	_play(_foot_pool, 2, _pick(_feet[lane], lane), randf_range(-1.5, 0.5), randf_range(0.97, 1.03))
 	_play(_tone_pool, 3, _tones[lane][_key_pc >> 1], 0.0, _tone_pitch)
 
 
-## Rings the player's bell load. quality: perfect, good, ok, miss (Session.ring's
-## silence and free too; early and late ring the ok clank pitched up or down). The rest
-## of the row joins in at the level set by row_bells().
-func bell(set_id: String, up: bool, quality: String) -> void:
+## Rings the player's bell load.
+## quality: perfect, good, ok, miss; also Session.ring's silence (an ok clank) and free
+## (a good ring), and early / late, which have their own rings: early = the small bells
+## lead and are choked short, a little left; late = a heavy flam with the big bells
+## dragging, a little right.
+## strength 0..1 (the flick's peak, optional): under 1/3 is a soft ring (darker, 2.5 dB
+## down), over 2/3 a hard one (a heavier slam layered on top, 1 dB up).
+## The rest of the row joins in at the level set by row_bells(), and after a streak the
+## load keeps jangling between rings.
+func bell(set_id: String, up: bool, quality: String, strength := 0.5) -> void:
 	var sets: Array = _bells[set_id] if _bells.has(set_id) else _bells[_alias(set_id)]
 	var q := _quality_index(quality)
-	var takes: Array = sets[q * 2 + (0 if up else 1)]
+	var d := 0 if up else 1
+	var takes: Array = sets[q * 2 + d]
 	# A tiny random pitch (+-0.25 %, what a load swinging at walking pace does by
-	# Doppler) so no two rings are identical. If the caller passes the judgement word
-	# "early" or "late", the clank is also nudged up or down (+-3.5 %): early sounds
-	# thin and hurried, late heavy and dragging, so the ear learns which way it was off.
+	# Doppler) so no two rings are identical.
 	var pitch := randf_range(0.9975, 1.0025)
-	if quality == "early":
-		pitch *= 1.035
-	elif quality == "late":
-		pitch *= 0.965
-	_play(_bell_pool, 0, _pick(takes, 100 + q * 2 + (0 if up else 1)), randf_range(-0.8, 0.0), pitch)
-	if _unison > 0 and q <= 2:
+	var gain := randf_range(-0.8, 0.0)
+	var bus := BUS_BELLS
+	var hard := false
+	if q == 4:
+		bus = BUS_EARLY
+		pitch *= 1.02
+	elif q == 5:
+		bus = BUS_LATE
+		pitch *= 0.98
+	elif q != 3:
+		if strength < 0.34:
+			bus = BUS_SOFT
+			gain -= 2.5
+		elif strength > 0.67:
+			hard = true
+			gain += 1.0
+	var load_id: String = set_id if _accents.has(set_id) else _alias(set_id)
+	_play(_bell_pool, 0, _pick(takes, 100 + q * 2 + d), gain, pitch, bus)
+	if hard:
+		var acc: Array = _accents[load_id][d]
+		_play(_bell_pool, 0, _pick(acc, 120 + d), gain, pitch, bus)
+	if _unison > 0 and _row_joins(quality):
 		# the row rings with you: tight and loud at high unison, ragged and far at low
 		var tight := 1 if _unison >= 3 and q <= 1 else 0
-		var gain: float = ROW_DB[_unison] - (6.0 if q == 2 else 0.0)
-		var rt: Array = _row[tight][0 if up else 1]
-		_play(_row_pool, 1, _pick(rt, 200 + tight * 2 + (0 if up else 1)), gain + randf_range(-1.0, 0.0), randf_range(0.996, 1.004))
+		var rgain: float = ROW_DB[_unison] - (0.0 if q <= 1 else 6.0)
+		var rt: Array = _row[tight][d]
+		_play(_row_pool, 1, _pick(rt, 200 + tight * 2 + d), rgain + randf_range(-1.0, 0.0), randf_range(0.996, 1.004), BUS_BELLS)
+	_update_jangle(load_id, q, quality)
 
 
 ## Unison level 0..5 (Session.unison_level): how much of the row rings with your bells.
@@ -152,8 +214,9 @@ func rope() -> void:
 func hold_start(lane: int) -> void:
 	lane = clampi(lane, 0, LANES - 1)
 	var p := _hold_players[lane]
+	_hold_idle[lane] = 0.0
 	if not p.playing or p.stream != _drones[lane][_key_pc]:
-		# set_key() was not called (or stop_all() ran): start it now
+		# set_key() was not called, or the drone was stopped after sitting idle
 		p.stream = _drones[lane][_key_pc]
 		_hold_gain[lane] = 0.0
 		p.volume_db = SILENT_DB
@@ -166,8 +229,8 @@ func hold_start(lane: int) -> void:
 	_hold_dir[lane] = 1
 
 
-## Fades the lane's drone out (no click). It keeps running silently, ready for the
-## next hold.
+## Fades the lane's drone out (no click). It keeps running silently for a few seconds,
+## ready for the next hold, then stops.
 func hold_stop(lane: int) -> void:
 	lane = clampi(lane, 0, LANES - 1)
 	if _hold_gain[lane] > 0.0 or _hold_dir[lane] > 0:
@@ -176,10 +239,10 @@ func hold_stop(lane: int) -> void:
 
 ## UI sounds: tap, back, unlock, carve, result.
 func ui(name: String) -> void:
-	var takes: Array = _ui.get(name, [])
-	if takes.is_empty():
+	if not _ui.has(name):
 		push_warning("Sound.ui: unknown sound '%s'" % name)
 		return
+	var takes: Array = _ui[name]
 	_play(_sfx_pool, 4, _pick(takes, 400 + UI_NAMES.find(name)), randf_range(-0.8, 0.0))
 
 
@@ -207,8 +270,9 @@ func stop_ambience() -> void:
 		_amb_target[i] = 0.0
 
 
-## Plays four beats at bpm (a frame drum, the first beat accented), sample-accurate
-## because the four hits are laid into one stream. Returns the count-in's length in s.
+## Plays four beats at bpm (a frame drum with a stick click, the first beat a fifth
+## higher), sample-accurate because the four hits are laid into one stream. Returns
+## the count-in's length in seconds.
 func count_in(bpm: float) -> float:
 	bpm = clampf(bpm, 30.0, 300.0)
 	var beat := int(round(44100.0 * 60.0 / bpm))
@@ -236,15 +300,19 @@ func count_in(bpm: float) -> float:
 # ---------------------------------------------------------------------------- inside
 
 ## Not part of the play API: stops every sound at once (quitting, tests). The audio
-## server needs a frame or two afterwards to release the streams.
+## server needs a moment afterwards to release the streams.
 func stop_all() -> void:
 	for pool in [_bell_pool, _row_pool, _foot_pool, _tone_pool, _sfx_pool, _hold_players, _amb_players]:
 		for p: AudioStreamPlayer in pool:
 			p.stop()
+	if _jangle_player:
+		_jangle_player.stop()
 	_hold_gain.fill(0.0)
 	_hold_dir.fill(0)
+	_hold_idle.fill(0.0)
 	_amb_gain.fill(0.0)
 	_amb_target.fill(0.0)
+	_streak = 0
 
 
 func _exit_tree() -> void:
@@ -253,9 +321,17 @@ func _exit_tree() -> void:
 
 func _process(delta: float) -> void:
 	for lane in LANES:
+		var p := _hold_players[lane]
 		var d := _hold_dir[lane]
 		if d == 0:
+			# a silent drone left running too long is stopped
+			if p.playing and _hold_gain[lane] <= 0.0:
+				_hold_idle[lane] += delta
+				if _hold_idle[lane] >= DRONE_IDLE_STOP:
+					p.stop()
+					_hold_idle[lane] = 0.0
 			continue
+		_hold_idle[lane] = 0.0
 		var g := _hold_gain[lane] + delta / (HOLD_FADE_IN if d > 0 else -HOLD_FADE_OUT)
 		if g >= 1.0:
 			g = 1.0
@@ -264,7 +340,7 @@ func _process(delta: float) -> void:
 			g = 0.0
 			_hold_dir[lane] = 0
 		_hold_gain[lane] = g
-		_hold_players[lane].volume_db = linear_to_db(g) if g > 0.001 else SILENT_DB
+		p.volume_db = linear_to_db(g) if g > 0.001 else SILENT_DB
 	for i in AMBIENCES.size():
 		var tgt := _amb_target[i]
 		var g := _amb_gain[i]
@@ -277,25 +353,65 @@ func _process(delta: float) -> void:
 		p.volume_db = linear_to_db(maxf(sin(g * PI * 0.5), 0.001))
 		if g <= 0.0 and p.playing:
 			p.stop()
+	if _jangle_choking and _jangle_player.playing:
+		# a miss muffles the load: the jangle is choked within ~0.1 s
+		_jangle_player.volume_db -= delta * 60.0 / JANGLE_CHOKE
+		if _jangle_player.volume_db <= -60.0:
+			_jangle_player.stop()
+			_jangle_choking = false
 
 
-func _play(pool: Array[AudioStreamPlayer], which: int, stream: AudioStream, gain_db: float, pitch := 1.0) -> void:
+func _update_jangle(load_id: String, q: int, quality: String) -> void:
+	if q == 3:
+		_streak = 0
+		if _jangle_player.playing:
+			_jangle_choking = true
+		return
+	if q > 1 or quality == "free":
+		_streak = 0
+		return
+	_streak += 1
+	if _streak < JANGLE_STREAK:
+		return
+	var p := _jangle_player
+	var js: AudioStream = _jangles[load_id]
+	# keep one jangle going under the rings; restart it once it is under way
+	if p.playing and p.stream == js and p.get_playback_position() < 0.45:
+		return
+	_jangle_choking = false
+	p.stream = js
+	p.volume_db = -6.0 + 1.5 * minf(float(_streak - JANGLE_STREAK), 4.0)
+	p.pitch_scale = randf_range(0.995, 1.005)
+	p.play()
+
+
+func _play(pool: Array[AudioStreamPlayer], which: int, stream: AudioStream, gain_db: float,
+		pitch := 1.0, bus := &"") -> void:
 	if stream == null:
 		return
-	# round robin, but prefer a free player so a ringing tail is not cut
+	# a free player if there is one (from the round-robin position); otherwise steal
+	# the voice that has played longest, whose tail is quietest
 	var n := pool.size()
 	var start := _next[which]
-	var p := pool[start]
+	var chosen := -1
+	var oldest := -1.0
 	for k in n:
-		var cand := pool[(start + k) % n]
+		var i := (start + k) % n
+		var cand := pool[i]
 		if not cand.playing:
-			p = cand
-			start = (start + k) % n
+			chosen = i
 			break
-	_next[which] = (start + 1) % n
+		var pos := cand.get_playback_position()
+		if pos > oldest:
+			oldest = pos
+			chosen = i
+	_next[which] = (chosen + 1) % n
+	var p := pool[chosen]
 	p.stream = stream
 	p.volume_db = gain_db
 	p.pitch_scale = pitch
+	if bus != &"":
+		p.bus = bus
 	p.play()
 
 
@@ -320,11 +436,24 @@ func _quality_index(quality: String) -> int:
 			return 0
 		"good", "free":
 			return 1
-		"ok", "early", "late", "silence":
+		"ok", "silence":
 			return 2
 		"miss", "wrong":
 			return 3
+		"early":
+			return 4
+		"late":
+			return 5
 	return 1
+
+
+## The row rings with you only when you rang with the procession: not for a free ring
+## (no note), nor for one during a stand-still.
+func _row_joins(quality: String) -> bool:
+	match quality:
+		"perfect", "good", "ok", "early", "late":
+			return true
+	return false
 
 
 func _alias(set_id: String) -> String:
@@ -338,11 +467,33 @@ func _alias(set_id: String) -> String:
 
 func _make_buses() -> void:
 	for bus_name in BUS_NAMES:
-		if AudioServer.get_bus_index(bus_name) < 0:
-			AudioServer.add_bus()
-			var idx := AudioServer.bus_count - 1
-			AudioServer.set_bus_name(idx, bus_name)
-			AudioServer.set_bus_send(idx, "Master")
+		_ensure_bus(bus_name, "Master")
+		AudioServer.set_bus_volume_db(AudioServer.get_bus_index(bus_name), BUS_TRIM_DB[bus_name])
+	# Bells: a gentle compressor, then a limiter, so a heavy load with the whole row
+	# never reaches the Master limiter (which would pump the music)
+	var bells := AudioServer.get_bus_index("Bells")
+	if AudioServer.get_bus_effect_count(bells) == 0:
+		var comp := AudioEffectCompressor.new()
+		comp.threshold = -14.0
+		comp.ratio = 3.0
+		comp.attack_us = 500.0
+		comp.release_ms = 150.0
+		AudioServer.add_bus_effect(bells, comp)
+		var lim := AudioEffectHardLimiter.new()
+		lim.ceiling_db = -3.0
+		lim.release = 0.12
+		AudioServer.add_bus_effect(bells, lim)
+	var soft := _ensure_bus("BellsSoft", "Bells")
+	if AudioServer.get_bus_effect_count(soft) == 0:
+		var lp := AudioEffectLowPassFilter.new()
+		lp.cutoff_hz = 2200.0
+		AudioServer.add_bus_effect(soft, lp)
+	for pair in [["BellsEarly", -0.3], ["BellsLate", 0.3]]:
+		var idx := _ensure_bus(pair[0], "Bells")
+		if AudioServer.get_bus_effect_count(idx) == 0:
+			var pan := AudioEffectPanner.new()
+			pan.pan = pair[1]
+			AudioServer.add_bus_effect(idx, pan)
 	var master := AudioServer.get_bus_index("Master")
 	var has_limiter := false
 	for i in AudioServer.get_bus_effect_count(master):
@@ -354,13 +505,25 @@ func _make_buses() -> void:
 		AudioServer.add_bus_effect(master, lim)
 
 
+func _ensure_bus(bus_name: String, send: String) -> int:
+	var idx := AudioServer.get_bus_index(bus_name)
+	if idx < 0:
+		AudioServer.add_bus()
+		idx = AudioServer.bus_count - 1
+		AudioServer.set_bus_name(idx, bus_name)
+	AudioServer.set_bus_send(idx, send)
+	return idx
+
+
 func _load_all() -> void:
 	for s in BELL_SETS:
 		var arr: Array = []
-		for q in QUALITIES:
+		for qi in QUALITIES.size():
 			for dir in ["up", "down"]:
-				arr.append(_load_takes("bells/%s_%s_%s_%%d.wav" % [s, dir, q], TAKES))
+				arr.append(_load_takes("bells/%s_%s_%s_%%d.wav" % [s, dir, QUALITIES[qi]], QUALITY_TAKES[qi]))
 		_bells[s] = arr
+		_accents[s] = [_load_takes("bells/%s_up_accent_%%d.wav" % s, 2), _load_takes("bells/%s_down_accent_%%d.wav" % s, 2)]
+		_jangles[s] = _load("bells/%s_jangle_1.wav" % s)
 	for tight in ["loose", "tight"]:
 		var by_dir: Array = []
 		for dir in ["up", "down"]:
@@ -420,8 +583,8 @@ func _set_loop(s: AudioStream) -> void:
 
 
 func _make_players() -> void:
-	_fill(_bell_pool, 8, "Bells")
-	_fill(_row_pool, 4, "Bells")
+	_fill(_bell_pool, 10, "Bells")
+	_fill(_row_pool, 6, "Bells")
 	_fill(_foot_pool, 4, "Sfx")
 	_fill(_tone_pool, 4, "Sfx")
 	_fill(_sfx_pool, 6, "Sfx")
@@ -429,6 +592,9 @@ func _make_players() -> void:
 	_fill(_amb_players, AMBIENCES.size(), "Ambience")
 	for i in AMBIENCES.size():
 		_amb_players[i].stream = _amb_streams[i]
+	var j: Array[AudioStreamPlayer] = []
+	_fill(j, 1, "Bells")
+	_jangle_player = j[0]
 
 
 func _fill(pool: Array[AudioStreamPlayer], count: int, bus: String) -> void:

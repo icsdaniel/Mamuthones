@@ -125,8 +125,8 @@ def rest_report(song, stems, sources):
 
 def cue_report(song, stems, sources):
     """Every bell and ring has an audible cue (rim click or call) within the beat before it."""
-    cue_on = np.concatenate([onset_times(stems[k]) for k in ("frame", "calls", "rope", "snare", "hat", "count")
-                             if k in stems] or [np.array([])])
+    names = ("frame", "calls", "rope", "snare", "hat", "count") + (("bells",) if song.kind == "piazza" else ())
+    cue_on = np.concatenate([onset_times(stems[k]) for k in names if k in stems] or [np.array([])])
     total = 0
     ok = 0
     for d, lst in sources.items():

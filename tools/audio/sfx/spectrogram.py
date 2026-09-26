@@ -23,6 +23,7 @@ FILES = [
     "bells/full_down_miss_1.wav", "bells/row_tight_down_1.wav", "bells/row_loose_down_1.wav",
     "voice/call_1.wav", "voice/call_3.wav", "fx/rope_1.wav", "steps/tone_1_02.wav", "steps/foot_1_1.wav",
     "ui/carve_1.wav", "ui/unlock.ogg", "ui/result.ogg", "fx/count_hi.wav",
+    "bells/full_down_early_1.wav", "bells/full_down_late_1.wav", "bells/full_down_accent_1.wav", "bells/full_jangle_1.wav",
 ]
 
 

@@ -88,6 +88,27 @@ def flatness(x, sr):
     return float(np.exp(np.mean(np.log(S))) / np.mean(S))
 
 
+def phone_loss_db(x, sr):
+    """How much quieter a sound gets on a phone speaker, modelled as a 4th-order
+    500 Hz high-pass (RMS, dB; 0 = nothing lost)."""
+    y = mono(x)
+    sos = signal.butter(4, 500, "highpass", fs=sr, output="sos")
+    return float(20 * np.log10(np.sqrt(np.mean(signal.sosfilt(sos, y) ** 2)) / (np.sqrt(np.mean(y ** 2)) + 1e-12) + 1e-12))
+
+
+def attack_ms(x, sr):
+    """Time from the first sound (-30 dB of the peak 10 ms envelope) to within 6 dB of
+    the peak: how quickly the sound arrives at full strength."""
+    y = mono(x)
+    w = int(0.01 * sr)
+    c = np.concatenate([[0.0], np.cumsum(y ** 2)])
+    env = np.sqrt(np.maximum(c[w:] - c[:-w], 0) / w)
+    pk = env.max()
+    a = np.argmax(env >= pk * 10 ** (-30 / 20))
+    b = np.argmax(env >= pk * 0.5)
+    return float((b - a) / sr * 1000)
+
+
 def hf_click_score(x, sr):
     """Largest sample-to-sample jump of the >6 kHz residual, relative to its local RMS
     (10 ms). Isolated steps (clicks) score high; noise and strikes stay moderate."""
@@ -147,6 +168,8 @@ def main():
         r["onset_ms"] = round(float(np.argmax(m >= 0.1 * peak)) / sr * 1000, 2)
         r["hf_click"] = round(hf_click_score(x, sr), 1)
         r["rise_ms"] = round(rise_ms(x, sr), 1)
+        r["phone_loss_db"] = round(phone_loss_db(x, sr), 1)
+        r["attack_ms"] = round(attack_ms(x, sr), 1)
         if rel.startswith(("voice/", "fx/", "steps/", "ui/")):
             r["flatness"] = round(flatness(x, sr), 3)
         if is_loop:
@@ -244,12 +267,14 @@ def main():
     total = sum(os.path.getsize(p) for p in glob.glob(os.path.join(OUT, "**", "*"), recursive=True) if os.path.isfile(p))
     groups = {}
     for rel, r in rows.items():
-        m = re.match(r"(bells/row_(tight|loose)|voice/call|fx/rope|steps/tone|steps/foot)", rel)
+        m = re.match(r"(bells/row_(tight|loose)|voice/call|fx/rope|fx/count|steps/tone|steps/foot|bells/\w+_miss|bells/\w+_perfect|bells/\w+_early|bells/\w+_late|bells/\w+_accent|bells/\w+_jangle|ui/\w+?_|ambience/\w+)", rel)
         if m:
             groups.setdefault(m.group(1), []).append(r)
     summary = {}
     for g, v in groups.items():
         summary[g] = dict(rise_ms=round(float(np.mean([r["rise_ms"] for r in v])), 1),
+                          phone_loss_db_worst=round(float(np.min([r["phone_loss_db"] for r in v])), 1),
+                          attack_ms_worst=round(float(np.max([r["attack_ms"] for r in v])), 1),
                           seconds=round(float(np.mean([r["seconds"] for r in v])), 2))
         if "flatness" in v[0]:
             summary[g]["flatness"] = round(float(np.mean([r["flatness"] for r in v])), 3)

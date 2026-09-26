@@ -98,14 +98,23 @@ func test_early_and_late_read_differently() -> void:
 			steps.append(n)
 		if steps.size() == 2:
 			break
-	# Judge one note early and one late through the session, as the router would.
+	# Judge one note early and one late through the session, as the router would, reading the words
+	# after each (both may share a lane, so the second word replaces the first).
 	s.tap(steps[0].lane, steps[0].t - 0.07, 1)
+	var early := _words_text(words)
+	s.release(steps[0].t - 0.05, 1)
 	s.tap(steps[1].lane, steps[1].t + 0.07, 2)
-	var texts: Array[String] = []
-	for spot in (words.get("_spots") as Dictionary).values():
-		texts.append((spot[1] as Label).text + "/" + (spot[2] as Label).text)
-	var joined := " ".join(texts)
-	check(joined.contains(tr("judge_hint_early")) or joined.contains(tr("judge_early")), "an early hit says early (%s)" % joined)
-	check(joined.contains(tr("judge_hint_late")) or joined.contains(tr("judge_late")), "a late hit says late (%s)" % joined)
+	var late := _words_text(words)
+	check(early.contains(tr("judge_hint_early")) or early.contains(tr("judge_early")), "an early hit says early (%s)" % early)
+	check(late.contains(tr("judge_hint_late")) or late.contains(tr("judge_late")), "a late hit says late (%s)" % late)
+	check(not early.contains(tr("judge_hint_late")) or early.contains(tr("judge_hint_early")), "the early hit does not read late")
 	UIHarness.free_app(app)
 	UIHarness.restore_profile()
+
+
+func _words_text(words: JudgementWords) -> String:
+	var texts: Array[String] = []
+	for spot in (words.get("_spots") as Dictionary).values():
+		if (spot[0] as Control).modulate.a > 0.5:
+			texts.append((spot[1] as Label).text + "/" + (spot[2] as Label).text)
+	return " ".join(texts)

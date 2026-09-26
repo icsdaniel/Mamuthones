@@ -45,16 +45,18 @@ func test_every_sample_loads() -> void:
 			if check(st != null, "%s/%s loads" % [path, f]):
 				check(st.get_length() > 0.05, "%s/%s has length" % [path, f])
 				count += 1
-	check(count >= 168, "found all samples (%d)" % count)
+	check(count >= 207, "found all samples (%d)" % count)
 
 
 func test_bell_matrix_complete() -> void:
 	var s := _sound()
 	for set_id in ["light", "village", "full"]:
 		var arr: Array = s._bells[set_id]
-		check_eq(arr.size(), 8, "%s has 4 qualities x 2 directions" % set_id)
-		for takes in arr:
-			check(takes.size() >= 3, "%s: 3 takes per variant" % set_id)
+		check_eq(arr.size(), 12, "%s has 6 qualities x 2 directions" % set_id)
+		for i in arr.size():
+			check(arr[i].size() >= (3 if i < 8 else 2), "%s: enough takes for variant %d" % [set_id, i])
+		check(s._accents[set_id][0].size() == 2 and s._accents[set_id][1].size() == 2, "%s has hard-flick accents" % set_id)
+		check(s._jangles[set_id] != null, "%s has a jangle" % set_id)
 	for tight in 2:
 		for d in 2:
 			check(s._row[tight][d].size() >= 3, "row bells takes")
@@ -80,6 +82,7 @@ func test_loops_loop() -> void:
 	for st in s._amb_streams:
 		check(st != null and (st as AudioStreamOggVorbis).loop, "ambience loops")
 		check(st.get_length() >= 15.0, "ambience loop is long enough not to be noticed")
+	check(s._amb_streams[2].get_length() >= 48.0, "the wind loop is long enough that its gusts don't recur")
 
 
 func test_api_calls_headless() -> void:
@@ -90,7 +93,8 @@ func test_api_calls_headless() -> void:
 	check_eq(s._key_pc, 11, "negative midi wraps")
 	for bus in ["music", "bells", "sfx", "ambience", "master"]:
 		s.set_volume(bus, 0.5)
-		check_near(AudioServer.get_bus_volume_db(AudioServer.get_bus_index(bus.capitalize())), linear_to_db(0.5), 0.01, "%s volume" % bus)
+		var trim: float = s.BUS_TRIM_DB.get(bus.capitalize(), 0.0)
+		check_near(AudioServer.get_bus_volume_db(AudioServer.get_bus_index(bus.capitalize())), linear_to_db(0.5) + trim, 0.01, "%s volume" % bus)
 		s.set_volume(bus, 0.0)
 		check(AudioServer.is_bus_mute(AudioServer.get_bus_index(bus.capitalize())), "%s muted at 0" % bus)
 		s.set_volume(bus, 1.0)
@@ -150,6 +154,7 @@ func test_steps_follow_key() -> void:
 	s.step(2)
 	p = s._tone_pool[(s._next[3] - 1 + n) % n]
 	check(p.stream == s._tones[2][4], "the right step in A uses the tone recorded a semitone below")
+	# (A is pitch class 9: the G# tone, index 4, raised a semitone)
 	check_near(p.pitch_scale, pow(2.0, 1.0 / 12.0), 1e-6, "and raises it by exactly one semitone")
 	for lane in 3:
 		check(s._hold_players[lane].playing and s._hold_players[lane].stream == s._drones[lane][9], "drone %d runs silently in the new key" % lane)
@@ -218,19 +223,126 @@ func test_loop_seams_in_godot_decoder() -> void:
 		check(same, "%s: the loop restarts sample-exactly" % path.get_file())
 
 
+func _last_player(s: Node, pool: Array, which: int) -> AudioStreamPlayer:
+	var n: int = pool.size()
+	return pool[(s._next[which] - 1 + n) % n]
+
+
 func test_early_and_late_sound_different() -> void:
 	var s := _sound()
-	var n: int = s._bell_pool.size()
 	s.bell("village", true, "early")
-	var early: AudioStreamPlayer = s._bell_pool[(s._next[0] - 1 + n) % n]
-	check(early.pitch_scale > 1.02, "an early clank is pitched up (%.3f)" % early.pitch_scale)
+	var early := _last_player(s, s._bell_pool, 0)
+	check(s._bells["village"][8].has(early.stream), "early plays its own ring (small bells first, choked)")
+	check_eq(String(early.bus), "BellsEarly", "early rings a little to the left")
+	check(early.pitch_scale > 1.01, "and a touch higher (%.3f)" % early.pitch_scale)
 	s.bell("village", false, "late")
-	var late: AudioStreamPlayer = s._bell_pool[(s._next[0] - 1 + n) % n]
-	check(late.pitch_scale < 0.98, "a late clank is pitched down (%.3f)" % late.pitch_scale)
-	check(s._bells["village"][4].has(early.stream) or s._bells["village"][5].has(early.stream), "early uses the ok clank")
+	var late := _last_player(s, s._bell_pool, 0)
+	check(s._bells["village"][11].has(late.stream), "late plays its own ring (a heavy flam, big bells dragging)")
+	check_eq(String(late.bus), "BellsLate", "late rings a little to the right")
+	check(late.pitch_scale < 0.99, "and a touch lower (%.3f)" % late.pitch_scale)
 	s.bell("village", true, "perfect")
-	var p: AudioStreamPlayer = s._bell_pool[(s._next[0] - 1 + n) % n]
+	var p := _last_player(s, s._bell_pool, 0)
 	check(absf(p.pitch_scale - 1.0) <= 0.0026, "a perfect ring is only humanized, not detuned")
+	await _settle()
+
+
+func test_strength_layers() -> void:
+	var s := _sound()
+	s.bell("full", true, "perfect", 0.1)
+	var soft := _last_player(s, s._bell_pool, 0)
+	check_eq(String(soft.bus), "BellsSoft", "a soft flick rings darker, through the low-pass bus")
+	var before: int = s._next[0]
+	s.bell("full", false, "perfect", 0.95)
+	var hard := _last_player(s, s._bell_pool, 0)
+	check(s._accents["full"][1].has(hard.stream), "a hard flick layers the heavy slam")
+	check_eq((s._next[0] - before + s._bell_pool.size()) % s._bell_pool.size(), 2, "a hard flick uses two voices")
+	s.bell("full", false, "perfect")
+	check_eq(String(_last_player(s, s._bell_pool, 0).bus), "Bells", "the default strength is the normal ring")
+	await _settle()
+
+
+func test_row_only_with_the_procession() -> void:
+	var s := _sound()
+	s.stop_all()
+	await tree.create_timer(0.1).timeout
+	s.row_bells(5)
+	for q in ["silence", "free", "miss"]:
+		var before: int = s._next[1]
+		s.bell("light", true, q)
+		check_eq(s._next[1], before, "the row stays out of a %s ring" % q)
+	for q in ["perfect", "good", "ok", "early", "late"]:
+		var before: int = s._next[1]
+		s.bell("light", true, q)
+		check(s._next[1] != before, "the row joins a %s ring" % q)
+	check(s.ROW_DB[5] <= -6.0, "the full row sits at -6 dB or under")
+	await _settle()
+
+
+func test_jangle_after_streak() -> void:
+	var s := _sound()
+	s.end_song()
+	for i in 3:
+		s.bell("village", i % 2 == 0, "perfect")
+	check(not s._jangle_player.playing, "no jangle before a streak")
+	s.bell("village", true, "good")
+	check(s._jangle_player.playing, "the load keeps jangling after 4 rings in a row")
+	s.bell("village", false, "miss")
+	check(s._jangle_choking, "a miss chokes the jangle")
+	for i in 20:
+		await tree.process_frame
+	s._process(0.2)
+	check(not s._jangle_player.playing, "choked within a fraction of a second")
+	await _settle()
+
+
+func test_end_song_and_idle_drones() -> void:
+	var s := _sound()
+	s.set_key(62)
+	for lane in 3:
+		check(s._hold_players[lane].playing, "set_key starts drone %d (silent)" % lane)
+	s._process(s.DRONE_IDLE_STOP + 0.1)
+	for lane in 3:
+		check(not s._hold_players[lane].playing, "a drone silent for %.0f s stops" % s.DRONE_IDLE_STOP)
+	s.hold_start(1)
+	check(s._hold_players[1].playing, "hold_start restarts a stopped drone")
+	s._process(s.DRONE_IDLE_STOP + 0.1)
+	check(s._hold_players[1].playing, "a sounding drone is not stopped")
+	s.set_key(62)
+	s.row_bells(4)
+	s.end_song()
+	for lane in 3:
+		check(not s._hold_players[lane].playing, "end_song stops drone %d" % lane)
+	check_eq(s._unison, 0, "end_song forgets the unison level")
+	await _settle()
+
+
+func test_steals_the_oldest_voice() -> void:
+	var s := _sound()
+	s.stop_all()
+	await tree.create_timer(0.1).timeout
+	check_eq(s._row_pool.size(), 6, "six row voices")
+	var n: int = s._bell_pool.size()
+	var first: AudioStreamPlayer = null
+	for i in n:
+		s.bell("full", i % 2 == 0, "perfect")
+		if i == 0:
+			first = _last_player(s, s._bell_pool, 0)
+		await tree.create_timer(0.03).timeout
+	var all_busy := true
+	for p in s._bell_pool:
+		all_busy = all_busy and p.playing
+	if all_busy:
+		var oldest: AudioStreamPlayer = null
+		var best := -1.0
+		for p: AudioStreamPlayer in s._bell_pool:
+			if p.get_playback_position() > best:
+				best = p.get_playback_position()
+				oldest = p
+		s.bell("full", true, "perfect")
+		check(_last_player(s, s._bell_pool, 0) == oldest, "with every voice busy, the oldest ring is the one cut")
+		check(oldest == first or best > 0.2, "and it is one of the first rung")
+	else:
+		check(true, "a voice finished early; nothing to steal")
 	await _settle()
 
 

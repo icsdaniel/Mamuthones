@@ -128,6 +128,31 @@ def call(take: int) -> np.ndarray:
     return out
 
 
+def level_call(x: np.ndarray) -> np.ndarray:
+    """A shout arrives at full strength: even out the envelope (a slow leveller that
+    lifts the quieter opening syllable, up to +10 dB), then align every call so its
+    first sound starts 5 ms into the file. Gameplay plays the call on a hit, so it
+    must not swell in late."""
+    w = int(0.015 * SR)
+    c = np.concatenate([[0.0], np.cumsum(x ** 2)])
+    env = np.sqrt(np.maximum(c[w:] - c[:-w], 0) / w)
+    env = np.concatenate([env, np.full(len(x) - len(env), env[-1])])
+    pk = env.max()
+    voiced = env > pk * db(-24)
+    gain = np.ones_like(x)
+    gain[voiced] = np.clip(pk * db(-2) / (env[voiced] + 1e-12), 1.0, db(10))
+    # the tail (reverb, fall-off) keeps its shape: no lift after the voice ends
+    last = np.nonzero(voiced)[0][-1]
+    gain[last:] = gain[last]
+    gain[last:] = 1 + (gain[last] - 1) * np.exp(-np.arange(len(x) - last) / (0.08 * SR))
+    sm = int(0.02 * SR)
+    gain = np.convolve(gain, np.hanning(sm) / np.hanning(sm).sum(), "same")
+    y = x * gain
+    first = int(np.argmax(np.abs(y) > np.max(np.abs(y)) * db(-40)))
+    start = max(0, first - int(0.005 * SR))
+    return fade(y[start:], 0.003, 0.0)
+
+
 def crowd_loop(seconds: float = 24.0, xf: float = 2.0, voices: int = 26) -> np.ndarray:
     """Murmur of a crowd lining the street: many unintelligible voices at a distance."""
     sr = 22050  # rendered at half rate (the crowd is far away and darkened), resampled after
@@ -218,7 +243,7 @@ def crowd_loop(seconds: float = 24.0, xf: float = 2.0, voices: int = 26) -> np.n
 
 
 def main(which=("call", "crowd")) -> None:
-    calls = [call(k) for k in range(4)]
+    calls = [level_call(call(k)) for k in range(4)]
     # equal loudness (RMS of the voiced part), then one gain so the loudest peak is -1.5 dBFS
     loud = [np.sqrt(np.mean(c[: int(0.6 * SR)] ** 2)) for c in calls]
     calls = [c / l for c, l in zip(calls, loud)]

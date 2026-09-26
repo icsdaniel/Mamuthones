@@ -217,7 +217,7 @@ def fire_loop(seconds=20.0, xf=1.5) -> np.ndarray:
     return loop_crossfade(out[: L + X], L, X)
 
 
-def wind_loop(seconds=24.0, xf=2.0) -> np.ndarray:
+def wind_loop(seconds=52.0, xf=2.0) -> np.ndarray:
     """Winter wind in the lanes: slow gusts, a low rumble and a stone-corner whistle."""
     rng = np.random.default_rng(141)
     n = int((seconds + xf) * SR)
@@ -228,8 +228,10 @@ def wind_loop(seconds=24.0, xf=2.0) -> np.ndarray:
 
         def shape(t, f, c=c):
             nonlocal gust_ctrl
-            gust = 0.55 + 0.45 * np.interp(t, np.linspace(0, t[-1], 64),
-                                           np.convolve(g_rng.standard_normal(64), np.hanning(7), "same") / 2.5)
+            # about one gust shape every 0.4 s, never repeating within the 52 s loop
+            k = int(seconds * 2.5)
+            gust = 0.55 + 0.45 * np.interp(t, np.linspace(0, t[-1], k),
+                                           np.convolve(g_rng.standard_normal(k), np.hanning(7), "same") / 2.5)
             gust = np.clip(gust, 0.1, 1.3)
             gust_ctrl = gust
             fc = 250 + 700 * gust
@@ -260,9 +262,11 @@ def main() -> None:
     pk = max(np.max(np.abs(r)) for r in ropes)
     for k, r in enumerate(ropes):
         write_wav(f"fx/rope_{k + 1}.wav", r * db(-2) / pk)
+    # count-in: a frame drum with a stick click on the rim (the click is what a phone
+    # speaker plays); the first beat is a fifth higher and louder
     rng = np.random.default_rng(151)
-    hi = frame_drum(rng, 104, 1.0, 0.8, 0.28, 0.5) + wood_knock(rng, 1300, 0.35, 0.28, 0.1)
-    lo = frame_drum(rng, 104, 0.7, 0.3, 0.28, 0.8)
+    hi = frame_drum(rng, 156, 1.0, 0.7, 0.28, 0.6) + wood_knock(rng, 2250, 0.9, 0.28, 0.05)
+    lo = frame_drum(rng, 104, 0.8, 0.4, 0.28, 0.8) + wood_knock(rng, 1500, 0.65, 0.28, 0.05)
     pk = max(np.max(np.abs(hi)), np.max(np.abs(lo)))
     write_wav("fx/count_hi.wav", fade(hi * db(-2) / pk, 0.0005, 0.03))
     write_wav("fx/count_lo.wav", fade(lo * db(-2) / pk, 0.0005, 0.03))
@@ -287,7 +291,7 @@ def main() -> None:
     fire = fire_loop()
     write_ogg("ambience/fire.ogg", level(fire, -27), 0.3)
     wind = wind_loop()
-    write_ogg("ambience/wind.ogg", level(wind, -28), 0.3)
+    write_ogg("ambience/wind.ogg", level(wind, -28), 0.2)
     print("wrote fx, ui, ambience")
 
 

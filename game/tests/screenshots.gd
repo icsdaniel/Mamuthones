@@ -33,7 +33,7 @@ func _init() -> void:
 				sizes.append(Vector2i(int(t.get_slice("x", 0)), int(t.get_slice("x", 1))))
 		elif a[i].begins_with("locales="):
 			locales.assign(a[i].substr(8).split(","))
-		else:
+		elif a[i] != "":
 			only.append(a[i])
 	await process_frame
 	profile = root.get_node("/root/Profile")
