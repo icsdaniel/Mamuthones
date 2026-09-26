@@ -35,7 +35,7 @@ def build():
     def pipes(b, bars, tune, vel=0.9, ost=True):
         s.drone("tumbu", b, bars * 4, tumbu, vel=0.5)
         for k in range(0, bars, 4):
-            s.melody("mancosedda", b + k * 4, tune, vel=vel, octave=1, hold_min=99)
+            s.melody("mancosedda", b + k * 4, tune, vel=vel, octave=1, hold_min=99, sig_start=0)
             if ost:
                 for j in range(4):
                     s.melody("mancosa", b + (k + j) * 4, OST, vel=0.45, octave=1, role="fast", rank_shift=1,

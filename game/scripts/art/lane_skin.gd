@@ -146,6 +146,7 @@ static func _blit(ci: CanvasItem, tex: Texture2D, name: String, x0: float, width
 ## Draws `tex` stretched over `dest`, keeping only the part inside `clip` (by cropping the source
 ## region, so it stays one batched textured rect).
 static func _draw_clipped(ci: CanvasItem, tex: Texture2D, dest: Rect2, clip: Rect2, modulate := Color.WHITE) -> void:
+	_mip(ci)
 	var vis := dest.intersection(clip)
 	if vis.size.x <= 0.5 or vis.size.y <= 0.5:
 		return
@@ -155,6 +156,13 @@ static func _draw_clipped(ci: CanvasItem, tex: Texture2D, dest: Rect2, clip: Rec
 	var ts := Vector2(tex.get_size())
 	var src := Rect2((vis.position - dest.position) / dest.size * ts, vis.size / dest.size * ts)
 	ci.draw_texture_rect_region(tex, vis, src, modulate)
+
+
+## Sprites are baked at 2x with mipmaps; sample them with a mipmapped filter so they stay clean when
+## drawn smaller (narrow phones). This sets the canvas item's default filter; textures without
+## mipmaps drawn on it look exactly as before.
+static func _mip(ci: CanvasItem) -> void:
+	RenderingServer.canvas_item_set_default_texture_filter(ci.get_canvas_item(), RenderingServer.CANVAS_ITEM_TEXTURE_FILTER_LINEAR_WITH_MIPMAPS)
 
 
 ## True when a vector note at y (half height `half`) is at least partly inside `clip`.
@@ -169,6 +177,7 @@ static func draw_lanes(ci: CanvasItem, field: Rect2, glow: Array = [0.0, 0.0, 0.
 	if tex == null:
 		vec_lanes(ci, field, glow)
 		return
+	_mip(ci)
 	ci.draw_texture_rect(tex, field, false)
 	var gt := Palette.tex("glow")
 	var lanes := lane_rects(field, 3)
@@ -184,6 +193,7 @@ static func draw_hit_line(ci: CanvasItem, field: Rect2, pulse := 0.0) -> void:
 	if tex == null:
 		vec_hit_line(ci, field, pulse)
 		return
+	_mip(ci)
 	var y := hit_line_y(field)
 	if pulse > 0.0:
 		var gt := Palette.tex("glow")
@@ -274,6 +284,7 @@ static func draw_button(ci: CanvasItem, rect: Rect2, lane: int, state: String) -
 	if tex == null:
 		vec_button(ci, rect, lane, state)
 		return
+	_mip(ci)
 	ci.draw_texture_rect(tex, rect, false)
 
 

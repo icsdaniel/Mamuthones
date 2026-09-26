@@ -71,7 +71,7 @@ def build():
     s.stop(b + 30, 2)
 
     # ---- climax: everything, the melody an octave up, the row's bells behind the beat
-    b = s.sec("climax", 8, 3)
+    b = s.sec("climax", 8, 3, chart={"hard": dict(steps=[("pulse", 4), ("mel", 5), ("chorus", 5), ("perc", 5)])})
     s.tenore(b, 32, "rhythm", pattern="x...o.o.x.o.o.o.", vowels="aoae", vel=0.95)
     s.melody("boghe", b, A1, vel=1.0, octave=1, sig_start=0)
     s.melody("boghe", b + 16, B2, vel=1.0)

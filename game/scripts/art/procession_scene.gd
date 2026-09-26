@@ -280,7 +280,7 @@ func _build() -> void:
 	order.append(isso_back)
 	for w in order:
 		_world.add_child(w.root)
-	_ghost = _cell(func(ci): Figures.ghost(ci, _hf * 0.97, Color(Palette.BONE, 0.4)), Vector2.ZERO, Rect2(-0.36, -1.0, 0.64, 1.03))
+	_ghost = _cell(func(ci): Figures.ghost(ci, _hf * 0.97, Color(Palette.EMBER, 0.6)), Vector2.ZERO, Rect2(-0.35, -1.02, 0.7, 1.05))
 	_ghost.visible = ghost_visible
 	_world.add_child(_ghost)
 	var front := []

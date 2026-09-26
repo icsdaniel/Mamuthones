@@ -61,7 +61,7 @@ TARGET = {
     4: {"easy": 0.85, "medium": 1.35, "hard": 2.0, "expert": 3.0},
     5: {"easy": 0.9, "medium": 1.45, "hard": 2.3, "expert": 3.4},
     6: {"easy": 0.95, "medium": 1.6, "hard": 2.7, "expert": 4.0},
-    7: {"easy": 1.0, "medium": 1.7, "hard": 2.9, "expert": 4.3},
+    7: {"easy": 1.0, "medium": 1.85, "hard": 3.1, "expert": 4.4},
 }
 # how a section's density follows the song's shape (energy 0 calm .. 3 climax)
 ENERGY_FACTOR = {0: 0.6, 1: 0.85, 2: 1.05, 3: 1.4}
@@ -280,7 +280,9 @@ class Charter:
             near = min((abs(n.b - bb) for bb in bell_bs), default=99)
             if near < 1e-6:
                 bl = bell_bs[n.b]
-                if n.k == "step" and ring_ok and (bl.tag == "ring" or lv >= 3 or (tutorial and bl.tag == "ring")):
+                # rings where the score marks a leap (the bell cue lands with a step); at Expert
+                # also on the strongest bells, the rest of Expert's bells stay free of the steps
+                if n.k == "step" and ring_ok and (bl.tag in ("ring", "triple") or (lv >= 3 and bl.rank == 1)):
                     bl.k = "ring"
                     bl.pitch = n.pitch if n.pitch is not None else bl.pitch
                     bl.role = n.role
@@ -503,11 +505,11 @@ class Charter:
         remove = set()
         for n in notes:
             m = mech(n)
-            if id(n) in remove or m in ("step", "rest") or m in seen:
+            if id(n) in remove or m == "step" or m in seen:
                 continue
             seen.add(m)
             lo = n.b - 2.0
-            hi = n.b + (n.len if n.k == "hold" else 0.0) + 2.0
+            hi = n.b + (n.len if n.k in ("hold", "rest") else 0.0) + 2.0
             for o in notes:
                 if o is n or id(o) in remove:
                     continue
