@@ -137,6 +137,32 @@ func test_first_note_within_a_minute() -> void:
 			await tree.process_frame
 		var secs := (Time.get_ticks_msec() - t0) / 1000.0
 		check(c.song_time() >= first, "the first note arrives")
+		print("  first note %.1f s after launch with instant taps" % secs)
 		check(secs < 15.0, "the game's own waits before the first note stay short (%.1f s)" % secs)
 	UIHarness.free_app(app)
 	UIHarness.restore_profile()
+
+
+## A returning player is two taps from a song (title -> stop card -> play), and on the play screen the
+## lanes (note-reading space) take most of the height at every store size; the procession scene sits
+## above them and never eats into it.
+func test_two_taps_to_a_song_and_lanes_dominate() -> void:
+	for sz in [Vector2i(720, 1440), Vector2i(720, 1280), Vector2i(720, 1600), Vector2i(1536, 2048)]:
+		UIHarness.fresh_profile()
+		var app := UIHarness.make_app(tree, "", {}, sz)
+		await UIHarness.frames(tree, 2)
+		check(UIHarness.press(app, "Procession"), "title: one tap on the next stop")
+		await UIHarness.settle(tree)
+		check(UIHarness.press(app.current(), "Play"), "stop card: second tap plays")
+		await UIHarness.settle(tree)
+		var play := app.current()
+		check_eq(play.screen_name(), "play_screen", "two taps reach the song")
+		var lanes: Control = play.get("lanes")
+		var scene: Control = play.get("scene")
+		var h := play.size.y
+		print("  %s: lanes %.0f%% of height, procession %.0f%%" % [sz, lanes.size.y / h * 100.0, scene.size.y / h * 100.0])
+		check(lanes.size.y >= h * 0.58, "%s: lanes get most of the screen (%.0f%%)" % [sz, lanes.size.y / h * 100.0])
+		check(scene.size.y <= lanes.size.y * 0.5, "%s: the procession is a band, not the stage" % sz)
+		check(scene.get_global_rect().end.y <= lanes.get_global_rect().position.y + 1.0, "%s: the scene does not overlap the lanes" % sz)
+		UIHarness.free_app(app)
+		UIHarness.restore_profile()
