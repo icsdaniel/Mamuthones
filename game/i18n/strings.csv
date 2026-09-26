@@ -196,6 +196,7 @@ judge_wrong,Wrong lane,Corsia sbagliata
 judge_held,Held,Tenuto
 judge_let_go,Let go,Lasciato
 judge_silence,Stand still,Fermo!
+lane_still,Stand still,Fermi
 judge_hint_early,early,presto
 judge_hint_late,late,tardi
 pause_title,Paused,Pausa

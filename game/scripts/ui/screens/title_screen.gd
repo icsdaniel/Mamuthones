@@ -33,7 +33,7 @@ func build() -> void:
 	Sound.ambience(UIKit.ambience_for(stop))
 
 	var play := UIKit.button("", _play_next, UIKit.PRIMARY)
-	play.name = "Procession"
+	play.name = "PlayNext"
 	play.text = tr("title_continue") % UIKit.song_title(next_song) if next_song != null else tr("title_procession")
 	play.text_overrun_behavior = TextServer.OVERRUN_TRIM_ELLIPSIS
 	box.add_child(play)

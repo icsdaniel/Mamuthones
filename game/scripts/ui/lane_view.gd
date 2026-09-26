@@ -171,7 +171,26 @@ func _draw_notes(field: Rect2) -> void:
 					LaneSkin.draw_swipe(self, field, y, n.dir)
 			Note.Kind.REST:
 				if not n.finished:
-					LaneSkin.draw_rest(self, field, LaneSkin.note_y(field, n.end_t - t, pps), y)
+					var y_end := LaneSkin.note_y(field, n.end_t - t, pps)
+					LaneSkin.draw_rest(self, field, y_end, y)
+					_rest_words(field, y_end, y)
+
+
+## Names a stand-still band on the lanes, so a rest reads as an instruction and not as empty
+## space: the words sit in the visible part of the band, kept inside the field.
+func _rest_words(field: Rect2, y_a: float, y_b: float) -> void:
+	var top := maxf(minf(y_a, y_b), field.position.y)
+	var bottom := minf(maxf(y_a, y_b), LaneSkin.hit_line_y(field))
+	if bottom - top < 60.0:
+		return
+	var font := get_theme_default_font()
+	var fs := 34
+	var text := tr("lane_still")
+	var w := font.get_string_size(text, HORIZONTAL_ALIGNMENT_LEFT, -1, fs).x
+	# Near the top of the band, clear of the judgement words that rise from the hit line.
+	var pos := Vector2(field.get_center().x - w * 0.5, top + 30.0 + fs * 0.7)
+	draw_string_outline(font, pos, text, HORIZONTAL_ALIGNMENT_LEFT, -1, fs, 8, Palette.INK)
+	draw_string(font, pos, text, HORIZONTAL_ALIGNMENT_LEFT, -1, fs, Palette.BONE)
 
 
 ## A note is gone once it is judged (or over) and has passed the bottom of the field.

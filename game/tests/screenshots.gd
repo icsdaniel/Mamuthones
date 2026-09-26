@@ -106,6 +106,11 @@ func _shots() -> Array:
 		{"file": "workshop_dress", "screen": "workshop", "setup": "tab_dress", "wait": 0.8},
 		{"file": "tutorial", "screen": "tutorial", "args": {"song_id": tut_id, "first_run": true}, "wait": 1.2},
 		{"file": "play_fires", "screen": "play", "args": {"song_id": fires_id, "difficulty": "hard", "bell_set": "light", "autoplay": true, "human": true}, "setup": "advance:0.42"},
+		{"file": "play_dense", "screen": "play", "args": {"song_id": fires_id, "difficulty": "hard", "bell_set": "light", "autoplay": true}, "setup": "moment:dense", "wait": 0.1},
+		{"file": "play_hold", "screen": "play", "args": {"song_id": "bonfires", "difficulty": "medium", "bell_set": "light", "autoplay": true}, "setup": "moment:hold", "wait": 0.1},
+		{"file": "play_bell", "screen": "play", "args": {"song_id": fires_id, "difficulty": "hard", "bell_set": "light", "autoplay": true}, "setup": "moment:bell", "wait": 0.1},
+		{"file": "play_still", "screen": "play", "args": {"song_id": fires_id, "difficulty": "hard", "bell_set": "light", "autoplay": true}, "setup": "moment:still", "wait": 0.1},
+		{"file": "play_miss", "screen": "play", "args": {"song_id": fires_id, "difficulty": "hard", "bell_set": "light", "autoplay": true}, "setup": "moment:miss", "wait": 0.05},
 		{"file": "play_tutorial", "screen": "play", "args": {"song_id": tut_id, "difficulty": "easy", "bell_set": "light", "autoplay": true}, "setup": "advance:0.25"},
 		{"file": "pause", "screen": "play", "args": {"song_id": fires_id, "difficulty": "medium", "bell_set": "light", "autoplay": true}, "setup": "pause"},
 		{"file": "results", "screen": "results", "setup": "results", "wait": 1.3},
@@ -151,6 +156,8 @@ func _render(shot: Dictionary, size: Vector2i, locale: String, dir: String) -> v
 	var screen: Control = app.call("current")
 	if setup.begins_with("advance:") and screen != null:
 		await _advance(screen, float(setup.get_slice(":", 1)))
+	elif setup.begins_with("moment:") and screen != null:
+		await _moment(screen, setup.get_slice(":", 1))
 	elif setup == "pause" and screen != null:
 		await _advance(screen, 0.2)
 		screen.call("pause")
@@ -175,6 +182,56 @@ func _advance(screen: Node, share: float) -> void:
 	c.use_manual_clock(true)
 	var target := lerpf(s.notes[0].t if not s.notes.is_empty() else 0.0, s.end_time(), share)
 	var steps := 90
+	var step := maxf((target - c.song_time()) / steps, 0.0)
+	for i in steps:
+		c.advance(step)
+		await process_frame
+
+
+## Moves a play screen to a telling moment of its song on a manual clock: "dense" (the busiest two
+## seconds), "hold" (half-way through a held note), "bell" (a bell cue about to reach the line),
+## "still" (inside a stand-still rest) or "miss" (just after a note Autoplay lets go by).
+func _moment(screen: Node, what: String) -> void:
+	var c: Conductor = screen.get("conductor")
+	var s: Session = screen.get("session")
+	if c == null or s == null or s.notes.is_empty():
+		return
+	var from := lerpf(s.notes[0].t, s.end_time(), 0.2)
+	var target := from
+	match what:
+		"dense":
+			var best := -1
+			for i in s.notes.size():
+				if s.notes[i].t < from:
+					continue
+				var k := 0
+				for j in range(i, s.notes.size()):
+					if s.notes[j].t > s.notes[i].t + 2.0:
+						break
+					k += 1
+				if k > best:
+					best = k
+					target = s.notes[i].t + 0.9
+		"hold", "bell", "still", "miss":
+			var kinds := {"hold": [Note.Kind.HOLD], "bell": [Note.Kind.BELL, Note.Kind.RING],
+				"still": [Note.Kind.REST], "miss": [Note.Kind.STEP]}
+			for i in s.notes.size():
+				var n: Note = s.notes[i]
+				if n.t < from or not n.kind in kinds[what]:
+					continue
+				match what:
+					"hold", "still":
+						target = lerpf(n.t, n.end_t, 0.45)
+					"bell":
+						target = n.t - 0.45
+					"miss":
+						var auto: Object = screen.get("autoplay")
+						if auto != null:
+							(auto.get("_plan") as Array)[i] = NAN   # this one note goes by untouched
+						target = n.t + 0.22
+				break
+	c.use_manual_clock(true)
+	var steps := 120
 	var step := maxf((target - c.song_time()) / steps, 0.0)
 	for i in steps:
 		c.advance(step)

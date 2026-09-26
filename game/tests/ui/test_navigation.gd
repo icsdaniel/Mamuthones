@@ -151,7 +151,7 @@ func test_two_taps_to_a_song_and_lanes_dominate() -> void:
 		UIHarness.fresh_profile()
 		var app := UIHarness.make_app(tree, "", {}, sz)
 		await UIHarness.frames(tree, 2)
-		check(UIHarness.press(app, "Procession"), "title: one tap on the next stop")
+		check(UIHarness.press(app, "PlayNext"), "title: one tap on the next stop")
 		await UIHarness.settle(tree)
 		check(UIHarness.press(app.current(), "Play"), "stop card: second tap plays")
 		await UIHarness.settle(tree)
