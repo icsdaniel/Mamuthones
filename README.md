@@ -16,3 +16,16 @@ Two short songs, played holding the phone in both hands:
 ## Sensor test (`test.html`)
 
 Raw numbers for the inputs: tap and shake timing offsets, false shakes set off by taps, sensor rate and peak motion.
+
+## Godot game (`game/`)
+
+The real game, in Godot 4.6 (mobile renderer, portrait). It plays the same two songs with the same rules as the web prototype, and the charts now live in `game/data/songs.json`.
+
+- **Open it:** install [Godot 4.6.2](https://godotengine.org/download) and open `game/project.godot`. Press F5 to play on your computer: **A S D** step, **Space** rings the bell, **Q / E** swipe left / right, **Esc** leaves the song.
+- **Code:** the rules are plain scripts with no screen or sound, so tests can drive them.
+  - `scripts/chart.gd` reads songs and parses charts, `scripts/session.gd` judges and scores a play.
+  - `scripts/calibrator.gd` learns the bell tilt, `scripts/bell_detector.gd` turns sensor readings into rings, `scripts/motion_reader.gd` reads the sensors.
+  - `scripts/play_view.gd` is the play screen, `scripts/main.gd` builds the other screens, `scripts/save_data.gd` keeps the calibration and best scores.
+- **Tests:** `godot --headless --path game --import`, then `godot --headless --path game -s res://tests/run_tests.gd`. They also run on every pull request (`.github/workflows/godot-tests.yml`). `tests/screenshots.gd` saves a picture of every screen; it needs a display (for example `xvfb-run`) and `--rendering-driver opengl3`.
+- **Audio:** the music and sounds are placeholders made by `tools/make_placeholder_audio.py`. Each song's `first_beat` in `songs.json` is the second in its audio file where the chart starts, so real recordings only need that number updated.
+- **Phones:** exporting needs Godot's export templates plus the Android SDK (for Android) or a Mac with Xcode (for iOS). Not set up yet.

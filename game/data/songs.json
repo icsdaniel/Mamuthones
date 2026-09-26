@@ -1,0 +1,57 @@
+{
+  "_format": "Charts use an eighth-note grid, 8 symbols per bar. L M R: step on that button (an odd eighth is an off-beat Issohadore call). l m r: hold that button, each following '=' extends it by one eighth. X: bell (tilt), always alternating up and down. > <: rope swipe. -: stand still. .: nothing. first_beat: seconds into the audio file where the chart's first eighth falls.",
+  "songs": [
+    {
+      "id": "steps",
+      "title": "The First Steps",
+      "bpm": 84,
+      "about": "Steps on the beat and alternating bells.",
+      "chart": [
+        "L.M.R.X.",
+        "R.M.L.X.",
+        "L.M.R.X.",
+        "L.R.M.-.",
+        "L.L.M.X.",
+        "R.-.M.X.",
+        "L.M.R.X.",
+        "R.M.L.X.",
+        "L.M.X.X.",
+        "R.M.X.-.",
+        "M.L.X.X.",
+        "L.R.X.X.",
+        "L.M.R.M.",
+        "X.X.X.X.",
+        "L.M.R.X.",
+        "X.-.-.-."
+      ],
+      "audio": "res://audio/steps.wav",
+      "first_beat": 3.057143
+    },
+    {
+      "id": "rope",
+      "title": "The Rope",
+      "bpm": 92,
+      "about": "Held notes, off-beat Issohadore calls and the rope swipe.",
+      "chart": [
+        "m===X.L.",
+        "R.M.X...",
+        "l===X.R.",
+        "M.L.X.-.",
+        "L.M.R.X.",
+        "L..M..X.",
+        "R..M.L..",
+        "X...-...",
+        "L.M.>...",
+        "X...R.M.",
+        "L.M.<...",
+        "X...r===",
+        "L.M.R.M.",
+        "L..R..X.",
+        ">...m===",
+        "X......."
+      ],
+      "audio": "res://audio/rope.wav",
+      "first_beat": 2.808696
+    }
+  ]
+}
