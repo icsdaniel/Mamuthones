@@ -155,7 +155,8 @@ static func build() -> Theme:
 	t.set_stylebox("focus", "LineEdit", focus)
 	t.set_stylebox("read_only", "LineEdit", field)
 	t.set_color("font_color", "LineEdit", Palette.BONE)
-	t.set_color("font_placeholder_color", "LineEdit", Palette.BONE_FAINT)
+	# Placeholder must still read on the grained field (BONE_DIM is about 7:1 on it).
+	t.set_color("font_placeholder_color", "LineEdit", Palette.BONE_DIM)
 	t.set_color("caret_color", "LineEdit", Palette.EMBER)
 	t.set_color("selection_color", "LineEdit", Color(Palette.RED, 0.7))
 	t.set_font_size("font_size", "LineEdit", SIZE_TEXT)
@@ -210,10 +211,13 @@ static func build() -> Theme:
 
 	# ---- progress
 	t.set_stylebox("background", "ProgressBar", _nine("groove", 8, Vector4(-1, -1, -1, -1)))
-	t.set_stylebox("fill", "ProgressBar", _nine("groove_ember", 8, Vector4(-1, -1, -1, -1)))
+	# Red fill (bone text on it is about 4.6:1) and a heavy ink outline so the percentage reads on the
+	# fill and on the empty groove alike.
+	t.set_stylebox("fill", "ProgressBar", _nine("groove_red", 8, Vector4(-1, -1, -1, -1)))
 	t.set_color("font_color", "ProgressBar", Palette.BONE)
 	t.set_color("font_outline_color", "ProgressBar", Palette.INK)
-	t.set_constant("outline_size", "ProgressBar", 6)
+	t.set_constant("outline_size", "ProgressBar", 10)
+	t.set_font("font", "ProgressBar", Palette.text_font("ExtraBold"))
 	t.set_font_size("font_size", "ProgressBar", SIZE_CAPTION)
 
 	# ---- separators

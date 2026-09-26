@@ -291,6 +291,7 @@ tut_unison,"Every 12 good hits in a row raise your unison: ×1.5, ×2, up to ×4
 tut_weight,"Heavier bell sets, earned later, multiply your score too, but their timing is stricter.","I carichi di campanacci più pesanti, che guadagnerai più avanti, moltiplicano anche il punteggio, ma chiedono un tempo più preciso."
 tut_ready,"Now the whole song, at Easy.","Ora il brano intero, a Facile."
 tut_play_song,Play the Workshop song,Suona il brano del laboratorio
+tut_next_stop,On to %s,Avanti: %s
 tut_later,Later,Più tardi
 tut_leave_q,Leave the lessons? You can come back to them from the Workshop stop.,Lasciare le lezioni? Puoi tornarci dalla tappa del laboratorio.
 tut_leave,Leave,Esci

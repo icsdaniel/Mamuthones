@@ -91,7 +91,49 @@ def finish(song, stems, n, out_name, quality):
     return y, meas
 
 
+def load_stems(dirpath):
+    import soundfile as sf
+    out = {}
+    for f in sorted(os.listdir(dirpath)):
+        if f.endswith(".flac"):
+            out[f[:-5]] = sf.read(os.path.join(dirpath, f))[0]
+    return out
+
+
+def rechart_one(sid, opts, report):
+    """Charts, JSON and timing again from the saved stems, without re-rendering audio."""
+    song = load_song(sid)
+    path = os.path.join(SONGS, sid + ".json")
+    with open(path, encoding="utf-8") as f:
+        data = json.load(f)
+    stems = load_stems(os.path.join(opts["stems"], sid))
+    charts, sources = chart_song(song) if song.kind != "piazza" else piazza_chart(song)
+    entry = report.get(sid, {})
+    entry["timing"] = analyze.timing_report(song, sources, stems, charts)
+    entry["rests"] = analyze.rest_report(song, stems, sources)
+    entry["cues"] = analyze.cue_report(song, stems, sources)
+    if "remix" in data and os.path.isdir(os.path.join(opts["stems"], sid + "_remix")):
+        import remix
+        rsong = remix.build(song, stems)
+        rstems = load_stems(os.path.join(opts["stems"], sid + "_remix"))
+        entry.setdefault("remix", {})["timing"] = analyze.timing_report(
+            rsong, remix.remix_sources(rsong, sources), rstems, charts)
+    data["charts"] = charts
+    data["sections"] = [{"name": s.name, "b": s.b, "len": s.len} for s in song.sections]
+    if song.kind == "tutorial":
+        data["lessons"] = song.lessons
+    with open(path, "w", encoding="utf-8") as f:
+        f.write(dumps_song(data))
+    report[sid] = entry
+    print(f"{sid:14s} timing " + " ".join(f"{d}:{v['within_20ms'] * 100:.1f}%" for d, v in entry["timing"].items())
+          + ("  remix " + " ".join(f"{v['within_20ms'] * 100:.1f}%" for v in entry["remix"]["timing"].values())
+             if "remix" in entry and "timing" in entry["remix"] else ""), flush=True)
+    return entry
+
+
 def render_one(sid, opts, report):
+    if opts.get("charts_only"):
+        return rechart_one(sid, opts, report)
     t0 = time.time()
     song = load_song(sid)
     stems, n = mixer.render_stems(song)
@@ -180,6 +222,8 @@ def main(argv):
             opts["report"] = next(it)
         elif a == "--quality":
             opts["quality"] = float(next(it))
+        elif a == "--charts-only":
+            opts["charts_only"] = True
         elif a == "-j":
             opts["jobs"] = int(next(it))
         else:

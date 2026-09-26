@@ -371,8 +371,8 @@ func test_reference_formula_on_random_runs() -> void:
 				chart.append({"b": b, "k": "ring", "lane": rng.randi() % 3})
 			else:
 				chart.append({"b": b, "k": "rest", "len": 0.5})
-		var set: String = BellSets.ids()[run % 3]
-		var s := Session.new(make(chart), "easy", set)
+		var bell_set: String = BellSets.ids()[run % 3]
+		var s := Session.new(make(chart), "easy", bell_set)
 		var events := []
 		s.judged.connect(func(n, j, _o): events.append([n.kind, j]))
 		var rest_events := []
@@ -400,7 +400,7 @@ func test_reference_formula_on_random_runs() -> void:
 		var level := 0
 		var run12 := 0
 		var total := 0.0
-		var w := BellSets.weight(set)
+		var w := BellSets.weight(bell_set)
 		var pts := {"perfect": 300, "good": 150, "early": 50, "late": 50}
 		var ring_pts := {"perfect": 450, "good": 225, "early": 75, "late": 75}
 		for e in events:

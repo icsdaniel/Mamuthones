@@ -386,12 +386,23 @@ func _rebuild_stop() -> void:
 	_layout()
 
 
+## Resizes arrive in bursts (window drags, container animations): move things at once, but re-render
+## the baked textures only once the size has settled for REBAKE_DELAY seconds.
+const REBAKE_DELAY := 0.15
+var _rebake_due := -1.0
+
+
 func _on_resized() -> void:
-	if _built:
+	if not _built:
+		return
+	if bake_count == 0:
 		_layout()
+		return
+	_layout(false)
+	_rebake_due = REBAKE_DELAY
 
 
-func _layout() -> void:
+func _layout(rebake := true) -> void:
 	var sz := size
 	if sz.x < 2.0 or sz.y < 2.0:
 		return
@@ -429,7 +440,15 @@ func _layout() -> void:
 	_arm.position = Vector2(14.5, -77.0) * _hf * 0.93 / 100.0
 	for n in [_glow, _frame]:
 		n.queue_redraw()
-	_rebake(true)
+	if rebake:
+		_rebake_due = -1.0
+		_rebake(true)
+	else:
+		for w in _walkers:
+			for n in [w.back, w.body, w.head]:
+				n.queue_redraw()
+		for n in [_arm, _ghost, _back, _front]:
+			n.queue_redraw()
 
 
 ## Row positions for the current unison: the row closes up as unison rises.
@@ -463,6 +482,10 @@ func _process(delta: float) -> void:
 	if not _built:
 		return
 	var t0 := Time.get_ticks_usec()
+	if _rebake_due >= 0.0:
+		_rebake_due -= delta
+		if _rebake_due < 0.0:
+			_rebake(true)
 	delta = minf(delta, 0.05)
 	_t += delta
 	if auto_bpm > 0.0 and not still:
@@ -708,15 +731,17 @@ func _paint_rope(ci: CanvasItem) -> void:
 	var tip := hand.lerp(target, out)
 	var mid := (hand + tip) * 0.5 + Vector2(0, -60.0 * out + 30.0 * (1.0 - out))
 	var pts := WoodcutDraw.quad(hand, mid, tip, 14)
-	# Twisted rope: a red core with dark twists.
-	WoodcutDraw.stroke(ci, pts, Palette.RED, 4.0, 3.0, 4.5)
+	# Twisted rush rope: a pale core with darker twists, inked so it reads against the day streets.
+	WoodcutDraw.stroke(ci, pts, Palette.INK, 5.6, 4.4, 6.0)
+	WoodcutDraw.stroke(ci, pts, Palette.ROPE, 4.0, 3.0, 4.5)
 	for i in range(1, pts.size() - 1, 2):
 		var d := (pts[i + 1] - pts[i - 1]).normalized().orthogonal() * 2.0
-		WoodcutDraw.line(ci, pts[i] - d, pts[i] + d + (pts[i + 1] - pts[i]) * 0.5, Palette.RED_DEEP, 1.4)
+		WoodcutDraw.line(ci, pts[i] - d, pts[i] + d + (pts[i + 1] - pts[i]) * 0.5, Palette.ROPE_DARK, 1.4)
 	# The noose at the end.
 	var loop := WoodcutDraw.ellipse(tip + Vector2(0, 8), Vector2(9, 12), 14, 0.4)
 	loop.append(loop[0])
-	WoodcutDraw.stroke(ci, loop, Palette.RED, 3.0, 3.0)
+	WoodcutDraw.stroke(ci, loop, Palette.INK, 4.4, 4.4)
+	WoodcutDraw.stroke(ci, loop, Palette.ROPE, 3.0, 3.0)
 	WoodcutDraw.end()
 
 

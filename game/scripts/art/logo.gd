@@ -32,13 +32,23 @@ func _draw() -> void:
 	paint(self, c, r)
 	if show_title:
 		var font := Palette.display_font()
-		var fs := int(title_h * 0.5)
+		var fs := _fit(font, title.to_upper(), int(title_h * 0.5), size.x * 0.92)
 		var ty := size.y - title_h + fs * 0.95
 		_centered_text(font, title.to_upper(), ty, fs, Palette.BONE)
 		if subtitle != "":
 			var sub_font := Palette.text_font("Bold")
-			var ss := maxi(24, int(fs * 0.34))
+			var ss := _fit(sub_font, subtitle, maxi(24, int(fs * 0.34)), size.x * 0.92)
 			_centered_text(sub_font, subtitle, ty + ss * 1.5, ss, Palette.EMBER)
+
+
+## The largest size up to `fs` at which `text` fits in `max_w` (never below 12 px).
+static func _fit(font: Font, text: String, fs: int, max_w: float) -> int:
+	if font == null or text == "":
+		return fs
+	var w := font.get_string_size(text, HORIZONTAL_ALIGNMENT_LEFT, -1, fs).x
+	if w <= max_w:
+		return fs
+	return maxi(12, int(floor(float(fs) * max_w / w)))
 
 
 func _centered_text(font: Font, text: String, y: float, fs: int, color: Color) -> void:

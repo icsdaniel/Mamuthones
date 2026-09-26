@@ -17,6 +17,9 @@ const BONE_FAINT := Color("#6e645b")   ## disabled text
 const RED_DEEP := Color("#8e2a20")     ## shaded red cloth
 const EMBER_HOT := Color("#f3cf85")    ## the white-hot heart of a fire
 const ASH := Color("#7d756c")          ## grey for stand-stills and ash
+## The soha as it really is: natural rush or hemp. (Red is kept only for the swipe note and the logo.)
+const ROPE := Color("#b39a6b")
+const ROPE_DARK := Color("#7a6446")    ## its twists
 
 ## Sheepskin shades and strap leathers the player can pick (Profile look values).
 const FLEECE := {

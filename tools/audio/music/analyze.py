@@ -42,7 +42,10 @@ def onset_times(x, delta=0.05):
         ref = maximum_filter1d(lm[:k], 5, axis=1)
         d[fr] = np.maximum(0, lm[k:] - ref).sum(axis=1)
     d[:LAG] = 0
-    out = d / (d.max() + 1e-9)
+    # normalise against the loudest flux in the surrounding seconds, so a soft legato passage is
+    # judged against itself and not against the loudest attack in the whole stem
+    local = maximum_filter1d(d, int(3.0 * SR / HOP) | 1)
+    out = d / np.maximum(local, d.max() * 0.08 + 1e-9)
     base = uniform_filter1d(out, int(0.25 * SR / HOP) | 1)
     loc = maximum_filter1d(out, int(0.05 * SR / HOP) | 1)
     peaks = np.where((out == loc) & (out > base + delta) & (out > 0.03))[0]

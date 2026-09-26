@@ -2,7 +2,9 @@ extends SceneTree
 ## Renders every art piece to PNGs for looking at (needs a real renderer):
 ##   xvfb-run -a godot --path game --rendering-driver opengl3 --resolution 720x1440 \
 ##       -s res://tests/art/gallery.gd -- /tmp/art-gallery [piece ...]
-## Pieces: theme, masks, procession, stops, lanes, logo, cards, icon, greyscale (default: all).
+## Pieces: theme, masks, figures, stops, procession, lanes, logo, timing (default: all).
+## lanes also writes the greyscale and small-size sheets; logo also writes the 64 and 128 px icons;
+## timing writes play_mock.png (scene and lanes together) and appends to timing.txt.
 
 var out_dir := "/tmp/art-gallery"
 var only: Array[String] = []
@@ -116,7 +118,7 @@ func _masks() -> void:
 	# Every option of every part, on the default mask.
 	var sheet := ColorRect.new()
 	sheet.color = Palette.NIGHT
-	var cell := Vector2(180, 220)
+	var cell := Vector2(180, 236)
 	sheet.size = Vector2(cell.x * 4, cell.y * MaskSpec.PARTS.size())
 	for r in MaskSpec.PARTS.size():
 		var part: String = MaskSpec.PARTS[r]
@@ -127,12 +129,15 @@ func _masks() -> void:
 			spec[part] = opts[c]
 			m.spec = spec
 			m.position = Vector2(c * cell.x, r * cell.y)
-			m.size = cell - Vector2(0, 30)
+			m.size = cell - Vector2(0, 46)
 			sheet.add_child(m)
 			var l := Label.new()
-			l.text = "%s: %s" % [part, opts[c]]
-			l.add_theme_font_size_override("font_size", 18)
-			l.position = Vector2(c * cell.x + 8, r * cell.y + cell.y - 30)
+			l.text = "%s\n%s" % [part, opts[c]]
+			l.add_theme_font_size_override("font_size", 16)
+			l.add_theme_constant_override("line_spacing", -4)
+			l.size = Vector2(cell.x - 16, 44)
+			l.clip_text = true
+			l.position = Vector2(c * cell.x + 8, r * cell.y + cell.y - 46)
 			sheet.add_child(l)
 	await render(sheet, Vector2i(sheet.size), "mask_options.png")
 	# A few full carvings and the tiny size used in the procession.
@@ -154,7 +159,7 @@ func _masks() -> void:
 			t.spec = combos[i]
 			var h: float = [24.0, 40.0, 64.0][j]
 			t.size = Vector2(h, h * 1.25)
-			t.position = Vector2(i * 180 + 10 + j * 56, 330 + (80 - h))
+			t.position = Vector2(i * 180 + [10.0, 44.0, 94.0][j], 330 + (80 - h))
 			row.add_child(t)
 	await render(row, Vector2i(row.size), "mask_combos.png")
 
@@ -367,7 +372,8 @@ func _timing(with_scene: bool, with_field: bool) -> void:
 		samples.append(c)
 		worst_cpu = maxf(worst_cpu, c)
 		gpu += RenderingServer.viewport_get_measured_render_time_gpu(vp.get_viewport_rid())
-	vp.get_texture().get_image().save_png(out_dir.path_join("play_mock.png"))
+	if with_scene and with_field:
+		vp.get_texture().get_image().save_png(out_dir.path_join("play_mock.png"))
 	samples.sort()
 	var line := "[scene %s, field %s] play-screen mock 720x1440:" % [with_scene, with_field] + " render cpu median %.2f ms, min %.2f, avg %.2f, worst %.2f; gpu avg %.2f ms (llvmpipe software GPU); procession process %d us; bakes %d" % [samples[frames / 2], samples[0], cpu / frames, worst_cpu, gpu / frames, scene.last_process_usec, scene.bake_count]
 	print(line)

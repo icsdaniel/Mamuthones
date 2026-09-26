@@ -29,7 +29,8 @@ extends RefCounted
 ##   draw_button(ci, rect, lane, state)                state "idle" | "cued" | "pressed" | "hit" | "miss"
 ##   draw_hit_burst(ci, pos, quality, age, size := 1.0) -> bool   false once finished (BURST_TIME)
 ##       quality perfect | good | early | late | miss | held | wrong. Early bursts spray upward with
-##       an up-chevron, late ones downward with a down-chevron, so timing reads without words.
+##       an ember up-chevron, late ones downward with a red down-chevron (ink-outlined), so timing reads
+##       without words; a perfect also shoots an ember streak up its lane.
 
 ## Notes, bars, buttons, the lanes and the hit line are drawn from sprites baked by tools/art/bake.sh
 ## (game/art/notes/) from the vec_* functions below, so each is one batched textured rect per frame.
@@ -133,12 +134,32 @@ static func cell_size(name: String) -> Vector2:
 	return CELLS[name][0]
 
 
-## Draws sprite `name` so its reference cell spans x0..x0+width with the note centre at y.
-static func _blit(ci: CanvasItem, tex: Texture2D, name: String, x0: float, width: float, y: float) -> void:
+## Draws sprite `name` so its reference cell spans x0..x0+width with the note centre at y, cropped to
+## `clip` (notes never spill out of their lane or field).
+static func _blit(ci: CanvasItem, tex: Texture2D, name: String, x0: float, width: float, y: float, clip: Rect2) -> void:
 	var cell: Array = CELLS[name]
 	var sz: Vector2 = cell[0]
 	var k := width / sz.x
-	ci.draw_texture_rect(tex, Rect2(x0, y - float(cell[1]) * k, width, sz.y * k), false)
+	_draw_clipped(ci, tex, Rect2(x0, y - float(cell[1]) * k, width, sz.y * k), clip)
+
+
+## Draws `tex` stretched over `dest`, keeping only the part inside `clip` (by cropping the source
+## region, so it stays one batched textured rect).
+static func _draw_clipped(ci: CanvasItem, tex: Texture2D, dest: Rect2, clip: Rect2, modulate := Color.WHITE) -> void:
+	var vis := dest.intersection(clip)
+	if vis.size.x <= 0.5 or vis.size.y <= 0.5:
+		return
+	if vis.is_equal_approx(dest):
+		ci.draw_texture_rect(tex, dest, false, modulate)
+		return
+	var ts := Vector2(tex.get_size())
+	var src := Rect2((vis.position - dest.position) / dest.size * ts, vis.size / dest.size * ts)
+	ci.draw_texture_rect_region(tex, vis, src, modulate)
+
+
+## True when a vector note at y (half height `half`) is at least partly inside `clip`.
+static func _visible(clip: Rect2, y: float, half: float) -> bool:
+	return y + half > clip.position.y and y - half < clip.end.y
 
 
 # ------------------------------------------------------------------ public drawing
@@ -177,12 +198,13 @@ static func draw_step(ci: CanvasItem, lane: Rect2, y: float, call := false, alph
 	var name := "call" if call else "step"
 	var tex := sprite(name)
 	if tex == null:
-		vec_step(ci, lane, y, call, alpha)
+		if _visible(lane, y, lane.size.x * NOTE_H):
+			vec_step(ci, lane, y, call, alpha)
 		return
 	var cell: Array = CELLS[name]
 	var sz: Vector2 = cell[0]
 	var k := lane.size.x / sz.x
-	ci.draw_texture_rect(tex, Rect2(lane.position.x, y - float(cell[1]) * k, lane.size.x, sz.y * k), false, Color(1, 1, 1, alpha))
+	_draw_clipped(ci, tex, Rect2(lane.position.x, y - float(cell[1]) * k, lane.size.x, sz.y * k), lane, Color(1, 1, 1, alpha))
 
 
 static func draw_hold(ci: CanvasItem, lane: Rect2, y_head: float, y_tail: float, holding := false) -> void:
@@ -192,8 +214,8 @@ static func draw_hold(ci: CanvasItem, lane: Rect2, y_head: float, y_tail: float,
 		return
 	var cx := lane.get_center().x
 	var bw := lane.size.x * 0.34
-	var top := minf(y_head, y_tail)
-	var bottom := maxf(y_head, y_tail)
+	var top := maxf(minf(y_head, y_tail), lane.position.y)
+	var bottom := minf(maxf(y_head, y_tail), lane.end.y)
 	if bottom - top > 2.0:
 		var col := Rect2(cx - bw * 0.5, top, bw, bottom - top)
 		ci.draw_rect(col, Palette.EMBER if holding else Color("#4a4038"))
@@ -203,24 +225,25 @@ static func draw_hold(ci: CanvasItem, lane: Rect2, y_head: float, y_tail: float,
 			ci.draw_texture_rect(hatch, col, true, Color(Palette.INK if holding else Palette.BONE, 0.55))
 		ci.draw_rect(Rect2(col.position.x - 1.5, top, 3.0, col.size.y), Palette.EMBER_HOT if holding else Palette.BONE)
 		ci.draw_rect(Rect2(col.end.x - 1.5, top, 3.0, col.size.y), Palette.INK)
-	_blit(ci, cap, "hold_cap", lane.position.x, lane.size.x, y_tail)
+	_blit(ci, cap, "hold_cap", lane.position.x, lane.size.x, y_tail, lane)
 	draw_step(ci, lane, y_head, false)
 	if holding:
 		var gt := Palette.tex("glow")
 		if gt:
-			ci.draw_texture_rect(gt, Rect2(cx - lane.size.x * 0.6, y_head - lane.size.x * 0.5, lane.size.x * 1.2, lane.size.x), false, Color(Palette.EMBER, 0.6))
+			_draw_clipped(ci, gt, Rect2(cx - lane.size.x * 0.6, y_head - lane.size.x * 0.5, lane.size.x * 1.2, lane.size.x), lane.grow_individual(lane.size.x * 0.1, 0, lane.size.x * 0.1, 0), Color(Palette.EMBER, 0.6))
 
 
 static func draw_bell(ci: CanvasItem, field: Rect2, y: float, up: bool) -> void:
 	var name := "bell_up" if up else "bell_down"
 	var tex := sprite(name)
 	if tex == null:
-		vec_bell(ci, field, y, up)
+		if _visible(field, y, BAR_H):
+			vec_bell(ci, field, y, up)
 		return
 	# Bars keep their height and stretch only in width, like the vector version.
 	var cell: Array = CELLS[name]
 	var sz: Vector2 = cell[0]
-	ci.draw_texture_rect(tex, Rect2(field.position.x, y - float(cell[1]), field.size.x, sz.y), false)
+	_draw_clipped(ci, tex, Rect2(field.position.x, y - float(cell[1]), field.size.x, sz.y), field)
 
 
 static func draw_ring(ci: CanvasItem, field: Rect2, lane: Rect2, y: float, up: bool) -> void:
@@ -229,18 +252,19 @@ static func draw_ring(ci: CanvasItem, field: Rect2, lane: Rect2, y: float, up: b
 		vec_ring(ci, field, lane, y, up)
 		return
 	draw_bell(ci, field, y, up)
-	_blit(ci, block, "ring_block", lane.position.x, lane.size.x, y)
+	_blit(ci, block, "ring_block", lane.position.x, lane.size.x, y, field)
 
 
 static func draw_swipe(ci: CanvasItem, field: Rect2, y: float, dir: int) -> void:
 	var name := "swipe_r" if dir >= 0 else "swipe_l"
 	var tex := sprite(name)
 	if tex == null:
-		vec_swipe(ci, field, y, dir)
+		if _visible(field, y, 50.0):
+			vec_swipe(ci, field, y, dir)
 		return
 	var cell: Array = CELLS[name]
 	var sz: Vector2 = cell[0]
-	ci.draw_texture_rect(tex, Rect2(field.position.x, y - float(cell[1]), field.size.x, sz.y), false)
+	_draw_clipped(ci, tex, Rect2(field.position.x, y - float(cell[1]), field.size.x, sz.y), field)
 
 
 static func draw_button(ci: CanvasItem, rect: Rect2, lane: int, state: String) -> void:
@@ -358,8 +382,8 @@ static func vec_hold(ci: CanvasItem, lane: Rect2, y_head: float, y_tail: float, 
 	WoodcutDraw.begin(ci)
 	var cx := lane.get_center().x
 	var bw := lane.size.x * 0.34
-	var top := minf(y_head, y_tail)
-	var bottom := maxf(y_head, y_tail)
+	var top := maxf(minf(y_head, y_tail), lane.position.y)
+	var bottom := minf(maxf(y_head, y_tail), lane.end.y)
 	var col := Rect2(cx - bw * 0.5, top, bw, bottom - top)
 	if col.size.y > 2.0:
 		var pts := _rect_pts(col)
@@ -367,8 +391,10 @@ static func vec_hold(ci: CanvasItem, lane: Rect2, y_head: float, y_tail: float, 
 		WoodcutDraw.fill_fan(ci, pts, Color(Palette.INK if holding else Palette.BONE, 0.55), Palette.tex("hatch"), Transform2D(0.0, Vector2(1.0 / 96.0, 1.0 / 96.0), 0.0, Vector2.ZERO))
 		WoodcutDraw.line(ci, Vector2(col.position.x, top), Vector2(col.position.x, bottom), Palette.BONE if not holding else Palette.EMBER_HOT, 3.0)
 		WoodcutDraw.line(ci, Vector2(col.end.x, top), Vector2(col.end.x, bottom), Palette.INK, 3.0)
-	_hold_cap(ci, cx, bw, y_tail)
-	vec_step(ci, lane, y_head, false)
+	if _visible(lane, y_tail, 20.0):
+		_hold_cap(ci, cx, bw, y_tail)
+	if _visible(lane, y_head, lane.size.x * NOTE_H):
+		vec_step(ci, lane, y_head, false)
 	if holding:
 		var tex := Palette.tex("glow")
 		if tex:
@@ -397,7 +423,8 @@ static func vec_bell(ci: CanvasItem, field: Rect2, y: float, up: bool) -> void:
 			continue
 		var tip := Vector2(x, y + dir * ch)
 		var wing := h * 0.5
-		WoodcutDraw.stroke(ci, PackedVector2Array([Vector2(x - wing, y - dir * ch), tip, Vector2(x + wing, y - dir * ch)]), Palette.INK, 7.0, 7.0, 8.0)
+		var chev := PackedVector2Array([Vector2(x - wing, y - dir * ch), tip, Vector2(x + wing, y - dir * ch)])
+		WoodcutDraw.stroke(ci, chev, Palette.INK, 7.0, 7.0, 8.0)
 	# The bell itself in a carved ring at the centre.
 	WoodcutDraw.fill_fan(ci, WoodcutDraw.ellipse(Vector2(cx, y), Vector2(h * 0.78, h * 0.78), 20), Palette.INK)
 	WoodcutDraw.fill_fan(ci, WoodcutDraw.ellipse(Vector2(cx, y), Vector2(h * 0.66, h * 0.66), 20), Palette.RED)
@@ -536,6 +563,12 @@ static func draw_hit_burst(ci: CanvasItem, pos: Vector2, quality: String, age: f
 	var s := size
 	match quality:
 		"perfect":
+			# An ember streak shoots up the lane from the hit, like a chisel run along the grain.
+			var streak := lerpf(80.0, 300.0, grow) * s
+			var sp := PackedVector2Array([pos + Vector2(0, -8.0 * s), pos + Vector2(0, -streak * 0.5), pos + Vector2(0, -streak)])
+			WoodcutDraw.stroke(ci, sp, Color(Palette.INK, 0.5 * fade), 30.0 * s, 0.0, 26.0 * s)
+			WoodcutDraw.stroke(ci, sp, Color(Palette.EMBER, 0.8 * fade), 22.0 * s, 0.0, 18.0 * s)
+			WoodcutDraw.stroke(ci, sp, Color(Palette.EMBER_HOT, fade), 8.0 * s, 0.0, 6.0 * s)
 			var r := lerpf(20.0, 96.0, grow) * s
 			WoodcutDraw.fill_fan(ci, WoodcutDraw.ellipse(pos, Vector2(34, 34) * s * (1.0 - t * 0.6), 18), Color(Palette.EMBER_HOT, 0.9 * fade))
 			var ring := WoodcutDraw.ellipse(pos, Vector2(r, r * 0.8), 28)
@@ -552,12 +585,15 @@ static func draw_hit_burst(ci: CanvasItem, pos: Vector2, quality: String, age: f
 			var up := quality == "early"
 			var r := lerpf(14.0, 64.0, grow) * s
 			var centre := -PI * 0.5 if up else PI * 0.5
-			_splinters(ci, pos, r * 0.3, r, 8, Color(Palette.EMBER, fade), 5.0 * s, 4, centre - 1.0, 2.0)
+			_splinters(ci, pos, r * 0.3, r, 8, Color(Palette.EMBER if up else Palette.RED, fade), 5.0 * s, 4, centre - 1.0, 2.0)
 			var d := -1.0 if up else 1.0
-			var cp := pos + Vector2(0, d * (30.0 + 34.0 * grow) * s)
-			var chev := PackedVector2Array([cp + Vector2(-24, -d * 13) * s, cp, cp + Vector2(24, -d * 13) * s])
-			WoodcutDraw.stroke(ci, chev, Color(Palette.INK, fade), 12.0 * s, 12.0 * s, 13.0 * s)
-			WoodcutDraw.stroke(ci, chev, Color(Palette.EMBER_HOT if up else Palette.BONE, fade), 7.0 * s, 7.0 * s, 8.0 * s)
+			# Early is ember and points up, late is red and points down: they differ in shape, place and
+			# colour. Both are cut out of a heavy ink outline so they read on any lane or backdrop.
+			var cp := pos + Vector2(0, d * (34.0 + 34.0 * grow) * s)
+			var chev := PackedVector2Array([cp + Vector2(-30, -d * 17) * s, cp, cp + Vector2(30, -d * 17) * s])
+			var ca := minf(1.0, fade * 1.3)
+			WoodcutDraw.stroke(ci, chev, Color(Palette.INK, ca), 19.0 * s, 19.0 * s, 20.0 * s)
+			WoodcutDraw.stroke(ci, chev, Color(Palette.EMBER_HOT if up else Palette.RED, ca), 10.0 * s, 10.0 * s, 11.0 * s)
 		"held":
 			var tex := Palette.tex("glow")
 			if tex:

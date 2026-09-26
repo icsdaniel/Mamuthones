@@ -200,7 +200,7 @@ static func issohadore_body(ci: CanvasItem, h: float, lit := Palette.EMBER, deta
 	for i in 3:
 		var loop := WoodcutDraw.ellipse(Vector2(-17 + float(i) * 1.1, -44 + float(i) * 0.7), Vector2(4.5, 6.5), 16)
 		loop.append(loop[0])
-		WoodcutDraw.stroke(ci, _u(loop, u), Palette.RED if i != 1 else Palette.RED_DEEP, 1.3 * u, 1.3 * u)
+		WoodcutDraw.stroke(ci, _u(loop, u), Palette.ROPE if i != 1 else Palette.ROPE_DARK, 1.3 * u, 1.3 * u)
 	WoodcutDraw.fill(ci, _u(WoodcutDraw.ellipse(Vector2(-16, -50), Vector2(2.4, 2.2), 8), u), Palette.BONE.darkened(0.15))
 	WoodcutDraw.end()
 

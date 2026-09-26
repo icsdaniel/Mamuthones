@@ -390,3 +390,180 @@ func test_song_library() -> void:
 	check_eq(ok.notes("easy").size(), 2, "unknown kinds and junk entries are skipped")
 	check_eq(ok.notes("missing").size(), 0, "a missing chart has no notes")
 	SongLibrary.reset()
+
+
+func test_profile_crash_safety_and_checksum() -> void:
+	_clean()
+	var p := _fresh_profile()
+	p.set_setting("note_speed", 1.5)
+	p.save()
+	p.set_setting("note_speed", 1.75)
+	p.save()
+	p.free()
+	check(FileAccess.file_exists(P.get_basename() + ".bak.cfg"), "the previous save is kept as .bak")
+	# A crash after writing .tmp but before it replaced the main file.
+	DirAccess.rename_absolute(ProjectSettings.globalize_path(P), ProjectSettings.globalize_path(P + ".tmp"))
+	var q := _fresh_profile()
+	check_eq(q.load_status, "backup", "main file missing: recovered")
+	check_eq(q.get_setting("note_speed"), 1.75, "from the complete .tmp, the newest save")
+	check(FileAccess.file_exists(P), "and written back as the main file")
+	q.free()
+	# Parses, but cut short: the checksum catches it and the .bak is used.
+	var f := FileAccess.open(P, FileAccess.WRITE)
+	f.store_string("[meta]\nversion=1\n")
+	f.close()
+	var r := _fresh_profile()
+	check_eq(r.load_status, "backup", "truncated-but-parsable file detected")
+	check(r.get_setting("note_speed") in [1.5, 1.75], "a good copy restored")
+	r.free()
+	# A damaged main file is never copied over the good .bak.
+	var good_bak := FileAccess.get_file_as_string(P.get_basename() + ".bak.cfg")
+	f = FileAccess.open(P, FileAccess.WRITE)
+	f.store_string("[meta]\nversion=1\nchecksum=\"nope\"\n")
+	f.close()
+	var s: Node = ProfileScript.new()
+	s.path = P
+	s.set_setting("note_speed", 2.5)
+	s.save()
+	check_eq(FileAccess.get_file_as_string(P.get_basename() + ".bak.cfg"), good_bak, ".bak untouched by a save over a damaged file")
+	s.free()
+	# An edited value breaks the checksum too.
+	var t := _fresh_profile()
+	t.save()
+	t.free()
+	var text := FileAccess.get_file_as_string(P).replace("2.5", "9.5")
+	f = FileAccess.open(P, FileAccess.WRITE)
+	f.store_string(text)
+	f.close()
+	var u := _fresh_profile()
+	check(u.load_status != "ok", "hand-edited file is not trusted (%s)" % u.load_status)
+	u.free()
+	_clean()
+
+
+func test_profile_settings_are_clamped() -> void:
+	_clean()
+	var p := _fresh_profile()
+	p.set_setting("audio_offset", 3.0)
+	check_eq(p.get_setting("audio_offset"), 0.5, "audio offset at most +0.5 s")
+	p.set_setting("audio_offset", -2.0)
+	check_eq(p.get_setting("audio_offset"), -0.5, "at least -0.5 s")
+	p.set_setting("note_speed", 0.0)
+	check_eq(p.get_setting("note_speed"), 0.5, "note speed floor")
+	p.set_setting("music_volume", 7)
+	check_eq(p.get_setting("music_volume"), 1.0, "volume at most 1")
+	p.set_setting("sfx_volume", -1.0)
+	check_eq(p.get_setting("sfx_volume"), 0.0, "volume at least 0")
+	p.free()
+	var cfg := ConfigFile.new()
+	cfg.set_value("meta", "version", 1)
+	cfg.set_value("settings", "values", {"audio_offset": 99.0, "note_speed": 1.2})
+	ProfileScript.seal(cfg)
+	cfg.save(P)
+	var q := _fresh_profile()
+	check_eq(q.get_setting("audio_offset"), 0.5, "clamped on load too")
+	check_eq(q.get_setting("note_speed"), 1.2, "good values kept")
+	q.free()
+	_clean()
+
+
+func test_profile_fuzz() -> void:
+	# Random damage to a real save: never a crash, and never a half-read profile — either the
+	# checksum passes and every value is the saved one, or a fresh/backup profile is used.
+	_clean()
+	SongLibrary.use_directory(STORY)
+	var p := _fresh_profile()
+	p.leaderboards = _boards()
+	p.set_setting("note_speed", 1.25)
+	p.set_flag("tutorial_done")
+	p.set_piazza_players(["Anna", "Bachisio"])
+	p.record_result(_play("s2", "easy"))
+	p.save()
+	var good: PackedByteArray = FileAccess.get_file_as_bytes(P)
+	p.leaderboards.free()
+	p.free()
+	var rng := RandomNumberGenerator.new()
+	rng.seed = 77
+	var statuses := {}
+	for i in 150:
+		var bytes: PackedByteArray = good.duplicate()
+		match i % 4:
+			0:
+				for k in 1 + rng.randi() % 8:
+					bytes[rng.randi() % bytes.size()] = rng.randi() % 256
+			1:
+				bytes = bytes.slice(0, rng.randi() % bytes.size())
+			2:
+				var at := rng.randi() % bytes.size()
+				bytes = bytes.slice(0, at) + bytes.slice(mini(bytes.size(), at + 1 + rng.randi() % 40))
+			3:
+				var at2 := rng.randi() % bytes.size()
+				bytes[at2] = [48, 49, 57, 34, 123, 125][rng.randi() % 6]
+		DirAccess.remove_absolute(ProjectSettings.globalize_path(P.get_basename() + ".bak.cfg"))
+		DirAccess.remove_absolute(ProjectSettings.globalize_path(P + ".tmp"))
+		var f := FileAccess.open(P, FileAccess.WRITE)
+		f.store_buffer(bytes)
+		f.close()
+		var q := _fresh_profile()
+		statuses[q.load_status] = statuses.get(q.load_status, 0) + 1
+		if q.load_status == "ok":
+			check(q.get_setting("note_speed") == 1.25 and q.has_flag("tutorial_done") and q.piazza_players().size() == 2 and not q.best("s2", "easy").is_empty(), "fuzz %d: a trusted file reads back exactly" % i)
+		else:
+			check(q.load_status in ["corrupt", "new"], "fuzz %d: otherwise a fresh profile (%s)" % [i, q.load_status])
+			check_eq(q.get_setting("note_speed"), 1.0, "fuzz %d: fresh defaults" % i)
+		q.free()
+	check(statuses.get("corrupt", 0) > 100, "most damage is detected (%s)" % [statuses])
+	SongLibrary.reset()
+	_clean()
+
+
+func test_tutorial_flag_clears_the_workshop() -> void:
+	_clean()
+	SongLibrary.use_directory(STORY)
+	var p := _fresh_profile()
+	check(not Progression.is_unlocked("s2", p), "stop 2 locked at first")
+	p.set_flag("tutorial_done")
+	check(Progression.cleared("s1", p), "finishing the tutorial finishes the Workshop")
+	check(Progression.is_unlocked("s2", p), "and opens stop 2")
+	check(Progression.is_unlocked("pz", p), "and the Piazza")
+	p.free()
+	SongLibrary.reset()
+	_clean()
+
+
+func test_daily_boards_and_checks() -> void:
+	_clean()
+	SongLibrary.use_directory(STORY)
+	var day := {"year": 2026, "month": 9, "day": 26}
+	check_eq(Daily.board_id(day), "daily.2026-09-26", "a board per day")
+	var d := Daily.for_date(day)
+	var right := Session.new(SongLibrary.get_song(d.song_id), d.difficulty, "light", Daily.session_options(day))
+	check(Daily.matches(right), "the day's procession matches")
+	var other: String = "easy" if d.difficulty != "easy" else "hard"
+	var wrong := Session.new(SongLibrary.get_song(d.song_id), other, "light", Daily.session_options(day))
+	check(not Daily.matches(wrong), "another difficulty does not")
+	var flipped := Session.new(SongLibrary.get_song(d.song_id), d.difficulty, "light", {"daily": "2026-09-26", "mirror": not d.mirror})
+	check(not Daily.matches(flipped), "the wrong mirroring does not")
+	var p := _fresh_profile()
+	var lb := _boards()
+	p.leaderboards = lb
+	var fake := _play(d.song_id, other, {"daily": "2026-09-26", "mirror": d.mirror})
+	p.record_result(fake)
+	check(p.daily_best("2026-09-26").is_empty(), "a run that is not the day's procession is not a daily")
+	check_eq(lb.best("daily.2026-09-26"), 0, "and not on the daily ladder")
+	var real := _play(d.song_id, d.difficulty, Daily.session_options(day))
+	p.record_result(real)
+	check_eq(lb.best("daily.2026-09-26"), real.score, "the real one is")
+	# Local daily ladders keep the last 14 days; online they all go to one "daily" board.
+	for i in 20:
+		lb.submit("daily.2026-08-%02d" % (i + 1), 100 + i)
+	var days: Array = lb._boards.keys().filter(func(k): return str(k).begins_with("daily."))
+	check_eq(days.size(), 14, "14 days kept")
+	check(not lb._boards.has("daily.2026-08-01"), "oldest days dropped")
+	check(lb._boards.has("daily.2026-09-26"), "the newest kept")
+	check_eq(lb.platform_id("daily.2026-09-26"), "daily", "one recurring board online")
+	check_eq(lb.platform_id("song.fires.hard"), "song.fires.hard", "song boards keep their id")
+	p.free()
+	lb.free()
+	SongLibrary.reset()
+	_clean()

@@ -57,6 +57,17 @@ func test_every_art_script_loads() -> void:
 		check(Palette.tex(t) != null, "texture %s" % t)
 
 
+func test_mask_finishes_stay_black() -> void:
+	# Every finish renders black to dark brown-black: base wood with its grain overlay < 12 % luminance.
+	for id in MaskView.FINISH:
+		var f: Dictionary = MaskView.FINISH[id]
+		var wood: Color = (f.base as Color).lerp(Palette.BONE, float(f.grain))
+		var lum := wood.srgb_to_linear().get_luminance()   # relative luminance, as in WCAG
+		check(lum < 0.12, "finish %s stays dark (luminance %.3f)" % [id, lum])
+	for id in MaskView.PATINA:
+		check(float(MaskView.PATINA[id].w) <= 1.0, "patina %s never widens the cuts" % id)
+
+
 func test_mask_spec() -> void:
 	var d := MaskSpec.default()
 	check(MaskSpec.validate(d), "default spec is valid")
@@ -130,6 +141,11 @@ func test_text_contrast() -> void:
 	check(_contrast(Palette.BLACK, Palette.BONE) >= 7.0, "ink on paper")
 	check(_contrast(Palette.EMBER, Palette.NIGHT) >= 4.5, "ember on night")
 	check(_contrast(Palette.BONE, Palette.RED) >= 3.0, "bone on red (large bold only)")
+	var th := WoodcutTheme.build()
+	check(_contrast(th.get_color("font_placeholder_color", "LineEdit"), Palette.NIGHT) >= 4.5, "LineEdit placeholder readable")
+	# Progress text sits on the fill: it must not be the ember fill (bone on ember is about 1.5:1).
+	check(_contrast(th.get_color("font_color", "ProgressBar"), Palette.RED) >= 3.0, "progress text on its red fill (large bold)")
+	check(th.get_constant("outline_size", "ProgressBar") >= 8, "progress text has a heavy ink outline")
 
 
 func _contrast(a: Color, b: Color) -> float:

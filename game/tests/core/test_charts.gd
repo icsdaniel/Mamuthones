@@ -71,6 +71,13 @@ func test_real_songs() -> void:
 			check_eq(s.stats.let_go, 0, "%s/%s: every hold kept" % [song.id, diff])
 			if song.length > 0.0:
 				check(s.notes[-1].end_t <= song.length, "%s/%s: notes end before the song does" % [song.id, diff])
+			if song.kind != "piazza":
+				var sl := Session.new(song, diff, "light", {"slam": true})
+				_play_all(sl)
+				check_near(sl.accuracy(), 1.0, 1e-9, "%s/%s slam: autoplay 100 %% with the buttons" % [song.id, diff])
+				var mi := Session.new(song, diff, "village", {"mirror": true})
+				_play_all(mi)
+				check_near(mi.accuracy(), 1.0, 1e-9, "%s/%s mirrored: autoplay 100 %%" % [song.id, diff])
 			if song.has_remix():
 				var r := Session.new(song, diff, "light", {"remix": true})
 				_play_all(r)

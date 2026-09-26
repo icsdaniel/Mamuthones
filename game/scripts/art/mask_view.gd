@@ -37,17 +37,21 @@ extends Control
 		highlight_part = v
 		queue_redraw()
 
+## Every finish stays black to dark brown-black: the rendered wood (base plus grain) is kept under
+## about 12 % luminance (tested). Only the carved cuts and the worn edges catch the light.
 const FINISH := {
-	"soot_black": {"base": Color("#16110f"), "grain": 0.07, "rim": 0.55},
-	"smoked": {"base": Color("#24180f"), "grain": 0.1, "rim": 0.6},
-	"dark_walnut": {"base": Color("#2f1f14"), "grain": 0.15, "rim": 0.6},
-	"charred": {"base": Color("#101012"), "grain": 0.04, "rim": 0.45},
+	"soot_black": {"base": Color("#16110f"), "grain": 0.06, "rim": 0.55},
+	"smoked": {"base": Color("#1d1611"), "grain": 0.07, "rim": 0.6},
+	"dark_walnut": {"base": Color("#221813"), "grain": 0.08, "rim": 0.6},
+	"charred": {"base": Color("#0f0f11"), "grain": 0.04, "rim": 0.45},
 }
+## Patina is age: the cuts' highlight stays bone (a little warmer and softer with age) and never
+## widens; what grows is the wear on the high edges (brow ridge, nose, cheekbones, rim).
 const PATINA := {
-	"fresh": {"color": Color("#ede6da"), "a": 0.62, "w": 0.8},
-	"worn": {"color": Color("#f0e4cc"), "a": 0.85, "w": 1.0},
-	"old": {"color": Color("#dca462"), "a": 0.9, "w": 1.1},
-	"ancient": {"color": Color("#efcf98"), "a": 0.95, "w": 1.25},
+	"fresh": {"color": Color("#ede6da"), "a": 0.62, "w": 0.85, "wear": 0.0},
+	"worn": {"color": Color("#efe4cf"), "a": 0.8, "w": 0.95, "wear": 0.35},
+	"old": {"color": Color("#e8d9bd"), "a": 0.78, "w": 1.0, "wear": 0.6},
+	"ancient": {"color": Color("#e2d2b4"), "a": 0.74, "w": 1.0, "wear": 0.9},
 }
 const KERCHIEF := Color("#2b211b")
 const HOLE := Color("#050404")
@@ -115,6 +119,8 @@ static func paint(ci: CanvasItem, c: Vector2, s: float, mask: Dictionary, detail
 	_mouth(k, m.mouth)
 	if m.patina == "ancient" and detail > 0:
 		_cracks(k)
+	if detail > 0 and float(pat.wear) > 0.0:
+		_wear(k, float(pat.wear))
 	# Firelight on the left edge.
 	k.cut(PackedVector2Array([Vector2(-0.3, -1.29), Vector2(-0.8, -0.98), Vector2(-0.96, -0.35), Vector2(-0.93, 0.3), Vector2(-0.74, 0.86)]),
 		0.07, Color(Palette.EMBER, fin.rim), false)
@@ -254,6 +260,29 @@ static func _kerchief(k: _Carver) -> void:
 	WoodcutDraw.fill(ci, k.xf * WoodcutDraw.ellipse(Vector2(0.04, 1.8), Vector2(0.17, 0.12), 12), knot_col)
 	if k.detail > 0:
 		WoodcutDraw.stroke(ci, k.xf * WoodcutDraw.quad(Vector2(-0.08, 1.76), Vector2(0.04, 1.72), Vector2(0.14, 1.77), 5), Color(Palette.BONE, 0.35), 0.005 * s, 0.0, 0.035 * s)
+
+
+## Worn edges: short rubbed-through flecks on the high points, where hands and years polish the wood.
+static func _wear(k: _Carver, amount: float) -> void:
+	var col := Color(k.hi, 0.5 * amount)
+	var spots := [
+		[Vector2(-0.78, -0.6), Vector2(-0.46, -0.72)],    # brow ridge
+		[Vector2(-0.12, -0.2), Vector2(-0.1, 0.18)],       # bridge of the nose
+		[Vector2(-0.16, 0.3), Vector2(-0.06, 0.4)],        # nose tip
+		[Vector2(-0.8, 0.12), Vector2(-0.62, 0.28)],       # cheekbone
+		[Vector2(-0.98, -0.3), Vector2(-0.96, 0.2)],       # rim
+		[Vector2(-0.4, 1.1), Vector2(-0.14, 1.24)],        # chin
+	]
+	var n := int(ceil(amount * float(spots.size())))
+	for i in n:
+		var sp: Array = spots[i]
+		var a: Vector2 = sp[0]
+		var b: Vector2 = sp[1]
+		for j in 3:
+			var t0 := 0.1 + 0.3 * float(j) + 0.1 * WoodcutDraw.hash01(i, j + 60)
+			var p0 := a.lerp(b, t0)
+			var p1 := a.lerp(b, minf(1.0, t0 + 0.18))
+			WoodcutDraw.stroke(k.ci, k.xf * _v([p0, p1]), col, 0.004 * k.s, 0.004 * k.s, 0.035 * k.s)
 
 
 static func _straps(k: _Carver, strap_id: String) -> void:
