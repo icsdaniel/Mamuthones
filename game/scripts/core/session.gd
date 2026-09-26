@@ -12,7 +12,8 @@ extends RefCounted
 ## [from, to), for tutorial lessons and practice), daily ("YYYY-MM-DD", recorded on the daily ladder).
 ##
 ## Additions beyond the architecture doc: tap()/swipe() return a result Dictionary; ring() takes an
-## optional `tilt` flag and returns extra keys (judgement, offset, note); running_accuracy(),
+## optional `tilt` flag and `strength` (0-1) and returns extra keys (judgement, offset, side,
+## strength, note); running_accuracy(),
 ## mean_offset(), median_offset(), hit_offsets, score_breakdown(), end_time(), progress(t),
 ## song_key(), ladder_ok(), passed(), upcoming_bell(t), window(kind), stats keys listed in _init,
 ## Note.side ("early"/"late"/"" for every judged hit, so a Perfect can still say which side it was).
@@ -374,8 +375,11 @@ func swipe(dir: int, t: float) -> Dictionary:
 ## so the bell sound can match: early/late = the Ok band with its direction (the clank is pitched
 ## up or down), miss = close to a bell but outside its window, silence = during a stand-still,
 ## free = no bell expected. side is "early"/"late" for any timed hit off by more than 10 ms, else "".
-func ring(t: float, tilt: bool = true) -> Dictionary:
+## strength (0-1, how hard the flick was, for Sound.bell) is the detector's value for a tilt and
+## 0.5 for a slam or keyboard ring.
+func ring(t: float, tilt: bool = true, strength: float = 0.5) -> Dictionary:
 	input_log.append([t, "ring", tilt])
+	var st := clampf(strength, 0.0, 1.0) if tilt and not slam else 0.5
 	if slam:
 		tilt = false
 	var w := win_tilt if tilt else win_touch
@@ -393,7 +397,7 @@ func ring(t: float, tilt: bool = true) -> Dictionary:
 				_finish_ring(best)
 		# judgement stays "" for a full ring still waiting for its step half.
 		return {"up": best.up, "quality": _quality(g), "judgement": best.judgement, "offset": off,
-				"side": _side(off), "note": best}
+				"side": _side(off), "strength": st, "note": best}
 	var up := _next_free_up
 	_next_free_up = not up
 	var rest := _rest_at(t)
@@ -411,9 +415,9 @@ func ring(t: float, tilt: bool = true) -> Dictionary:
 			_refresh_score(t)
 			judged.emit(rest, "silence", t - rest.t)
 		_last_silence = t
-		return {"up": up, "quality": "silence", "judgement": "silence", "offset": 0.0, "side": "", "note": rest}
+		return {"up": up, "quality": "silence", "judgement": "silence", "offset": 0.0, "side": "", "strength": st, "note": rest}
 	var near := _find_bell(t, 2.0 * w.z) != null
-	return {"up": up, "quality": "miss" if near else "free", "judgement": "", "offset": 0.0, "side": "", "note": null}
+	return {"up": up, "quality": "miss" if near else "free", "judgement": "", "offset": 0.0, "side": "", "strength": st, "note": null}
 
 
 ## Call every frame with the current song time.

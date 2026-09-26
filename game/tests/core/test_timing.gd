@@ -358,6 +358,7 @@ func test_router_keys() -> void:
 	check_eq(s.stats.perfect, 6, "A S D, Space, Q, E all reach the session")
 	check_eq(rang.size(), 1, "Space rang")
 	check_eq(rang[0].quality, "perfect", "with the ring result")
+	check_eq(rang[0].strength, 0.5, "a keyboard ring has middle strength")
 	check_eq(paused.size(), 1, "Esc asks to pause")
 	r.queue_free()
 
@@ -375,6 +376,9 @@ func test_router_motion_and_slam() -> void:
 		r.feed_motion(t, Vector3.ZERO, Vector3(g, 0, 0))
 	check_eq(rang.size(), 1, "one tilt, one ring")
 	check_eq(rang[0].get("judgement"), "perfect", "tilt judged on its crossing time")
+	var st: float = rang[0].get("strength", -1.0)
+	check(st > 0.5 and st <= 1.0, "a 400 °/s flick over a 150 °/s threshold rings strong (%.2f)" % st)
+	check_near(st, r.detector.last_strength, 1e-6, "the rang payload carries the detector's strength")
 	# Slam session: tilts ignored, Left + Right ring.
 	var sl := Session.new(_song([{"b": 0, "k": "bell"}]), "easy", "light", {"slam": true})
 	var r2 := _router(sl)
@@ -389,6 +393,7 @@ func test_router_motion_and_slam() -> void:
 	_touch(r2, 690, true, 1)
 	check_eq(rang2.size(), 1, "Left + Right rang the bell")
 	check_eq(sl.stats.perfect, 1, "slam bell judged")
+	check_eq(rang2[0].strength, 0.5, "a slam ring has middle strength")
 	r.queue_free()
 	r2.queue_free()
 

@@ -45,6 +45,10 @@ var adapt := true
 ## Time and direction of the last ring.
 var last_t := -INF
 var last_up := true
+## How hard the last ring was, 0-1: clamp((peak / calibrated threshold - 1) / 2, 0, 1), from the
+## peak on the calibrated axis seen up to the moment the ring was confirmed (the sound cannot wait
+## for the rest of the flick). A flick just over the threshold is 0, one at three times it is 1.
+var last_strength := 0.5
 ## Seconds between distinct sensor readings (smoothed).
 var sample_interval := 1.0 / 60.0
 
@@ -53,6 +57,7 @@ var _calm_since := NAN
 var _cand_t := NAN
 var _cand_first := NAN
 var _cand_vec := Vector3.ZERO
+var _cand_peak := 0.0
 var _prev_v := 0.0
 var _prev_t := -INF
 var _last_vec := Vector3(NAN, NAN, NAN)
@@ -150,9 +155,11 @@ func feed(t: float, acc: Vector3, gyro_dps: Vector3) -> bool:
 					_cand_t = _prev_t + (threshold - _prev_v) / (v - _prev_v) * (t - _prev_t)
 				_cand_first = t
 				_cand_vec = vec
+				_cand_peak = v
 			else:
 				_watch_near(v, t)
 		elif v >= threshold * SUSTAIN:
+			_cand_peak = maxf(_cand_peak, v)
 			var near_touch := mode == "accel" and _last_touch >= _cand_t - TOUCH_WINDOW and _last_touch <= t
 			if t - _cand_first >= (CONFIRM_NEAR_TOUCH if near_touch else CONFIRM):
 				fired = true
@@ -176,11 +183,17 @@ func _fire() -> void:
 	last_t = _cand_t - _reading_age()
 	var s := signf(_cand_vec[axis]) * up_sign
 	last_up = s >= 0.0
+	last_strength = strength_of(_cand_peak)
 	_cand_t = NAN
 	_near_n = 0
 	_peak = 0.0
 	_peak_until = last_t + PEAK_WATCH
 	rang.emit(last_t, last_up)
+
+
+## Strength (0-1) of a flick peaking at peak, relative to the calibrated threshold.
+func strength_of(peak: float) -> float:
+	return clampf((peak / maxf(base_threshold, 1e-6) - 1.0) * 0.5, 0.0, 1.0)
 
 
 func _learn_peak(p: float) -> void:

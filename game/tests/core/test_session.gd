@@ -120,6 +120,16 @@ func test_results_carry_direction() -> void:
 	check_eq(sw.side, "late", "swipe result carries the side")
 
 
+func test_ring_strength() -> void:
+	var s := Session.new(make([{"b": 0, "k": "bell"}, {"b": 2, "k": "bell"}, {"b": 4, "k": "bell"}]), "easy")
+	check_eq(s.ring(_bt(0), true, 0.8).strength, 0.8, "a tilt passes the detector's strength on")
+	check_eq(s.ring(_bt(2), true, 3.0).strength, 1.0, "clamped to 1")
+	check_eq(s.ring(_bt(4), false, 0.9).strength, 0.5, "keyboard rings are 0.5")
+	check_eq(s.ring(_bt(9), true, 0.2).strength, 0.2, "a free ring carries it too")
+	var sl := Session.new(make([{"b": 0, "k": "bell"}]), "easy", "light", {"slam": true})
+	check_eq(sl.ring(_bt(0), true, 0.9).strength, 0.5, "slam rings are 0.5")
+
+
 func test_tilt_and_swipe_windows() -> void:
 	var s := Session.new(make([{"b": 0, "k": "bell"}, {"b": 2, "k": "bell"}, {"b": 4, "k": "bell"}, {"b": 6, "k": "bell"}]), "easy")
 	check_eq(s.ring(_bt(0) + 0.058).quality, "perfect", "tilts get +15 ms: 58 ms is Perfect")

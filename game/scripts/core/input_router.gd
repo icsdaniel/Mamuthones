@@ -184,7 +184,7 @@ func feed_motion(t: float, acc: Vector3, gyro_dps: Vector3) -> void:
 	if detector.feed(t, acc, gyro_dps):
 		if motion_log != null:
 			motion_log.add_ring(detector.last_t)
-		rang.emit(session.ring(detector.last_t))
+		rang.emit(session.ring(detector.last_t, true, detector.last_strength))
 
 
 func _press(lane: int, t: float, id: int) -> void:

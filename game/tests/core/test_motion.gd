@@ -375,6 +375,25 @@ func test_body_turn_does_not_ring() -> void:
 	check_eq(_run(_detector(120.0, "accel"), walk, 10.0).size(), 0, "walking bounce does not ring (accel)")
 
 
+func test_ring_strength_follows_the_flick() -> void:
+	var d := _detector(100.0)   # calibrated 180 °/s
+	check_eq(d.strength_of(180.0), 0.0, "a flick just at the threshold is 0")
+	check_near(d.strength_of(360.0), 0.5, 1e-6, "twice the threshold is 0.5")
+	check_eq(d.strength_of(900.0), 1.0, "three times or more is 1")
+	for mode: String in ["gyro", "accel"]:
+		var last := -1.0
+		for k in 4:
+			var sy := Synth.new(30 + k)
+			sy.jitter = 0.0
+			sy.flick(1.0, true, 220.0 + k * 150.0, 6.5 + k * 3.0, 0.2)
+			var det := _detector(100.0, mode)
+			check_eq(_run(det, sy, 2.0).size(), 1, "%s flick %d rings" % [mode, k])
+			check(det.last_strength >= last, "%s: a harder flick is at least as strong (%.2f after %.2f)" % [mode, det.last_strength, last])
+			check(det.last_strength >= 0.0 and det.last_strength <= 1.0, "in 0..1")
+			last = det.last_strength
+		check(last > 0.3, "%s: the hardest flick rings strong (%.2f)" % [mode, last])
+
+
 func test_held_readings_are_stamped_earlier() -> void:
 	# A 50 Hz sensor at 120 fps: readings are held for ~2.4 frames, so each is ~10 ms old on average.
 	var sy := Synth.new(17)
