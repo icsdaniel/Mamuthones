@@ -415,7 +415,6 @@
 
   // Jolts
   function onMotion(e) {
-    gotMotion = true;
     const t = performance.now();
     let m;
     const a = e.acceleration;
@@ -425,6 +424,7 @@
       if (!ag || ag.x === null) return;
       m = Math.abs(Math.hypot(ag.x, ag.y, ag.z) - 9.81);
     }
+    gotMotion = true;
     samples.push(m); if (samples.length > 240) samples.shift();
     sampleCount++;
     if (t - rateWindowStart > 1000) {
@@ -457,15 +457,49 @@
   }
   draw();
 
+  // Where is the page running, and what can it read? Shown so a failure names its cause.
+  const ua = navigator.userAgent;
+  const isIOS = /iPhone|iPad|iPod/.test(ua) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+  const isAndroid = /Android/.test(ua);
+  const inApp = (isIOS && !/Safari\//.test(ua)) || /; wv\)|FBAN|FBAV|Instagram|Line\/|GSA\//.test(ua);
+  function help(kind) {
+    const note = $('sensorNote');
+    const lines = {
+      insecure: 'This page must be opened over https for motion access.',
+      unsupported: 'This browser has no motion sensor support. Try Safari on iPhone or Chrome on Android.',
+      inapp: 'You seem to be inside an app\'s built-in browser, which usually refuses motion access. Copy the link and open it in Safari (iPhone) or Chrome (Android).',
+      denied: isIOS
+        ? 'Motion access was refused. iPhone remembers this until Safari is restarted: close Safari completely (swipe it away in the app switcher), reopen this page and tap Allow. If there is no prompt, go to Settings, Apps, Safari, Advanced, Website Data, remove github.io, and try again.'
+        : 'Motion access was refused. In Chrome, tap the icon left of the address, open Permissions or Site settings, set Motion sensors to Allow, then reload.',
+      blocked: isIOS
+        ? 'The motion permission prompt could not open. Open this page directly in Safari rather than inside another app, then tap Start.'
+        : 'This view blocked motion access. Open the page directly in Chrome.',
+      silent: isAndroid
+        ? 'No motion readings yet. In Chrome, go to Settings, Site settings, Motion sensors and allow them, for this site too, then reload.'
+        : 'No motion readings yet. On a laptop this is expected. On a phone, open the page directly in the browser, not inside another app.'
+    };
+    note.textContent = lines[kind];
+    note.hidden = false;
+  }
+  if (!window.isSecureContext) help('insecure');
+  else if (typeof DeviceMotionEvent === 'undefined') help('unsupported');
+  else if (inApp) help('inapp');
+  else if (navigator.permissions?.query) {
+    navigator.permissions.query({ name: 'accelerometer' })
+      .then(r => { if (r.state === 'denied') help('denied'); })
+      .catch(() => {});
+  }
+
   async function start() {
     const note = $('sensorNote');
     if (running) { stop(); return; }
+    // iOS needs requestPermission() called straight from this tap, before any other await.
     if (typeof DeviceMotionEvent !== 'undefined' && typeof DeviceMotionEvent.requestPermission === 'function') {
       try {
         const res = await DeviceMotionEvent.requestPermission();
-        if (res !== 'granted') { note.textContent = 'Motion access was refused. On iPhone, allow Motion & Orientation Access for this site and try again.'; note.hidden = false; }
+        if (res !== 'granted') help('denied');
       } catch (err) {
-        note.textContent = 'This view blocked motion access. Open the page directly in Safari or Chrome on your phone.'; note.hidden = false;
+        help('blocked');
       }
     }
     window.addEventListener('devicemotion', onMotion);
@@ -481,10 +515,7 @@
     $('startBtn').textContent = 'Stop';
     show('Count-in…', null, 'var(--ash)');
     setTimeout(() => {
-      if (running && !gotMotion) {
-        note.textContent = 'No motion readings yet. On a laptop this is expected. On a phone, open the page directly in the browser rather than inside an app preview.';
-        note.hidden = false;
-      }
+      if (running && !gotMotion) help('silent');
     }, 2500);
   }
   function stop() {
