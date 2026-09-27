@@ -9,7 +9,7 @@ extends SceneTree
 ## base 720×1440), so the pictures match the phone whatever the window size. Progress comes from real
 ## Autoplay runs recorded into a throwaway profile (the player's own profile is never touched).
 
-const SIZES: Array[Vector2i] = [Vector2i(720, 1440), Vector2i(720, 1280), Vector2i(720, 1600), Vector2i(1536, 2048)]
+const SIZES: Array[Vector2i] = [Vector2i(720, 1440), Vector2i(720, 1280), Vector2i(720, 1600), Vector2i(1290, 2796), Vector2i(1536, 2048)]
 const BASE := Vector2(720, 1440)
 const PROFILE := "user://screenshots_profile.cfg"
 

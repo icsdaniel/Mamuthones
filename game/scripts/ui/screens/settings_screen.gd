@@ -18,7 +18,7 @@ func build() -> void:
 	var lat := UIKit.button(tr("set_latency"), func() -> void: app.open("latency"))
 	lat.name = "Latency"
 	box.add_child(lat)
-	_slider(box, "audio_offset", tr("set_offset"), -0.2, 0.2, 0.005,
+	_slider(box, "audio_offset", tr("set_offset"), Profile.RANGES["audio_offset"].x, Profile.RANGES["audio_offset"].y, 0.005,
 		func(v: float) -> String: return tr("ms_signed") % roundi(v * 1000.0))
 
 	box.add_child(UIKit.label(tr("set_play"), UIKit.SUB))

@@ -14,8 +14,9 @@ extends Node
 ##   local_scores(board_id) -> Array of {score, date}, best first
 ##   best(board_id) -> int
 ##   board_id(song_key, difficulty) -> "song.<key>.<difficulty>"
-##   Daily boards are "daily.YYYY-MM-DD" (Daily.board_id(date)): kept per day on the phone (the last
-##   DAILY_KEEP days), and sent online to the platform's single recurring board "daily".
+##   Daily boards are "daily.YYYY-MM-DD.difficulty" (Daily.board_id(date, difficulty)): kept per day
+##   on the phone (the last DAILY_KEEP days, every difficulty), and sent online to one recurring
+##   board per difficulty, "daily_<difficulty>" (platform_ids may rename it).
 ##   set_backend(obj)              anything with available(), submit(platform_id, score), show(platform_id)
 ##   platform_ids: Dictionary      board_id -> the id configured in App Store Connect / Play Console
 ##
@@ -97,18 +98,26 @@ func platform_id(id: String) -> String:
 	if platform_ids.has(id):
 		return platform_ids[id]
 	if id.begins_with(DAILY_PREFIX):
+		var parts := id.split(".")
+		if parts.size() >= 3:
+			var diff := parts[2]
+			return platform_ids.get("daily." + diff, "daily_" + diff)
 		return platform_ids.get("daily", "daily")
 	return id
 
 
+# Keeps the boards of the newest DAILY_KEEP dates (all their difficulties).
 func _prune_daily() -> void:
-	var days := []
+	var dates := {}
 	for k in _boards:
 		if str(k).begins_with(DAILY_PREFIX):
-			days.append(k)
-	days.sort()
-	while days.size() > DAILY_KEEP:
-		_boards.erase(days.pop_front())
+			dates[str(k).split(".")[1]] = true
+	var keep: Array = dates.keys()
+	keep.sort()
+	keep = keep.slice(maxi(0, keep.size() - DAILY_KEEP))
+	for k in _boards.keys():
+		if str(k).begins_with(DAILY_PREFIX) and not str(k).split(".")[1] in keep:
+			_boards.erase(k)
 
 
 func local_scores(id: String) -> Array:

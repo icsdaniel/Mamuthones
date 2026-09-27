@@ -566,3 +566,68 @@ func test_fonts_cover_both_languages() -> void:
 			continue
 		for ch in sample:
 			check(f.has_char(ch.unicode_at(0)), "%s has '%s'" % [f.get_font_name(), ch])
+
+
+func test_setup_art_draws() -> void:
+	# Every picture draws to the end at any size and parameter, including the extremes.
+	var p := _probe(func(ci):
+		for r in [Rect2(0, 0, 400, 360), Rect2(10, 10, 60, 40), Rect2(0, 0, 1080, 400)]:
+			SetupArt.headphones(ci, r)
+			for tilt in [-2.0, -0.6, 0.0, 0.6, 2.0]:
+				SetupArt.phone_in_hands(ci, r, tilt, tilt > 0.0, tilt < 0.0, [1, 0, -1][int(tilt + 2.0) % 3], 0.5)
+			for hit in [-1.0, 0.0, 0.5, 1.0, 3.0]:
+				SetupArt.frame_drum(ci, r, hit))
+	await _frames()
+	await _settle(p, 3)
+	check(p.done, "SetupArt: headphones, phone in hands and drum draw to the end")
+	check(p.usec < 400000, "SetupArt sheet (3 sizes, 13 pictures each) median %d us under 400 ms (generous limit)" % p.usec)
+	print("  setup art: %d us for 39 pictures (target: about 1 ms each)" % p.usec)
+	p.queue_free()
+
+
+func test_setup_art_view() -> void:
+	var v := SetupArtView.new()
+	v.size = Vector2(400, 360)
+	tree.root.add_child(v)
+	for k in ["headphones", "phone", "drum"]:
+		v.kind = k
+		await _frames(2)
+	v.kind = "drum"
+	v.strike()
+	check_eq(v.hit, 1.0, "strike() sets the drum's hit")
+	var t_end := Time.get_ticks_msec() + 600
+	while Time.get_ticks_msec() < t_end and v.hit > 0.0:
+		await tree.process_frame
+	check_eq(v.hit, 0.0, "the drum's hit decays back to rest")
+	v.hit = 7.0
+	check_eq(v.hit, 1.0, "hit clamps to 0..1")
+	v.kind = "phone"
+	v.tilt = 0.5
+	v.left_pressed = true
+	v.arrow = -1
+	await _frames(2)
+	v.queue_free()
+
+
+func test_mamuthone_portrait() -> void:
+	var p := MamuthonePortrait.new()
+	p.size = Vector2(340, 440)
+	tree.root.add_child(p)
+	p.set_look({"nose": "long", "finish": "neon"}, "dark_brown", "dark", "full")
+	check(MaskSpec.validate(p.mask), "the portrait sanitizes the mask")
+	check_eq(p.fleece, "dark_brown", "portrait fleece")
+	check_eq(p.bell_set, "full", "portrait bell set")
+	p.set_look(MaskSpec.default(), "pink", "gold", "huge")
+	check_eq(p.fleece, "black", "unknown fleece falls back")
+	check_eq(p.straps, "natural", "unknown straps fall back")
+	check_eq(p.bell_set, "village", "unknown bell set falls back")
+	await _frames(2)
+	p.queue_free()
+	# The static painter at every bell set, framed and not, big and tiny.
+	var probe := _probe(func(ci):
+		for bs in ["light", "village", "full"]:
+			MamuthonePortrait.paint(ci, Rect2(0, 0, 340, 440), MaskSpec.default(), "black", "natural", bs, "eyes", true)
+			MamuthonePortrait.paint(ci, Rect2(0, 0, 60, 40), MaskSpec.default(), "dark_brown", "dark", bs, "", false))
+	await _frames()
+	check(probe.done, "MamuthonePortrait.paint draws to the end for every bell set")
+	probe.queue_free()

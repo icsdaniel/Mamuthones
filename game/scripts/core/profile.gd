@@ -17,7 +17,8 @@ extends Node
 ##   audio_offset() -> float seconds (the "audio_offset" setting)
 ##   best(song_key, difficulty) -> {} or {score, accuracy, bells, ghost, slam, plays}
 ##   all_bests() -> {"song:difficulty": entry}
-##   daily_best(date_key) -> {} or {score, song_id, difficulty, bells}
+##   daily_best(date_key, difficulty := "") -> {} or {score, song_id, difficulty, bells}
+##       (one per difficulty; with no difficulty, the best of that day at any difficulty)
 ##   record_result(session) -> {prev_best, new_best, bells, unlocked: [{kind, id, part?}], carving_gained}
 ##   save(), load_profile(path := PATH), reset()
 ##   plays() -> total finished runs
@@ -190,9 +191,21 @@ func all_bests() -> Dictionary:
 	return _bests
 
 
-func daily_best(date_key: String) -> Dictionary:
-	var e = _daily.get(date_key, {})
-	return e.duplicate() if e is Dictionary else {}
+func daily_best(date_key: String, difficulty := "") -> Dictionary:
+	if difficulty != "":
+		var e = _daily.get(date_key + "." + difficulty, {})
+		if e is Dictionary and not e.is_empty():
+			return e.duplicate()
+		# Saved before dailies were per difficulty: one entry under the bare date.
+		var old = _daily.get(date_key, {})
+		return old.duplicate() if old is Dictionary and str(old.get("difficulty", "")) == difficulty else {}
+	var top := {}
+	for k in _daily:
+		var e = _daily[k]
+		if (str(k) == date_key or str(k).begins_with(date_key + ".")) and e is Dictionary \
+				and (top.is_empty() or int(e.get("score", 0)) > int(top.get("score", 0))):
+			top = e
+	return top.duplicate()
 
 
 func plays() -> int:
@@ -230,15 +243,15 @@ func record_result(session: Session) -> Dictionary:
 		_bests[key] = e
 		# Only the real procession of that day counts as a daily.
 		if Daily.matches(session):
-			var d := daily_best(session.daily)
+			var d := daily_best(session.daily, session.difficulty)
 			if d.is_empty() or session.score > int(d.get("score", 0)):
-				_daily[session.daily] = {"score": session.score, "song_id": session.song_key(), "difficulty": session.difficulty, "bells": session.bells(), "slam": session.slam}
+				_daily[session.daily + "." + session.difficulty] = {"score": session.score, "song_id": session.song_key(), "difficulty": session.difficulty, "bells": session.bells(), "slam": session.slam}
 		if session.ladder_ok():
 			var lb := _leaderboards()
 			if lb != null:
 				lb.submit(board_id(session.song_key(), session.difficulty), session.score)
 				if Daily.matches(session):
-					lb.submit(Daily.BOARD_ID + "." + session.daily, session.score)
+					lb.submit(Daily.board_for(session.daily, session.difficulty), session.score)
 	var after := Progression.snapshot(self)
 	for k in after:
 		if before.has(k):

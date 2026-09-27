@@ -29,37 +29,40 @@ func build() -> void:
 	var words := UIKit.label(tr(grade_key(acc)), UIKit.HEADER, true, HORIZONTAL_ALIGNMENT_CENTER)
 	words.name = "Grade"
 	box.add_child(words)
-	var bells := BellMarks.new(session.bells(), 76.0)
+	# Bells and score share one row, so the breakdown and timing fit above the fold.
+	var top := HBoxContainer.new()
+	top.alignment = BoxContainer.ALIGNMENT_CENTER
+	top.add_theme_constant_override("separation", 20)
+	box.add_child(top)
+	var bells := BellMarks.new(session.bells(), 52.0)
 	bells.name = "Bells"
-	bells.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
-	box.add_child(bells)
+	bells.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+	top.add_child(bells)
 	bells.animate(0.35)
 	var score := UIKit.label(UIKit.fmt_score(session.score), "BigNumberLabel", false, HORIZONTAL_ALIGNMENT_CENTER)
 	score.name = "Score"
-	box.add_child(score)
+	top.add_child(score)
 	_count_up(score, session.score)
 	var best_line := _best_line()
 	if best_line != "":
-		var bl := UIKit.label(best_line, UIKit.SUB, true, HORIZONTAL_ALIGNMENT_CENTER)
+		var bl := UIKit.label(best_line, UIKit.CAPTION, true, HORIZONTAL_ALIGNMENT_CENTER)
 		bl.name = "BestLine"
+		bl.add_theme_color_override("font_color", Palette.EMBER)
 		box.add_child(bl)
-	if session.slam:
-		box.add_child(UIKit.label(tr("res_slam_note"), UIKit.CAPTION, true, HORIZONTAL_ALIGNMENT_CENTER))
 
-	# What to do next comes first, right under the score; then what was won, then the detail.
-	var tip := UIKit.card(box, true)
-	tip.name = "Tip"
-	tip.add_child(UIKit.label(tr("res_tip"), UIKit.PAPER_HEADER))
-	tip.add_child(UIKit.label(tip_text(session), UIKit.PAPER))
-	_unlocks(box)
-	var closest := closest_unlock(session)
-	if closest != "":
-		var cc := UIKit.card(box)
-		cc.name = "Closest"
-		cc.add_child(UIKit.label(tr("res_closest"), UIKit.SUB))
-		cc.add_child(UIKit.label(closest, UIKit.CAPTION))
+	# The score's story first: the unison headline, where the points came from, and the timing.
 	_breakdown(box)
 	_tendency(box)
+	var tip_line := tip_text(session)
+	if tip_line != "":
+		var tip := UIKit.card(box, true)
+		tip.name = "Tip"
+		tip.add_child(UIKit.label(tr("res_tip"), UIKit.PAPER_HEADER))
+		tip.add_child(UIKit.label(tip_line, UIKit.PAPER))
+	_unlocks(box)
+	if session.slam:
+		box.add_child(UIKit.label(tr("res_slam_note"), UIKit.CAPTION, true, HORIZONTAL_ALIGNMENT_CENTER))
+	box.add_child(UIKit.label(tr("res_formula"), UIKit.CAPTION))
 
 	var again := UIKit.button(tr("res_again"), func() -> void: app.replace("play", play_args), UIKit.PRIMARY)
 	again.name = "Again"
@@ -110,8 +113,13 @@ func _breakdown(box: Container) -> void:
 	var b := session.score_breakdown()
 	var c := UIKit.card(box)
 	c.name = "Breakdown"
-	c.add_child(UIKit.label(tr("res_where"), UIKit.SUB))
 	var st := session.stats
+	var peak := float(st.get("unison_peak", Session.UNISON_MULTS[int(st.get("max_unison", 0))]))
+	var top := Session.UNISON_MULTS[Session.UNISON_MULTS.size() - 1]
+	var head := UIKit.label(unison_headline(peak, float(st.get("time_at_top", 0.0)), top), UIKit.SUB, true)
+	head.name = "UnisonHeadline"
+	head.add_theme_color_override("font_color", Palette.EMBER_HOT)
+	c.add_child(head)
 	var grid := GridContainer.new()
 	grid.columns = 2
 	grid.add_theme_constant_override("h_separation", 16)
@@ -120,11 +128,8 @@ func _breakdown(box: Container) -> void:
 	_row(grid, tr("res_accuracy"), "%d%%" % roundi(session.accuracy() * 100.0), "Accuracy")
 	_row(grid, tr("res_counts") % [int(st.perfect), int(st.good), int(st.early) + int(st.late), int(st.miss) + int(st.wrong)], "", "Counts", true)
 	_row(grid, tr("res_base"), UIKit.fmt_score(roundi(float(b.get("base", 0.0)))), "Base")
-	var peak := float(st.get("unison_peak", Session.UNISON_MULTS[int(st.get("max_unison", 0))]))
 	_row(grid, tr("res_unison") % Hud._mult_text(peak),
 		"+" + UIKit.fmt_score(roundi(float(b.get("unison", 0.0)))), "Unison")
-	var top := Session.UNISON_MULTS[Session.UNISON_MULTS.size() - 1]
-	_row(grid, tr("res_top_time") % Hud._mult_text(top), UIKit.fmt_dec(float(st.get("time_at_top", 0.0)), 0) + " s", "TopTime")
 	_row(grid, tr("res_weight") % [BellSets.name(session.bell_set, I18n.locale()), Hud._mult_text(session.weight())],
 		"+" + UIKit.fmt_score(roundi(float(b.get("weight", 0.0)))), "Weight")
 	if float(b.get("holds", 0.0)) > 0.0:
@@ -134,8 +139,14 @@ func _breakdown(box: Container) -> void:
 		var net := float(b.get("stills", 0.0)) - absf(float(b.get("penalties", 0.0)))
 		_row(grid, tr("res_still") % [int(st.get("still_kept", 0)), int(st.get("rests", 0))],
 			("+" if net >= 0.0 else "−") + UIKit.fmt_score(roundi(absf(net))), "Still")
-	c.add_child(UIKit.label(tr("res_formula"), UIKit.CAPTION))
 	UIKit.pop_in(c, 0.5)
+
+
+## "Unison peak ×4 · 38 s at ×4", or just the peak when the top was never reached.
+static func unison_headline(peak: float, secs_at_top: float, top: float) -> String:
+	if peak >= top and secs_at_top >= 0.5:
+		return UIKit.tr_("res_unison_head_top") % [Hud._mult_text(peak), UIKit.fmt_dec(secs_at_top, 0), Hud._mult_text(top)]
+	return UIKit.tr_("res_unison_head") % Hud._mult_text(peak)
 
 
 func _row(grid: GridContainer, what: String, value: String, id: String, span := false) -> void:
@@ -165,18 +176,31 @@ func _tendency(box: Container) -> void:
 	var tl := UIKit.label(text, "")
 	if side != "" and session.hit_offsets.size() >= 4:
 		tl.add_theme_color_override("font_color", UIKit.side_color(side))
-	c.add_child(tl)
+	var row := HBoxContainer.new()
+	row.add_theme_constant_override("separation", 16)
+	c.add_child(row)
+	tl.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	tl.size_flags_stretch_ratio = 1.2
+	row.add_child(tl)
 	var meter := TendencyMeter.new()
+	meter.name = "Meter"
 	meter.offsets = session.hit_offsets
-	meter.custom_minimum_size.y = 210
-	c.add_child(meter)
+	meter.custom_minimum_size.y = 150
+	meter.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	row.add_child(meter)
 	UIKit.pop_in(c, 0.7)
 
 
 func _unlocks(box: Container) -> void:
 	var list: Array = record.get("unlocked", [])
 	var carving := int(record.get("carving_gained", 0))
+	var closest := closest_unlock(session)
 	if list.is_empty() and carving <= 0:
+		if closest != "":
+			var cc := UIKit.card(box)
+			cc.name = "Closest"
+			cc.add_child(UIKit.label(tr("res_closest"), UIKit.SUB))
+			cc.add_child(UIKit.label(closest, UIKit.CAPTION))
 		return
 	var c := UIKit.card(box, true)
 	c.name = "Unlocked"
@@ -188,6 +212,10 @@ func _unlocks(box: Container) -> void:
 		lines.append(tr("res_carving") % carving)
 	for line in lines:
 		c.add_child(UIKit.label("• " + line, UIKit.PAPER))
+	if closest != "":
+		var cl := UIKit.label(tr("res_closest") + ": " + closest, UIKit.PAPER)
+		cl.name = "Closest"
+		c.add_child(cl)
 	if not list.is_empty():
 		UIKit.celebrate(self, lines[0], 2.2)
 
@@ -230,12 +258,30 @@ static func tip_text(s: Session) -> String:
 	if int(st.miss) * 5 > total:
 		return UIKit.tr_("tip_slow")
 	if int(st.get("max_unison", 0)) < 3:
-		return UIKit.tr_("tip_unison")
-	if s.bells() >= 2 and s.difficulty in ["easy", "medium"]:
-		return UIKit.tr_("tip_harder")
-	if s.bell_set != "full" and Progression.bell_set_unlocked("village"):
-		return UIKit.tr_("tip_weight")
-	return UIKit.tr_("tip_expert")
+		return UIKit.tr_("tip_unison") % Session.UNISON_STEP
+	# A clean run: one step up that is actually open to this player, or nothing.
+	var diffs := s.song.difficulties()
+	var i := diffs.find(s.difficulty)
+	if s.bells() >= 2 and i >= 0 and i + 1 < diffs.size():
+		var nd := diffs[i + 1]
+		var tip := UIKit.tr_("tip_harder") % UIKit.tr_("diff_" + nd)
+		if nd in Progression.REMIX_LEVELS and s.song.has_remix() and not Progression.remix_unlocked(s.song.id):
+			tip += " " + UIKit.tr_("tip_harder_remix") % [Progression.REMIX_BELLS, UIKit.tr_("diff_" + nd)]
+		return tip
+	var heavier := next_bell_set(s.bell_set) if s.bells() >= 2 else ""
+	if heavier != "":
+		return UIKit.tr_("tip_weight") % [BellSets.name(heavier, I18n.locale()), Hud._mult_text(float(BellSets.WEIGHTS[heavier]))]
+	return ""
+
+
+## The next heavier bell set the player has unlocked, or "" when there is none.
+static func next_bell_set(current: String) -> String:
+	var ids := BellSets.ids()
+	var i := ids.find(current)
+	for j in range(i + 1, ids.size()):
+		if Progression.bell_set_unlocked(ids[j]):
+			return ids[j]
+	return ""
 
 
 func _count_up(l: Label, target: int) -> void:

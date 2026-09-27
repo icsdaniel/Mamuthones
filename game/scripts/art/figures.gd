@@ -174,13 +174,16 @@ static func _mamuthone_legs(ci: CanvasItem, u: float, lit: Color, detail: int) -
 
 ## White-line carving of the sheepskin: rows of curled cuts, following the fall of the wool.
 static func _fleece_cuts(ci: CanvasItem, u: float, lit: Color) -> void:
+	# At close-up sizes (portraits) the locks stay about the same size in pixels and get denser, so the
+	# wool never turns into a few big slashes.
+	var f := clampf(3.5 / u, 0.4, 1.0)
 	var row := 0
 	var y := -77.0
 	while y < -31.0:
 		# Half-width of the coat at this height.
 		var t := clampf((y + 82.0) / 30.0, 0.0, 1.0)
 		var half := lerpf(12.0, 21.0, sqrt(t))
-		var x := -half + 1.0 + (1.6 if row % 2 == 1 else 0.0) + 0.8 * WoodcutDraw.hash01(row, 51)
+		var x := -half + 1.0 + ((1.6 if row % 2 == 1 else 0.0) + 0.8 * WoodcutDraw.hash01(row, 51)) * f
 		var k := 0
 		while x < half - 1.5:
 			var j := WoodcutDraw.hash01(row * 31 + k, 52)
@@ -190,13 +193,13 @@ static func _fleece_cuts(ci: CanvasItem, u: float, lit: Color) -> void:
 				var p := Vector2(x, y + (j - 0.5) * 1.6)
 				# A lock of wool: a short hooked cut, hanging down, bent one way or the other at random.
 				var curl := -1.0 if WoodcutDraw.hash01(row * 31 + k, 54) < 0.5 else 1.0
-				var ln := 2.6 + 1.8 * WoodcutDraw.hash01(row * 31 + k, 55)
-				var c := PackedVector2Array([p, p + Vector2(curl * 0.3, ln * 0.55), p + Vector2(curl * 1.3, ln)])
+				var ln := (2.6 + 1.8 * WoodcutDraw.hash01(row * 31 + k, 55)) * f
+				var c := PackedVector2Array([p, p + Vector2(curl * 0.3 * f, ln * 0.55), p + Vector2(curl * 1.3 * f, ln)])
 				var col := Color(Palette.BONE, minf(0.9, a * 1.25)) if lx < 0.35 else Color(Palette.BONE.lerp(lit, 0.4), a)
-				WoodcutDraw.stroke(ci, _u(c, u), col, 0.15 * u, 0.05 * u, 0.85 * u)
-			x += 3.2 + 1.2 * j
+				WoodcutDraw.stroke(ci, _u(c, u), col, 0.15 * u * f, 0.05 * u * f, 0.85 * u * f)
+			x += (3.2 + 1.2 * j) * f
 			k += 1
-		y += 4.2
+		y += 4.2 * f
 		row += 1
 
 

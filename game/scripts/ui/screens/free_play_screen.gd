@@ -72,6 +72,7 @@ func _pick_song(s: SongData) -> void:
 		b.set_pressed_no_signal(d == difficulty)
 		b.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 		b.name = "Diff_" + d
+		b.alignment = HORIZONTAL_ALIGNMENT_LEFT
 		var best: Dictionary = Profile.best(UIKit.board_song_id(s, use_remix), d)
 		_badge(b, int(best.get("bells", 0)), "")
 		_diff_box.add_child(b)

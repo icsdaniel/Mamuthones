@@ -180,6 +180,10 @@ static func label(text: String, variation := "", wrap := true, align := HORIZONT
 	if wrap:
 		l.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 		l.custom_minimum_size.x = 1
+		# The display face has tall line gaps: pull wrapped headings' lines together.
+		var tighten: int = {TITLE: -18, HEADER: -12, PAPER_HEADER: -8}.get(variation, 0)
+		if tighten != 0:
+			l.add_theme_constant_override("line_spacing", tighten)
 	return l
 
 

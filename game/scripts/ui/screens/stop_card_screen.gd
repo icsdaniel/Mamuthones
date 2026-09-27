@@ -40,7 +40,22 @@ func build() -> void:
 		lessons.name = "Lessons"
 		foot.add_child(lessons)
 
-	box.add_child(UIKit.label(tr("stop_difficulty"), UIKit.SUB))
+	# The difficulty heading carries the Remix chip once it is earned, so the reason to replay is in
+	# view next to the difficulty buttons.
+	var dh := HBoxContainer.new()
+	dh.add_theme_constant_override("separation", 12)
+	box.add_child(dh)
+	var dl := UIKit.label(tr("stop_difficulty"), UIKit.SUB)
+	dl.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	dl.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+	dh.add_child(dl)
+	if song.has_remix() and Progression.remix_unlocked(song.id):
+		var chip := UIKit.button(tr("stop_remix_chip"), func() -> void: pass)
+		chip.toggle_mode = true
+		chip.name = "Remix"
+		chip.custom_minimum_size.x = 200
+		chip.toggled.connect(func(on: bool) -> void: use_remix = on)
+		dh.add_child(chip)
 	var grid := GridContainer.new()
 	grid.columns = 2
 	grid.add_theme_constant_override("h_separation", 12)
@@ -56,14 +71,9 @@ func build() -> void:
 	_best = UIKit.label("", UIKit.CAPTION)
 	box.add_child(_best)
 	UIKit.bell_set_picker(box)
-	if song.has_remix():
-		var r := CheckButton.new()
-		r.text = tr("stop_remix") if Progression.remix_unlocked(song.id) else tr("stop_remix_locked")
-		r.disabled = not Progression.remix_unlocked(song.id)
-		r.custom_minimum_size.y = UIKit.TOUCH
-		r.focus_mode = Control.FOCUS_NONE
-		r.toggled.connect(func(on: bool) -> void: use_remix = on)
-		r.name = "Remix"
+	if song.has_remix() and not Progression.remix_unlocked(song.id):
+		var r := UIKit.label(tr("stop_remix_locked"), UIKit.CAPTION)
+		r.name = "RemixLocked"
 		box.add_child(r)
 	var play := UIKit.button(tr("stop_play"), _play, "" if song.kind == "tutorial" else UIKit.PRIMARY)
 	play.name = "Play"

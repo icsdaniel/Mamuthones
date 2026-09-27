@@ -2,7 +2,8 @@ extends SceneTree
 ## Renders every art piece to PNGs for looking at (needs a real renderer):
 ##   xvfb-run -a godot --path game --rendering-driver opengl3 --resolution 720x1440 \
 ##       -s res://tests/art/gallery.gd -- /tmp/art-gallery [piece ...]
-## Pieces: theme, masks, figures, stops, procession, lanes, logo, timing (default: all).
+## Pieces: theme, masks, figures, stops, procession, lanes, logo, setup, timing (default: all).
+## setup: SetupArt (headphones, phone in hands, drum) and MamuthonePortrait.
 ## lanes also writes the greyscale and small-size sheets; logo also writes the 64 and 128 px icons;
 ## timing writes play_mock.png (scene and lanes together) and appends to timing.txt.
 
@@ -32,6 +33,8 @@ func _init() -> void:
 		await _lanes()
 	if _want("logo"):
 		await _logo()
+	if _want("setup"):
+		await _setup()
 	if _want("timing"):
 		await _timing(true, true)
 		await _timing(true, true)
@@ -162,6 +165,51 @@ func _masks() -> void:
 			t.position = Vector2(i * 180 + [10.0, 44.0, 94.0][j], 330 + (80 - h))
 			row.add_child(t)
 	await render(row, Vector2i(row.size), "mask_combos.png")
+
+
+func _setup() -> void:
+	var bg := func(ci: CanvasItem, sz: Vector2) -> void:
+		ci.draw_rect(Rect2(Vector2.ZERO, sz), Palette.NIGHT)
+	# Headphones and three drum states.
+	await render(_sheet(Vector2(720, 800), func(ci):
+		bg.call(ci, Vector2(720, 800))
+		SetupArt.headphones(ci, Rect2(160, 10, 400, 360))
+		for i in 3:
+			SetupArt.frame_drum(ci, Rect2(i * 240, 420, 240, 220), [0.0, 0.5, 1.0][i])
+		), Vector2i(720, 800), "setup_headphones_drum.png", 6)
+	# The phone: away, level, toward; thumbs up/down; arrows.
+	await render(_sheet(Vector2(720, 960), func(ci):
+		bg.call(ci, Vector2(720, 960))
+		var tilts := [-0.6, 0.0, 0.6]
+		for i in 3:
+			SetupArt.phone_in_hands(ci, Rect2(i * 240, 0, 240, 320), tilts[i], i == 0, i == 2, 0, 0.0)
+		SetupArt.phone_in_hands(ci, Rect2(0, 340, 360, 320), 0.4, true, true, 1, 0.8)
+		SetupArt.phone_in_hands(ci, Rect2(360, 340, 360, 320), -0.4, false, false, -1, 0.0)
+		SetupArt.phone_in_hands(ci, Rect2(160, 660, 400, 300), 0.0, false, false, 0, 0.0)
+		), Vector2i(720, 960), "setup_phone.png", 6)
+	# Portraits: default look, and a carved look with dark fleece, dark straps, full load; small size.
+	var root := Control.new()
+	root.size = Vector2(720, 700)
+	var looks := [[MaskSpec.default(), "black", "natural", "light"],
+		[{"brow": "furrowed", "eyes": "drooping", "nose": "long", "cheeks": "hollow", "mouth": "downturned", "finish": "smoked", "patina": "old"}, "dark_brown", "dark", "full"]]
+	for i in 2:
+		var p := MamuthonePortrait.new()
+		p.position = Vector2(i * 360 + 10, 10)
+		p.size = Vector2(340, 440)
+		var lk: Array = looks[i]
+		p.set_look(lk[0], lk[1], lk[2], lk[3])
+		if i == 1:
+			p.highlight_part = "nose"
+		root.add_child(p)
+	var small := MamuthonePortrait.new()
+	small.position = Vector2(10, 470)
+	small.size = Vector2(170, 220)
+	root.add_child(small)
+	var wide := MamuthonePortrait.new()
+	wide.position = Vector2(200, 470)
+	wide.size = Vector2(510, 220)
+	root.add_child(wide)
+	await render(root, Vector2i(720, 700), "setup_portrait.png", 6)
 
 
 class _Sheet:

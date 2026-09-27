@@ -95,17 +95,13 @@ func tick(t: float, delta: float) -> void:
 	_meter.fill = float(session.unison_streak) / float(Session.UNISON_STEP) if session.unison_level < 5 else 1.0
 	_bar.progress = session.progress(t)
 	_section.text = _bar.section_name(t)
-	if ghost != null and not ghost.is_empty():
-		var lead := ghost.lead_seconds(session.score, t)
-		if absf(lead) < 0.05:
-			_ghost.text = tr("hud_ghost_even")
-			_ghost.modulate = Palette.BONE_DIM
-		elif lead > 0.0:
-			_ghost.text = tr("hud_ghost_ahead") % UIKit.fmt_dec(lead)
-			_ghost.modulate = Palette.EMBER
-		else:
-			_ghost.text = tr("hud_ghost_behind") % UIKit.fmt_dec(-lead)
-			_ghost.modulate = Palette.BONE_DIM
+	if ghost != null and not ghost.is_empty() and judged_any(session):
+		# Points, not seconds: how far above or below your best run you are at this moment.
+		var d := ghost.delta_at(t, session.score)
+		_ghost.text = ghost_text(d)
+		_ghost.modulate = Palette.EMBER if d > 0 else Palette.BONE_DIM
+	elif ghost != null and not ghost.is_empty():
+		_ghost.text = ""
 	else:
 		_ghost.text = tr("hud_unison_hint") if session.unison_level == 0 else ""
 
@@ -122,3 +118,17 @@ func set_unison(level: int, animate := true) -> void:
 
 static func _mult_text(m: float) -> String:
 	return ("×%d" % int(m)) if is_equal_approx(m, roundf(m)) else ("×%.1f" % m)
+
+
+## Whether any note has been judged yet (the ghost line waits for it).
+static func judged_any(s: Session) -> bool:
+	return int(s.stats.get("notes", 0)) + int(s.stats.get("miss", 0)) + int(s.stats.get("wrong", 0)) > 0
+
+
+## "+1,250 on your best", "−800 on your best" or "Level with your best".
+static func ghost_text(delta: int) -> String:
+	if delta == 0:
+		return UIKit.tr_("hud_ghost_even")
+	if delta > 0:
+		return UIKit.tr_("hud_ghost_up") % UIKit.fmt_score(delta)
+	return UIKit.tr_("hud_ghost_down") % UIKit.fmt_score(-delta)
