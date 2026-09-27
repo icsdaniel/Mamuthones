@@ -56,7 +56,7 @@ static func reduced_motion() -> bool:
 static func first_screen() -> String:
 	if not Profile.has_flag("language_chosen"):
 		return "language"
-	if not Profile.has_flag("tutorial_done"):
+	if not Profile.has_flag("headphones_seen"):
 		return "headphones"
 	return "title"
 

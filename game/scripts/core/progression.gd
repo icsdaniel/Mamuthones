@@ -71,12 +71,19 @@ static func is_unlocked(song_id: String, profile: Variant = null) -> bool:
 		return remix_unlocked(s.id, profile)
 	if s.kind == "piazza":
 		var order := story_order()
-		return order.is_empty() or cleared(order[0], profile)
+		return order.is_empty() or opens_next(order[0], profile)
 	var story := story_order()
 	var i := story.find(song_id)
 	if i <= 0:
 		return true
-	return cleared(story[i - 1], profile)
+	return opens_next(story[i - 1], profile)
+
+
+## Whether a stop lets the next one open: finished, or the tutorial, which is optional (Daniele,
+## 2026-09-27: the tutorial and the calibration are offered from the menu, never forced).
+static func opens_next(song_id: String, profile: Variant = null) -> bool:
+	var s := SongLibrary.get_song(song_id)
+	return (s != null and s.kind == "tutorial") or cleared(song_id, profile)
 
 
 ## Accepts the base song id or the remix id.
@@ -131,6 +138,9 @@ static func mask_option_unlocked(part: String, option: String, profile: Variant 
 ## The first story stop that is open but not finished yet ("" when all are finished).
 static func next_stop(profile: Variant = null) -> String:
 	for id in story_order():
+		var s := SongLibrary.get_song(id)
+		if s != null and s.kind == "tutorial":
+			continue   # optional, and on the title menu of its own
 		if is_unlocked(id, profile) and not cleared(id, profile):
 			return id
 	return ""

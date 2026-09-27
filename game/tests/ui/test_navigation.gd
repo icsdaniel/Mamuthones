@@ -2,7 +2,7 @@ extends TestCase
 ## Forward and back through the menus, first launch into the tutorial, and the pause menu.
 
 
-func test_first_launch_leads_to_the_tutorial() -> void:
+func test_first_launch_leads_to_the_menu() -> void:
 	UIHarness.fresh_profile(false)
 	Profile.set_setting("language", "")
 	var app := UIHarness.make_app(tree)
@@ -14,17 +14,66 @@ func test_first_launch_leads_to_the_tutorial() -> void:
 	check_eq(app.current().screen_name(), "headphones_screen", "then the headphone suggestion")
 	check(UIHarness.press(app, "Continue"), "headphones: continue")
 	await UIHarness.frames(tree, 2)
-	check_eq(app.current().screen_name(), "calibration_screen", "then the tilt calibration")
-	# Buttons instead of the tilt are always offered (and are the way on with no sensor, as here).
-	check(UIHarness.press(app, "UseSlam"), "no sensor: play with buttons")
-	await UIHarness.frames(tree, 2)
-	check_eq(app.current().screen_name(), "latency_screen", "then the delay test")
-	check(UIHarness.press(app, "Skip"), "the delay test can be skipped")
-	await UIHarness.frames(tree, 2)
-	check_eq(app.current().screen_name(), "tutorial_screen", "then straight into the tutorial")
-	check(app.current().find_child("Try", true, false) != null, "the first lesson is one tap away")
+	check_eq(app.current().screen_name(), "title_screen", "then straight to the menu: tutorial and calibration are optional")
+	check_eq(app.stack.size(), 1, "the title is the bottom of the stack")
+	for b in ["Tutorial", "Calibrate"]:
+		check(app.current().find_child(b, true, false) != null, "the menu offers %s" % b)
+	var next := Progression.next_stop()
+	check(next != "" and SongLibrary.get_song(next).kind != "tutorial", "Continue leads to the first song, not the tutorial (%s)" % next)
+	check(Progression.is_unlocked(SongLibrary.story()[1].id), "the first song is open without the tutorial")
 	UIHarness.free_app(app)
 	TranslationServer.set_locale("en")
+	# A second launch goes straight to the title.
+	var again := UIHarness.make_app(tree)
+	await UIHarness.frames(tree, 2)
+	check_eq(again.current().screen_name(), "title_screen", "the headphone tip shows once")
+	UIHarness.free_app(again)
+	UIHarness.restore_profile()
+
+
+func test_calibrate_from_the_menu() -> void:
+	UIHarness.fresh_profile()
+	var app := UIHarness.make_app(tree)
+	await UIHarness.frames(tree, 2)
+	check(UIHarness.press(app, "Calibrate"), "title: Calibrate")
+	await UIHarness.frames(tree, 2)
+	check_eq(app.current().screen_name(), "calibration_screen", "the tilt calibration first")
+	check(UIHarness.press(app.current(), "UseSlam"), "no sensor here: play with buttons")
+	await UIHarness.frames(tree, 2)
+	check_eq(app.current().screen_name(), "latency_screen", "then the delay test")
+	check(UIHarness.press(app.current(), "Start"), "the delay test starts")
+	await UIHarness.frames(tree, 2)
+	check(UIHarness.press(app.current(), "Skip"), "Skip stays on screen while the test runs")
+	await UIHarness.frames(tree, 2)
+	check_eq(app.current().screen_name(), "title_screen", "and leads back to the menu")
+	UIHarness.free_app(app)
+	UIHarness.restore_profile()
+
+
+func test_quit_leaves() -> void:
+	UIHarness.fresh_profile()
+	var app := UIHarness.make_app(tree)
+	await UIHarness.frames(tree, 2)
+	var title: GDScript = load("res://scripts/ui/screens/title_screen.gd")
+	var before: int = title.quit_calls
+	check(UIHarness.press(app, "Quit"), "the title has Quit")
+	check_eq(title.quit_calls, before + 1, "Quit closes the game")
+	# Quit from the pause menu inside a tutorial lesson leaves the tutorial.
+	check(UIHarness.press(app, "Tutorial"), "title: Tutorial")
+	await UIHarness.frames(tree, 2)
+	var tut := app.current()
+	check_eq(tut.screen_name(), "tutorial_screen", "the tutorial opens")
+	check(UIHarness.press(tut, "Try"), "a lesson starts")
+	await UIHarness.frames(tree, 3)
+	var lesson := tut.find_child("Lesson", true, false)
+	check(lesson != null, "the lesson is playing")
+	if lesson != null:
+		lesson.call("pause")
+		await UIHarness.frames(tree, 2)
+		check(UIHarness.press(lesson, "Quit"), "the lesson's pause menu has Quit")
+		await UIHarness.frames(tree, 2)
+		check_eq(app.current().screen_name(), "title_screen", "Quit leaves the tutorial for the menu")
+	UIHarness.free_app(app)
 	UIHarness.restore_profile()
 
 
@@ -36,7 +85,7 @@ func test_menus_forward_and_back() -> void:
 	var routes := [
 		["StoryMap", "story_screen"], ["FreePlay", "free_play_screen"], ["Piazza", "piazza_screen"],
 		["Daily", "daily_screen"], ["Workshop", "workshop_screen"], ["Leaderboards", "boards_screen"],
-		["Settings", "settings_screen"],
+		["Settings", "settings_screen"], ["Tutorial", "tutorial_screen"], ["Calibrate", "calibration_screen"],
 	]
 	for r in routes:
 		check(UIHarness.press(app, r[0]), "title has %s" % r[0])
@@ -121,14 +170,15 @@ func test_first_note_within_a_minute() -> void:
 	var app := UIHarness.make_app(tree)
 	await UIHarness.frames(tree, 2)
 	var t0 := Time.get_ticks_msec()
-	for b in ["Lang_en", "Continue", "UseSlam", "Skip", "Try"]:
-		check(UIHarness.press(app, b), "first run: %s" % b)
+	# Language, headphones, then the first song straight from the menu (tutorial and calibration optional).
+	for b in ["Lang_en", "Continue", "PlayNext", "Play"]:
+		check(UIHarness.press(app.current(), b), "first run: %s" % b)
 		await UIHarness.settle(tree)
 	var play: Node = null
-	for n in app.current().find_children("*", "", true, false):
+	for n in [app.current()] + app.current().find_children("*", "", true, false):
 		if n.get("session") is Session and n.get("conductor") is Conductor:
 			play = n
-	check(play != null, "the first lesson is playing")
+	check(play != null, "the first song is playing")
 	if play != null:
 		var s: Session = play.get("session")
 		var c: Conductor = play.get("conductor")

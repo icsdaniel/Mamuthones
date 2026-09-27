@@ -49,14 +49,26 @@ func build() -> void:
 		["Daily", "title_daily", func() -> void: app.open("daily")],
 		["Workshop", "title_workshop", func() -> void: app.open("workshop")],
 		["Leaderboards", "title_boards", _boards],
+		["Tutorial", "title_tutorial", func() -> void: app.open("tutorial")],
+		["Calibrate", "title_calibrate", func() -> void: app.open("calibration", {"then_latency": true})],
 	]:
 		var b := UIKit.button(tr(item[1]), item[2])
 		b.name = item[0]
 		b.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 		grid.add_child(b)
+	var row := HBoxContainer.new()
+	row.add_theme_constant_override("separation", 12)
+	box.add_child(row)
 	var settings := UIKit.button(tr("title_settings"), func() -> void: app.open("settings"), UIKit.QUIET)
 	settings.name = "Settings"
-	box.add_child(settings)
+	settings.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	row.add_child(settings)
+	# iOS and browsers leave apps their own way; Android and desktop get a Quit.
+	if not (OS.has_feature("ios") or OS.has_feature("web")):
+		var quit := UIKit.button(tr("title_quit"), quit_game, UIKit.QUIET)
+		quit.name = "Quit"
+		quit.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		row.add_child(quit)
 
 
 func _play_next() -> void:
@@ -71,6 +83,18 @@ func _boards() -> void:
 	app.open("boards")
 
 
+## Tests set this to count quits instead of leaving.
+static var quit_calls := 0
+static var really_quit := true
+
+
+func quit_game() -> void:
+	quit_calls += 1
+	Sound.stop_all()
+	if really_quit:
+		get_tree().quit()
+
+
 func on_back() -> void:
 	# The title is the bottom of the stack: Android back leaves the game.
-	get_tree().quit()
+	quit_game()

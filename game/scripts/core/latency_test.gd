@@ -13,7 +13,8 @@ const CLUSTER := 0.06        ## taps within this of each other's delay agree
 const SEARCH := 0.6          ## taps are looked for this far from a click, so noisy taps at the edge
                              ## of the range still count; the offset itself is clamped to MAX_PAIR
 const MIN_TAPS := 6
-const MAX_SPREAD := 0.035    ## seconds; above this the taps were too uneven to trust
+const MAX_SPREAD := 0.05     ## seconds; above this the taps were too uneven to trust (touch screens
+                             ## report taps a frame late at random, so allow for 16 ms of that)
 
 var clicks := PackedFloat64Array()
 var taps := PackedFloat64Array()

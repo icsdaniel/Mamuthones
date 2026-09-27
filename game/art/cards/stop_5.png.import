@@ -4,15 +4,16 @@ importer="texture"
 type="CompressedTexture2D"
 uid="uid://bkj5xa8y37hw2"
 path.s3tc="res://.godot/imported/stop_5.png-d7d709ee4f7d467d862e7168dbaccf55.s3tc.ctex"
+path.etc2="res://.godot/imported/stop_5.png-d7d709ee4f7d467d862e7168dbaccf55.etc2.ctex"
 metadata={
-"imported_formats": ["s3tc_bptc"],
+"imported_formats": ["s3tc_bptc", "etc2_astc"],
 "vram_texture": true
 }
 
 [deps]
 
 source_file="res://art/cards/stop_5.png"
-dest_files=["res://.godot/imported/stop_5.png-d7d709ee4f7d467d862e7168dbaccf55.s3tc.ctex"]
+dest_files=["res://.godot/imported/stop_5.png-d7d709ee4f7d467d862e7168dbaccf55.s3tc.ctex", "res://.godot/imported/stop_5.png-d7d709ee4f7d467d862e7168dbaccf55.etc2.ctex"]
 
 [params]
 
