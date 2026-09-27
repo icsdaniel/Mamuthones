@@ -19,10 +19,12 @@ var _instruction: Label
 var _hint: Label
 var _actions: VBoxContainer
 var _done := false
+var _asking := false             ## web: the "tap to enable motion" prompt is showing
 
 
 func build() -> void:
-	reader = MotionReader.new()
+	# args.reader (tests) stands in for the phone's sensors.
+	reader = args.get("reader", null) if args.get("reader", null) is MotionReader else MotionReader.new()
 	calibrator = Calibrator.new()
 	calibrator.move_detected.connect(_on_move)
 	calibrator.finished.connect(_on_finished)
@@ -72,6 +74,7 @@ func build() -> void:
 
 func _show_skip() -> void:
 	for c in _actions.get_children():
+		_actions.remove_child(c)
 		c.queue_free()
 	var skip := UIKit.button(tr("cal_use_slam"), _use_slam, UIKit.QUIET)
 	skip.name = "UseSlam"
@@ -84,13 +87,46 @@ func _process(delta: float) -> void:
 	_t += delta
 	reader.read(delta)
 	var status := reader.status()
+	# Web (iOS Safari): the browser gives motion only after a tap asks for it.
+	if status == "permission":
+		if not _asking:
+			_show_permission()
+		_feed_phone(0.0, delta)
+		return
+	if _asking:
+		_asking = false
+		_sensor.text = ""
+		_show_skip()
 	if status == "no_gyro" and _sensor.text == "":
 		_sensor.text = tr("motion_no_gyro")
 	if status == "no_sensor":
 		_on_failed("no_sensor")
 		return
-	calibrator.feed(_t, reader.linear, reader.rotation_dps, reader.has_gyro())
+	# Every reading of this frame, each at its own time (the web sends 0-2 per frame), so a short
+	# flick between frames is not lost.
+	for smp in reader.samples:
+		calibrator.feed(_t - float(smp.get("age", 0.0)), smp.get("linear", Vector3.ZERO), smp.get("rotation_dps", Vector3.ZERO), reader.has_gyro())
 	_feed_phone(reader.rotation_dps.x, delta)
+
+
+## The browser needs a tap before it shares the motion sensors: say so, and ask from that tap.
+func _show_permission() -> void:
+	_asking = true
+	_sensor.text = tr("cal_permission_body")
+	for c in _actions.get_children():
+		_actions.remove_child(c)
+		c.queue_free()
+	var ask := UIKit.button(tr("cal_permission"), _request_permission, UIKit.PRIMARY)
+	ask.name = "EnableMotion"
+	_actions.add_child(ask)
+	var skip := UIKit.button(tr("cal_use_slam"), _use_slam, UIKit.QUIET)
+	skip.name = "UseSlam"
+	_actions.add_child(skip)
+
+
+func _request_permission() -> void:
+	reader.request_web_permission()
+	_sensor.text = tr("motion_waiting")
 
 
 ## Integrates the pitch rate (degrees per second) with a leak back to rest, so the drawing follows
@@ -142,6 +178,7 @@ func _on_finished(result: Dictionary) -> void:
 	_hint.text = tr("cal_done_body")
 	Sound.ui("unlock")
 	for c in _actions.get_children():
+		_actions.remove_child(c)
 		c.queue_free()
 	var go := UIKit.button(tr("ui_continue"), _next, UIKit.PRIMARY)
 	go.name = "Continue"
@@ -154,9 +191,13 @@ func _on_failed(reason: String) -> void:
 	if _done:
 		return
 	_done = true
-	_instruction.text = tr("cal_fail_" + reason)
-	_hint.text = tr("cal_fail_" + reason + "_body")
+	# On the web a refused permission is not a missing sensor: say how to allow it.
+	var key := "cal_fail_denied" if reason == "no_sensor" and reader.web_permission() == "denied" else "cal_fail_" + reason
+	_instruction.text = tr(key)
+	_hint.text = tr(key + "_body")
+	_sensor.text = ""
 	for c in _actions.get_children():
+		_actions.remove_child(c)
 		c.queue_free()
 	if reason != "no_sensor":
 		_actions.add_child(UIKit.button(tr("cal_again"), func() -> void: app.replace("calibration", args), UIKit.PRIMARY))

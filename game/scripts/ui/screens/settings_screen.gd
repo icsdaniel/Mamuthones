@@ -70,8 +70,10 @@ func _process(delta: float) -> void:
 	if st == _status or st == "waiting":
 		return
 	_status = st
-	var text := tr("motion_" + st)
-	if st != "no_sensor" and Profile.calibration().is_empty() and not bool(Profile.get_setting("slam")):
+	# On the web: not asked yet ("permission"), or refused (no_sensor with a denied permission).
+	var key := "motion_denied" if st == "no_sensor" and _reader.web_permission() == "denied" else "motion_" + st
+	var text := tr(key)
+	if st != "no_sensor" and st != "permission" and Profile.calibration().is_empty() and not bool(Profile.get_setting("slam")):
 		text += " " + tr("motion_uncalibrated")
 	_sensor.text = text
 

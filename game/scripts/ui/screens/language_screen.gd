@@ -23,6 +23,10 @@ func build() -> void:
 
 
 func _choose(code: String) -> void:
+	# On the web the first tap may ask for the motion sensors, so the browser's question comes now,
+	# with the choice, rather than in the middle of setup. Natively it does nothing.
+	if OS.has_feature("web"):
+		MotionReader.new().request_web_permission()
 	Profile.set_setting("language", code)
 	Profile.set_flag("language_chosen", true)
 	I18n.set_locale(code)

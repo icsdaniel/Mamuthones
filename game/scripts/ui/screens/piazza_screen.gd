@@ -173,6 +173,9 @@ func _build_handover(round: Dictionary) -> void:
 	box.add_child(phone)
 	_nod(phone)
 	var go := UIKit.button(tr("piazza_ready") % players[turn], func() -> void:
+		# Bells only: on the web this tap is where the browser may ask for the motion sensors.
+		if OS.has_feature("web"):
+			MotionReader.new().request_web_permission()
 		app.replace("play", {"song_id": round.song_id, "difficulty": "piazza", "bell_set": "light",
 			"piazza": true, "round": round}), UIKit.PRIMARY)
 	go.name = "Ready"
