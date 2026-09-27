@@ -240,6 +240,8 @@ func _draw_notes(field: Rect2) -> void:
 	# Skip notes that are over and gone for good.
 	while _first < notes.size() and _gone(notes[_first], t):
 		_first += 1
+	var rests: Array = []        # [y_a, y_b] of rest bands on screen, labelled after the notes
+	var taken: Array[float] = []  # y of every other note drawn, for the labels to avoid
 	for i in range(_first, notes.size()):
 		var n := notes[i]
 		if n.t > horizon:
@@ -247,6 +249,8 @@ func _draw_notes(field: Rect2) -> void:
 		if _gone(n, t):
 			continue
 		var y := LaneSkin.note_y(field, n.t - t, pps)
+		if n.kind != Note.Kind.REST and not n.done:
+			taken.append(y)
 		match n.kind:
 			Note.Kind.STEP:
 				if not n.done:
@@ -270,12 +274,16 @@ func _draw_notes(field: Rect2) -> void:
 				if not n.finished:
 					var y_end := LaneSkin.note_y(field, n.end_t - t, pps)
 					LaneSkin.draw_rest(self, field, y_end, y)
-					_rest_words(field, y_end, y)
+					rests.append([y_end, y])
+	for r in rests:
+		_rest_words(field, r[0], r[1], taken)
 
 
 ## Names a stand-still band on the lanes, so a rest reads as an instruction and not as empty
 ## space: the words sit in the visible part of the band, kept inside the field.
-func _rest_words(field: Rect2, y_a: float, y_b: float) -> void:
+## The label goes in the band's visible part, at the place farthest from every note or bell bar
+## crossing it (a bar is BAR_H tall), on an ink backing so it reads over the hatching.
+func _rest_words(field: Rect2, y_a: float, y_b: float, taken: Array[float] = []) -> void:
 	var top := maxf(minf(y_a, y_b), field.position.y)
 	var bottom := minf(maxf(y_a, y_b), LaneSkin.hit_line_y(field))
 	if bottom - top < 60.0:
@@ -284,10 +292,27 @@ func _rest_words(field: Rect2, y_a: float, y_b: float) -> void:
 	var fs := 34
 	var text := tr("lane_still")
 	var w := font.get_string_size(text, HORIZONTAL_ALIGNMENT_LEFT, -1, fs).x
-	# Near the top of the band, clear of the judgement words that rise from the hit line.
-	var pos := Vector2(field.get_center().x - w * 0.5, top + 30.0 + fs * 0.7)
+	var half := fs * 0.75
+	var best_y := (top + bottom) * 0.5
+	var best_gap := -INF
+	var cy := top + half + 8.0
+	while cy <= bottom - half - 8.0:
+		var gap := INF
+		for ty in taken:
+			gap = minf(gap, absf(ty - cy))
+		if gap > best_gap + 0.5:
+			best_gap = gap
+			best_y = cy
+		cy += 6.0
+	var back := Rect2(field.get_center().x - w * 0.5 - 16.0, best_y - half, w + 32.0, half * 2.0)
+	draw_rect(back, Color(Palette.INK, 0.72))
+	var pos := Vector2(field.get_center().x - w * 0.5, best_y + fs * 0.34)
 	draw_string_outline(font, pos, text, HORIZONTAL_ALIGNMENT_LEFT, -1, fs, 8, Palette.INK)
 	draw_string(font, pos, text, HORIZONTAL_ALIGNMENT_LEFT, -1, fs, Palette.BONE)
+	_rest_label_y = best_y
+
+
+var _rest_label_y := NAN   ## last rest label centre (tests)
 
 
 ## A note is gone once it is judged (or over) and has passed the bottom of the field.

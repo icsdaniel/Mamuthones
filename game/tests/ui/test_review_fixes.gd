@@ -154,3 +154,37 @@ func test_delay_slider_matches_profile() -> void:
 	check_near(sl.max_value, 0.5, 0.0001, "and to +0.5 s")
 	UIHarness.free_app(app)
 	UIHarness.restore_profile()
+
+
+func test_daily_hides_later_songs_and_plays_the_chosen_level() -> void:
+	UIHarness.fresh_profile()
+	var date := {}
+	var base := Time.get_unix_time_from_datetime_string("2026-10-01T12:00:00")
+	for i in 60:
+		var d := Time.get_date_dict_from_unix_time(base + i * 86400)
+		if Daily.is_hidden(d):
+			date = d
+			break
+	if not check(not date.is_empty(), "some day in the next two months picks a song a new player has not reached"):
+		UIHarness.restore_profile()
+		return
+	var app := UIHarness.make_app(tree, "daily", {"date": date})
+	await UIHarness.settle(tree)
+	var screen := app.current()
+	var title := screen.find_child("SongTitle", true, false) as Label
+	var song := SongLibrary.get_song(str(Daily.for_date(date).song_id))
+	check_eq(title.text, tr("daily_hidden"), "the song's name is hidden")
+	check(not (screen.find_child("Picture", true, false) is TextureRect), "and its picture is replaced")
+	check(UIHarness.find_button(screen, "Diff_medium").button_pressed, "the picker starts on Medium")
+	check(UIHarness.press(screen, "Diff_hard"), "the player picks Hard")
+	check(UIHarness.press(screen, "Play"), "and plays")
+	await UIHarness.settle(tree)
+	var play := app.current()
+	check_eq(play.screen_name(), "play_screen", "the day's procession starts")
+	var s: Session = play.get("session")
+	if s != null:
+		check_eq(s.difficulty, "hard", "at the chosen level")
+		check_eq(s.song.id, song.id, "on the day's song")
+		check_eq(s.daily, Daily.key(date), "as that day's daily")
+	UIHarness.free_app(app)
+	UIHarness.restore_profile()

@@ -139,6 +139,7 @@ S = [
 ("free_locked", "Stop %d · locked", "Tappa %d · chiusa"),
 ("free_ghost", "Your best run walks beside you as a ghost.", "La tua corsa migliore ti cammina accanto, come un fantasma."),
 ("daily_title", "Today's procession", "La processione di oggi"),
+("daily_hidden", "A procession from later in the story", "Una processione da più avanti nella storia"),
 ("daily_intro", "The same song, difficulty and lanes for everyone today. A new one tomorrow.",
  "Oggi per tutti lo stesso brano, la stessa difficoltà e le stesse corsie. Domani un'altra."),
 ("daily_none", "No procession today.", "Oggi nessuna processione."),
