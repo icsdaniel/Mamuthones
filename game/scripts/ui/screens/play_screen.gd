@@ -20,7 +20,7 @@ signal finished(session: Session)
 const SCENE_SHARE := 0.27         ## share of the screen height given to the procession scene
 const FIELD_MAX_W := 900.0        ## lanes and buttons stay thumb-sized on a tablet
 const JUDGE_WORDS := {
-	"perfect": "judge_perfect", "good": "judge_good", "early": "judge_early", "late": "judge_late",
+	"perfect": "judge_perfect", "good": "judge_good", "early": "judge_ok", "late": "judge_ok",
 	"miss": "judge_miss", "wrong": "judge_wrong", "held": "judge_held", "let_go": "judge_let_go",
 	"silence": "judge_silence",
 }
@@ -404,16 +404,16 @@ func _on_judged(note: Note, judgement: String, offset: float) -> void:
 		lanes.flash(lane, good or soft)
 	else:
 		pos = Vector2(lanes.size.x * 0.5, lanes.lane_center(1).y)
-	var side := ""
-	if judgement in ["perfect", "good"]:
-		side = UIKit.side_of(offset)
+	# Early/late is shown only off Perfect (like FAST/SLOW): on Good by the offset, and on the Ok band,
+	# whose word is "Ok" with its side, so "early" and "late" only ever mean a side.
+	var side := hit_side(judgement, offset)
 	lanes.burst(pos, quality, side)
 	var word_key: String = JUDGE_WORDS.get(judgement, "")
 	if word_key != "":
 		words.show_word(tr(word_key), side, lanes.word_spot(lane), quality)
 		if cue != null:
 			cue.hit(quality, tr(word_key))
-	if judgement in ["perfect", "good", "early", "late"]:
+	if side != "":
 		lanes.add_offset(offset, lane if lane >= 0 else 1)
 	if good or soft:
 		if note != null and note.kind == Note.Kind.RING:
@@ -423,6 +423,17 @@ func _on_judged(note: Note, judgement: String, offset: float) -> void:
 		UIKit.vibrate(30 if note != null and note.is_bell() else 14)
 	elif judgement in ["miss", "silence"]:
 		scene.jolt("miss")
+
+
+## The side shown for a judgement: none on Perfect, the offset's side on Good, the band's own side on
+## Ok ("early"/"late" judgements).
+static func hit_side(judgement: String, offset: float) -> String:
+	match judgement:
+		"good":
+			return UIKit.side_of(offset)
+		"early", "late":
+			return judgement
+	return ""
 
 
 ## A step on the wrong lane: the red mark goes on the button actually pressed, with a faint ring on

@@ -23,9 +23,12 @@ const SHAWL := Color("#2a1e2a")
 ## the back from the shoulder blades to the hips, so from the front it shows as a dark mass wider than
 ## the fleece, with bells hanging out at both sides (more on the fire-lit left) and only the tops of two
 ## peeking over the shoulders.
-static func mamuthone_back(ci: CanvasItem, h: float, lit := Palette.EMBER, detail := 1) -> void:
+## bell_set (BellSets id): "light" carries fewer, smaller bells, "full" more and bigger; the default is
+## the village set.
+static func mamuthone_back(ci: CanvasItem, h: float, lit := Palette.EMBER, detail := 1, bell_set := "village") -> void:
 	WoodcutDraw.begin(ci)
 	var u := h / 100.0
+	var bk: float = {"light": 0.86, "village": 1.0, "full": 1.12}.get(bell_set, 1.0)
 	# The mass of the load behind the body.
 	var mass := PackedVector2Array([Vector2(-15, -80), Vector2(15, -80), Vector2(23, -72), Vector2(28, -56), Vector2(29.5, -42),
 		Vector2(26, -32), Vector2(-26, -32), Vector2(-30.5, -42), Vector2(-29.5, -56), Vector2(-24, -72)])
@@ -37,8 +40,12 @@ static func mamuthone_back(ci: CanvasItem, h: float, lit := Palette.EMBER, detai
 		[23, -66, 0.26, 9.0], [27, -54, 0.18, 10.5], [27, -42, 0.1, 11.0],
 		[-23.5, -67, -0.26, 9.5], [-28.5, -55, -0.2, 11.0], [-29.5, -43, -0.12, 12.0], [-25, -34, -0.05, 11.0],
 	]
+	if bell_set == "light":
+		bells = bells.slice(2, 8)
+	elif bell_set == "full":
+		bells = [[-19, -31, -0.04, 10.0], [19, -31, 0.04, 9.5]] + bells
 	for b in bells:
-		cowbell(ci, Vector2(b[0], b[1]) * u, float(b[3]) * u, b[2], lit if float(b[0]) < 0.0 else Color(lit, 0.55), detail)
+		cowbell(ci, Vector2(b[0] * (0.5 + 0.5 * bk), b[1]) * u, float(b[3]) * u * bk, b[2], lit if float(b[0]) < 0.0 else Color(lit, 0.55), detail)
 	# Mouths of the lowest bells showing under the load's edge.
 	for x in [-16.0, -7.0, 4.0, 14.0]:
 		WoodcutDraw.fill(ci, _u(WoodcutDraw.ellipse(Vector2(x, -33.5), Vector2(4.2, 1.3), 10), u), Palette.INK)
@@ -202,9 +209,9 @@ static func mamuthone_head(ci: CanvasItem, h: float, mask: Dictionary, straps :=
 
 
 ## A whole Mamuthone in one call (for cards, the logo and the icon).
-static func mamuthone(ci: CanvasItem, h: float, mask: Dictionary, fleece := "black", straps := "natural", lit := Palette.EMBER, detail := 1) -> void:
+static func mamuthone(ci: CanvasItem, h: float, mask: Dictionary, fleece := "black", straps := "natural", lit := Palette.EMBER, detail := 1, bell_set := "village") -> void:
 	WoodcutDraw.begin(ci)
-	mamuthone_back(ci, h, lit, detail)
+	mamuthone_back(ci, h, lit, detail, bell_set)
 	mamuthone_body(ci, h, fleece, straps, lit, detail)
 	mamuthone_head(ci, h, mask, straps, detail)
 	WoodcutDraw.end()
