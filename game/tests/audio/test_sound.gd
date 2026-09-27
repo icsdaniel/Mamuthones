@@ -206,7 +206,7 @@ func test_steps_tell_quality() -> void:
 		for k in 3:
 			var ok: AudioStream = s._feet_ok[lane][k]
 			var clean: AudioStream = s._feet[lane][k]
-			check(ok != null and ok.get_length() < clean.get_length() - 0.05, "the dull step %d/%d is shorter" % [lane, k])
+			check(ok != null and ok.get_length() < clean.get_length() - 0.03, "the dull step %d/%d is shorter" % [lane, k])
 	for lane in 3:
 		s.step(lane)  # the old call still works: a clean step
 		var f := _last_player(s, s._foot_pool, 2)

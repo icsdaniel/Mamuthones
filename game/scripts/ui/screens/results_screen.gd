@@ -137,9 +137,19 @@ func _breakdown(box: Container) -> void:
 	if int(st.get("rests", 0)) > 0:
 		# Keeping still is scored both ways: a bonus for every stand-still kept, a cost for ringing in one.
 		var net := float(b.get("stills", 0.0)) - absf(float(b.get("penalties", 0.0)))
-		_row(grid, tr("res_still") % [int(st.get("still_kept", 0)), int(st.get("rests", 0))],
-			("+" if net >= 0.0 else "−") + UIKit.fmt_score(roundi(absf(net))), "Still")
+		var what := tr("res_still") % [int(st.get("still_kept", 0)), int(st.get("rests", 0))]
+		var share := still_share(net, session.score)
+		if share > 0:
+			what += " · " + tr("res_still_share") % share
+		_row(grid, what, ("+" if net >= 0.0 else "−") + UIKit.fmt_score(roundi(absf(net))), "Still")
 	UIKit.pop_in(c, 0.5)
+
+
+## Stillness's share of the final score in whole percent (at least 1 when it added anything).
+static func still_share(net: float, score: int) -> int:
+	if net <= 0.0 or score <= 0:
+		return 0
+	return maxi(1, roundi(net / float(score) * 100.0))
 
 
 ## "Unison peak ×4 · 38 s at ×4", or just the peak when the top was never reached.

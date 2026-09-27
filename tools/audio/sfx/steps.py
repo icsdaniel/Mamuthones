@@ -155,12 +155,12 @@ def main() -> None:
             # +4 dB into a look-ahead limiter: the heel's one-sample spike no longer sets
             # the level, so the knock itself carries over a remix's kick drum
             x = limit(x * db(2.5) / np.max(np.abs(x)), -1.5)
-            write_wav(f"steps/foot_{lane}_{k + 1}.wav", fade(x, 0.0005, 0.0))
+            write_wav(f"steps/foot_{lane}_{k + 1}.wav", trim_tail(fade(x, 0.0005, 0.0), -54, 0.03))
             # the dull "ok" step: same peak treatment, then 3 dB under the clean one's
             y = footfall(lane, k, dull=True)
             y = limit(y * db(2.5) / np.max(np.abs(y)), -1.5)
             y = y * np.sqrt(np.mean(x[: int(0.15 * SR)] ** 2) / np.mean(y[: int(0.15 * SR)] ** 2)) * db(-3)
-            write_wav(f"steps/foot_ok_{lane}_{k + 1}.wav", fade(np.clip(y, -0.84, 0.84), 0.0005, 0.0))
+            write_wav(f"steps/foot_ok_{lane}_{k + 1}.wav", trim_tail(fade(np.clip(y, -0.84, 0.84), 0.0005, 0.0), -54, 0.03))
     tones = {}
     for lane in range(3):
         for pc in range(0, 12, 2):

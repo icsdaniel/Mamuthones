@@ -180,7 +180,10 @@ class Charter:
             inside = [c for c in s.cands if lo - 1e-6 <= c.b < hi - 1e-6 and self.audible(c)]
             steps = dict(sp.get("steps", []))
             for c in inside:
-                if c.role in steps and (c.rank <= steps[c.role] or (c.sig is not None and diff != "easy")):
+                # Medium's answer bars (the second of each two-bar phrase) may take the tune's
+                # half-beats: "beat and some half-beats", and the answer gets its own rhythm
+                bonus = 1 if (diff == "medium" and c.role == "mel" and int((c.b + 1e-6) // s.bpb) % 2 == 1) else 0
+                if c.role in steps and (c.rank <= steps[c.role] + bonus or (c.sig is not None and diff != "easy")):
                     notes.append(N(c.b, "step", c.rank, c.role, c.pitch, c.stem, sig=c.sig, src=c))
                 elif c.sig is not None and diff in ("hard", "expert") and c.role in ("mel", "fast", "chorus"):
                     notes.append(N(c.b, "step", c.rank, c.role, c.pitch, c.stem, sig=c.sig, src=c))
@@ -224,6 +227,9 @@ class Charter:
                     notes.append(N(c.b, "rest", 0, "rest", None, None, len=c.len, src=c))
             self._sec_opts = sp
         return self.refine(notes, diff)
+
+    def in_climax(self, b):
+        return self.s.section_at(b).energy >= 3
 
     def audible(self, c, tol=0.02):
         if self.heard is None or c.role == "rest":
@@ -306,6 +312,13 @@ class Charter:
             gone = set(id(x) for x in bells) - set(id(x) for x in keep_b)
             notes = [n for n in notes if id(n) not in gone]
             bells = keep_b
+        if lv >= 1 and not tutorial:
+            sig_bs = [n.b for n in notes if n.sig is not None and n.k == "step" and self.in_climax(n.b)]
+            keep_b = [bl for bl in bells
+                      if not any(1e-6 < abs(b - bl.b) < clear - 1e-6 for b in sig_bs)]
+            gone = set(id(x) for x in bells) - set(id(x) for x in keep_b)
+            notes = [n for n in notes if id(n) not in gone]
+            bells = keep_b
         out = []
         bell_bs = {n.b: n for n in bells}
         for n in notes:
@@ -372,8 +385,18 @@ class Charter:
         return True
 
     def thin(self, notes, gap, diff):
-        """Greedy by priority: accept a note if no accepted note on another beat is closer than gap."""
-        order = sorted(notes, key=lambda n: n.prio())
+        """Greedy by priority: accept a note if no accepted note on another beat is closer than gap.
+        Above Easy, the second bar of each two-bar phrase lets the melody lead instead of the
+        signature figure: the drums call, the tune answers."""
+        bpb = self.s.bpb
+
+        def key(n):
+            p = n.prio()
+            if diff != "easy" and n.sig is not None and int((n.b + 1e-6) // bpb) % 2 == 1 \
+                    and not self.in_climax(n.b):
+                p = (p[0], 1) + p[2:]
+            return p
+        order = sorted(notes, key=key)
         acc = []
         beats = []
         import bisect
@@ -448,7 +471,6 @@ class Charter:
         if diff == "easy":
             self.easy_lanes(laned, groups)
         else:
-            self.vary_repeats(laned)
             self.balance(groups)
             self.break_jacks(laned)
         self.hold_chains(laned, diff)
@@ -460,9 +482,9 @@ class Charter:
                     n.lane = 2 if ring.lane == 0 else 0
 
     def easy_lanes(self, laned, groups):
-        """Easy: one lane at a time. Each phrase has a home lane that follows where the phrase sits
-        in the tune (low, middle, high) and moves from one phrase to the next; inside a phrase the
-        melody's highest and lowest notes may step one lane off home, after two notes, never 0<->2."""
+        """Easy: one lane at a time. Each two-bar phrase is a call and its answer: the first bar walks
+        on a home lane that follows where the phrase sits in the tune (low, middle, high), the second
+        answers it mirrored; the next phrase moves on from the last answer."""
         s = self.s
         if s.kind == "tutorial":
             return
@@ -470,66 +492,58 @@ class Charter:
         means = {k: sum(n.pitch for n in groups[k]) / len(groups[k]) for k in keys}
         order = sorted(means.values())
         prev_home = None
+        used = {0: 0, 1: 0, 2: 0}
         for idx, k in enumerate(keys):
-            g = [n for n in groups[k] if n.tag != "fixed" and n.sig is None]
+            g = [n for n in groups[k] if n.tag != "fixed"]
             if not g:
                 continue
             sec = s.section_at(g[0].b)
             # where this phrase sits among all the song's phrases (low, middle or high third)
             x = sum(1 for m in order if m < means[k] - 1e-6) / max(1, len(order) - 1)
             home = 0 if x < 0.34 else (1 if x < 0.67 else 2)
+            side = 0 if used[0] <= used[2] else 2      # the hand that has walked less so far
             if prev_home is not None and home == prev_home:
-                home = [1, 0, 1, 2][idx % 4] if [1, 0, 1, 2][idx % 4] != prev_home else (1 if prev_home != 1 else (0 if idx % 2 else 2))
-            if prev_home is not None and abs(home - prev_home) == 2:
-                home = 1
-            ps = [n.pitch for n in g]
-            lo, hi = min(ps), max(ps)
+                # the new phrase moves on from the last answer
+                home = side if prev_home == 1 else 1
+            # call and response: the first bar walks on the home lane, the second answers it
+            # mirrored (left <-> right; from the middle it steps out to the hand that walked less)
+            ans = 2 - home if home != 1 else side
+            p0 = s.section(k[0]).b + k[1] * 2 * s.bpb
             for n in g:
-                off = 0
-                if hi - lo >= 3 and sec.energy >= 2:
-                    x = (n.pitch - lo) / (hi - lo)
-                    off = -1 if x < 0.2 else (1 if x > 0.8 else 0)
-                n.lane = max(0, min(2, home + off))
-            prev_home = home
-        prev = None
-        run = 0
-        for n in laned:
-            if n.tag == "fixed":
-                prev, run = n.lane, 1
-                continue
-            if prev is not None and n.lane != prev and run < 2:
-                n.lane = prev
-            if prev is not None and abs(n.lane - prev) == 2:
-                n.lane = 1
-            run = run + 1 if n.lane == prev else 1
-            prev = n.lane
+                n.lane = home if n.b - p0 < s.bpb - 1e-6 else ans
+                used[n.lane] += 1
+            prev_home = ans
 
     PERMS = ({0: 0, 1: 1, 2: 2}, {0: 2, 1: 1, 2: 0}, {0: 1, 1: 2, 2: 0},
              {0: 1, 1: 0, 2: 2}, {0: 2, 1: 0, 2: 1}, {0: 0, 1: 2, 2: 1})
 
     def vary_repeats(self, laned):
-        """Call and response. When the music repeats a bar, the chart does not: bars of a repeated
-        figure come in pairs, the call and its answer (the call mirrored), and each new pair turns
-        the figure to another lane shape. So a long repeated groove reads as phrases answering each
-        other: A A' B B' C C' ..., six shapes of one figure."""
+        """Call and response. When the music repeats a figure, the chart does not: each time a bar's
+        figure comes back it takes the next lane shape (the call, its mirror, then turned left or
+        right and mirrored again), so a repeated groove reads as phrases answering each other. The
+        signature keeps its own lanes where it opens a section and in the climax, where every other
+        bar states it and the bar after answers it mirrored."""
         s = self.s
         bars = {}
         for n in laned:
             bars.setdefault(int((n.b + 1e-6) // s.bpb), []).append(n)
-        run = 0
-        prev_key = None
+        seen = {}
         for bi in sorted(bars):
             g = sorted(bars[bi], key=lambda n: n.b)
-            key = tuple((round(n.b - bi * s.bpb, 3), n.lane, n.k) for n in g)
-            if prev_key is not None and key == prev_key and bi - 1 in bars:
-                run += 1
+            if len(g) < 2 or any(n.tag == "fixed" for n in g):
+                continue
+            sec = s.section_at(bi * s.bpb)
+            k_in = int(round((bi * s.bpb - sec.b) / s.bpb))
+            has_sig = any(n.sig is not None for n in g)
+            if has_sig and (k_in == 0 or sec.energy >= 3):
+                continue    # the signature, stated as written (and restated in the climax)
             else:
-                run = 0
-            prev_key = key
-            if run and len(g) >= 2 and all(n.tag != "fixed" for n in g):
-                m = self.PERMS[run % 6]
-                for n in g:
-                    n.lane = m[n.lane]
+                key = tuple((round(n.b - bi * s.bpb, 3), n.lane, n.k) for n in g)
+                i = seen.get(key, 0)
+                seen[key] = i + 1
+                m = self.PERMS[i % 6]
+            for n in g:
+                n.lane = m[n.lane]
 
     def balance(self, groups):
         """Each two-bar phrase keeps its hands balanced: the left share (lane 0, half of lane 1)
@@ -720,12 +734,19 @@ class Charter:
             if excess <= 0:
                 continue
             # candidates to drop: plain steps, weakest first, spread through the section
-            pool = [n for n in inside if n.k == "step" and not n.call and (n.sig is None or diff == "easy")
-                    and n.tag != "triple_step"]
-            # the same place in every two-bar phrase is thinned the same way, so music that
-            # repeats keeps a repeating pattern (phrases echo each other)
-            span = 2 * s.bpb
-            pool.sort(key=lambda n: (-n.rank, -ROLE_PRIO.get(n.role, 5), (((n.b - sec.b) % span) * 7.31) % 1))
+            pool = [n for n in inside if n.k == "step" and not n.call and n.tag != "triple_step"
+                    and (n.sig is None or diff == "easy"
+                         or (int((n.b + 1e-6) // s.bpb) % 2 == 1 and sec.energy < 3))]
+            # the same place in every four-bar phrase is thinned the same way: music that repeats
+            # keeps a repeating pattern, but the bars inside a phrase differ, so the second half of
+            # a phrase answers the first with its own rhythm (Easy keeps two-bar phrases)
+            span = (2 if diff == "easy" else 4) * s.bpb
+            def answer(n):
+                # Medium's answer bars keep the tune's notes over the drum figure
+                return diff == "medium" and n.role == "mel" and int((n.b + 1e-6) // s.bpb) % 2 == 1
+
+            pool.sort(key=lambda n: (-(n.rank - 2 if answer(n) else n.rank), -ROLE_PRIO.get(n.role, 5),
+                                     (((n.b - sec.b) % span) * 7.31) % 1))
             drop = set(id(n) for n in pool[:excess])
             notes = [n for n in notes if id(n) not in drop]
         return notes

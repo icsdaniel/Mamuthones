@@ -47,6 +47,7 @@ var _bell_sched := 0             ## next note to check for the bell cue
 var _bell_cue := false           ## a soft tick half a beat before each bell (Easy and Medium)
 var _pause_panel: Control
 var count_view: CountInView
+var still_moment: StillMoment
 var _resume_at := -1.0           ## real time when a count-in ends and the music starts (-1: none)
 var _count_from := 0.0           ## real time the first count-in stick is heard
 var _count_music_t := 0.0        ## song time the music starts from after the count-in
@@ -187,6 +188,9 @@ func build() -> void:
 	count_view = CountInView.new()
 	count_view.name = "CountIn"
 	scene.add_child(count_view)
+	still_moment = StillMoment.new()
+	still_moment.name = "StillMoment"
+	scene.add_child(still_moment)
 
 	_bell_cue = bell_cue_on(difficulty)
 	Sound.set_key(song.key_root)
@@ -472,10 +476,11 @@ func _on_wrong_step(lane: int, note: Note, _offset: float) -> void:
 	words.show_word(tr("judge_wrong"), "", lanes.word_spot(lane), "wrong")
 
 
-## A stand-still kept to its end: the row settles, and it is named.
+## A stand-still kept to its end: the row settles as one, and the moment is named over the procession.
 func _on_still_kept(_note: Note, points: float) -> void:
 	var at := lanes.word_spot(1)
-	words.show_word(tr("judge_still_kept") + "  +" + UIKit.fmt_score(int(points)), "", at, "held", 0.8)
+	words.show_word(tr("judge_still_kept"), "", at, "held", 0.8)
+	still_moment.play(tr("still_moment"), "+" + UIKit.fmt_score(int(points)))
 	lanes.burst(lanes.lane_center(1), "held")
 	scene.set_unison(session.unison_level)
 	scene.settle()

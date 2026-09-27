@@ -115,6 +115,8 @@ func _shots() -> Array:
 		{"file": "play_ready", "screen": "play", "args": {"song_id": fires_id, "difficulty": "hard", "bell_set": "light"}, "setup": "moment:ready", "wait": 0.05},
 		{"file": "play_resume", "screen": "play", "args": {"song_id": fires_id, "difficulty": "hard", "bell_set": "light"}, "setup": "resume", "wait": 0.0},
 		{"file": "play_early", "screen": "play", "args": {"song_id": fires_id, "difficulty": "hard", "bell_set": "light", "autoplay": true}, "setup": "moment:early", "wait": 0.08},
+		{"file": "play_late", "screen": "play", "args": {"song_id": fires_id, "difficulty": "hard", "bell_set": "light", "autoplay": true}, "setup": "moment:late", "wait": 0.08},
+		{"file": "play_still_kept", "screen": "play", "args": {"song_id": fires_id, "difficulty": "hard", "bell_set": "light", "autoplay": true}, "setup": "moment:stillkept", "wait": 0.1},
 		{"file": "play_wrong", "screen": "play", "args": {"song_id": fires_id, "difficulty": "hard", "bell_set": "light", "autoplay": true}, "setup": "moment:wrong", "wait": 0.05},
 		{"file": "play_tutorial", "screen": "play", "args": {"song_id": tut_id, "difficulty": "easy", "bell_set": "light", "autoplay": true}, "setup": "advance:0.25"},
 		{"file": "pause", "screen": "play", "args": {"song_id": fires_id, "difficulty": "medium", "bell_set": "light", "autoplay": true}, "setup": "pause"},
@@ -247,6 +249,20 @@ func _moment(screen: Node, what: String) -> void:
 				if lone:
 					target = n.t - 0.03
 					break
+		"late":
+			var auto: Object = screen.get("autoplay")
+			for i in s.notes.size():
+				var n: Note = s.notes[i]
+				if n.t >= from and n.kind == Note.Kind.STEP:
+					if auto != null:
+						(auto.get("_plan") as Array)[i] = NAN   # the player hits this one late
+					target = n.t + 0.05
+					break
+		"stillkept":
+			for n in s.notes:
+				if n.t >= from and n.kind == Note.Kind.REST:
+					target = n.end_t + 0.45
+					break
 		"hold", "bell", "still", "miss", "rang":
 			var kinds := {"hold": [Note.Kind.HOLD], "bell": [Note.Kind.BELL, Note.Kind.RING], "rang": [Note.Kind.BELL, Note.Kind.RING],
 				"still": [Note.Kind.REST], "miss": [Note.Kind.STEP]}
@@ -276,6 +292,12 @@ func _moment(screen: Node, what: String) -> void:
 	if what == "early":
 		for n in s.notes:
 			if not n.done and n.kind == Note.Kind.STEP and n.t > c.song_time():
+				s.tap(n.lane, c.song_time(), 7)
+				screen.call("_on_stepped", n.lane)
+				break
+	if what == "late":
+		for n in s.notes:
+			if not n.done and n.kind == Note.Kind.STEP and n.t < c.song_time():
 				s.tap(n.lane, c.song_time(), 7)
 				screen.call("_on_stepped", n.lane)
 				break

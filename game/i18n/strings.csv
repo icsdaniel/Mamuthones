@@ -121,11 +121,13 @@ free_locked,Stop %d · locked,Tappa %d · chiusa
 free_ghost,Your best run walks beside you as a ghost.,"La tua corsa migliore ti cammina accanto, come un fantasma."
 daily_title,Today's procession,La processione di oggi
 daily_hidden,A procession from later in the story,Una processione da più avanti nella storia
-daily_intro,"The same song, difficulty and lanes for everyone today. A new one tomorrow.","Oggi per tutti lo stesso brano, la stessa difficoltà e le stesse corsie. Domani un'altra."
+daily_intro,The same song and lanes for everyone today; you pick the level. A new one tomorrow.,Oggi per tutti lo stesso brano e le stesse corsie; il livello lo scegli tu. Domani un'altra.
 daily_none,No procession today.,Oggi nessuna processione.
 daily_mirrored,lanes mirrored,corsie a specchio
 daily_best_today,Your best today: %s,Il tuo record di oggi: %s
-daily_first,Not played today yet.,Oggi non l'hai ancora giocata.
+daily_first,Not played at this level today yet.,Oggi non l'hai ancora giocata a questo livello.
+daily_be_first,Be the first today.,Apri tu la classifica di oggi.
+daily_scores,Today's scores,Punteggi di oggi
 daily_play,Walk today's procession,Cammina nella processione di oggi
 boards_title,Scores,Punteggi
 boards_online,Game Center / Play Games,Game Center / Play Games
@@ -206,6 +208,7 @@ judge_let_go,Let go,Lasciato
 judge_silence,Stand still,Fermo!
 lane_still,Stand still,Fermi
 judge_still_kept,Still!,Immobili!
+still_moment,The row stands as one,"La fila immobile, come un corpo solo"
 count_ready,Get ready,Pronti
 count_bars,%d bars to go,ancora %d battute
 count_bar_one,last bar,ultima battuta
@@ -255,6 +258,7 @@ res_unison,Unison (up to %s),Unisono (fino a %s)
 res_weight,Weight: %s bells %s,Peso: campanacci %s %s
 res_holds,Holds kept to the end,Note lunghe tenute fino in fondo
 res_still,Stillness: %d of %d stand-stills kept,Immobilità: %d soste rispettate su %d
+res_still_share,%d%% of your score,%d%% del punteggio
 res_formula,Every note × unison × weight. Long steady streaks and heavier bells are the way to a big score.,Ogni nota × unisono × peso. Serie lunghe e regolari e campanacci più pesanti sono la strada per un grande punteggio.
 res_timing,Your timing,Il tuo tempo
 res_on_time,Right on the beat.,Proprio sul battito.
