@@ -107,8 +107,12 @@ def rechart_one(sid, opts, report):
     with open(path, encoding="utf-8") as f:
         data = json.load(f)
     stems = load_stems(os.path.join(opts["stems"], sid))
-    charts, sources = chart_song(song) if song.kind != "piazza" else piazza_chart(song)
+    import soundfile as sf
+    y = sf.read(os.path.join(MUSIC, sid + ".ogg"), always_2d=True)[0]
+    heard = analyze.mix_onsets(y)
+    charts, sources = chart_song(song, heard) if song.kind != "piazza" else piazza_chart(song)
     entry = report.get(sid, {})
+    entry["mix_timing"] = analyze.mix_timing_report(song, charts, heard)
     entry["timing"] = analyze.timing_report(song, sources, stems, charts)
     entry["rests"] = analyze.rest_report(song, stems, sources)
     entry["cues"] = analyze.cue_report(song, stems, sources)
@@ -125,7 +129,8 @@ def rechart_one(sid, opts, report):
     with open(path, "w", encoding="utf-8") as f:
         f.write(dumps_song(data))
     report[sid] = entry
-    print(f"{sid:14s} timing " + " ".join(f"{d}:{v['within_20ms'] * 100:.1f}%" for d, v in entry["timing"].items())
+    print(f"{sid:14s} mix " + " ".join(f"{d}:{v['within_20ms'] * 100:.0f}%" for d, v in entry["mix_timing"].items())
+          + " | stems " + " ".join(f"{d}:{v['within_20ms'] * 100:.1f}%" for d, v in entry["timing"].items())
           + ("  remix " + " ".join(f"{v['within_20ms'] * 100:.1f}%" for v in entry["remix"]["timing"].values())
              if "remix" in entry and "timing" in entry["remix"] else ""), flush=True)
     return entry
@@ -142,7 +147,9 @@ def render_one(sid, opts, report):
     y, meas = finish(song, stems, n, sid, opts["quality"])
     dsp.spectrogram_png(os.path.join(opts["stems"], sid + ".png"), y)
     entry = {"audio": meas, "features": analyze.features(y)}
-    charts, sources = chart_song(song) if song.kind != "piazza" else piazza_chart(song)
+    heard = analyze.mix_onsets(y)
+    charts, sources = chart_song(song, heard) if song.kind != "piazza" else piazza_chart(song)
+    entry["mix_timing"] = analyze.mix_timing_report(song, charts, heard)
     entry["timing"] = analyze.timing_report(song, sources, stems, charts)
     entry["rests"] = analyze.rest_report(song, stems, sources)
     entry["cues"] = analyze.cue_report(song, stems, sources)
@@ -165,7 +172,8 @@ def render_one(sid, opts, report):
         dsp.spectrogram_png(os.path.join(opts["stems"], sid + "_remix.png"), ry)
         rsrc = remix.remix_sources(rsong, sources)
         entry["remix"] = {"audio": rmeas, "features": analyze.features(ry),
-                          "timing": analyze.timing_report(rsong, rsrc, rstems, charts)}
+                          "timing": analyze.timing_report(rsong, rsrc, rstems, charts),
+                          "mix_timing": analyze.mix_timing_report(rsong, charts, analyze.mix_onsets(ry))}
         data["remix"] = {"id": sid + "_remix", "bpm": song.bpm, "offset": round(rsong.offset, 4),
                          "audio": f"res://audio/music/{sid}_remix.ogg"}
     elif song.kind != "piazza":
@@ -188,9 +196,12 @@ def render_one(sid, opts, report):
     report[sid] = entry
     tim = entry["timing"]
     print(f"{sid:14s} {meas['seconds']:6.1f}s  {meas['lufs']:6.2f} LUFS  TP {meas['true_peak_db']:5.2f}  "
-          f"{meas['bytes'] / 1e6:4.2f} MB  timing " +
+          f"{meas['bytes'] / 1e6:4.2f} MB  mix " +
+          " ".join(f"{d}:{v['within_20ms'] * 100:.0f}%" for d, v in entry["mix_timing"].items()) + "  stems " +
           " ".join(f"{d}:{v['within_20ms'] * 100:.0f}%" for d, v in tim.items()) +
-          (f"  remix {entry['remix']['audio']['lufs']:.2f} LUFS" if "remix" in entry else "") +
+          (f"  remix {entry['remix']['audio']['lufs']:.2f} LUFS mix " + " ".join(
+              f"{v['within_20ms'] * 100:.0f}%" for v in entry["remix"]["mix_timing"].values())
+           if "remix" in entry else "") +
           f"  [{entry['seconds_to_render']}s]", flush=True)
     return entry
 

@@ -24,6 +24,7 @@ const OVERALL_GAP_THIRD := {"easy": 1.0, "medium": 1.0 / 3.0, "hard": 1.0 / 3.0,
 const BELL_CLEAR := {"medium": 0.5, "hard": 0.5}
 const BELL_CLEAR_S := {"expert": 0.15}
 const EASY_MIN_GAP_S := 0.6
+const MIN_STILL_BEATS := 2
 const THIRDS: Array[float] = [1.0 / 3.0, 2.0 / 3.0, 1.0 / 6.0, 5.0 / 6.0]
 const LEVEL_EXTRAS := {
 	"easy": ["step", "bell", "rest"],
@@ -88,6 +89,8 @@ static func check(song: SongData, difficulty: String) -> Array[String]:
 		var length := float(item.get("len", 1.0))
 		if (k == "hold" or k == "rest") and length <= 0.0:
 			out.append("%s: %s len must be positive" % [at, k])
+		elif k == "rest" and length < MIN_STILL_BEATS - TOL:
+			out.append("%s: a stand-still lasts at least %d beats (design section 3)" % [at, MIN_STILL_BEATS])
 		if k == "bell" or k == "ring":
 			if b - last_bell < 0.5 - TOL:
 				out.append("%s: bells closer than half a beat" % at)

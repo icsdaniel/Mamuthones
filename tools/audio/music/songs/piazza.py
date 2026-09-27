@@ -107,13 +107,12 @@ def build():
     b = s.sec("halt", 4, 1)
     harm(b // 4, [1, 1, 1, 1])
     s.drone("tumbu", b, 16, tumbu, vel=0.5)
-    for bar in range(4):
-        s.melody("mancosedda", b + bar * 4, "5:.25 4 5 4 5 4 5 4 8:1 r:1", vel=0.95, octave=1, hold_min=99)
-        s.drums(b + bar * 4, 1, "B...B...B.......")
-        s.bell_cue(b + bar * 4 + 2, rank=1, ring=True)
-        s.stop(b + bar * 4 + 3, 1)
-    s.ev("crowd", b + 3.2, 2, None, 0.5, cheer=True)
-    s.ev("crowd", b + 11.2, 2, None, 0.5, cheer=True)
+    for half, tempt in ((0, "call"), (8, "shake")):
+        s.melody("mancosedda", b + half, "5:.25 4 5 4 5 4 5 4 8:1 r:4 7:.5 6", vel=0.95, octave=1, hold_min=99)
+        s.drums(b + half, 2, ["B...B...B.......", "............B.B."])
+        s.bell_cue(b + half + 2, rank=1, ring=True)
+        # four beats of stillness; a shout or a shake in the middle that must not be answered
+        s.stop(b + half + 3, 4, tempt=tempt, at=1.0 if tempt == "call" else 1.5)
 
     # ---- build: sixteenths on the pipes, the drum climbs
     b = s.sec("build", 8, 2)
@@ -139,6 +138,8 @@ def build():
         s.bell_cue(b + bar * 4, rank=1 if bar % 2 == 0 else 2, ring=True)
         s.bell_cue(b + bar * 4 + 2, rank=2 if bar % 2 else 3)
         s.ev("bells", b + bar * 4 + 1, 1, None, 0.25, count=10)
+        if bar % 2 == 1:
+            s.bell_cue(b + bar * 4 + 3.5, rank=3, big=False)   # Expert's off-beat bell
     s.ev("crowd", b, 32, None, 0.65)
 
     # ---- chant 2: a breath before the end, higher
@@ -168,6 +169,8 @@ def build():
         s.bell_cue(b + bar * 4, rank=1 if bar % 2 == 0 else 2, ring=True)
         s.bell_cue(b + bar * 4 + 2, rank=2)
         s.ev("bells", b + bar * 4 + 3, 1, None, 0.25, count=10)
+        if bar % 2 == 0:
+            s.bell_cue(b + bar * 4 + 1.5, rank=3, big=False)   # Expert's off-beat bell
     s.ev("crowd", b, 32, None, 0.7)
 
     # ---- outro: last strokes and the roar

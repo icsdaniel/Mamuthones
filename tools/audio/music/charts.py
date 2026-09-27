@@ -145,8 +145,11 @@ def lead_pitch_at(song, b):
 
 
 class Charter:
-    def __init__(self, song):
+    def __init__(self, song, heard=None):
+        """heard: onset times (seconds) found in the final main mix. When given, only candidates the
+        player can actually hear in the mix (an onset within 20 ms) become notes."""
         self.s = song
+        self.heard = None if heard is None else sorted(heard)
         song._leads = sorted([e for e in song.events if e.inst in LEAD_STEMS and e.pitch is not None],
                              key=lambda e: e.b)
         self.third = song.sub == 3
@@ -174,7 +177,7 @@ class Charter:
                 continue
             lo = sec.b + (s.bpb if sec.opts.get("listen_bar") else 0)
             hi = sec.b + sec.len
-            inside = [c for c in s.cands if lo - 1e-6 <= c.b < hi - 1e-6]
+            inside = [c for c in s.cands if lo - 1e-6 <= c.b < hi - 1e-6 and self.audible(c)]
             steps = dict(sp.get("steps", []))
             for c in inside:
                 if c.role in steps and (c.rank <= steps[c.role] or (c.sig is not None and diff != "easy")):
@@ -221,6 +224,14 @@ class Charter:
                     notes.append(N(c.b, "rest", 0, "rest", None, None, len=c.len, src=c))
             self._sec_opts = sp
         return self.refine(notes, diff)
+
+    def audible(self, c, tol=0.02):
+        if self.heard is None or c.role == "rest":
+            return True
+        import bisect
+        t = self.s.time(c.b)
+        i = bisect.bisect_left(self.heard, t)
+        return any(0 <= j < len(self.heard) and abs(self.heard[j] - t) <= tol for j in (i - 1, i))
 
     def phrase_bars(self):
         bar_s = self.s.bpb * self.s.spb
@@ -279,8 +290,9 @@ class Charter:
         bells = [n for n in notes if n.k == "bell"]
         ring_ok = allowed(s, diff, "ring", {}) or (tutorial and self._ring_in_lesson())
         clear = {"easy": 1.0, "medium": 0.5, "hard": 0.5}.get(diff) or V.RULES["bell_clear_s"]["expert"] / s.spb
-        # in a climax the steps are the point: a weak bell crowded by steps gives way to them
-        if lv >= 2 and not tutorial:
+        # in a Hard climax the steps are the point: a weak bell crowded by steps gives way to them
+        # (Expert keeps its bells: they escalate with the difficulty)
+        if lv == 2 and not tutorial:
             step_bs = [n.b for n in notes if n.k in ("step", "hold")]
             keep_b = []
             for bl in bells:
@@ -343,6 +355,7 @@ class Charter:
                 for n in laned:
                     sec = s.section_at(n.b)
                     groups.setdefault((sec.name, int((n.b - sec.b + 1e-6) // (s.bpb * 2))), []).append(n)
+                self.vary_repeats(laned)
                 self.balance(groups)
                 self.break_jacks(laned)
                 notes = self.fix_hands(notes, diff)
@@ -435,6 +448,7 @@ class Charter:
         if diff == "easy":
             self.easy_lanes(laned, groups)
         else:
+            self.vary_repeats(laned)
             self.balance(groups)
             self.break_jacks(laned)
         self.hold_chains(laned, diff)
@@ -489,6 +503,31 @@ class Charter:
                 n.lane = 1
             run = run + 1 if n.lane == prev else 1
             prev = n.lane
+
+    def vary_repeats(self, laned):
+        """When bars repeat the same figure, every other bar of the run answers it instead: mirrored,
+        or its lanes turned one step left or right, so a long repeated groove still has phrases."""
+        s = self.s
+        bars = {}
+        for n in laned:
+            bars.setdefault(int((n.b + 1e-6) // s.bpb), []).append(n)
+        run = 0
+        prev_key = None
+        kind = 0
+        for bi in sorted(bars):
+            g = sorted(bars[bi], key=lambda n: n.b)
+            key = tuple((round(n.b - bi * s.bpb, 3), n.lane, n.k) for n in g)
+            if prev_key is not None and key == prev_key and bi - 1 in bars:
+                run += 1
+            else:
+                run = 0
+            prev_key = key
+            if run % 2 == 1 and len(g) >= 2 and all(n.tag != "fixed" for n in g):
+                maps = ({0: 2, 1: 1, 2: 0}, {0: 1, 1: 2, 2: 0}, {0: 2, 1: 0, 2: 1})
+                m = maps[kind % 3]
+                kind += 1
+                for n in g:
+                    n.lane = m[n.lane]
 
     def balance(self, groups):
         """Each two-bar phrase keeps its hands balanced: the left share (lane 0, half of lane 1)
@@ -723,8 +762,8 @@ class Charter:
         return notes
 
 
-def chart_song(song):
-    ch = Charter(song)
+def chart_song(song, heard=None):
+    ch = Charter(song, heard)
     charts = {}
     sources = {}
     for d in DIFFS:

@@ -138,7 +138,7 @@ QUALITY = {
     # spread: max onset spread (s); part: chance each bell rings; strength and hardness (fc);
     # second: chance of a clapper bounce; damp: decay multiplier; clanks: bell-on-bell knocks
     "perfect": dict(spread=0.010, part=1.00, strength=1.00, fc=6500, second=0.55, damp=1.00, clanks=0, settle=0.6, gain=0.0, level=0.0),
-    "good":    dict(spread=0.022, part=0.92, strength=0.80, fc=4200, second=0.40, damp=0.92, clanks=0, settle=0.5, gain=-2.5, level=-3.0),
+    "good":    dict(spread=0.022, part=0.92, strength=0.80, fc=3000, second=0.40, damp=0.92, clanks=0, settle=0.5, gain=-2.5, level=-3.0),
     "ok":      dict(spread=0.090, part=0.45, strength=0.55, fc=3000, second=0.15, damp=0.30, clanks=3, settle=0.3, gain=-6.0, level=-7.5),
     "miss":    dict(spread=0.030, part=0.60, strength=0.35, fc=650,  second=0.00, damp=0.035, clanks=0, settle=0.0, gain=-11.0, level=-11.0),
     # early: the jolt comes before the body is set, so the small bells lead and are
@@ -307,9 +307,10 @@ def render_set(set_id: str) -> dict[str, np.ndarray]:
     # Level each (direction, quality) group to a fixed loudness offset from the perfect
     # down ring (RMS of the first 300 ms). Up rings are a touch lighter than down rings.
     def loud(x):
-        # total power over both channels, so stereo and mono rings compare fairly
+        # power as the game plays it: a mono sample goes to both ears at full level,
+        # so it counts twice; a stereo one is the sum of its two channels
         y = x[: int(0.3 * SR)]
-        return np.sqrt(np.mean(y ** 2) * (y.shape[1] if y.ndim == 2 else 1)) + 1e-12
+        return np.sqrt(np.mean(y ** 2) * 2 if y.ndim == 1 else np.mean(y ** 2) * y.shape[1]) + 1e-12
     ref = np.mean([loud(v) for k, v in res.items() if "_down_perfect_" in k])
     for up in ("up", "down"):
         for quality, qd in QUALITY.items():
@@ -326,7 +327,8 @@ def render_set(set_id: str) -> dict[str, np.ndarray]:
     # Then the whole set to a loudness target (heavier loads a little louder) and a
     # look-ahead limiter on the few strike peaks that would pass -1.5 dBFS, so light
     # sets are not left quiet by their spiky attacks.
-    target = {"light": -16.5, "village": -16.0, "full": -15.5}[set_id]
+    # (+3 dB over the first mix, so a Perfect ring sits on top of -14 LUFS music)
+    target = {"light": -13.5, "village": -13.0, "full": -12.5}[set_id]
     g = db(target) / ref
     for k in res:
         floor = -44 if "_miss_" in k else -52

@@ -392,6 +392,27 @@ func test_kept_still_counts_four_hits_and_top_stats() -> void:
 	check(t0 >= 6.0, "clock ran to the end")
 
 
+func test_still_bonus_per_beat_and_hit_cap() -> void:
+	# 75 per beat: a 3-beat stand-still is worth 225 × unison × weight and 6 hits.
+	var s := Session.new(make(steps(6) + [{"b": 6, "k": "rest", "len": 3}]), "easy")
+	for i in 6:
+		s.tap(1, _bt(i), 0)
+	var before := s.score
+	s.update(_bt(10))
+	check_eq(s.score - before, 225, "3 beats: 75 × 3")
+	check_eq(s.unison_level, 1, "6 hits + 6 for the 3-beat stand-still: up one level")
+	# A long stand-still counts at most 8 hits: 6 beats -> 450 points but 8 hits, not 12.
+	var l := Session.new(make(steps(3) + [{"b": 3, "k": "rest", "len": 6}]), "easy")
+	for i in 3:
+		l.tap(1, _bt(i), 0)
+	var lb := l.score
+	l.update(_bt(10))
+	check_eq(l.score - lb, 450, "6 beats: 75 × 6")
+	check_eq(l.unison_level, 0, "3 + 8 = 11 hits: not yet a level")
+	check_eq(l.unison_streak, 11, "the stand-still's hits are capped at 8")
+	check_near(l.still_beats(l.notes[3]), 6.0, 1e-9, "still_beats")
+
+
 func test_let_go_costs_one_unison_level() -> void:
 	var s := Session.new(make(steps(24) + [{"b": 24, "k": "hold", "lane": 1, "len": 4}]), "easy")
 	for i in 24:
@@ -467,12 +488,13 @@ func test_reference_formula_on_random_runs() -> void:
 			elif k == 8:
 				chart.append({"b": b, "k": "ring", "lane": rng.randi() % 3})
 			else:
-				chart.append({"b": b, "k": "rest", "len": 0.5})
+				chart.append({"b": b, "k": "rest", "len": [2.0, 3.0, 4.5, 6.0][rng.randi() % 4]})
 		var bell_set: String = BellSets.ids()[run % 3]
 		var s := Session.new(make(chart), "easy", bell_set)
 		var events := []
 		s.judged.connect(func(n, j, _o): events.append([n.kind, j]))
-		s.still_kept.connect(func(_n, _p): events.append([Note.Kind.REST, "still"]))
+		# (no reference to s inside the lambda: s holds the lambda, that would be a cycle)
+		s.still_kept.connect(func(n, _p): events.append([Note.Kind.REST, "still", snappedf((n.end_t - n.t) * 2.0, 0.001)]))   # 120 bpm
 		var rest_events := []
 		for n in s.notes:
 			var off := rng.randf_range(-0.2, 0.2)
@@ -514,8 +536,9 @@ func test_reference_formula_on_random_runs() -> void:
 					else:
 						run12 = 0
 				"still":
-					total += 150 * mults[level] * w
-					run12 += 4
+					var beats: float = e[2]
+					total += 75 * beats * mults[level] * w
+					run12 += mini(8, floori(2 * beats + 1e-6))
 					if run12 >= 12:
 						run12 -= 12
 						level = mini(level + 1, 5)

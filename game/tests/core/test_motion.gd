@@ -80,6 +80,60 @@ func test_calibration_unreliable_direction() -> void:
 	check(not r.get("reliable", true), "mixed directions are not reliable")
 
 
+func test_calibration_ignores_a_tap() -> void:
+	# The reviewer's case: 5 tilts and a thumb tap. The tap has no rotation: it is ignored, the
+	# player is asked for one more tilt, and the gyro calibration stands.
+	var sy := Synth.new(8)
+	sy.gyro_noise = 3.0
+	for i in 3:
+		sy.flick(0.5 + i * 0.8, true, 400, 12)
+	sy.tap(2.9, 25.0, 0.005, 10.0)
+	for i in 2:
+		sy.flick(3.7 + i * 0.8, false, 400, 12)
+	var cal := Calibrator.new()
+	cal.start()
+	var ignored := []
+	cal.move_ignored.connect(func(why): ignored.append(why))
+	for t in sy.frames_hitting_taps(0.0, 5.4):
+		var smp := sy.sample(t)
+		cal.feed(t, smp[0], smp[1])
+	check_eq(ignored, ["no_rotation"], "the tap is ignored with a reason")
+	check_eq(cal.count(), 5, "5 tilts counted")
+	check(not cal.is_done(), "one more tilt is needed")
+	check(not cal.expecting_up(), "and it is a down tilt")
+	sy.flick(5.5, false, 400, 12)
+	for t in sy.frames(5.4, 6.5):
+		var smp := sy.sample(t)
+		cal.feed(t, smp[0], smp[1])
+	var r := cal.result()
+	check(cal.is_done(), "done after the sixth tilt")
+	check_eq(r.get("mode"), "gyro", "still the gyroscope")
+	check(r.get("reliable", false), "and reliable")
+	# A gyro that barely reacts: after 3 ignored moves every move counts, falling back to accel.
+	var weak := Synth.new(9)
+	weak.gyro_noise = 3.0
+	for i in 9:
+		weak.flick(0.5 + i * 0.8, i < 6, 40, 12)   # 40 °/s: below the rotation lobe
+	var cw := Calibrator.new()
+	cw.start()
+	for t in weak.frames(0.0, 8.0):
+		var smp := weak.sample(t)
+		cw.feed(t, smp[0], smp[1])
+	check_eq(cw.ignored_total, 3, "three moves asked again")
+	check(cw.is_done(), "then the calibration finishes")
+	check_eq(cw.result().get("mode"), "accel", "on the accelerometer")
+
+
+func test_calibration_measures_rise_time() -> void:
+	for fps: float in [60.0, 120.0]:
+		var sy := Synth.new(10)
+		sy.fps = fps
+		sy.gyro_noise = 4.0
+		_moves(sy, [400, 420, 380, 410, 390, 400], [12, 12, 12, 12, 12, 12])
+		var r := _calibrate(sy).result()
+		check_near(float(r.get("rise_time", 0.0)), 0.045, 0.008, "%d fps: rise time about 45 ms (%.3f)" % [fps, r.get("rise_time", 0.0)])
+
+
 func test_calibration_no_sensor() -> void:
 	var cal := Calibrator.new()
 	cal.start()
@@ -376,10 +430,10 @@ func test_body_turn_does_not_ring() -> void:
 
 
 func test_ring_strength_follows_the_flick() -> void:
-	var d := _detector(100.0)   # calibrated 180 °/s
-	check_eq(d.strength_of(180.0), 0.0, "a flick just at the threshold is 0")
-	check_near(d.strength_of(360.0), 0.5, 1e-6, "twice the threshold is 0.5")
-	check_eq(d.strength_of(900.0), 1.0, "three times or more is 1")
+	var d := _detector(100.0)   # calibrated 180 °/s: a typical flick peaks at 400 °/s
+	check_near(d.strength_of(400.0), 0.5, 1e-6, "the typical flick is 0.5")
+	check_near(d.strength_of(200.0), 0.25, 1e-6, "half as hard is 0.25")
+	check_eq(d.strength_of(900.0), 1.0, "twice as hard or more is 1")
 	for mode: String in ["gyro", "accel"]:
 		var last := -1.0
 		for k in 4:
@@ -392,6 +446,44 @@ func test_ring_strength_follows_the_flick() -> void:
 			check(det.last_strength >= 0.0 and det.last_strength <= 1.0, "in 0..1")
 			last = det.last_strength
 		check(last > 0.3, "%s: the hardest flick rings strong (%.2f)" % [mode, last])
+
+
+func test_typical_flick_rings_at_half_strength() -> void:
+	# The fast path fires before the flick peaks; the strength is predicted from the rising slope,
+	# so the player's typical calibrated flick is about 0.5 at every sensor and frame rate.
+	var cal_sy := Synth.new(11)
+	cal_sy.gyro_noise = 4.0
+	cal_sy.acc_noise = 0.2
+	_moves(cal_sy, [400, 400, 400, 400, 400, 400], [12, 12, 12, 12, 12, 12])
+	var calib := _calibrate(cal_sy).result()
+	check_eq(calib.get("mode"), "gyro", "calibrated on the gyro")
+	var rows := []
+	for hz: float in [100.0, 200.0]:
+		for fps: float in [60.0, 120.0]:
+			for share: float in [1.0, 0.6, 1.6]:
+				var det := BellDetector.from_calibration(calib, true)
+				det.set_bpm(100.0)
+				det.adapt = false
+				var sy := Synth.new(int(hz + fps + share * 10.0))
+				sy.gyro_noise = 4.0
+				for i in 20:
+					sy.flick(1.0 + i * 0.7013, i % 2 == 0, 400.0 * share, 12.0, 0.2)
+				var got: Array[float] = []
+				for f in sy.held_frames(0.0, 15.5, hz, fps):
+					if det.feed(f[0], f[1], f[2]):
+						got.append(det.last_strength)
+				check_eq(got.size(), 20, "%d Hz / %d fps / %.1f×: every flick rings" % [hz, fps, share])
+				if got.is_empty():
+					continue
+				got.sort()
+				var med := got[got.size() >> 1]
+				var want := 0.5 * share
+				rows.append("%3d Hz %3d fps %.1f×: median %.2f (%.2f..%.2f)" % [hz, fps, share, med, got[0], got[-1]])
+				check(absf(med - want) <= 0.12, "%d Hz / %d fps: a %.1f× flick rings at about %.2f (median %.2f, %.2f..%.2f)" % [hz, fps, share, want, med, got[0], got[-1]])
+				if share == 1.0:
+					var soft := got.filter(func(x): return x < 0.35).size()
+					check(soft <= 2, "%d Hz / %d fps: typical flicks rarely ring soft (%d of 20)" % [hz, fps, soft])
+	print("  ring strength (gyro, calibrated at 400 °/s):\n    " + "\n    ".join(rows))
 
 
 # Seconds from the moment the signal truly crosses the threshold to the frame where the ring

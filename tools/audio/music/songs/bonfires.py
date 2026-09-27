@@ -79,7 +79,7 @@ def build():
     s.drums(b, 8, "D.....d.....")
     for bar in range(0, 8, 2):
         s.bell_cue(b + bar * 4 + 2, rank=1, land="stomp")
-    s.stop(b + 30, 2)
+    s.stop(b + 30, 2, tempt="call")
 
     # ---- A3: back into the dance, claps on the off-beats
     b = s.sec("dance3", 8, 2, chart=hard_mid)

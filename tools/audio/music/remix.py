@@ -89,28 +89,63 @@ def build(song: Song, stems: dict) -> Song:
             elif h == "slap":
                 r.ev("snare", e.b, 0.25, None, e.vel * 0.9, style="clap")
             elif h == "rim":
-                r.ev("frame", e.b, 0.25, None, e.vel, hit="rim")   # the bell cue, unchanged
+                r.ev("frame", e.b, 0.25, None, e.vel, hit="rim", cue=True)   # the bell cue, unchanged
         elif e.inst == "clap":
             r.ev("snare", e.b, 0.25, None, e.vel * 0.8, style="clap")
         elif e.inst in ("rope", "calls"):
             r.ev(e.inst, e.b, e.dur, e.pitch, e.vel, **e.p)
+        elif e.inst == "bells" and e.p.get("tempt"):
+            r.ev("bells", e.b, e.dur, e.pitch, e.vel, **e.p)   # the stand-still's temptation
 
-    # ---- 2. the style groove on top, by section energy
+    # ---- 2. the style groove on top, by section energy. Every section line is heard: the groove
+    # drops out in the last bar before it (a snare fill builds instead), an impact marks the new
+    # section, and a section at the same energy as the one before takes a variation (half-time kick,
+    # no hats, the lead an octave up), so the layers come in and out.
     have = {(e.inst, round(e.b, 4)) for e in r.events}
-    for sec in song.sections:
-        e_ = sec.energy
-        for bar in range(int(sec.len // spb)):
+    secs = [x for x in song.sections]
+    # the remix's own energy per section: the tutorial's lessons (all calm in the song) alternate
+    # between a light and a fuller groove, and "together" is its climax
+    eff = {x.name: x.energy for x in secs}
+    if song.kind == "tutorial":
+        lessons = [x for x in secs if x.name.startswith("lesson")]
+        for i, x in enumerate(lessons):
+            eff[x.name] = 1 + i % 2
+        for x in secs:
+            if x.name == "together":
+                eff[x.name] = 3
+    r.variation = {}
+    for si, sec in enumerate(secs):
+        e_ = eff[sec.name]
+        prev = secs[si - 1] if si > 0 else None
+        nxt = secs[si + 1] if si + 1 < len(secs) else None
+        var = bool(prev is not None and eff[prev.name] == e_ and si % 2 == 1 and e_ < 3)
+        r.variation[sec.name] = var
+        if si > 0 and e_ >= 1 and not in_stop(sec.b):
+            r.ev("impact", sec.b, 2, None, 0.5 if e_ < 3 else 0.9)
+        nbars = int(sec.len // spb)
+        for bar in range(nbars):
             b0 = sec.b + bar * spb
+            pre_drop = nxt is not None and bar == nbars - 1 and eff[nxt.name] >= 1 and e_ >= 1
+            if pre_drop:
+                # the fill: snare eighths, then sixteenths on the last beat, rising
+                nf = 8 if song.sub == 2 else 6
+                for k in range(nf):
+                    fb = b0 + spb / 2 + k * (spb / 2) / nf
+                    if not in_stop(fb):
+                        r.ev("snare", fb, 0.25, None, 0.35 + 0.6 * k / nf, style=st["snare_style"])
             for i in range(steps):
                 b = b0 + i * step_b
                 if in_stop(b):
                     continue
+                if pre_drop and b >= b0 + spb / 2 - 1e-6:
+                    continue
                 sw = st["swing"] * step_b * 2 if (i % 2 == 1 and song.sub == 2) else 0.0
-                if e_ >= 1 and st["kick"][i] == "x" and ("kick", round(b, 4)) not in have:
+                kick_on = st["kick"][i] == "x" and (not var or i == 0)
+                if e_ >= 1 and kick_on and ("kick", round(b, 4)) not in have:
                     r.ev("kick", b, 0.5, None, 0.9, style=st["kick_style"])
                 if e_ >= 2 and st["snare"][i] == "x" and ("snare", round(b, 4)) not in have:
                     r.ev("snare", b, 0.5, None, 0.85, style=st["snare_style"])
-                if e_ >= 1 and st["hat"][i] == "x":
+                if e_ >= 1 and st["hat"][i] == "x" and not var:
                     r.ev("hat", b + sw, 0.25, None, 0.35 + (0.25 if i % 4 == 0 else 0.0), open=st.get("stabs") and i % 4 == 2)
                     if st.get("rolls") and e_ >= 3 and i % 8 == 7:
                         for k in range(1, 3):
@@ -123,7 +158,7 @@ def build(song: Song, stems: dict) -> Song:
             pat = st["sub"]
             sstep = spb / len(pat)
             i = 0
-            if e_ >= 1:
+            if e_ >= 1 and not pre_drop:
                 while i < len(pat):
                     if pat[i] == "x":
                         j = i + 1
@@ -138,7 +173,6 @@ def build(song: Song, stems: dict) -> Song:
         # risers into climaxes, an impact on the first beat
         if e_ >= 3:
             r.ev("riser", sec.b - 2 * spb, 2 * spb, None, 0.8)
-            r.ev("impact", sec.b, 2, None, 0.9)
 
     # ---- 3. harmony: pads on every chord (stabs for house)
     for (hb, hl, deg) in song.harm:
@@ -162,7 +196,7 @@ def build(song: Song, stems: dict) -> Song:
     # ---- 4. melodies: the lead sings the boghe and the mancosedda; the mancosa becomes an arp
     for e in song.events:
         if e.inst in ("boghe", "mancosedda") and e.pitch is not None:
-            p = e.pitch + 12 * st["lead_oct"]
+            p = e.pitch + 12 * st["lead_oct"] + (12 if r.variation.get(song.section_at(e.b).name) else 0)
             while p > 84:
                 p -= 12
             r.ev("lead", e.b, e.dur, p, 0.8 * e.vel)

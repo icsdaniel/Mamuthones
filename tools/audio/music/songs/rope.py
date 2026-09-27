@@ -137,7 +137,7 @@ def build():
             s.bell_cue(b + bar * 4, rank=1, ring=True)
         s.offcall(b + bar * 4 + 2.5)
     s.ev("crowd", b, 32, None, 0.5)
-    s.stop(b + 30, 2)
+    s.stop(b + 30, 2, tempt="shake")
 
     # ---- climax: everything - the tune at full tilt, throws, shouts, leaps
     b = s.sec("climax", 8, 3)
@@ -153,6 +153,9 @@ def build():
         else:
             s.bell_cue(b + bar * 4, rank=1 if bar % 2 == 0 else 2, ring=True)
             s.bell_cue(b + bar * 4 + 2, rank=3)
+            if bar in (0, 1, 4, 5):
+                # Expert's extra: an off-beat bell on the "and" of four
+                s.bell_cue(b + bar * 4 + 3.5, rank=3, big=False)
         s.offcall(b + bar * 4 + 1.5)
     s.ev("crowd", b, 32, None, 0.6)
 

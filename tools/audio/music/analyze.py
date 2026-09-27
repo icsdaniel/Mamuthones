@@ -110,7 +110,7 @@ def timing_report(song, sources, stems, charts):
 def rest_report(song, stems, sources):
     """Stand-stills must be real rests: no onsets in the rhythmic/melodic stems inside them."""
     from mixer import THROUGH
-    skip = THROUGH | {"calls", "count"}
+    skip = THROUGH | {"calls", "count", "rim", "shake"}   # cues and temptations are allowed
     on = {k: onset_times(v) for k, v in stems.items() if k not in skip}
     rests = sorted({(b, ln) for lst in sources.values() for (b, k, stem, ln) in lst if k == "rest"})
     bad = []
@@ -125,7 +125,8 @@ def rest_report(song, stems, sources):
 
 def cue_report(song, stems, sources):
     """Every bell and ring has an audible cue (rim click or call) within the beat before it."""
-    names = ("frame", "calls", "rope", "snare", "hat", "count") + (("bells",) if song.kind == "piazza" else ())
+    names = ("frame", "rim", "calls", "rope", "snare", "hat", "count") + \
+        (("bells", "shake") if song.kind == "piazza" else ())
     cue_on = np.concatenate([onset_times(stems[k]) for k in names if k in stems] or [np.array([])])
     total = 0
     ok = 0
@@ -138,6 +139,44 @@ def cue_report(song, stems, sources):
             if np.any((cue_on > t - song.spb - 0.02) & (cue_on < t - 0.08)):
                 ok += 1
     return {"bells": total, "cued": ok}
+
+
+def mix_onsets(x):
+    """Onsets heard in the final mix (not the stems): a log-magnitude spectral flux with a 1024
+    window, normalised over 2 s, peaks above a 0.2 s local mean. This is the same measurement the
+    play review makes on the shipped OGG files."""
+    from scipy.signal import stft
+    from scipy.ndimage import maximum_filter1d
+    m = x.mean(axis=1) if x.ndim == 2 else x
+    hop = 128
+    _, _, Z = stft(m, SR, nperseg=1024, noverlap=1024 - hop, boundary=None, padded=False)
+    L = np.log1p(100 * np.abs(Z))
+    ref = maximum_filter1d(L, 3, axis=0)
+    d = np.maximum(0, L[:, 2:] - ref[:, :-2]).sum(0)
+    d = np.concatenate([[0, 0], d])
+    d /= maximum_filter1d(d, int(2 * SR / hop) | 1) + 1e-9
+    base = uniform_filter1d(d, int(0.2 * SR / hop) | 1)
+    loc = maximum_filter1d(d, int(0.04 * SR / hop) | 1)
+    pk = np.where((d == loc) & (d > base + 0.08) & (d > 0.1))[0]
+    return (pk * hop + 512) / SR
+
+
+def mix_timing_report(song, charts, onsets, offset=None, tol=0.02):
+    """Per chart: the share of notes with an onset in the main mix within tol, and the same for the
+    chart shifted by 0.37 beat (the control)."""
+    off = song.offset if offset is None else offset
+    res = {}
+    for name, notes in charts.items():
+        ts = np.array([off + n["b"] * song.spb for n in notes if n["k"] != "rest"])
+        if not len(ts) or not len(onsets):
+            continue
+        idx = np.clip(np.searchsorted(onsets, ts), 1, len(onsets) - 1)
+        e = np.minimum(np.abs(onsets[idx] - ts), np.abs(onsets[idx - 1] - ts))
+        ts2 = ts + 0.37 * song.spb
+        idx2 = np.clip(np.searchsorted(onsets, ts2), 1, len(onsets) - 1)
+        e2 = np.minimum(np.abs(onsets[idx2] - ts2), np.abs(onsets[idx2 - 1] - ts2))
+        res[name] = {"within_20ms": float(np.mean(e <= tol)), "control": float(np.mean(e2 <= tol))}
+    return res
 
 
 def features(x):

@@ -15,7 +15,7 @@ MIX = {
     "bassu": (0.95, -0.12, 0.18), "contra": (0.8, 0.14, 0.18), "mesu": (0.62, -0.3, 0.2),
     "boghe": (0.8, 0.04, 0.24), "calls": (0.75, 0.35, 0.3),
     "tumbu": (0.5, 0.0, 0.12), "mancosa": (0.95, -0.18, 0.16), "mancosedda": (0.72, 0.22, 0.16),
-    "frame": (2.0, 0.18, 0.14), "bass": (1.0, 0.0, 0.1), "stomp": (0.7, -0.1, 0.1),
+    "frame": (2.0, 0.18, 0.14), "rim": (2.0, 0.18, 0.14), "shake": (0.8, None, 0.25), "bass": (1.0, 0.0, 0.1), "stomp": (0.7, -0.1, 0.1),
     "clap": (0.55, 0.25, 0.2), "count": (0.6, 0.0, 0.05),
     "bells": (0.8, None, 0.25), "rope": (0.8, None, 0.1), "fire": (0.45, None, 0.0),
     "crowd": (0.6, None, 0.15),
@@ -31,7 +31,7 @@ DUCKED = {"pad", "sub"}
 # ...but inside a stand-still the music really stops: the drone drops out and ringing drum tails
 # are cut, so the rest is heard as a rest; the crowd only quietens, the fire keeps crackling
 STOP_DUCK_DEFAULT = -40.0
-STOP_DUCKED = {"tumbu": -30.0, "crowd": -8.0, "fire": 0.0}
+STOP_DUCKED = {"tumbu": -30.0, "crowd": -8.0, "fire": 0.0, "rim": 0.0, "shake": 0.0, "calls": 0.0}
 
 
 def stop_gain(song, n, db):
@@ -68,6 +68,12 @@ def apply_stops(song):
         for (sb, sl) in song.stops:
             if sb - 1e-6 <= e.b < sb + sl - 1e-6:
                 keep = False
+                # a bell's cue and the temptations sound inside the stand-still, on their own stems
+                # so the stand-still's ducking leaves them alone
+                if e.p.get("cue") or e.p.get("tempt") or (e.inst == "calls" and e.p.get("kind") != "hup"):
+                    inst = {"frame": "rim", "bells": "shake"}.get(e.inst, e.inst)
+                    e = type(e)(inst, e.b, e.dur, e.pitch, e.vel, e.p)
+                    keep = True
                 break
             if e.b < sb and e.b + e.dur > sb - 0.05:
                 # a note running into the rest is cut just before it

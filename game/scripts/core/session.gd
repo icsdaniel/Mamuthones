@@ -45,8 +45,9 @@ const RING_POINTS := {"perfect": 450, "good": 225, "early": 75, "late": 75}
 const HOLD_BONUS := 150
 const HOLD_GRACE := 0.120    ## a hold released up to 120 ms before its end still counts as kept
 const STILL_PENALTY := 100
-const STILL_BONUS := 150     ## a stand-still kept to its end: 150 × unison × weight
-const STILL_HITS := 4        ## and it counts as 4 hits toward the next unison level
+const STILL_BONUS := 75      ## a stand-still kept to its end: 75 × unison × weight per beat it lasts
+const STILL_HITS := 2        ## and 2 hits per beat toward the next unison level...
+const STILL_HITS_MAX := 8    ## ...at most 8
 const SILENCE_DEBOUNCE := 0.150  ## rings in a stand-still closer than this count once
 const SIDE_DEAD_ZONE := 0.010    ## hits this close to the beat are neither early nor late
 const UNISON_MULTS: Array[float] = [1.0, 1.5, 2.0, 2.5, 3.0, 4.0]
@@ -452,11 +453,12 @@ func update(t: float) -> void:
 					if n.judgement != "silence":
 						n.judgement = "still"
 						stats.still_kept += 1
-						var v := STILL_BONUS * unison_mult() * _weight
+						var beats := still_beats(n)
+						var v := STILL_BONUS * beats * unison_mult() * _weight
 						_raw += v
 						_breakdown.stills += v
 						_refresh_score(n.end_t)
-						_add_streak(STILL_HITS, n.end_t)
+						_add_streak(mini(STILL_HITS_MAX, floori(STILL_HITS * beats + 1e-6)), n.end_t)
 						still_kept.emit(n, v)
 			Note.Kind.HOLD:
 				if n.holding:
@@ -482,6 +484,11 @@ func _grade(off: float, w: Vector3) -> String:
 	if a <= w.y + 1e-6:
 		return "good"
 	return "early" if off < 0.0 else "late"
+
+
+## How many beats a stand-still lasts.
+func still_beats(n: Note) -> float:
+	return snappedf((n.end_t - n.t) * song.bpm / 60.0, 0.001)
 
 
 static func _side(off: float) -> String:

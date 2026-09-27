@@ -55,10 +55,17 @@ var adapt := true
 ## Time and direction of the last ring.
 var last_t := -INF
 var last_up := true
-## How hard the last ring was, 0-1: clamp((peak / calibrated threshold - 1) / 2, 0, 1), from the
-## peak on the calibrated axis seen up to the moment the ring was confirmed (the sound cannot wait
-## for the rest of the flick). A flick just over the threshold is 0, one at three times it is 1.
+## How hard the last ring was, 0-1: 0.5 × peak / the calibrated typical peak, so the player's
+## normal flick is 0.5 and one twice as hard is 1. The ring fires before the flick peaks (the sound
+## cannot wait), so the peak is predicted from the rising slope: on a flick rising like a sine to
+## its peak in rise_time, a reading pair with mean value v and slope s gives
+## peak = sqrt((s / w)^2 + v^2), w = PI / (2 rise_time). The larger of that and the highest reading
+## so far is used.
 var last_strength := 0.5
+## The player's typical flick peak (from calibration; else threshold / Calibrator.SHARE).
+var typical_peak := 150.0 / 0.45
+## Seconds a typical flick takes from rest to its peak (from calibration; else 45 ms).
+var rise_time := 0.045
 ## Seconds between distinct sensor readings (smoothed).
 var sample_interval := 1.0 / 60.0
 
@@ -68,6 +75,7 @@ var _cand_t := NAN
 var _cand_first := NAN
 var _cand_vec := Vector3.ZERO
 var _cand_peak := 0.0
+var _cand_pred := 0.0         # peak predicted from the rising slope
 var _rise_since := NAN        # first fresh reading of the current lobe on its rising slope
 var _lobe_over := false # the current lobe already went over the threshold
 var _prev_v := 0.0
@@ -98,6 +106,10 @@ func configure(d: Dictionary, has_gyro := true) -> void:
 	# Without a calibration: tilting the top edge is rotation about x, or acceleration along z.
 	axis = clampi(int(d.get("axis", 0 if mode == "gyro" else 2)), 0, 2) if d.get("mode", "") == mode else (0 if mode == "gyro" else 2)
 	up_sign = 1 if int(d.get("up_sign", 1)) >= 0 else -1
+	var calibrated: bool = d.get("mode", "") == mode
+	var med := float(d.get("median_peak", 0.0)) if calibrated else 0.0
+	typical_peak = med if med > threshold else threshold / Calibrator.SHARE
+	rise_time = clampf(float(d.get("rise_time", 0.045)), 0.02, 0.15)
 	reliable = bool(d.get("reliable", false))
 	reset()
 
@@ -176,6 +188,8 @@ func feed(t: float, acc: Vector3, gyro_dps: Vector3) -> bool:
 				_cand_first = t
 				_cand_vec = vec
 				_cand_peak = v
+				_cand_pred = 0.0
+				_predict(v, t)
 				if fast:
 					fired = true
 					_fire()
@@ -183,6 +197,7 @@ func feed(t: float, acc: Vector3, gyro_dps: Vector3) -> bool:
 				_watch_near(v, t)
 		elif v >= threshold * SUSTAIN:
 			_cand_peak = maxf(_cand_peak, v)
+			_predict(v, t)
 			var near_touch := mode == "accel" and _last_touch >= _cand_t - TOUCH_WINDOW and _last_touch <= t
 			if fast or t - _cand_first >= (CONFIRM_NEAR_TOUCH if near_touch else CONFIRM):
 				fired = true
@@ -206,7 +221,7 @@ func _fire() -> void:
 	last_t = _cand_t - _reading_age()
 	var s := signf(_cand_vec[axis]) * up_sign
 	last_up = s >= 0.0
-	last_strength = strength_of(_cand_peak)
+	last_strength = strength_of(maxf(_cand_peak, _cand_pred))
 	_cand_t = NAN
 	_near_n = 0
 	_peak = 0.0
@@ -214,9 +229,24 @@ func _fire() -> void:
 	rang.emit(last_t, last_up)
 
 
-## Strength (0-1) of a flick peaking at peak, relative to the calibrated threshold.
+## Strength (0-1) of a flick peaking at peak, relative to the player's typical flick.
 func strength_of(peak: float) -> float:
-	return clampf((peak / maxf(base_threshold, 1e-6) - 1.0) * 0.5, 0.0, 1.0)
+	return clampf(0.5 * peak / maxf(typical_peak, 1e-6), 0.0, 1.0)
+
+
+# Predicts the flick's peak from the rise between the previous fresh reading and this one.
+func _predict(v: float, t: float) -> void:
+	var dt := t - _prev_t
+	if dt <= 0.0 or dt > MAX_GAP or v <= _prev_v:
+		return
+	# Held readings are stamped with frame times, which jitter against the sensor's own clock: the
+	# measured sensor interval is the better gap between two fresh readings.
+	if _held_seen > 0.0 and dt < 2.0 * sample_interval:
+		dt = sample_interval
+	var w := PI / (2.0 * rise_time)
+	var slope := (v - _prev_v) / dt
+	var mid := (v + _prev_v) * 0.5
+	_cand_pred = maxf(_cand_pred, sqrt(pow(slope / w, 2.0) + mid * mid))
 
 
 func _learn_peak(p: float) -> void:

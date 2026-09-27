@@ -81,16 +81,17 @@ def build():
     walk(b, 8)
     s.drums(b, 8, "..t...t.t.t.T.tt")
 
-    # ---- break: the launeddas alone, the row halts twice
+    # ---- break: the launeddas alone, the row halts twice for three beats; in the silence the small
+    # bells shake once and an Issohadore shouts - the row must not answer
     b = s.sec("halt", 4, 1)
     harm(b // 4, [1, 1, 1, 1])
     s.drone("tumbu", b, 16, tumbu, vel=0.55)
-    s.melody("mancosedda", b, "5:.25 6 5 6 5 6 5 6 5:1 r:1 5:.25 6 5 6 5 6 5 6 8:1 r:1"
-                              " 5:.25 6 5 6 5 6 5 6 5:1 r:1 7:.25 6 7 6 5 4 3 2 1:1 r:1", vel=0.9, hold_min=99)
-    for bar in range(4):
-        s.drums(b + bar * 4, 1, "B.......B.......")
-        s.bell_cue(b + bar * 4 + 2, rank=1, ring=True)
-        s.stop(b + bar * 4 + 3, 1)
+    s.melody("mancosedda", b, "5:.25 6 5 6 5 6 5 6 5:1 r:3 3:.25 4 5 6 5 6 5 6"
+                              " 5:.25 6 5 6 5 6 5 6 8:1 r:3 7:.25 6 5 4 3 2 1:.5", vel=0.9, hold_min=99)
+    for half, tempt in ((0, "shake"), (8, "call")):
+        s.drums(b + half, 2, ["B.......B.......", "........B...B..."])
+        s.bell_cue(b + half + 2, rank=1, ring=True)
+        s.stop(b + half + 3, 3, tempt=tempt, at=1.5 if tempt == "shake" else 1.0)
 
     # ---- tenore again, higher and with the launeddas answering each phrase
     b = s.sec("song2", 8, 2)

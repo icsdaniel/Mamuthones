@@ -4,7 +4,7 @@ extends Screen
 ## becomes the audio offset. Uneven taps are explained and the test repeats.
 ## args: first_run (bool) continues to the tutorial; otherwise back to settings.
 
-const BPM := 100.0
+const BPM := LatencyTest.BPM
 const LISTEN := 4
 const COUNT := 12
 

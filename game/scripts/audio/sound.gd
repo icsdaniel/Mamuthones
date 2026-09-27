@@ -9,15 +9,21 @@ extends Node
 ## source-filter voices); tools/audio/sfx/measurements.json has their measurements.
 ##
 ## Buses, created here: Music, Bells, Sfx and Ambience under Master (which gets a -1 dB
-## limiter). Bells and Sfx sit 5 dB down so bells, steps and the row together leave
-## headroom for the music; Bells has its own compressor and limiter. Three small
-## buses feed Bells: BellsSoft (a soft flick: darker), BellsEarly and BellsLate (a
-## little left and right, so a player can hear which way they were off).
+## limiter). Sfx sits 5 dB down; Bells has its own limiter, and
+## every ring of the player's bells ducks the Music bus by 3 dB for ~150 ms. Three
+## small buses feed Bells: BellsSoft (a soft flick: a little darker), BellsEarly and
+## BellsLate (a little left and right, so a player can hear which way they were off).
 
 const SFX_DIR := "res://audio/sfx/"
 const BUS_NAMES: Array[String] = ["Music", "Bells", "Sfx", "Ambience"]
 ## Fixed trim under each bus's user volume (set_volume adds it).
-const BUS_TRIM_DB := {"Music": 0.0, "Bells": -5.0, "Sfx": -5.0, "Ambience": 0.0}
+const BUS_TRIM_DB := {"Music": 0.0, "Bells": 0.0, "Sfx": -5.0, "Ambience": 0.0}
+## Each ring of the player's bells dips the music this much for DUCK_HOLD seconds, so
+## the ring lands on top of the music (the bells are the reward).
+const DUCK_DB := 3.0
+const DUCK_ATTACK := 0.015
+const DUCK_HOLD := 0.13
+const DUCK_RELEASE := 0.12
 const BELL_SETS: Array[String] = ["light", "village", "full"]
 ## Index = quality slot used by bell(): perfect, good, ok, miss, early, late.
 const QUALITIES: Array[String] = ["perfect", "good", "ok", "miss", "early", "late"]
@@ -91,6 +97,10 @@ var _hold_idle := PackedFloat32Array([0.0, 0.0, 0.0])
 var _amb_gain := PackedFloat32Array([0.0, 0.0, 0.0])
 var _amb_target := PackedFloat32Array([0.0, 0.0, 0.0])
 var _missing: Array[String] = []
+var _user_db := {"Music": 0.0, "Bells": 0.0, "Sfx": 0.0, "Ambience": 0.0}
+var _music_bus := -1
+var _duck := 0.0        # 0..1, how far the music is dipped
+var _duck_hold := 0.0   # seconds left at full dip
 
 
 func _ready() -> void:
@@ -141,7 +151,8 @@ func set_volume(bus: String, linear: float) -> void:
 		push_warning("Sound.set_volume: unknown bus '%s'" % bus)
 		return
 	AudioServer.set_bus_mute(idx, linear <= 0.0001)
-	AudioServer.set_bus_volume_db(idx, linear_to_db(maxf(linear, 0.0001)) + BUS_TRIM_DB.get(bus_name, 0.0))
+	_user_db[bus_name] = linear_to_db(maxf(linear, 0.0001))
+	AudioServer.set_bus_volume_db(idx, _user_db[bus_name] + BUS_TRIM_DB.get(bus_name, 0.0) - (DUCK_DB * _duck if bus_name == "Music" else 0.0))
 
 
 ## A footfall on stone and the lane's tuned knock (Left root, Middle fifth, Right octave).
@@ -169,7 +180,7 @@ func bell(set_id: String, up: bool, quality: String, strength := 0.5) -> void:
 	# A tiny random pitch (+-0.25 %, what a load swinging at walking pace does by
 	# Doppler) so no two rings are identical.
 	var pitch := randf_range(0.9975, 1.0025)
-	var gain := randf_range(-0.8, 0.0)
+	var gain := randf_range(-0.5, 0.0)
 	var bus := BUS_BELLS
 	var hard := false
 	if q == 4:
@@ -180,13 +191,16 @@ func bell(set_id: String, up: bool, quality: String, strength := 0.5) -> void:
 		pitch *= 0.98
 	elif q != 3:
 		if strength < 0.34:
+			# a soft flick: slightly quieter and a little darker, never worse than a Good
 			bus = BUS_SOFT
-			gain -= 2.5
+			gain -= 1.0
 		elif strength > 0.67:
 			hard = true
 			gain += 1.0
 	var load_id: String = set_id if _accents.has(set_id) else _alias(set_id)
 	_play(_bell_pool, 0, _pick(takes, 100 + q * 2 + d), gain, pitch, bus)
+	if q != 3:
+		_duck_hold = DUCK_HOLD  # the music steps back for the ring (see _process)
 	if hard:
 		var acc: Array = _accents[load_id][d]
 		_play(_bell_pool, 0, _pick(acc, 120 + d), gain, pitch, bus)
@@ -344,6 +358,17 @@ func _exit_tree() -> void:
 
 
 func _process(delta: float) -> void:
+	# music duck: a 15 ms dip, held while the ring's attack sounds, a 120 ms return.
+	# The bus volume is ramped across each mix block, so the steps don't click.
+	var duck := _duck
+	if _duck_hold > 0.0:
+		_duck_hold -= delta
+		duck = move_toward(duck, 1.0, delta / DUCK_ATTACK)
+	else:
+		duck = move_toward(duck, 0.0, delta / DUCK_RELEASE)
+	if duck != _duck:
+		_duck = duck
+		AudioServer.set_bus_volume_db(_music_bus, _user_db["Music"] + BUS_TRIM_DB["Music"] - DUCK_DB * _duck)
 	for lane in LANES:
 		var p := _hold_players[lane]
 		var d := _hold_dir[lane]
@@ -498,24 +523,18 @@ func _make_buses() -> void:
 	for bus_name in BUS_NAMES:
 		_ensure_bus(bus_name, "Master")
 		AudioServer.set_bus_volume_db(AudioServer.get_bus_index(bus_name), BUS_TRIM_DB[bus_name])
-	# Bells: a gentle compressor, then a limiter, so a heavy load with the whole row
-	# never reaches the Master limiter (which would pump the music)
+	# Bells: a limiter only (the samples already peak at -1.5 dBFS; it catches a
+	# ring, an accent and the row landing together)
 	var bells := AudioServer.get_bus_index("Bells")
 	if AudioServer.get_bus_effect_count(bells) == 0:
-		var comp := AudioEffectCompressor.new()
-		comp.threshold = -14.0
-		comp.ratio = 3.0
-		comp.attack_us = 500.0
-		comp.release_ms = 150.0
-		AudioServer.add_bus_effect(bells, comp)
 		var lim := AudioEffectHardLimiter.new()
-		lim.ceiling_db = -3.0
+		lim.ceiling_db = -1.5
 		lim.release = 0.12
 		AudioServer.add_bus_effect(bells, lim)
 	var soft := _ensure_bus("BellsSoft", "Bells")
 	if AudioServer.get_bus_effect_count(soft) == 0:
 		var lp := AudioEffectLowPassFilter.new()
-		lp.cutoff_hz = 2200.0
+		lp.cutoff_hz = 6000.0  # a gentle roll-off of the top only
 		AudioServer.add_bus_effect(soft, lp)
 	for pair in [["BellsEarly", -0.3], ["BellsLate", 0.3]]:
 		var idx := _ensure_bus(pair[0], "Bells")
@@ -523,6 +542,7 @@ func _make_buses() -> void:
 			var pan := AudioEffectPanner.new()
 			pan.pan = pair[1]
 			AudioServer.add_bus_effect(idx, pan)
+	_music_bus = AudioServer.get_bus_index("Music")
 	var master := AudioServer.get_bus_index("Master")
 	var has_limiter := false
 	for i in AudioServer.get_bus_effect_count(master):

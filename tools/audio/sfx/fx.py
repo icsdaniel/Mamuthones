@@ -7,7 +7,7 @@ from __future__ import annotations
 import numpy as np
 
 from bells import Bell, make_load, render_ring, render_row, strike_response
-from dsp import (SR, add_at, bandpass, convolve_ir, db, fade, highpass, loop_crossfade,
+from dsp import (SR, add_at, bandpass, convolve_ir, limit, db, fade, highpass, loop_crossfade,
                  lowpass, make_ir, pan, periodic_lfo, resonator, shaped_noise, trim_tail,
                  write_ogg, write_wav)
 
@@ -189,7 +189,14 @@ def cue(take: int) -> np.ndarray:
         start = int(t * SR)
         add_at(out, strike_response(b, n - start, rng.uniform(0.4, 0.7) * (1 - 0.15 * k), 9000, rng, 0.35), start)
         t += rng.uniform(0.018, 0.035)
-    out = highpass(out, 1800, 2)
+    # body at 2-3 kHz: a soft, damped "tik" of a fingertip on a small bell's rim, so
+    # the cue cuts through the music without sounding like a ring of the load
+    tk = int(0.05 * SR)
+    e = rng.standard_normal(tk) * np.exp(-np.arange(tk) / (0.004 * SR))
+    tik = resonator(e, rng.uniform(2300, 2600), 7) + 0.5 * resonator(e, rng.uniform(2900, 3200), 8)
+    add_at(out, tik * 0.8 * np.max(np.abs(out)) / (np.max(np.abs(tik)) + 1e-9), 0)
+    add_at(out, tik * 0.5 * np.max(np.abs(out)) / (np.max(np.abs(tik)) + 1e-9), int(t * SR * 0.5))
+    out = highpass(out, 1500, 2)
     return fade(out, 0.0008, 0.06)
 
 
@@ -315,9 +322,11 @@ def main() -> None:
     add_at(back, wood_knock(r, 520, 0.6, 0.22), int(0.075 * SR))
     write_wav("ui/back_1.wav", fade(back * db(-6) / np.max(np.abs(back)), 0.0003, 0.04))
     cues = [cue(k) for k in range(3)]
-    pk = max(np.max(np.abs(x)) for x in cues)
+    # by loudness, not peak (the tik's peak would hold it down): about 9 dB over the
+    # first cut, peaks still under -1.5 dBFS
     for k, x in enumerate(cues):
-        write_wav(f"ui/cue_{k + 1}.wav", x * db(-12) / pk)
+        y = x * db(-17) / np.sqrt(np.mean(x[: int(0.1 * SR)] ** 2))
+        write_wav(f"ui/cue_{k + 1}.wav", limit(y, -1.5))
     grabs = [rope_grab(k) for k in range(3)]
     pk = max(np.max(np.abs(x)) for x in grabs)
     for k, x in enumerate(grabs):

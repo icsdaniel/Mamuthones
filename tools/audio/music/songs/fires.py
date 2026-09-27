@@ -13,11 +13,16 @@ B1 = "1':2 7:1 6:1 5:2 6:1 5:.5 4:.5 3:1 4:1 5:1 4:.5 3:.5 2:2 r:2"
 B2 = "1':2 2':1 1':1 7:2 6:1 5:1 4:1 5:.5 4:.5 3:1 2:1 1:2 r:2"
 
 
+# Easy walks on beats 1 and 3 of every bar (the slow procession step), about 0.57 notes a second
+EASY_WALK = {"easy": dict(steps=[("pulse", 3)])}
+
+
 def build():
     s = Song("fires", "Sant'Antonio's Fires", "I fuochi di Sant'Antonio", 2, "story", 68, 4, 57, "aeolian")
     s.reverb = {"t60": 2.2, "wet": 0.22, "predelay": 0.03, "bright": 4500}
     s.mechanics = {"step", "bell", "rest"}
     s.signature = {"medium": [1, 2, 1, 0], "hard": [1, 2, 1, 0], "expert": [1, 2, 1, 0]}
+    s.targets = {"easy": 0.82}
     s.countin()
     s.tail = 7.0
     s.ev("fire", -6, 200, None, 0.55)
@@ -35,7 +40,7 @@ def build():
     s.drums(b + 4, 1, "B.......b.......", cands=False)
 
     # ---- verse 1: drone chords, the boghe's first phrases, the heavy walk
-    b = s.sec("verse1", 8, 1)
+    b = s.sec("verse1", 8, 1, add=EASY_WALK)
     harm(b, [1, 1, 1, 1, 1, 1, 7, 1])
     s.tenore(b, 32, "drone", vowels="oa", vel=0.75)
     s.melody("boghe", b, A1, vel=0.85, sig_start=0)
@@ -47,7 +52,7 @@ def build():
     s.stop(b + 30, 2)
 
     # ---- verse 2: the tenore turns rhythmic, the frame drum joins, the answer phrases (higher)
-    b = s.sec("verse2", 8, 2)
+    b = s.sec("verse2", 8, 2, add=EASY_WALK)
     harm(b, [1, 1, 7, 1, 1, 1, 7, 1])
     s.tenore(b, 32, "rhythm", pattern="x.......x...o.o.", vowels="oaoe", vel=0.8)
     s.melody("boghe", b, B1, vel=0.9)
@@ -57,10 +62,10 @@ def build():
         s.bell_cue(b + bar * 4, rank=1 if bar % 2 == 0 else 2)
         if bar % 2 == 1 and bar != 7:
             s.bell_cue(b + bar * 4 + 2, rank=3, big=False)
-    s.stop(b + 30, 2)
+    s.stop(b + 30, 2, tempt="shake")
 
     # ---- build: the harmony climbs (bVI bVII bVI bVII iv v), drums double, a roll into the stop
-    b = s.sec("build", 8, 2)
+    b = s.sec("build", 8, 2, add=EASY_WALK)
     harm(b, [6, 6, 7, 7, 6, 6, 4, 5])
     s.tenore(b, 32, "rhythm", pattern="x...o.o.x...o.o.", vowels="aoae", vel=0.85)
     s.melody("boghe", b, A1, vel=0.9, sig_start=0)

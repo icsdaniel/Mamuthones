@@ -31,6 +31,33 @@ func test_latency_median() -> void:
 	check_eq(LatencyTest.measure(clicks, PackedFloat64Array()).count, 0, "no taps")
 
 
+func test_latency_wide_range_at_test_tempo() -> void:
+	# At the test tempo (70 bpm, 0.857 s) any delay within ±0.5 s is read correctly, even though a
+	# tap 0.45 s late is also 0.41 s early for the next click.
+	check_eq(LatencyTest.BPM, 70.0, "test tempo")
+	check_eq(LatencyTest.MAX_PAIR, 0.5, "the same ±0.5 s range as Profile's audio offset")
+	var rng := RandomNumberGenerator.new()
+	rng.seed = 21
+	var clicks := LatencyTest.click_times(LatencyTest.BPM, 12, 0.6)
+	for d: float in [0.0, 0.12, 0.3, 0.38, 0.45, 0.49, -0.1, -0.3]:
+		for skip_last in [false, true]:
+			var taps := PackedFloat64Array()
+			for i in 12:
+				if skip_last and i == 11:
+					continue
+				taps.append(clicks[i] + d + rng.randfn(0.0, 0.01))
+			var r := LatencyTest.measure(clicks, taps)
+			check(r.ok, "delay %.2f s%s: a good test" % [d, " (last click missed)" if skip_last else ""])
+			check_near(r.offset, d, 0.015, "delay %.2f s%s: read as %.3f" % [d, " (last click missed)" if skip_last else "", r.offset])
+	# The old 100 bpm clicks paired a 0.35 s delay with the wrong click; at 70 bpm it cannot.
+	var taps2 := PackedFloat64Array()
+	for i in 12:
+		taps2.append(clicks[i] + 0.35)
+	var r2 := LatencyTest.measure(clicks, taps2)
+	check_near(r2.offset, 0.35, 1e-6, "0.35 s is read as 0.35 s")
+	check_eq(r2.count, 12, "every tap paired")
+
+
 func _conductor() -> Conductor:
 	var c := Conductor.new()
 	c.audio_offset = 0.0

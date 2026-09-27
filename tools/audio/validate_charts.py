@@ -46,6 +46,7 @@ RULES = {
     "jack_fast_s": 0.15,
     "jack_run": 3,
     "expert_peak_nps": 4.0,          # every story Expert chart reaches this somewhere
+    "rest_min_beats": 2.0,           # a stand-still lasts at least two beats (design section 3)
     "bell_gap": 0.5,                 # bells at least half a beat apart
     "easy_min_gap_s": 0.6,           # easy never asks for two inputs closer than this
     "easy_peak_nps": 1.5,            # easy stays beginner friendly
@@ -280,6 +281,9 @@ def check_chart(song: dict, name: str, notes: list, audio_len: float | None):
                 errs.append(f"{where}: hold len must be 0.5..16 beats, got {ln!r}")
         if k == "rest" and "len" in n and (not isinstance(n["len"], (int, float)) or n["len"] <= 0):
             errs.append(f"{where}: rest len must be > 0")
+        elif k == "rest" and n.get("len", 1) < RULES["rest_min_beats"] - EPS:
+            errs.append(f"{where}: stand-still of {n.get('len', 1)} beats is shorter than "
+                        f"{RULES['rest_min_beats']:g} beats")
         if k == "swipe" and n.get("dir") not in (1, -1):
             errs.append(f"{where}: swipe dir must be 1 or -1")
         if "call" in n and (k != "step" or n["call"] is not True):

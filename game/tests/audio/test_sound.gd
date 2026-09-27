@@ -277,7 +277,8 @@ func test_strength_layers() -> void:
 	var s := _sound()
 	s.bell("full", true, "perfect", 0.1)
 	var soft := _last_player(s, s._bell_pool, 0)
-	check_eq(String(soft.bus), "BellsSoft", "a soft flick rings darker, through the low-pass bus")
+	check_eq(String(soft.bus), "BellsSoft", "a soft flick rings a little darker, through the gentle low-pass bus")
+	check(soft.volume_db >= -1.81, "and only about 1 dB down")
 	var before: int = s._next[0]
 	s.bell("full", false, "perfect", 0.95)
 	var hard := _last_player(s, s._bell_pool, 0)
@@ -413,4 +414,34 @@ func test_hold_fades_are_click_free_in_the_mixer() -> void:
 			edge = maxf(edge, d)
 	check(loud > 0.05, "the drone was heard (peak %.3f)" % loud)
 	check(edge <= steady * 1.05, "no click while fading: largest step %.4f vs %.4f while steady" % [edge, steady])
+	await _settle()
+
+
+func test_rings_duck_the_music() -> void:
+	var s := _sound()
+	var music := AudioServer.get_bus_index("Music")
+	s.set_volume("music", 1.0)
+	for i in 30:
+		s._process(0.02)
+	check_near(AudioServer.get_bus_volume_db(music), 0.0, 0.01, "music at its level before a ring")
+	s.bell("full", false, "perfect")
+	s._process(0.02)
+	check_near(AudioServer.get_bus_volume_db(music), -s.DUCK_DB, 0.01, "a ring dips the music %.1f dB" % s.DUCK_DB)
+	for i in 5:
+		s._process(0.02)
+	check_near(AudioServer.get_bus_volume_db(music), -s.DUCK_DB, 0.01, "held through the ring's attack")
+	for i in 20:
+		s._process(0.02)
+	check_near(AudioServer.get_bus_volume_db(music), 0.0, 0.01, "and back within ~0.3 s")
+	s.set_volume("music", 0.5)
+	s.bell("full", false, "miss")
+	s._process(0.02)
+	check_near(AudioServer.get_bus_volume_db(music), linear_to_db(0.5), 0.01, "a miss doesn't duck; the user's music volume is kept")
+	s.bell("full", true, "good")
+	s._process(0.05)
+	check_near(AudioServer.get_bus_volume_db(music), linear_to_db(0.5) - s.DUCK_DB, 0.01, "ducking works from the user's level")
+	for i in 30:
+		s._process(0.02)
+	s.set_volume("music", 1.0)
+	check_near(AudioServer.get_bus_volume_db(AudioServer.get_bus_index("Bells")), 0.0, 0.01, "Bells bus has no trim")
 	await _settle()

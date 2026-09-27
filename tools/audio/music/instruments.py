@@ -315,9 +315,13 @@ def render_pipe(kind):
                 freq[max(0, s - g):s] = mtof(e.pitch + e.p.get("tap_int", 2))
                 dips[max(0, s - g):s + 20] = 0.35
             else:
-                # finger articulation: a short dip in the reed's sound as the finger lifts
-                k = int(0.012 * SR)
-                dips[max(0, s - k):s + k // 3] = np.maximum(dips[max(0, s - k):s + k // 3], 0.55)
+                # finger articulation: a short dip in the reed's sound as the finger lifts, then the
+                # new note speaks with a little bite (players "strike" the finger holes)
+                k = int(0.014 * SR)
+                dips[max(0, s - k):s + k // 3] = np.maximum(dips[max(0, s - k):s + k // 3], 0.7)
+                kb = min(end - s, int(0.05 * SR))
+                if kb > 0 and kind != "tumbu":
+                    amp[s:s + kb] *= 1 + 0.3 * np.exp(-np.arange(kb) / (0.015 * SR))
             if e.p.get("accent"):
                 k = int(0.05 * SR)
                 amp[s:s + k] *= 1.25
@@ -810,9 +814,9 @@ RENDERERS = {
     "bassu": render_voice("bassu"), "contra": render_voice("contra"), "mesu": render_voice("mesu"),
     "boghe": render_voice("boghe"), "calls": render_calls,
     "tumbu": render_pipe("tumbu"), "mancosa": render_pipe("mancosa"), "mancosedda": render_pipe("mancosedda"),
-    "frame": render_drum("frame"), "bass": render_drum("bass"), "stomp": render_drum("stomp"),
+    "frame": render_drum("frame"), "rim": render_drum("frame"), "bass": render_drum("bass"), "stomp": render_drum("stomp"),
     "clap": render_drum("clap"), "count": render_drum("count"),
-    "bells": render_bells, "rope": render_rope, "fire": render_fire, "crowd": render_crowd,
+    "bells": render_bells, "shake": render_bells, "rope": render_rope, "fire": render_fire, "crowd": render_crowd,
     "kick": render_kit("kick"), "snare": render_kit("snare"), "hat": render_kit("hat"),
     "impact": render_kit("impact"), "riser": render_kit("riser"),
     "pad": render_pad, "sub": render_sub, "lead": render_lead, "arp": render_lead, "chop": render_chop,

@@ -271,14 +271,15 @@ class Song:
             cb = b - (0.5 if self.sub == 2 else 1 / 3)
             ex = self.find("frame", cb)
             if ex and ex.p.get("hit") == "slap":
-                pass  # an off-beat shout is already a strong cue
+                ex.p["cue"] = True  # an off-beat shout is already a strong cue
             elif ex:
                 ex.p["hit"] = "rim"
+                ex.p["cue"] = True
                 ex.vel = 0.9
             else:
-                self.ev("frame", cb, 0.25, None, 0.9, hit="rim")
+                self.ev("frame", cb, 0.25, None, 0.9, hit="rim", cue=True)
         elif cue == "call":
-            self.ev("calls", b - 1.0, 0.6, None, 0.8, kind="ohi")
+            self.ev("calls", b - 1.0, 0.6, None, 0.8, kind="ohi", cue=True)
         return self.cand(b, "bell", land_inst if land else "bass", rank=rank, ring=ring)
 
     def find(self, inst, b):
@@ -287,10 +288,19 @@ class Song:
                 return e
         return None
 
-    def stop(self, b, beats):
-        """A real musical rest: every non-sustaining instrument is silent in [b, b+beats)."""
+    MIN_REST = 2.0
+
+    def stop(self, b, beats, tempt=None, at=0.5):
+        """A real musical rest: every non-sustaining instrument is silent in [b, b+beats). A stand-still
+        lasts at least two beats. tempt puts something inside it the player must not answer:
+        "call" (an Issohadore's shout) or "shake" (the small bells shaking like a bell cue), at b+at."""
+        assert beats >= self.MIN_REST - 1e-9, f"stand-still at b={b} is shorter than {self.MIN_REST} beats"
         self.stops.append((b, beats))
         self.cand(b, "rest", None, rank=1, len=beats)
+        if tempt == "call":
+            self.ev("calls", b + at, 0.6, None, 0.8, kind="hei", tempt=True)
+        elif tempt == "shake":
+            self.ev("bells", b + at, 0.5, None, 0.22, count=3, spread=0.02, width=0.4, tempt=True)
 
     def rope(self, b, direction):
         """The Issohadore throws the rope: a whoosh that ends in a crack exactly on b."""
@@ -384,21 +394,12 @@ class Song:
                 t += step
 
     def finalize(self):
-        """A stand-still ends before any cue inside it (the rim click or call that announces the
-        next bell), so the cue is heard and the rest stays silent."""
+        """Fills between sections. Stand-stills keep their full length: a bell's cue (the rim click or
+        call half a beat before a bell that follows the rest) still sounds inside them, and so do the
+        temptations - everything else is silent."""
         self.auto_fills()
-        cues = sorted(e.b for e in self.events
-                      if (e.inst == "frame" and e.p.get("hit") == "rim") or e.inst == "calls")
-        new = []
         for (sb, sl) in self.stops:
-            inside = [cb for cb in cues if sb + 0.25 <= cb < sb + sl]
-            if inside:
-                sl = max(0.5, int((min(inside) - sb) * 2) / 2)
-            new.append((sb, sl))
-            for c in self.cands:
-                if c.role == "rest" and abs(c.b - sb) < 1e-6:
-                    c.len = sl
-        self.stops = new
+            assert sl >= self.MIN_REST - 1e-9, f"{self.id}: stand-still at b={sb} is {sl} beats"
         return self
 
     def countin(self, style="rim"):
