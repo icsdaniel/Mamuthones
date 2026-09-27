@@ -1,13 +1,14 @@
 extends Screen
 ## The workshop: build your own Mamuthone. Carve the mask (every bell earned is a carving point; finer
 ## options open as the story goes on), choose the bell set (tap to hear it), the fleece shade and the
-## straps. Your Mamuthone walks in the procession at the top and changes as you choose.
+## straps. A close-up of your own Mamuthone (Art's portrait) at the top changes as you choose, with
+## the part being carved outlined.
 ## args: tab (optional: mask, bells or dress).
 
 static var tab := "mask"
 static var part := "brow"
 
-var scene: ProcessionScene
+var portrait: MamuthonePortrait
 var mask: MaskView
 var _body: VBoxContainer
 var _tabs := {}
@@ -16,16 +17,12 @@ var _tabs := {}
 func build() -> void:
 	var box := UIKit.column(self, true, 14)
 	UIKit.header(box, tr("ws_title"), on_back)
-	scene = ProcessionScene.new()
-	scene.name = "Procession"
-	scene.custom_minimum_size = Vector2(0, 300)
-	scene.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	box.add_child(scene)
-	scene.set_stop(maxi(Progression.highest_stop(), 1))
-	scene.set_reduced_motion(UIKit.reduced_motion())
-	scene.set_unison(3)
-	scene.auto_bpm = 76.0
-	UIKit.show_look(scene)
+	portrait = MamuthonePortrait.new()
+	portrait.name = "Portrait"
+	portrait.custom_minimum_size = Vector2(0, 340)
+	box.add_child(portrait)
+	_refresh_look()
+	Profile.changed.connect(_refresh_look)
 	var row := HBoxContainer.new()
 	row.add_theme_constant_override("separation", 10)
 	box.add_child(row)
@@ -40,6 +37,22 @@ func build() -> void:
 	_body.add_theme_constant_override("separation", 14)
 	box.add_child(_body)
 	_show_tab(str(args.get("tab", tab)))
+
+
+## Puts the saved look on the portrait (it redraws only when something changed).
+func _refresh_look() -> void:
+	if portrait == null:
+		return
+	var look: Dictionary = Profile.get_look()
+	var m: Dictionary = MaskSpec.sanitize(look.get("mask", {}))
+	var f := str(look.get("fleece", "black"))
+	var st := str(look.get("straps", "natural"))
+	var bs := str(look.get("bell_set", "village"))
+	if m != portrait.mask or f != portrait.fleece or st != portrait.straps or bs != portrait.bell_set:
+		portrait.set_look(m, f, st, bs)
+	var hp := part if tab == "mask" else ""
+	if portrait.highlight_part != hp:
+		portrait.highlight_part = hp
 
 
 func _show_tab(t: String) -> void:
@@ -57,6 +70,7 @@ func _show_tab(t: String) -> void:
 			_build_bells()
 		_:
 			_build_dress()
+	_refresh_look()
 
 
 func _spec() -> Dictionary:
@@ -125,7 +139,6 @@ func _carve(option: String) -> void:
 	Profile.set_look("mask", spec)
 	Sound.ui("carve")
 	UIKit.vibrate(15)
-	UIKit.show_look(scene)
 	_show_tab("mask")
 
 
@@ -144,7 +157,6 @@ func _ring() -> void:
 	var id := str(Profile.get_look().get("bell_set", "light"))
 	Sound.bell(id, _ring_up, "perfect")
 	_ring_up = not _ring_up
-	scene.jolt("bell")
 
 
 func _build_dress() -> void:
@@ -164,7 +176,7 @@ func _choice_row(key: String, ids: Array) -> void:
 	for id in ids:
 		var b := UIKit.button(tr("ws_%s_%s" % [key, id]), func() -> void:
 			Profile.set_look(key, id)
-			UIKit.show_look(scene)
+			_refresh_look()
 			for c in row.get_children():
 				(c as Button).set_pressed_no_signal(c.name == "Opt_" + str(id)))
 		b.toggle_mode = true

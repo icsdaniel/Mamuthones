@@ -110,7 +110,7 @@ func _feed_phone(pitch_dps: float, delta: float) -> void:
 		_phone.flash = _flash
 
 
-func _on_move(index: int, up: bool, strength: float) -> void:
+func _on_move(_index: int, up: bool, _strength: float) -> void:
 	if up:
 		_marks_up.count = mini(_marks_up.count + 1, 3)
 	else:

@@ -121,10 +121,10 @@ def build(song: Song, stems: dict) -> Song:
         nxt = secs[si + 1] if si + 1 < len(secs) else None
         var = bool(prev is not None and eff[prev.name] == e_ and si % 2 == 1 and e_ < 3)
         r.variation[sec.name] = var
-        if var:
-            r.automation.append((sec.b, sec.b + sec.len, -5.0, ("pad", "chop")))
-        elif e_ <= 1:
-            r.automation.append((sec.b, sec.b + sec.len, -3.0, ("pad", "lead")))
+        # layers by energy: calm sections sit well below the climaxes, a variation a little below
+        lvl = {0: -7.0, 1: -4.5, 2: 0.0, 3: 0.0}[min(3, e_)] - (2.5 if var else 0.0)
+        if lvl < 0:
+            r.automation.append((sec.b, sec.b + sec.len, lvl, ("pad", "sub", "lead", "arp", "chop", "hat", "snare")))
         if si > 0 and e_ >= 1 and not in_stop(sec.b):
             r.ev("impact", sec.b, 2, None, 0.5 if e_ < 3 else 0.9)
         nbars = int(sec.len // spb)
@@ -149,7 +149,7 @@ def build(song: Song, stems: dict) -> Song:
                     continue
                 sw = st["swing"] * step_b * 2 if (i % 2 == 1 and song.sub == 2) else 0.0
                 kick_on = st["kick"][i] == "x" and (not var or i == 0)
-                if e_ >= 1 and kick_on and ("kick", round(b, 4)) not in have:
+                if e_ >= 2 and kick_on and ("kick", round(b, 4)) not in have:
                     r.ev("kick", b, 0.5, None, 0.9, style=st["kick_style"])
                 if e_ >= 2 and st["snare"][i] == "x" and ("snare", round(b, 4)) not in have:
                     r.ev("snare", b, 0.5, None, 0.85, style=st["snare_style"])
