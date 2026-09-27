@@ -545,3 +545,96 @@ func test_slam_two_thumbs_through_router() -> void:
 			check(res[1] <= 2, "%s/%s: never more than two buttons down (%d)" % [song.id, diff, res[1]])
 		await tree.process_frame
 	SongLibrary.reset()
+
+
+# ---------------------------------------------------------------- web sensors
+
+
+# Browser devicemotion samples [timeStamp ms, ax, ay, az, beta, gamma, alpha, lx, ly, lz, has_lin,
+# has_rot] of a synthetic phone held upright-ish (gravity along y), at `hz`, from t0 to t1.
+func _browser_samples(sy: RefCounted, t0: float, t1: float, hz: float, with_linear := true) -> Array:
+	var out := []
+	var g := Vector3(0.0, 9.81, 0.0)
+	var t := t0
+	while t < t1:
+		var smp: Array = sy.sample(t)
+		var lin: Vector3 = smp[0]
+		var rot: Vector3 = smp[1]
+		var inc := lin + g
+		out.append([t * 1000.0, inc.x, inc.y, inc.z, rot.x, rot.y, rot.z,
+			lin.x if with_linear else 0.0, lin.y if with_linear else 0.0, lin.z if with_linear else 0.0,
+			1 if with_linear else 0, 1])
+		t += 1.0 / hz
+	return out
+
+
+func test_web_motion_conversion() -> void:
+	var c := WebMotion.convert_sample([1000.0, 0.5, 9.81, 1.5, 90.0, -45.0, 180.0, 0.5, 0.0, 1.5, 1, 1], 1016.0)
+	check_near(c.age, 0.016, 1e-9, "age from performance.now()")
+	check_eq(c.accel, Vector3(0.5, 9.81, 1.5), "accelerationIncludingGravity keeps the device axes")
+	check(c.gravity.is_equal_approx(Vector3(0.0, 9.81, 0.0)), "gravity = including - linear")
+	check(c.gyro_rad.is_equal_approx(Vector3(PI / 2.0, -PI / 4.0, PI)), "beta, gamma, alpha (deg/s) -> x, y, z (rad/s)")
+	var n := WebMotion.convert_sample([0.0, 0, 0, 9.8, 0, 0, 0, 0, 0, 0, 0, 0], 0.0)
+	check_eq(n.gravity, Vector3.ZERO, "no linear acceleration from the browser: gravity left to the low-pass")
+	check_eq(n.gyro_rad, Vector3.ZERO, "no rotationRate: no gyro")
+	check(not n.has_gyro and c.has_gyro, "whether the browser sent a rotationRate")
+	var still := MotionReader.new()
+	still.ingest_web(WebMotion.convert_all([[0.0, 0, 9.81, 0, 0, 0, 0, 0, 0, 0, 1, 1]], 16.0), 0.016)
+	check_eq(still.status(), "ok", "a phone lying still still has a gyro (a zero rotationRate is a reading)")
+	check_eq(WebMotion.convert_all([[1, 2], "junk"], 0.0).size(), 0, "malformed samples are skipped")
+	check(not WebMotion.supported(), "not on the web here: nothing JavaScript runs")
+	var m := MotionReader.new()
+	check(not m.web, "a native or headless reader stays native")
+	check_eq(m.web_permission(), "native", "permission is not a web question here")
+	m.request_web_permission()   # harmless natively
+
+
+func test_web_motion_rings_at_60_hz() -> void:
+	# The browser's devicemotion at 60 Hz, drained once per 60 fps frame (0-2 samples a frame, the
+	# frames drifting against the sensor): every flick rings once, on time, the right way up.
+	var Synth := preload("res://tests/core/motion_synth.gd")
+	for with_linear in [true, false]:
+		for fps: float in [60.0, 58.0, 120.0]:
+			var sy: RefCounted = Synth.new(40)
+			sy.gyro_noise = 4.0
+			sy.acc_noise = 0.2
+			var starts := []
+			for i in 12:
+				starts.append(1.0 + i * 0.61)
+				sy.flick(starts[-1], i % 2 == 0, 400.0, 12.0, 0.2)
+			var raw := _browser_samples(sy, 0.0, 9.0, 60.0, with_linear)
+			var s := Session.new(_song([]), "easy")
+			var r := _router(s)
+			r.detector = BellDetector.from_calibration({"mode": "gyro", "threshold": 180.0, "axis": 0, "up_sign": 1, "reliable": true})
+			r.detector.set_bpm(100.0)
+			var reader := MotionReader.new()
+			var rings := []
+			var det := r.detector
+			r.rang.connect(func(_x): rings.append([det.last_up, det.last_t]))
+			var k := 0
+			var frame_t := 0.003
+			var per_frame := {}
+			while frame_t < 9.0:
+				var batch := []
+				while k < raw.size() and raw[k][0] <= frame_t * 1000.0:
+					batch.append(raw[k])
+					k += 1
+				per_frame[batch.size()] = true
+				reader.ingest_web(WebMotion.convert_all(batch, frame_t * 1000.0), 1.0 / fps)
+				_now = frame_t
+				r.feed_samples(frame_t, reader.samples)
+				frame_t += 1.0 / fps
+			var what := "%s, %d fps" % ["with linear" if with_linear else "gravity by low-pass", fps]
+			check_eq(reader.status(), "ok", "%s: sensor present once events arrived" % what)
+			check_eq(rings.size(), 12, "%s: 12 flicks ring 12 times" % what)
+			if rings.size() == 12:
+				var worst := 0.0
+				var wrong_way := 0
+				for i in 12:
+					worst = maxf(worst, absf(float(rings[i][1]) - starts[i]))
+					if rings[i][0] != (i % 2 == 0):
+						wrong_way += 1
+				check(worst < 0.03, "%s: ring times within 30 ms of the flick (worst %.3f)" % [what, worst])
+				check_eq(wrong_way, 0, "%s: up and down read the right way" % what)
+			r.queue_free()
+

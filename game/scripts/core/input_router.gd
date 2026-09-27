@@ -35,6 +35,7 @@ var buttons_rect := Rect2()
 var enabled := true
 var read_motion := true
 var motion := MotionReader.new()
+var _last_motion_t := -INF
 var detector: BellDetector
 ## Set to a MotionLog to record readings, touches and rings (for checking detection on real phones).
 var motion_log: MotionLog
@@ -172,13 +173,24 @@ func _process(delta: float) -> void:
 		detector.configure(_calibration(), false)
 		if session != null:
 			detector.set_bpm(session.song.bpm)
-	feed_motion(now(), motion.linear, motion.rotation_dps)
+	feed_samples(now(), motion.samples)
+
+
+## Feeds one frame of MotionReader.samples, each reading at its own time t_now - age (the web
+## delivers 0-2 per frame, natively 1).
+func feed_samples(t_now: float, frame_samples: Array) -> void:
+	for smp in frame_samples:
+		var t := t_now - float(smp.age)
+		if smp.age > 0.0 and t_now >= _last_motion_t:
+			t = maxf(t, _last_motion_t + 0.0005)   # keep the readings in order
+		feed_motion(t, smp.linear, smp.rotation_dps)
 
 
 ## Feeds one motion reading by hand (tests, or a screen that reads sensors itself).
 func feed_motion(t: float, acc: Vector3, gyro_dps: Vector3) -> void:
 	if session == null or session.slam or detector == null:
 		return
+	_last_motion_t = t
 	if motion_log != null:
 		motion_log.add_reading(t, acc, gyro_dps)
 	if detector.feed(t, acc, gyro_dps):
