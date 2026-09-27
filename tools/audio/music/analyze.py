@@ -113,6 +113,9 @@ def rest_report(song, stems, sources):
     skip = THROUGH | {"calls", "count", "rim", "shake"}   # cues and temptations are allowed
     on = {k: onset_times(v) for k, v in stems.items() if k not in skip}
     rests = sorted({(b, ln) for lst in sources.values() for (b, k, stem, ln) in lst if k == "rest"})
+    tempt_on = np.concatenate([onset_times(stems[k]) for k in ("shake", "calls") if k in stems] or [np.array([])])
+    tempted = [b for (b, ln) in rests
+               if np.any((tempt_on > song.time(b) + 0.03) & (tempt_on < song.time(b + ln) - 0.1))]
     bad = []
     for (b, ln) in rests:
         t0, t1 = song.time(b) + 0.06, song.time(b + ln) - 0.06
@@ -120,7 +123,7 @@ def rest_report(song, stems, sources):
             hits = o[(o > t0) & (o < t1)]
             if len(hits):
                 bad.append((b, k, len(hits)))
-    return {"rests": len(rests), "with_onsets": bad}
+    return {"rests": len(rests), "with_onsets": bad, "tempted": len(tempted)}
 
 
 def cue_report(song, stems, sources):

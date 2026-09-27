@@ -303,7 +303,7 @@ class Song:
             tempt = "shake" if self._tempts % 2 else "call"
         if at is None:
             # a shake half a beat before a beat looks exactly like a bell's cue; a call lands early
-            at = (0.5 if tempt == "shake" else 0.5) if beats < 3 else (1.5 if tempt == "shake" else 1.0)
+            at = 0.5 if beats < 3 else (1.5 if tempt == "shake" else 1.0)
         if tempt == "call":
             self.ev("calls", b + at, 0.6, None, 0.8, kind="hei", tempt=True)
         elif tempt == "shake":
