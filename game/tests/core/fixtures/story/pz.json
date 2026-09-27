@@ -1,0 +1,80 @@
+{
+ "id": "pz",
+ "title": {
+  "en": "Piazza Test"
+ },
+ "stop": 0,
+ "kind": "piazza",
+ "bpm": 120,
+ "offset": 1.0,
+ "audio": "",
+ "length": 20.0,
+ "charts": {
+  "piazza": [
+   {
+    "b": 0,
+    "k": "bell"
+   },
+   {
+    "b": 2,
+    "k": "bell"
+   },
+   {
+    "b": 4,
+    "k": "bell"
+   },
+   {
+    "b": 6,
+    "k": "bell"
+   },
+   {
+    "b": 8,
+    "k": "bell"
+   },
+   {
+    "b": 10,
+    "k": "bell"
+   },
+   {
+    "b": 12,
+    "k": "bell"
+   },
+   {
+    "b": 14,
+    "k": "bell"
+   },
+   {
+    "b": 16,
+    "k": "bell"
+   },
+   {
+    "b": 18,
+    "k": "bell"
+   },
+   {
+    "b": 20,
+    "k": "bell"
+   },
+   {
+    "b": 22,
+    "k": "bell"
+   },
+   {
+    "b": 24,
+    "k": "bell"
+   },
+   {
+    "b": 26,
+    "k": "bell"
+   },
+   {
+    "b": 28,
+    "k": "bell"
+   },
+   {
+    "b": 30,
+    "k": "bell"
+   }
+  ]
+ }
+}

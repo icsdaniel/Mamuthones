@@ -1,0 +1,44 @@
+; Engine configuration file.
+config_version=5
+
+[application]
+
+config/name="Mamuthones: The Weight of Bells"
+config/description="A rhythm game built around the Mamuthones of Mamoiada, Sardinia."
+run/main_scene="res://scenes/main.tscn"
+config/features=PackedStringArray("4.6", "Mobile")
+config/icon="res://art/icon.png"
+boot_splash/bg_color=Color(0.0784, 0.0667, 0.0627, 1)
+boot_splash/show_image=false
+
+[autoload]
+
+Profile="*res://scripts/core/profile.gd"
+Leaderboards="*res://scripts/core/leaderboards.gd"
+Sound="*res://scripts/audio/sound.gd"
+
+[display]
+
+window/size/viewport_width=720
+window/size/viewport_height=1440
+window/stretch/mode="canvas_items"
+window/stretch/aspect="expand"
+window/handheld/orientation=1
+
+[input_devices]
+
+pointing/emulate_touch_from_mouse=true
+buffering/agile_event_flushing=true
+sensors/enable_accelerometer=true
+sensors/enable_gravity=true
+sensors/enable_gyroscope=true
+
+[audio]
+
+driver/output_latency=15
+
+[rendering]
+
+renderer/rendering_method="mobile"
+textures/vram_compression/import_etc2_astc=true
+environment/defaults/default_clear_color=Color(0.0784, 0.0667, 0.0627, 1)

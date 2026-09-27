@@ -1,0 +1,385 @@
+keys,en,it
+ui_back,Back,Indietro
+ui_cancel,Cancel,Annulla
+ui_continue,Continue,Avanti
+ui_done,Done,Fatto
+app_title,The Weight of Bells,Il peso dei campanacci
+lang_name_en,English,English
+lang_name_it,Italiano,Italiano
+celebrate_title,Unlocked,Sbloccato
+diff_easy,Easy,Facile
+diff_medium,Medium,Media
+diff_hard,Hard,Difficile
+diff_expert,Expert,Esperto
+diff_piazza,Piazza,Piazza
+date_fmt,%d %s %d,%d %s %d
+month_1,January,gennaio
+month_2,February,febbraio
+month_3,March,marzo
+month_4,April,aprile
+month_5,May,maggio
+month_6,June,giugno
+month_7,July,luglio
+month_8,August,agosto
+month_9,September,settembre
+month_10,October,ottobre
+month_11,November,novembre
+month_12,December,dicembre
+ms_signed,%+d ms,%+d ms
+hp_title,Best with headphones,Meglio con le cuffie
+hp_body,"The bells and the drum come through clearer, and your timing will be tighter. Turn the sound up.","Campanacci e tamburo si sentono meglio, e il tuo tempo sarà più preciso. Alza il volume."
+hp_continue,Continue,Avanti
+cal_step,Setup 1 of 2,Preparazione 1 di 2
+cal_title,Tune the tilt,Taratura del colpo
+cal_tilt_up,"Tilt the top toward you, sharply, and back","Porta di scatto la parte alta verso di te, e torna"
+cal_tilt_down,"Now away from you, sharply, and back","Ora di scatto lontano da te, e torna"
+cal_hint,"Hold the phone the way you will play: both hands, screen facing you. Three times each way.","Tieni il telefono come quando giochi: due mani, schermo verso di te. Tre volte per verso."
+cal_done,Done: your bells are tuned,Fatto: i tuoi campanacci sono pronti
+cal_done_body,You can redo this any time in Settings.,Puoi rifarlo quando vuoi dalle Impostazioni.
+cal_again,Try again,Riprova
+cal_use_slam,Play with buttons instead,Gioca con i tasti
+cal_fail_too_soft,Those tilts were too gentle,Movimenti troppo leggeri
+cal_fail_too_soft_body,"Flick a little harder and snap straight back, as if shaking the bells.","Dai un colpo un po' più deciso e torna subito indietro, come per scuotere i campanacci."
+cal_fail_no_sensor,No motion sensor found,Nessun sensore di movimento
+cal_fail_no_sensor_body,"This device can't feel tilts. You can ring the bells by pressing Left and Right together (slam mode). On a computer, the space bar rings them.",Questo dispositivo non rileva i movimenti. Puoi suonare i campanacci premendo insieme Sinistra e Destra (modalità colpo). Al computer si suonano con la barra spaziatrice.
+cal_permission,Tap to enable motion,Tocca per attivare il movimento
+cal_permission_body,"The browser asks before sharing the phone's motion sensors. Tap the button, then allow it.","Il browser chiede il permesso prima di usare i sensori di movimento. Tocca il pulsante, poi consenti."
+cal_fail_denied,Motion access was refused,Accesso al movimento negato
+cal_fail_denied_body,"The browser won't share the motion sensors. Allow motion for this site in the browser's settings and reload, or ring the bells by pressing Left and Right together.","Il browser non condivide i sensori di movimento. Consenti il movimento per questo sito nelle impostazioni del browser e ricarica, oppure suona i campanacci premendo Sinistra e Destra insieme."
+cal_up_label,Toward you,Verso di te
+cal_down_label,Away from you,Lontano da te
+motion_ok,Motion sensors: gyroscope and accelerometer.,Sensori di movimento: giroscopio e accelerometro.
+motion_no_gyro,"No gyroscope: the tilt is read from the accelerometer, a little less precisely.","Niente giroscopio: il colpo viene letto dall'accelerometro, con un po' meno precisione."
+motion_no_sensor,No motion sensor: use slam mode (Left + Right) to ring the bells.,Nessun sensore di movimento: usa la modalità colpo (Sinistra + Destra) per suonare i campanacci.
+motion_permission,Motion sensors: the browser needs your permission. Open Tune the tilt and tap to enable motion.,Sensori di movimento: il browser chiede il permesso. Apri la taratura e tocca per attivare il movimento.
+motion_denied,"Motion access was refused in the browser: allow it in the site settings, or use slam mode (Left + Right).","Accesso al movimento negato dal browser: consentilo nelle impostazioni del sito, o usa la modalità colpo (Sinistra + Destra)."
+motion_waiting,Checking the motion sensors…,Controllo dei sensori di movimento…
+motion_uncalibrated,Not calibrated yet.,Taratura non ancora fatta.
+lat_step,Setup 2 of 2,Preparazione 2 di 2
+lat_title,Sound delay,Ritardo dell'audio
+lat_intro,Tap the drum along with the clicks you hear. This measures how late the sound reaches you.,Batti sul tamburo insieme ai clic che senti. Così misuriamo quanto arriva in ritardo il suono.
+lat_pad,Tap here,Batti qui
+lat_start,Start,Inizia
+lat_skip,Skip for now,Salta per ora
+lat_listen,Listen…,Ascolta…
+lat_tap_now,Now tap along,Ora batti a tempo
+lat_count,%d of %d,%d di %d
+lat_done,Your delay: %d ms. Saved.,Il tuo ritardo: %d ms. Salvato.
+lat_done_body,The notes now line up with what you hear.,Ora le note sono allineate a quello che senti.
+lat_uneven,The taps were uneven,I tocchi erano irregolari
+lat_few,Not enough taps,Troppo pochi tocchi
+lat_uneven_body,"Try again and tap with the sound, not ahead of it. Headphones help.","Riprova e batti insieme al suono, senza anticiparlo. Con le cuffie è più facile."
+lat_again,Try again,Riprova
+title_continue,Play: %s,Gioca: %s
+title_procession,The procession,La processione
+title_story,The stops,Le tappe
+title_free,Free play,Gioco libero
+title_piazza,Piazza,Piazza
+title_daily,Today's procession,Processione del giorno
+title_workshop,Workshop,Laboratorio
+title_boards,Scores,Punteggi
+title_settings,Settings,Impostazioni
+story_title,The procession,La processione
+story_next_goal,Next to earn,Il prossimo traguardo
+story_locked,Earn a bell at the stop before to open it,Guadagna un campanaccio nella tappa precedente per aprirla
+story_next,next,la prossima
+story_cleared,cleared,superata
+story_remix_open,remix open,remix sbloccato
+goal_song,Unlock %s: finish %s with at least 1 bell,Per sbloccare «%s»: finisci «%s» con almeno 1 campanaccio
+goal_hard,Unlock %s: %d bells on %s at Hard or Expert (best so far: %d),Per sbloccare %s: %d campanacci in «%s» a Difficile o Esperto (finora: %d)
+goal_points,Carve the %s: reach %d carving points (you have %d),Intaglio «%s»: arriva a %d punti d'intaglio (ne hai %d)
+goal_points_stop,Carve the %s: reach stop %d and %d carving points (you have %d),Intaglio «%s»: arriva alla tappa %d e a %d punti d'intaglio (ne hai %d)
+goal_stop,Unlock %s: reach stop %d,Per sbloccare %s: arriva alla tappa %d
+name_remix,the %s remix,il remix di «%s»
+name_bells,the %s bells,i campanacci «%s»
+unlock_song,New stop: %s,Nuova tappa: %s
+unlock_remix,Now open: %s,Ora aperto: %s
+unlock_bells,Now open: %s,Ora aperti: %s
+unlock_mask,New carving: %s,Nuovo intaglio: %s
+stop_n,Stop %d,Tappa %d
+stop_lessons,Play the lessons,Fai le lezioni
+stop_difficulty,Difficulty,Difficoltà
+stop_best,Best: %s · %d of 3 bells,Record: %s · %d campanacci su 3
+stop_no_best,Not played yet,Non ancora giocata
+stop_remix,Play the remix,Suona il remix
+stop_remix_chip,Remix,Remix
+stop_remix_locked,Remix: earn 2 bells at Hard to open it,Remix: servono 2 campanacci a Difficile
+stop_play,Play,Gioca
+bells_title,Bell set,Carico di campanacci
+bells_note,Heavier bells score more but need tighter timing. More sets open as the procession goes on.,I campanacci più pesanti valgono di più ma chiedono un tempo più preciso. Altri carichi si aprono andando avanti con la processione.
+stop_date_1,The night before,La vigilia
+stop_date_2,16 January,16 gennaio
+stop_date_3,17 January,17 gennaio
+stop_date_4,Carnival Sunday,Domenica di Carnevale
+stop_date_5,"Carnival, in the streets","Carnevale, per le strade"
+stop_date_6,"Carnival, in the square","Carnevale, in piazza"
+stop_date_7,Shrove Tuesday,Martedì grasso
+stop_fact_1,"Before the procession, the masks are made ready and the bells are tied on. A Mamuthone carries his load of bells on his back.",Prima della processione si preparano le maschere e si legano i campanacci. Il Mamuthone porta il suo carico di campanacci sulla schiena.
+stop_fact_2,"In mid-January, for the feast of Sant'Antonio, bonfires are lit across Mamoiada. It is the first time in the year that the Mamuthones come out.","A metà gennaio, per la festa di Sant'Antonio, a Mamoiada si accendono i fuochi. È la prima volta nell'anno che escono i Mamuthones."
+stop_fact_3,The procession moves from one bonfire to the next. People gather by the fires to watch it pass.,La processione va da un fuoco all'altro. La gente si raccoglie intorno ai fuochi per vederla passare.
+stop_fact_4,"On Carnival Sunday the Mamuthones walk through the streets of Mamoiada again. They move in two rows, with the Issohadores around them.","La domenica di Carnevale i Mamuthones tornano a sfilare per le strade di Mamoiada. Avanzano in due file, con gli Issohadores intorno."
+stop_fact_5,"The Issohadores wear red jackets and white masks. With a rope, the soha, they catch people from the crowd.","Gli Issohadores portano la giacca rossa e la maschera bianca. Con una fune, la soha, catturano le persone tra la folla."
+stop_fact_6,"The procession reaches the square, where the crowd is thickest. The rows stop and start, and the bells ring together with every step.","La processione arriva in piazza, dove la folla è più fitta. Le file si fermano e ripartono, e i campanacci suonano insieme a ogni passo."
+stop_fact_7,"Shrove Tuesday is the last day of Carnival and the last procession. After it, the masks are put away until the next January.",Il Martedì grasso è l'ultimo giorno di Carnevale e l'ultima processione. Poi le maschere si ripongono fino al gennaio seguente.
+free_title,Free play,Gioco libero
+free_song,Song,Brano
+free_locked,Stop %d · locked,Tappa %d · chiusa
+free_ghost,Your best run walks beside you as a ghost.,"La tua corsa migliore ti cammina accanto, come un fantasma."
+daily_title,Today's procession,La processione di oggi
+daily_hidden,A procession from later in the story,Una processione da più avanti nella storia
+daily_intro,The same song and lanes for everyone today; you pick the level. A new one tomorrow.,Oggi per tutti lo stesso brano e le stesse corsie; il livello lo scegli tu. Domani un'altra.
+daily_none,No procession today.,Oggi nessuna processione.
+daily_mirrored,lanes mirrored,corsie a specchio
+daily_best_today,Your best today: %s,Il tuo record di oggi: %s
+daily_first,Not played at this level today yet.,Oggi non l'hai ancora giocata a questo livello.
+daily_week,Your last seven days,I tuoi ultimi sette giorni
+daily_week_days,"M,T,W,T,F,S,S","L,M,M,G,V,S,D"
+daily_week_count,%d of 7 walked,%d su 7
+daily_be_first,Be the first today.,Apri tu la classifica di oggi.
+daily_scores,Today's scores,Punteggi di oggi
+daily_play,Walk today's procession,Cammina nella processione di oggi
+boards_title,Scores,Punteggi
+boards_online,Game Center / Play Games,Game Center / Play Games
+boards_offline,Online ladders aren't available right now. Your scores are kept on this phone.,Le classifiche online ora non sono disponibili. I tuoi punteggi restano su questo telefono.
+boards_local,Your bests on this phone,I tuoi record su questo telefono
+boards_empty,Play a song to set your first best.,Gioca un brano per fare il tuo primo record.
+piazza_title,Piazza,Piazza
+piazza_intro,"A round of bells only, for everyone. Pass the phone: each player rings along to the same song, and the best score wins.","Un giro di soli campanacci, per tutti. Passatevi il telefono: ognuno suona sullo stesso brano, e vince il punteggio più alto."
+piazza_players,Players,Giocatori
+piazza_count,%d of %d,%d su %d
+piazza_how_title,How a round goes,Come va un giro
+piazza_step_1,"Everyone plays the same song, one after another, passing the phone.","Tutti suonano lo stesso brano, uno dopo l'altro, passandosi il telefono."
+piazza_step_2,"Stand up and flick the phone when the circle closes: up or down, as the arrow says.","In piedi, dai un colpo al telefono quando il cerchio si chiude: su o giù, come dice la freccia."
+piazza_step_3,"Bells only, no buttons. The best score leads the row.","Solo campanacci, niente tasti. Il punteggio migliore guida la fila."
+piazza_add,Add a player,Aggiungi un giocatore
+piazza_remove,Remove,Togli
+piazza_start,Start the round,Inizia il giro
+piazza_player_n,Player %d,Giocatore %d
+piazza_no_song,The Piazza song isn't ready yet.,Il brano della Piazza non è ancora pronto.
+piazza_last,%s rang %s,%s ha fatto %s
+piazza_pass_to,Pass the phone to,Passa il telefono a
+piazza_how,"Stand up, hold the phone in both hands and flick it when the circle closes. The arrow shows up or down.","In piedi, telefono in due mani: dai il colpo quando il cerchio si chiude. La freccia indica su o giù."
+piazza_ready,"Go, %s!","Vai, %s!"
+piazza_quit_q,Stop this round?,Interrompere il giro?
+piazza_quit,Stop the round,Interrompi il giro
+piazza_ranking,Ranking,Classifica
+piazza_winner,Leading the row,In testa alla fila
+piazza_again,Another round,Un altro giro
+piazza_ring,Ring!,Suona!
+set_title,Settings,Impostazioni
+set_timing,Timing,Tempo
+set_calibrate,Redo the tilt calibration,Rifai la taratura del colpo
+set_latency,Sound delay test,Test del ritardo audio
+set_offset,Delay adjustment,Correzione del ritardo
+set_play,Play,Gioco
+set_note_speed,Note speed,Velocità delle note
+set_vibration,Vibration,Vibrazione
+set_slam,Slam mode: Left + Right rings the bells,Modalità colpo: Sinistra + Destra suonano i campanacci
+set_slam_note,For when tilting is hard. Runs are marked and stay off the global ladder.,Per quando inclinare il telefono è difficile. Le partite vengono segnate e restano fuori dalla classifica mondiale.
+set_reduced_motion,Reduced motion,Meno movimento
+set_sound,Sound,Suono
+set_music,Music,Musica
+set_sfx,Bells and effects,Campanacci ed effetti
+set_language,Language,Lingua
+set_credits,Credits and respect,Riconoscimenti e rispetto
+cred_title,Credits,Riconoscimenti
+cred_respect_title,A living tradition,Una tradizione viva
+cred_respect,"The Mamuthones and the Issohadores belong to the people of Mamoiada. This game is made with respect for their tradition: it aims to show only real forms, and the details still being checked with the community are listed below. It is no substitute for seeing the procession in Mamoiada.","I Mamuthones e gli Issohadores appartengono alla gente di Mamoiada. Questo gioco è fatto con rispetto per la loro tradizione: cerca di mostrare solo forme vere, e i dettagli ancora in verifica con la comunità sono elencati qui sotto. Non sostituisce il vedere la processione a Mamoiada."
+cred_check,"Still being checked with the community, such as the Museo delle Maschere Mediterranee in Mamoiada: the local names, the calendar of the stops, the details of masks and dress, and real bell recordings to replace ours.","Stiamo ancora verificando con la comunità, per esempio con il Museo delle Maschere Mediterranee di Mamoiada: i nomi locali, il calendario delle tappe, i dettagli di maschere e vestiti, e registrazioni di campanacci veri al posto delle nostre."
+cred_made_h,The game,Il gioco
+cred_made,"An offline game with no ads, no tracking and no purchases.","Un gioco offline, senza pubblicità, senza tracciamento e senza acquisti."
+cred_music_h,Music,Musica
+cred_music,Original music written for the game in the spirit of Sardinian traditional music. Nothing is taken from real recordings or known tunes.,"Musica originale scritta per il gioco, ispirata alla musica tradizionale sarda. Niente è preso da registrazioni vere o da melodie conosciute."
+cred_sound_h,Bells and sound,Campanacci e suoni
+cred_sound,"The bells are synthesized for now. Before launch they will be replaced by recordings of Mamoiada bells, made with the community's consent.","Per ora i campanacci sono sintetizzati. Prima dell'uscita saranno sostituiti da registrazioni di campanacci di Mamoiada, fatte con il consenso della comunità."
+cred_art_h,Art,Grafica
+cred_art,Woodcut-style art drawn for the game.,Illustrazioni in stile xilografia disegnate per il gioco.
+cred_fonts_h,Fonts,Caratteri
+cred_fonts,"IM Fell English SC by Igino Marini and Alegreya Sans by the Alegreya Sans Project Authors (Huerta Tipográfica), under the SIL Open Font License.","IM Fell English SC di Igino Marini e Alegreya Sans degli autori del progetto Alegreya Sans (Huerta Tipográfica), con licenza SIL Open Font License."
+cred_engine_h,Engine,Motore
+cred_engine,Made with Godot Engine (MIT licence).,Realizzato con Godot Engine (licenza MIT).
+cred_privacy,No data is collected. Scores and settings stay on this phone.,Nessun dato viene raccolto. Punteggi e impostazioni restano su questo telefono.
+play_pause,Pause,Pausa
+hud_unison,Unison %s,Unisono %s
+hud_unison_hint,Keep the row together,Tieni unita la fila
+hud_ghost_up,+%s on your best,+%s sul tuo record
+hud_ghost_down,−%s on your best,−%s sul tuo record
+hud_ghost_even,Level with your best,Pari con il tuo record
+judge_perfect,Perfect,Perfetto
+judge_good,Good,Bene
+judge_early,Early,Presto
+judge_late,Late,Tardi
+judge_ok,Ok,Ok
+judge_miss,Miss,Mancato
+judge_wrong,Wrong lane,Corsia sbagliata
+judge_held,Held,Tenuto
+judge_let_go,Let go,Lasciato
+judge_silence,Stand still,Fermo!
+lane_still,Stand still,Fermi
+judge_still_kept,Still!,Immobili!
+still_moment,The row stands as one,"La fila immobile, come un corpo solo"
+count_ready,Get ready,Pronti
+count_bars,%d bars to go,ancora %d battute
+count_bar_one,last bar,ultima battuta
+judge_hint_early,early,presto
+judge_hint_late,late,tardi
+pause_title,Paused,Pausa
+pause_resume,Resume,Riprendi
+pause_restart,Restart,Ricomincia
+pause_quit,Quit,Esci
+pause_hint,Resuming counts you back in.,Alla ripresa si riparte con il conteggio.
+section_intro,Intro,Intro
+section_verse,Verse,Strofa
+section_build,Build,Crescendo
+section_climax,Climax,Culmine
+section_outro,Outro,Finale
+section_bridge,Bridge,Ponte
+section_chorus,Chorus,Ritornello
+section_together,Together,Insieme
+section_break,Break,Stacco
+section_finale,Finale,Gran finale
+section_lessons,Lessons,Lezioni
+section_dance,Dance,Ballo
+section_turn,Turn,Giro
+section_procession,Procession,Processione
+section_song,Song,Canto
+section_halt,Halt,Sosta
+section_tune,Tune,Melodia
+section_chant,Chant,Coro
+section_throws,Throws,Lanci
+section_answer,Answer,Risposta
+section_round,Round,Giro
+section_theme,Theme,Tema
+section_walk,Walk,Cammino
+section_lilt,Lilt,Cadenza
+section_rope,Rope,Soha
+section_final,Last walk,Ultimo giro
+grade_0,The Issohadores are waiting for you,Gli Issohadores ti stanno aspettando
+grade_1,You found the step,Hai trovato il passo
+grade_2,You walked with the row,Hai camminato con la fila
+grade_3,The row moved as one,La fila si è mossa come un corpo solo
+grade_4,The whole row rang as one,Tutta la fila ha suonato come una sola
+res_where,Where your score came from,Da dove viene il punteggio
+res_accuracy,Accuracy,Precisione
+res_counts,%d perfect · %d good · %d ok · %d missed,%d perfetti · %d buoni · %d ok · %d mancati
+res_base,Notes,Note
+res_unison,Unison (up to %s),Unisono (fino a %s)
+res_weight,Weight: %s bells %s,Peso: campanacci %s %s
+res_holds,Holds kept to the end,Note lunghe tenute fino in fondo
+res_still,Stillness: %d of %d stand-stills kept,Immobilità: %d soste rispettate su %d
+res_still_share,%d%% of your score,%d%% del punteggio
+res_formula,Every note × unison × weight. Long steady streaks and heavier bells are the way to a big score.,Ogni nota × unisono × peso. Serie lunghe e regolari e campanacci più pesanti sono la strada per un grande punteggio.
+res_timing,Your timing,Il tuo tempo
+res_on_time,Right on the beat.,Proprio sul battito.
+res_early,"You tend to be early, by about %d ms.","Tendi ad anticipare, di circa %d ms."
+res_late,"You tend to be late, by about %d ms.","Tendi a ritardare, di circa %d ms."
+res_timing_few,Too few hits to tell.,Troppo pochi colpi per dirlo.
+res_meter_early,early,presto
+res_meter_late,late,tardi
+res_unlocked,Unlocked!,Sbloccato!
+res_carving,+%d carving points,+%d punti d'intaglio
+res_remix,remix,remix
+res_tip,Next time,La prossima volta
+tut_why_missed,Missed: %d of %d,Mancate: %d su %d
+tut_why_lane_0,Missed in the left lane: %d of %d,Mancate nella corsia sinistra: %d su %d
+tut_why_lane_1,Missed in the middle lane: %d of %d,Mancate nella corsia centrale: %d su %d
+tut_why_lane_2,Missed in the right lane: %d of %d,Mancate nella corsia destra: %d su %d
+tut_why_early,"You were early, by about %d ms.","Eri in anticipo, di circa %d ms."
+tut_why_late,"You were late, by about %d ms.","Eri in ritardo, di circa %d ms."
+tut_why_wrong,Taps on the wrong lane: %d,Tocchi nella corsia sbagliata: %d
+tut_why_silence,Bells rung in the grey: %d,Campanacci suonati nel grigio: %d
+tut_why_holds,Long notes held to the end: %d of %d,Note lunghe tenute fino in fondo: %d su %d
+res_closest,Closest unlock,Sblocco più vicino
+res_unison_head,Unison peak %s,Unisono massimo %s
+res_unison_head_top,Unison peak %s · %s s at %s,Unisono massimo %s · %s s a %s
+res_top_time,Time at %s,Tempo a %s
+set_note_warning,%s s to read,%s s per leggere
+set_bell_cue,Bell cue on Easy and Medium,Avviso dei campanacci in Facile e Media
+set_bell_cue_note,A soft tick half a beat before each bell.,Un tocco leggero mezzo battito prima di ogni campanaccio.
+res_again,Play again,Rigioca
+res_next,Next stop: %s,Prossima tappa: %s
+res_done,Back,Indietro
+res_new_best_by,New best: +%s over your best,Nuovo record: +%s sul tuo record
+res_first_best,Your first best on this song,Il tuo primo record su questo brano
+res_best,Best: %s (%s to go),Record: %s (ne mancano %s)
+res_slam_note,"Played in slam mode: kept on this phone, not on the global ladder.","Giocata in modalità colpo: resta su questo telefono, fuori dalla classifica mondiale."
+tip_still,Keep the phone steady through the grey stand-still bars: each ring there costs 100 points and a level of unison.,Tieni fermo il telefono durante le barre grigie delle soste: ogni colpo lì costa 100 punti e un livello di unisono.
+tip_holds,Keep holds pressed until their end crosses the line: each hold kept is worth 150 × unison.,Tieni premute le note lunghe finché la fine non passa la linea: ognuna vale 150 × unisono.
+tip_bells,"Many bells were missed. Flick sharply and snap back just as the bell touches the line. If the tilt feels off, redo the calibration in Settings.","Molti campanacci sono andati persi. Dai un colpo secco e torna subito indietro proprio quando il campanaccio tocca la linea. Se il colpo non risponde bene, rifai la taratura nelle Impostazioni."
+tip_bells_slam,"Many bells were missed. Press Left and Right at the same instant, just as the bell touches the line.","Molti campanacci sono andati persi. Premi Sinistra e Destra nello stesso istante, proprio quando il campanaccio tocca la linea."
+tip_early,"You were early by about %d ms. Wait for the note to touch the line. If it always feels like this, run the delay test in Settings.","Hai anticipato di circa %d ms. Aspetta che la nota tocchi la linea. Se ti capita sempre, fai il test del ritardo nelle Impostazioni."
+tip_late,"You were late by about %d ms. Tap as the note touches the line, not after it. If it always feels like this, run the delay test in Settings.","Hai ritardato di circa %d ms. Tocca quando la nota tocca la linea, non dopo. Se ti capita sempre, fai il test del ritardo nelle Impostazioni."
+tip_wrong,"Several taps landed in the wrong lane. Keep one thumb on each side: left thumb for Left, right thumb for Right, either for the middle.","Diversi tocchi sono finiti nella corsia sbagliata. Un pollice per lato: il sinistro per Sinistra, il destro per Destra, uno dei due per il centro."
+tip_slow,"Many notes went by untouched. Try a lower difficulty, or a slower note speed in Settings, then come back.","Molte note sono passate senza tocco. Prova una difficoltà più bassa, o note più lente nelle Impostazioni, e poi torna qui."
+tip_unison,Your unison stayed low. %d good hits in a row raise it a level: aim for steady hits rather than risky perfects.,"Il tuo unisono è rimasto basso. %d colpi buoni di fila lo alzano di un livello: punta sulla costanza, non sui perfetti rischiosi."
+tip_harder,A clean run. Try %s next.,Una corsa pulita. Prova il livello %s.
+tip_harder_remix,%d bells at %s open this stop's remix.,Con %d campanacci a %s si apre il remix di questa tappa.
+tip_weight,A clean run. Choose the %s bell set in the workshop: every point counts %s.,Una corsa pulita. Scegli il carico «%s» nel laboratorio: ogni punto vale %s.
+ws_title,Workshop,Laboratorio
+ws_tab_mask,Mask,Maschera
+ws_tab_bells,Bells,Campanacci
+ws_tab_dress,Sheepskin,Pelli
+ws_points,Carving points: %d,Punti d'intaglio: %d
+ws_points_note,Every bell you earn is a carving point. They are never used up: more points open finer carving.,Ogni campanaccio guadagnato è un punto d'intaglio. Non si consumano: più punti aprono intagli più fini.
+ws_needs,stop %d · %d points,tappa %d · %d punti
+ws_bells_intro,Your bells are your Mamuthone's voice. Tap a set to hear it.,I campanacci sono la voce del tuo Mamuthone. Tocca un carico per sentirlo.
+ws_ring,Ring them,Falli suonare
+ws_fleece,Sheepskin,Pelli di pecora
+ws_straps,Straps,Cinghie
+ws_fleece_black,Black,Nere
+ws_fleece_dark_brown,Dark brown,Marrone scuro
+ws_straps_natural,Natural leather,Cuoio naturale
+ws_straps_dark,Dark leather,Cuoio scuro
+ws_dress_note,Only the real colours: black and dark sheepskins.,Solo i colori veri: pelli nere e scure.
+tut_title,The Workshop,Il laboratorio
+tut_lesson_n,Lesson %d of %d,Lezione %d di %d
+tut_try,Try it,Prova
+tut_try_again,Try again,Riprova
+tut_your_turn,Your turn,Tocca a te
+tut_show_me,Show me,Fammi vedere
+tut_skip,Skip this lesson,Salta questa lezione
+tut_watch,Watch,Guarda
+tut_almost,Almost,Quasi
+tut_well_done,Well done,Ben fatto
+tut_accuracy,Accuracy %d%%,Precisione %d%%
+tut_unison_title,Keep the row together,Tieni unita la fila
+tut_unison,"Every 12 good hits in a row raise your unison: ×1.5, ×2, up to ×4, and the whole row rings behind you. A miss drops it two levels, not to zero.","Ogni 12 colpi buoni di fila l'unisono sale: ×1,5, ×2, fino a ×4, e tutta la fila suona dietro di te. Un errore lo fa scendere di due livelli, non a zero."
+tut_weight,"Heavier bell sets, earned later, multiply your score too, but their timing is stricter.","I carichi di campanacci più pesanti, che guadagnerai più avanti, moltiplicano anche il punteggio, ma chiedono un tempo più preciso."
+tut_ready,"Now the whole song, at Easy.","Ora il brano intero, a Facile."
+tut_play_song,Play the Workshop song,Suona il brano del laboratorio
+tut_next_stop,On to %s,Avanti: %s
+tut_later,Later,Più tardi
+tut_leave_q,Leave the lessons? You can come back to them from the Workshop stop.,Lasciare le lezioni? Puoi tornarci dalla tappa del laboratorio.
+tut_leave,Leave,Esci
+tut_steps_title,Steps,I passi
+tut_steps,Notes come down the middle lane. Tap the middle button just as each one reaches the line.,Le note scendono nella corsia centrale. Tocca il tasto centrale proprio quando arrivano alla linea.
+tut_steps_short,Tap the middle button on the line,Tocca il tasto centrale sulla linea
+tut_fail_steps,"Some taps came too early or too late: blue arrows above the line mean early, orange ones below mean late. Listen to the drum: the notes land on its beat.","Alcuni tocchi erano in anticipo o in ritardo: le frecce azzurre sopra la linea vogliono dire in anticipo, quelle arancioni sotto in ritardo. Ascolta il tamburo: le note cadono sul suo battito."
+tut_lanes_title,Three lanes,Tre corsie
+tut_lanes,"Now the notes use all three lanes. Each button has its own step: left, middle, right.","Ora le note usano tutte e tre le corsie. Ogni tasto ha il suo passo: sinistra, centro, destra."
+tut_lanes_short,"Left, middle, right","Sinistra, centro, destra"
+tut_fail_lanes,"Watch which lane each note is in, and keep your thumbs over the left and right buttons.",Guarda in quale corsia arriva ogni nota e tieni i pollici sopra i tasti di sinistra e di destra.
+tut_bells_title,The bells,I campanacci
+tut_bells,"When a bell reaches the line, ring it: tilt the top of the phone sharply and back. The arrow shows up or down; only the timing counts.","Quando un campanaccio arriva alla linea, suonalo: inclina di scatto la parte alta del telefono e riportala indietro. La freccia indica su o giù, ma conta solo il tempo."
+tut_bells_slam,"When a bell reaches the line, ring it by pressing Left and Right together.","Quando un campanaccio arriva alla linea, suonalo premendo insieme Sinistra e Destra."
+tut_bells_short,Flick on the line,Un colpo secco sulla linea
+tut_fail_bells,"Make the flick short and sharp, as if shaking the bells on your back, and do it right on the line.","Fai un colpo breve e deciso, come per scuotere i campanacci sulla schiena, proprio sulla linea."
+tut_holds_title,Long notes,Note lunghe
+tut_holds,Press the button when the head reaches the line and keep holding until the end passes it.,Premi il tasto quando la testa arriva alla linea e tienilo premuto finché non passa la fine.
+tut_holds_short,Press and hold,Premi e tieni premuto
+tut_fail_holds,Keep your thumb down until the end of the long note reaches the line.,Tieni il pollice giù finché la fine della nota non arriva alla linea.
+tut_still_title,Stand still,Fermi
+tut_still,"Grey bars mean the procession stops. Keep stepping on the notes, but don't ring the bells until the grey has passed.","Le barre grigie vogliono dire che la processione si ferma. Continua con i passi, ma non suonare i campanacci finché il grigio non è passato."
+tut_still_short,No bells in the grey,Niente campanacci nel grigio
+tut_fail_still,The bells rang during a stand-still. Hold the phone steady while the grey bars pass.,I campanacci hanno suonato durante una sosta. Tieni fermo il telefono mentre passano le barre grigie.
+tut_swipes_title,The rope,La soha
+tut_swipes,"When the Issohadore throws the rope, drag a finger across the buttons the way the arrow points.","Quando l'Issohadore lancia la soha, la fune, trascina un dito sui tasti nel verso della freccia."
+tut_swipes_short,Drag across with the arrow,Trascina seguendo la freccia
+tut_fail_swipes,"Drag in one quick stroke across all three buttons, in the arrow's direction.","Trascina con un solo gesto veloce su tutti e tre i tasti, nel verso della freccia."
+tut_full_title,Full ring,Colpo pieno
+tut_full,A step and a bell on the same beat: tap the button and flick the phone together.,Un passo e un campanaccio sullo stesso battito: tocca il tasto e dai il colpo al telefono insieme.
+tut_full_slam,"A step and a bell on the same beat. In slam mode, just tap the step right on the line: its bell rings with it.",Un passo e un campanaccio sullo stesso battito. In modalità colpo basta toccare il passo proprio sulla linea: il campanaccio suona insieme.
+tut_full_slam_short,Tap the step on the line,Tocca il passo sulla linea
+tut_fail_full_slam,Tap the step right as it reaches the line: in slam mode that rings its bell too.,Tocca il passo proprio quando arriva sulla linea: in modalità colpo così suona anche il campanaccio.
+tut_full_short,Step and flick together,Passo e colpo insieme
+tut_fail_full,Both halves have to land together: tap and flick in one movement.,Le due parti devono arrivare insieme: tocca e dai il colpo in un solo movimento.

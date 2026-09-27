@@ -1,0 +1,32 @@
+{
+  "id": "basic",
+  "title": {"en": "Basic Test", "it": "Prova"},
+  "stop": 1,
+  "kind": "story",
+  "bpm": 120,
+  "offset": 1.0,
+  "audio": "res://audio/music/none.ogg",
+  "remix": {"id": "basic_remix", "bpm": 120, "offset": 0.5, "audio": "res://audio/music/none_remix.ogg"},
+  "length": 30.0,
+  "preview": 4.0,
+  "key_root": 62,
+  "sections": [{"name": "intro", "b": 0, "len": 8}, {"name": "verse", "b": 8, "len": 24}],
+  "charts": {
+    "easy": [
+      {"b": 0, "k": "step", "lane": 0},
+      {"b": 2, "k": "step", "lane": 1},
+      {"b": 4, "k": "bell"},
+      {"b": 6, "k": "step", "lane": 2, "call": true},
+      {"b": 8, "k": "rest", "len": 2},
+      {"b": 12, "k": "bell"},
+      {"b": 14, "k": "hold", "lane": 1, "len": 2},
+      {"b": 18, "k": "swipe", "dir": 1},
+      {"b": 20, "k": "swipe", "dir": -1},
+      {"b": 22, "k": "ring", "lane": 0},
+      {"b": 24, "k": "bell"}
+    ],
+    "medium": [],
+    "hard": [],
+    "expert": []
+  }
+}
