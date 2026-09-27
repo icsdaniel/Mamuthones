@@ -328,12 +328,36 @@ def render_set(set_id: str) -> dict[str, np.ndarray]:
     # look-ahead limiter on the few strike peaks that would pass -1.5 dBFS, so light
     # sets are not left quiet by their spiky attacks.
     # (+3 dB over the first mix, so a Perfect ring sits on top of -14 LUFS music)
-    target = {"light": -13.5, "village": -13.0, "full": -12.5}[set_id]
+    target = {"light": -12.5, "village": -12.3, "full": -12.3}[set_id]
     g = db(target) / ref
     for k in res:
         floor = -44 if "_miss_" in k else -52
         res[k] = trim_tail(limit(res[k] * g, -1.5), floor, 0.04)
         res[k] = fade(res[k], 0.0008, 0.0)
+    # The limiter takes more off the loud, spiky perfect rings than off the others, so
+    # re-check each group against the limited perfect and pull it down (never up) to
+    # its offset: a Good ring must stay a clear step below a Perfect one.
+    ref2 = np.mean([loud(v) for k, v in res.items() if "_down_perfect_" in k])
+    for up in ("up", "down"):
+        for quality, qd in QUALITY.items():
+            if quality == "perfect":
+                continue
+            keys = [k for k in res if f"_{up}_{quality}_" in k]
+            cur = np.mean([loud(res[k]) for k in keys])
+            want = ref2 * db(qd["level"] + (-1.0 if up == "up" else 0.0))
+            if cur > want:
+                for k in keys:
+                    res[k] = res[k] * (want / cur)
+        # the hard-strike accent layer sits well under the ring it thickens
+        for k in [k for k in res if f"_{up}_accent_" in k]:
+            want = ref2 * db(-5.0)
+            if loud(res[k]) > want:
+                res[k] = res[k] * (want / loud(res[k]))
+    # the streak jangle is a reward shimmer, never as loud as the ring itself
+    k = f"{set_id}_jangle_1"
+    want = ref2 * db(-4.0)
+    if loud(res[k]) > want:
+        res[k] = res[k] * (want / loud(res[k]))
     return res
 
 

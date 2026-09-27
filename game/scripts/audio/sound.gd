@@ -168,8 +168,8 @@ func step(lane: int) -> void:
 ## (a good ring), and early / late, which have their own rings: early = the small bells
 ## lead and are choked short, a little left; late = a heavy flam with the big bells
 ## dragging, a little right.
-## strength 0..1 (the flick's peak, optional): under 1/3 is a soft ring (darker, 2.5 dB
-## down), over 2/3 a hard one (a heavier slam layered on top, 1 dB up).
+## strength 0..1 (the flick's peak, optional): under 1/3 is a soft ring (1 dB down, the top
+## above 6 kHz eased off), over 2/3 a hard one (a heavier slam layered on top, 1 dB up).
 ## The rest of the row joins in at the level set by row_bells(), and after a streak the
 ## load keeps jangling between rings.
 func bell(set_id: String, up: bool, quality: String, strength := 0.5) -> void:

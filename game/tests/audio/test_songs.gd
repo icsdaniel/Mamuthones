@@ -127,6 +127,7 @@ func _check_chart(where: String, s: Dictionary, notes: Array) -> void:
 			last_bell = b
 		if k == "rest":
 			rests.append(n)
+			check(float(n.get("len", 1)) >= 2.0 - EPS, "%s stand-still lasts 2+ beats at b=%s" % [where, b])
 		var end_b := b + (float(n.get("len", 0)) if k in ["hold", "rest"] else 0.0)
 		check(float(s["offset"]) + end_b * spb <= float(s["length"]), "%s note inside the audio at b=%s" % [where, b])
 	check(sorted_ok, "%s notes sorted by b" % where)

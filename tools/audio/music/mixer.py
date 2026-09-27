@@ -34,6 +34,22 @@ STOP_DUCK_DEFAULT = -40.0
 STOP_DUCKED = {"tumbu": -30.0, "crowd": -8.0, "fire": 0.0, "rim": 0.0, "shake": 0.0, "calls": 0.0}
 
 
+def automation_gain(song, n, b0, b1, db, ramp_s=0.08):
+    """A level change over [b0, b1) with short ramps (remix drops and section layers)."""
+    g = np.ones(n)
+    a = int(round(song.time(b0) * SR))
+    e = min(n, int(round(song.time(b1) * SR)))
+    if e <= a or a >= n:
+        return g
+    r = min(int(ramp_s * SR), (e - a) // 3)
+    low = 10 ** (db / 20)
+    g[a:e] = low
+    if r > 0:
+        g[a:a + r] = np.linspace(1, low, r)
+        g[e - r:e] = np.linspace(low, 1, r)
+    return g
+
+
 def stop_gain(song, n, db):
     """Gain curve that falls to db inside every stand-still (short ramps at both ends)."""
     g = np.ones(n)
@@ -114,6 +130,9 @@ def mix(song, stems, n):
         st = y * g if y.ndim == 2 else dsp.pan(y * g, p if p is not None else 0.0)
         if kick_env is not None and inst in DUCKED:
             st = st * (1 - 0.6 * kick_env)[:, None]
+        for (a0, a1, db, insts) in getattr(song, "automation", []):
+            if inst in insts:
+                st = st * automation_gain(song, len(st), a0, a1, db)[:, None]
         duck = STOP_DUCKED.get(inst, STOP_DUCK_DEFAULT)
         if song.stops and duck < 0:
             st = st * stop_gain(song, len(st), duck)[:, None]
@@ -136,7 +155,7 @@ def mix(song, stems, n):
 
 
 def master(x, target=-14.0, ceiling=-1.5):
-    for _ in range(8):
+    for _ in range(14):
         lk = dsp.integrated_loudness(x)
         if abs(lk - target) < 0.15:
             break

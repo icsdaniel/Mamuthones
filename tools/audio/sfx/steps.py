@@ -20,7 +20,7 @@ from __future__ import annotations
 import numpy as np
 
 from dsp import (SR, add_at, bandpass, convolve_ir, db, fade, highpass, lowpass,
-                 make_ir, periodic_lfo, periodic_noise, resonator, trim_tail,
+                 limit, make_ir, periodic_lfo, periodic_noise, resonator, trim_tail,
                  write_ogg, write_wav)
 
 LANE_INTERVALS = (0, 7, 12)
@@ -46,7 +46,7 @@ def footfall(lane: int, take: int) -> np.ndarray:
     f = (78, 70, 88)[lane] * rng.uniform(0.94, 1.06)
     fr = f * (1 + 0.8 * np.exp(-t / 0.012))
     thump = np.sin(2 * np.pi * np.cumsum(fr) / SR) * np.exp(-t / 0.03)
-    out += thump * (0.9, 1.0, 0.75)[lane] * 0.4
+    out += thump * (0.9, 1.0, 0.75)[lane] * 0.3
     # sole contact: band-limited noise, the stone's hard slap
     slap = bandpass(rng.standard_normal(n), 250, 2600, 2) * np.exp(-t / 0.012)
     out += slap * 0.75
@@ -56,7 +56,7 @@ def footfall(lane: int, take: int) -> np.ndarray:
     he = rng.standard_normal(hn) * np.exp(-np.arange(hn) / (0.0025 * SR))
     heel = resonator(he, rng.uniform(1300, 1700) * (1.0, 0.9, 1.15)[lane], 4) + 0.6 * resonator(he, rng.uniform(2500, 3100), 5)
     # (lifted so the step's attack still reads over a remix's kick drum)
-    out[:hn] += heel * 1.6 / (np.max(np.abs(heel)) + 1e-9) * np.max(np.abs(thump))
+    out[:hn] += heel * 2.4 / (np.max(np.abs(heel)) + 1e-9) * np.max(np.abs(thump))
     # grit crunching under the sole: sparse tiny impulses in the first 40 ms
     grit = np.zeros(n)
     for _ in range(int(rng.integers(10, 22))):
@@ -143,7 +143,10 @@ def main() -> None:
     for lane in range(3):
         for k in range(3):
             x = footfall(lane, k)
-            write_wav(f"steps/foot_{lane}_{k + 1}.wav", x * db(-1.5) / np.max(np.abs(x)))
+            # +4 dB into a look-ahead limiter: the heel's one-sample spike no longer sets
+            # the level, so the knock itself carries over a remix's kick drum
+            x = limit(x * db(2.5) / np.max(np.abs(x)), -1.5)
+            write_wav(f"steps/foot_{lane}_{k + 1}.wav", fade(x, 0.0005, 0.0))
     tones = {}
     for lane in range(3):
         for pc in range(0, 12, 2):

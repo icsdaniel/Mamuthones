@@ -114,12 +114,17 @@ def build(song: Song, stems: dict) -> Song:
             if x.name == "together":
                 eff[x.name] = 3
     r.variation = {}
+    r.automation = []
     for si, sec in enumerate(secs):
         e_ = eff[sec.name]
         prev = secs[si - 1] if si > 0 else None
         nxt = secs[si + 1] if si + 1 < len(secs) else None
         var = bool(prev is not None and eff[prev.name] == e_ and si % 2 == 1 and e_ < 3)
         r.variation[sec.name] = var
+        if var:
+            r.automation.append((sec.b, sec.b + sec.len, -5.0, ("pad", "chop")))
+        elif e_ <= 1:
+            r.automation.append((sec.b, sec.b + sec.len, -3.0, ("pad", "lead")))
         if si > 0 and e_ >= 1 and not in_stop(sec.b):
             r.ev("impact", sec.b, 2, None, 0.5 if e_ < 3 else 0.9)
         nbars = int(sec.len // spb)
@@ -127,6 +132,9 @@ def build(song: Song, stems: dict) -> Song:
             b0 = sec.b + bar * spb
             pre_drop = nxt is not None and bar == nbars - 1 and eff[nxt.name] >= 1 and e_ >= 1
             if pre_drop:
+                # the music pulls back for the fill: pads, voices and lead dip, then the new section
+                # lands with everything at once
+                r.automation.append((b0 + spb / 2, b0 + spb, -12.0, ("pad", "sub", "lead", "arp", "chop")))
                 # the fill: snare eighths, then sixteenths on the last beat, rising
                 nf = 8 if song.sub == 2 else 6
                 for k in range(nf):
@@ -158,7 +166,7 @@ def build(song: Song, stems: dict) -> Song:
             pat = st["sub"]
             sstep = spb / len(pat)
             i = 0
-            if e_ >= 1 and not pre_drop:
+            if e_ >= 2 and not pre_drop and not var:
                 while i < len(pat):
                     if pat[i] == "x":
                         j = i + 1
@@ -173,6 +181,9 @@ def build(song: Song, stems: dict) -> Song:
         # risers into climaxes, an impact on the first beat
         if e_ >= 3:
             r.ev("riser", sec.b - 2 * spb, 2 * spb, None, 0.8)
+
+    def eff_at(b):
+        return eff[song.section_at(b).name]
 
     # ---- 3. harmony: pads on every chord (stabs for house)
     for (hb, hl, deg) in song.harm:
@@ -190,7 +201,7 @@ def build(song: Song, stems: dict) -> Song:
                                            if hb < x < hb + hl])
             for a, z in zip(cuts, cuts[1:]):
                 if z - a > 0.25 and not in_stop(a):
-                    r.ev("pad", a, z - a, None, 0.6 if energy(a) < 3 else 0.8, notes=notes,
+                    r.ev("pad", a, z - a, None, (0.35, 0.45, 0.6, 0.85)[min(3, eff_at(a))], notes=notes,
                          attack=0.2 if a == hb else 0.05)
 
     # ---- 4. melodies: the lead sings the boghe and the mancosedda; the mancosa becomes an arp
@@ -200,6 +211,8 @@ def build(song: Song, stems: dict) -> Song:
             while p > 84:
                 p -= 12
             r.ev("lead", e.b, e.dur, p, 0.8 * e.vel)
+            if eff_at(e.b) >= 3 and p + 12 <= 96:
+                r.ev("lead", e.b, e.dur, p + 12, 0.35 * e.vel)   # the climax doubles the hook
         elif e.inst == "mancosa" and e.pitch is not None:
             r.ev("arp", e.b, min(e.dur, 0.5), e.pitch + 12, 0.5 * e.vel)
 

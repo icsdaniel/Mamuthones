@@ -84,7 +84,7 @@ def build():
     s.drums(b, 8, "B.......B...b.b.")
     for bar in range(8):
         s.bell_cue(b + bar * 4, rank=1 if bar % 2 == 0 else 2)
-    s.stop(b + 30, 2)
+    s.stop(b + 29, 3)
 
     # ---- A3: the tune with throws and shouts
     b = s.sec("tune3", 8, 2)
@@ -155,7 +155,7 @@ def build():
         s.bell_cue(b + bar * 4, rank=1 if bar % 2 == 0 else 2)
     s.ev("calls", b + 15, 0.6, None, 0.85, kind="hei")
     s.rope(b + 16, 1)
-    s.stop(b + 30, 2)
+    s.stop(b + 29, 3)
 
     # ---- climax 2: the fast figure over everything
     b = s.sec("climax2", 8, 3)
