@@ -148,7 +148,7 @@ func test_wrong_lane_marks_the_pressed_button() -> void:
 			continue
 		var clear := true
 		for m in s.notes:
-			if m != n and absf(m.t - n.t) < 0.6 and (m.lane == 0 or m.is_bell() or m.kind == Note.Kind.SWIPE):
+			if m != n and absf(m.t - n.t) < 0.6:
 				clear = false
 		if clear:
 			target = n

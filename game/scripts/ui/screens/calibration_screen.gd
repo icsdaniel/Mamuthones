@@ -7,7 +7,11 @@ extends Screen
 var reader: MotionReader
 var calibrator: Calibrator
 var _t := 0.0
-var _phone: TiltPhone
+var _phone: SetupArtView         ## Art's phone in two hands, following the real tilt
+var _angle := 0.0                ## radians, > 0 = top edge toward the player
+var _flash := 0.0
+var _nod := 0.0                  ## a slow demonstration nod while waiting for the first move
+var _expect_up := true
 var _marks_up: BellMarks
 var _marks_down: BellMarks
 var _sensor: Label
@@ -32,7 +36,9 @@ func build() -> void:
 	box.add_child(UIKit.label(tr("cal_title"), UIKit.HEADER, true, HORIZONTAL_ALIGNMENT_CENTER))
 	_instruction = UIKit.label("", UIKit.SUB, true, HORIZONTAL_ALIGNMENT_CENTER)
 	box.add_child(_instruction)
-	_phone = TiltPhone.new()
+	_phone = SetupArtView.new()
+	_phone.name = "Phone"
+	_phone.kind = "phone"
 	_phone.custom_minimum_size = Vector2(0, 460)
 	_phone.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	box.add_child(_phone)
@@ -84,7 +90,24 @@ func _process(delta: float) -> void:
 		_on_failed("no_sensor")
 		return
 	calibrator.feed(_t, reader.linear, reader.rotation_dps, reader.has_gyro())
-	_phone.feed(reader.rotation_dps, delta)
+	_feed_phone(reader.rotation_dps.x, delta)
+
+
+## Integrates the pitch rate (degrees per second) with a leak back to rest, so the drawing follows
+## flicks without drifting; while nothing moves it nods the way the player should tilt. Art's picture
+## costs a few ms to draw, so it is only updated when what it shows changes.
+func _feed_phone(pitch_dps: float, delta: float) -> void:
+	_angle += deg_to_rad(pitch_dps) * delta
+	_angle = clampf(lerpf(_angle, 0.0, clampf(delta * 3.0, 0.0, 1.0)), -0.9, 0.9)
+	_flash = maxf(_flash - delta * 2.5, 0.0)
+	_nod += delta
+	var shown := _angle
+	if absf(_angle) < 0.02 and _flash <= 0.0 and not UIKit.reduced_motion():
+		shown = (0.35 if _expect_up else -0.35) * maxf(sin(_nod * 3.0), 0.0)
+	if absf(shown - _phone.tilt) > 0.01:
+		_phone.tilt = shown
+	if absf(_flash - _phone.flash) > 0.02 or (_flash == 0.0 and _phone.flash != 0.0):
+		_phone.flash = _flash
 
 
 func _on_move(index: int, up: bool, strength: float) -> void:
@@ -92,7 +115,9 @@ func _on_move(index: int, up: bool, strength: float) -> void:
 		_marks_up.count = mini(_marks_up.count + 1, 3)
 	else:
 		_marks_down.count = mini(_marks_down.count + 1, 3)
-	_phone.flash(up, strength)
+	_flash = 1.0
+	if absf(_angle) < 0.2:
+		_angle = 0.55 if up else -0.55
 	Sound.bell("light", up, "perfect")
 	UIKit.vibrate(25)
 	_update_instruction()
@@ -101,7 +126,8 @@ func _on_move(index: int, up: bool, strength: float) -> void:
 func _update_instruction() -> void:
 	var up := calibrator.expecting_up()
 	_instruction.text = tr("cal_tilt_up") if up else tr("cal_tilt_down")
-	_phone.expect_up = up
+	_expect_up = up
+	_phone.arrow = 1 if up else -1
 
 
 func _on_finished(result: Dictionary) -> void:
