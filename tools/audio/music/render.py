@@ -71,14 +71,19 @@ def dumps_song(d):
 
 
 def finish(song, stems, n, out_name, quality):
-    x = mixer.mix(song, stems, n)
-    x = mixer.master(x)
+    raw = mixer.mix(song, stems, n)
+    x = mixer.master(raw)
     path = os.path.join(MUSIC, out_name + ".ogg")
     y = mixer.write_ogg(path, x, quality)
     tp = dsp.true_peak_db(y)
     tries = 0
-    while tp > -1.0 and tries < 3:
-        x = x * 10 ** ((-1.2 - tp) / 20)
+    ceiling = -1.5
+    while (tp > -1.0 or dsp.integrated_loudness(y) < -14.6) and tries < 4:
+        # the encoder moved the peaks (or the limiter held the level down): master again with a
+        # lower ceiling, keeping the loudness at the target
+        if tp > -1.0:
+            ceiling -= 0.4
+        x = mixer.master(raw, ceiling=ceiling)
         y = mixer.write_ogg(path, x, quality)
         tp = dsp.true_peak_db(y)
         tries += 1

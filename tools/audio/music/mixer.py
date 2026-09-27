@@ -155,18 +155,19 @@ def mix(song, stems, n):
 
 
 def master(x, target=-14.0, ceiling=-1.5):
-    for _ in range(14):
-        lk = dsp.integrated_loudness(x)
-        if abs(lk - target) < 0.15:
+    """Loudness to target and true peak under the ceiling together: the limiter's own ceiling is
+    lowered while true peaks still get through, and the loudness is brought back each pass."""
+    c = ceiling
+    y = x
+    for _ in range(16):
+        lk = dsp.integrated_loudness(y)
+        y = dsp.limiter(y * 10 ** ((target - lk) / 20), c)
+        tp = dsp.true_peak_db(y)
+        if abs(dsp.integrated_loudness(y) - target) < 0.15 and tp <= ceiling + 0.2:
             break
-        x = x * 10 ** ((target - lk) / 20)
-        x = dsp.limiter(x, ceiling)
-    for _ in range(4):
-        tp = dsp.true_peak_db(x)
-        if tp <= ceiling + 0.2:
-            break
-        x = dsp.limiter(x, ceiling - (tp - ceiling) - 0.1)
-    return x
+        if tp > ceiling + 0.2:
+            c -= 0.7 * (tp - ceiling)
+    return y
 
 
 def write_ogg(path, x, quality=0.45):

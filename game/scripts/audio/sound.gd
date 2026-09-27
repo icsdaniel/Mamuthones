@@ -9,7 +9,7 @@ extends Node
 ## source-filter voices); tools/audio/sfx/measurements.json has their measurements.
 ##
 ## Buses, created here: Music, Bells, Sfx and Ambience under Master (which gets a -1 dB
-## limiter). Sfx sits 5 dB down; Bells has its own limiter, and
+## limiter). Music sits 2 dB and Sfx 7 dB down (headroom for the bells); Bells has its own limiter, and
 ## every ring of the player's bells ducks the Music bus by 3 dB for ~150 ms. Three
 ## small buses feed Bells: BellsSoft (a soft flick: a little darker), BellsEarly and
 ## BellsLate (a little left and right, so a player can hear which way they were off).
@@ -17,7 +17,7 @@ extends Node
 const SFX_DIR := "res://audio/sfx/"
 const BUS_NAMES: Array[String] = ["Music", "Bells", "Sfx", "Ambience"]
 ## Fixed trim under each bus's user volume (set_volume adds it).
-const BUS_TRIM_DB := {"Music": 0.0, "Bells": 0.0, "Sfx": -5.0, "Ambience": 0.0}
+const BUS_TRIM_DB := {"Music": -2.0, "Bells": 0.0, "Sfx": -7.0, "Ambience": 0.0}
 ## Each ring of the player's bells dips the music this much for DUCK_HOLD seconds, so
 ## the ring lands on top of the music (the bells are the reward).
 const DUCK_DB := 3.0
@@ -523,12 +523,13 @@ func _make_buses() -> void:
 	for bus_name in BUS_NAMES:
 		_ensure_bus(bus_name, "Master")
 		AudioServer.set_bus_volume_db(AudioServer.get_bus_index(bus_name), BUS_TRIM_DB[bus_name])
-	# Bells: a limiter only (the samples already peak at -1.5 dBFS; it catches a
-	# ring, an accent and the row landing together)
+	# Bells: a limiter only. Its -3.5 dB ceiling (2 dB under the samples' own peaks) plus
+	# the Music and Sfx trims keep the Master limiter to about 1 dB of peak shaving when
+	# a hard ring, its accent, the full row, a step and a dense remix all land together.
 	var bells := AudioServer.get_bus_index("Bells")
 	if AudioServer.get_bus_effect_count(bells) == 0:
 		var lim := AudioEffectHardLimiter.new()
-		lim.ceiling_db = -1.5
+		lim.ceiling_db = -3.5
 		lim.release = 0.12
 		AudioServer.add_bus_effect(bells, lim)
 	var soft := _ensure_bus("BellsSoft", "Bells")

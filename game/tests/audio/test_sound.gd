@@ -420,26 +420,27 @@ func test_hold_fades_are_click_free_in_the_mixer() -> void:
 func test_rings_duck_the_music() -> void:
 	var s := _sound()
 	var music := AudioServer.get_bus_index("Music")
+	var trim: float = s.BUS_TRIM_DB["Music"]
 	s.set_volume("music", 1.0)
 	for i in 30:
 		s._process(0.02)
-	check_near(AudioServer.get_bus_volume_db(music), 0.0, 0.01, "music at its level before a ring")
+	check_near(AudioServer.get_bus_volume_db(music), trim, 0.01, "music at its level before a ring")
 	s.bell("full", false, "perfect")
 	s._process(0.02)
-	check_near(AudioServer.get_bus_volume_db(music), -s.DUCK_DB, 0.01, "a ring dips the music %.1f dB" % s.DUCK_DB)
+	check_near(AudioServer.get_bus_volume_db(music), trim - s.DUCK_DB, 0.01, "a ring dips the music %.1f dB" % s.DUCK_DB)
 	for i in 5:
 		s._process(0.02)
-	check_near(AudioServer.get_bus_volume_db(music), -s.DUCK_DB, 0.01, "held through the ring's attack")
+	check_near(AudioServer.get_bus_volume_db(music), trim - s.DUCK_DB, 0.01, "held through the ring's attack")
 	for i in 20:
 		s._process(0.02)
-	check_near(AudioServer.get_bus_volume_db(music), 0.0, 0.01, "and back within ~0.3 s")
+	check_near(AudioServer.get_bus_volume_db(music), trim, 0.01, "and back within ~0.3 s")
 	s.set_volume("music", 0.5)
 	s.bell("full", false, "miss")
 	s._process(0.02)
-	check_near(AudioServer.get_bus_volume_db(music), linear_to_db(0.5), 0.01, "a miss doesn't duck; the user's music volume is kept")
+	check_near(AudioServer.get_bus_volume_db(music), trim + linear_to_db(0.5), 0.01, "a miss doesn't duck; the user's music volume is kept")
 	s.bell("full", true, "good")
 	s._process(0.05)
-	check_near(AudioServer.get_bus_volume_db(music), linear_to_db(0.5) - s.DUCK_DB, 0.01, "ducking works from the user's level")
+	check_near(AudioServer.get_bus_volume_db(music), trim + linear_to_db(0.5) - s.DUCK_DB, 0.01, "ducking works from the user's level")
 	for i in 30:
 		s._process(0.02)
 	s.set_volume("music", 1.0)

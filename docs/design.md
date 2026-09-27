@@ -128,9 +128,10 @@ cue so it can be played while moving. Pass-and-play: up to 6 named players take 
 the round ends on a ranking. Scores stay on the phone.
 
 ### Daily procession (offline)
-Each day the date picks one song, a difficulty and whether the lanes are mirrored, so friends get the
-same procession with no server. Its best score goes to its own ladder when online services are
-available.
+Each day the date picks one song and whether the lanes are mirrored, so friends get the same
+procession with no server. The player picks the difficulty, and each difficulty has its own daily
+ladder when online services are available. A song from a stop the player hasn't reached plays with its
+name and picture hidden ("a procession from later in the story"), so the daily never spoils the story.
 
 ## 6. Progression: your Mamuthone
 
