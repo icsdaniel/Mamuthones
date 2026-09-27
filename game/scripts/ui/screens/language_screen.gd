@@ -5,10 +5,13 @@ extends Screen
 func build() -> void:
 	var box := UIKit.column(self, false, 24)
 	UIKit.spacer(box, 0, true)
+	# The same wordmark as the title screen: the name, then the subtitle.
 	var logo := Logo.new()
-	logo.custom_minimum_size = Vector2(0, 420)
+	logo.name = "Logo"
+	logo.show_title = true
+	logo.subtitle = tr("app_title")
+	logo.custom_minimum_size = Vector2(0, 600)
 	box.add_child(logo)
-	box.add_child(UIKit.label(tr("app_title"), UIKit.TITLE, true, HORIZONTAL_ALIGNMENT_CENTER))
 	UIKit.spacer(box, 24)
 	var phone := I18n.system_locale()
 	for code in ["en", "it"] if phone == "en" else ["it", "en"]:

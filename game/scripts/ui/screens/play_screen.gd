@@ -363,11 +363,11 @@ func _on_stepped(lane: int) -> void:
 	_tap_quality = ""
 
 
-## The step's knock, duller on an Ok hit so the ear hears a sloppy step. Sound.step takes the hit
-## quality once Sound adds it; until then every step knocks the same.
+## The step's knock at the hit's quality (Sound: "good" a little softer, "ok" dull and short), in the
+## same frame as the judgement; a stray tap (quality "") knocks plain.
 static func play_step(lane: int, quality: String) -> void:
-	if quality != "" and Sound.get_method_argument_count("step") >= 2:
-		Sound.call("step", lane, quality)
+	if quality != "":
+		Sound.step(lane, quality)
 	else:
 		Sound.step(lane)
 
@@ -446,7 +446,8 @@ func _on_judged(note: Note, judgement: String, offset: float) -> void:
 		words.show_word(tr(word_key), side, lanes.word_spot(lane), quality)
 		if cue != null:
 			cue.hit(quality, tr(word_key))
-	if side != "":
+	if side != "" and not is_step:
+		# Steps say their side with the step tick; the lasting timing ticks are for the bells.
 		lanes.add_offset(offset, lane if lane >= 0 else 1)
 	if good or soft:
 		if note != null and note.kind == Note.Kind.RING:

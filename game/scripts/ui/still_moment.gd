@@ -34,6 +34,13 @@ func play(p_text: String, p_points: String) -> void:
 	queue_redraw()
 
 
+## Gone at once (a restart, or a picture that should not show it).
+func clear() -> void:
+	_t = -1.0
+	set_process(false)
+	queue_redraw()
+
+
 ## The text showing now ("" when idle), for tests.
 func shown() -> String:
 	return text if _t >= 0.0 and _t < IN + HOLD + OUT else ""
@@ -58,7 +65,7 @@ func _draw() -> void:
 	var grow := 1.0 if UIKit.reduced_motion() else 1.0 - pow(1.0 - clampf(_t / (IN * 2.0), 0.0, 1.0), 3.0)
 	var fs := 46
 	var fs2 := 30
-	var cy := size.y * 0.42
+	var cy := maxf(size.y * 0.3, 70.0)   # above the row's heads
 	var band_h := 124.0
 	var band_w := size.x * grow
 	draw_rect(Rect2((size.x - band_w) * 0.5, cy - band_h * 0.5, band_w, band_h), Color(Palette.INK, 0.72 * a))

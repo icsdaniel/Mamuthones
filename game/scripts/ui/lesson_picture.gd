@@ -8,7 +8,7 @@ const LOOP := 2.4
 
 var topic := "steps"
 var slam := false
-var _t := 0.0
+var _t := 0.9   ## starts with the note on its way down, so the first frame already shows it
 
 
 func _process(delta: float) -> void:

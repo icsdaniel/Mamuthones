@@ -48,8 +48,7 @@ def build():
     s.drums(b, 8, "B.......b.......")
     for bar in range(8):
         s.bell_cue(b + bar * 4, rank=1 if bar % 2 == 0 else 2)
-    s.stop(b + 14, 2)
-    s.stop(b + 30, 2)
+    # verse 1 flows on without a halt: the first stand-still is the end of verse 2 (a shake inside)
 
     # ---- verse 2: the tenore turns rhythmic, the frame drum joins, the answer phrases (higher)
     b = s.sec("verse2", 8, 2, add=EASY_WALK)
@@ -100,7 +99,7 @@ def build():
     s.bell_cue(b, rank=1)
     s.bell_cue(b + 8, rank=1)
     s.tenore(b + 8, 1, "rhythm", pattern="x...............", vowels="o", vel=0.9)
-    s.stop(b + 9, 3)
+    s.stop(b + 9, 2)
     s.bell_cue(b + 12, rank=1)
     s.tenore(b + 12, 4, "drone", vowels="o", vel=0.7, sustain_cands=False)
     for i in range(6):

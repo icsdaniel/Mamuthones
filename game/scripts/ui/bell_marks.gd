@@ -9,6 +9,8 @@ var count := 0:
 		queue_redraw()
 var total := 3
 var bell_size := 44.0
+var empty_color := Palette.BONE_FAINT   ## the outline of a bell not yet earned
+var _host: Button                       ## the button it sits on, if any (red when pressed/primary)
 var _pop: Array[float] = [1.0, 1.0, 1.0]
 
 
@@ -17,6 +19,22 @@ func _init(p_count := 0, p_size := 44.0) -> void:
 	bell_size = p_size
 	custom_minimum_size = Vector2(p_size * 3.4, p_size * 1.15)
 	mouse_filter = Control.MOUSE_FILTER_IGNORE
+
+
+func _ready() -> void:
+	var p := get_parent()
+	while p != null and not p is Button:
+		p = p.get_parent()
+	_host = p as Button
+	if _host != null:
+		_host.draw.connect(queue_redraw)   # redrawn whenever the button changes state
+
+
+## The outline colour now: on a red (pressed or primary) button the grey goes muddy, so bone.
+func _empty_ink() -> Color:
+	if _host != null and (_host.button_pressed or _host.theme_type_variation == UIKit.PRIMARY) and empty_color == Palette.BONE_FAINT:
+		return Color(Palette.BONE, 0.75)
+	return empty_color
 
 
 ## Pop the earned bells in turn, ringing one each.
@@ -53,7 +71,7 @@ func _draw_bell(c: Vector2, s: float, earned: bool) -> void:
 	var body := PackedVector2Array([
 		Vector2(c.x - w_top * 0.5, top), Vector2(c.x + w_top * 0.5, top),
 		Vector2(c.x + w_bot * 0.5, bot), Vector2(c.x - w_bot * 0.5, bot)])
-	var ink := Palette.EMBER if earned else Palette.BONE_FAINT
+	var ink := Palette.EMBER if earned else _empty_ink()
 	if earned:
 		draw_colored_polygon(body, ink)
 		draw_line(Vector2(c.x - w_bot * 0.32, bot - h * 0.3), Vector2(c.x - w_top * 0.2, top + h * 0.2), Palette.EMBER_HOT, 2.0)

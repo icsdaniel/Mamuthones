@@ -166,9 +166,10 @@ def build():
     s.melody("mancosedda", b, SKIP + "4:.75 5:.25 4:.5 2:.5 1:2 r:2", vel=0.85, sig_start=0, hold_min=99)
     s.drums(b, 2, "D...t.t.D.t.t...")
     s.bell_cue(b, rank=1)
-    throw(b + 8, -1, cheer=True)
+    throw(b + 8, -1)
     s.stop(b + 9, 3)
     s.bell_cue(b + 12, rank=1)
+    s.ev("crowd", b + 12.25, 3, None, 0.5, cheer=True)   # laughter after the halt, not inside it
     s.tenore(b + 12, 4, "drone", vowels="o", vel=0.75, sustain_cands=False)
     s.tail = 6.0
     s.preview = s.time(s.section("climax").b)

@@ -162,12 +162,37 @@ func _build_handover(round: Dictionary) -> void:
 	who.name = "Player"
 	box.add_child(who)
 	box.add_child(UIKit.label(tr("piazza_how"), "", true, HORIZONTAL_ALIGNMENT_CENTER))
-	UIKit.spacer(box, 0, true)
+	# The flick, shown: the phone in both hands nods toward and away, its screen warming on each count.
+	var phone := SetupArtView.new()
+	phone.kind = "phone"
+	phone.name = "Phone"
+	phone.left_pressed = true
+	phone.right_pressed = true
+	phone.custom_minimum_size = Vector2(0, 200)
+	phone.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	box.add_child(phone)
+	_nod(phone)
 	var go := UIKit.button(tr("piazza_ready") % players[turn], func() -> void:
 		app.replace("play", {"song_id": round.song_id, "difficulty": "piazza", "bell_set": "light",
 			"piazza": true, "round": round}), UIKit.PRIMARY)
 	go.name = "Ready"
 	box.add_child(go)
+
+
+## A slow demonstration flick, toward then away; with reduced motion the phone just shows the arrow.
+func _nod(phone: SetupArtView) -> void:
+	if UIKit.reduced_motion():
+		phone.tilt = 0.35
+		phone.arrow = 1
+		return
+	var tw := phone.create_tween().set_loops()
+	for dir in [1, -1]:
+		tw.tween_callback(func() -> void: phone.arrow = dir)
+		tw.tween_property(phone, "tilt", 0.45 * dir, 0.3).set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_OUT)
+		tw.tween_callback(func() -> void: phone.flash = 1.0)
+		tw.tween_property(phone, "flash", 0.0, 0.4)
+		tw.parallel().tween_property(phone, "tilt", 0.0, 0.5).set_trans(Tween.TRANS_SINE)
+		tw.tween_interval(0.5)
 
 
 func on_back() -> void:

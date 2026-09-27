@@ -157,6 +157,8 @@ func test_wrong_lane_marks_the_pressed_button() -> void:
 		_close(app)
 		return
 	await _to_time(c, target.t)
+	# Earlier misses on the way here may still be flashing; only the wrong tap's own marks count.
+	lanes.set("_flash", [-9.0, -9.0, -9.0] as Array[float])
 	var rect := router.buttons_rect
 	var ev := InputEventScreenTouch.new()
 	ev.index = 0

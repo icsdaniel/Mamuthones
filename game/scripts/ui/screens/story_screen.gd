@@ -48,8 +48,13 @@ func _row(song: SongData, is_next: bool) -> Control:
 	var name_label := UIKit.label(UIKit.song_title(song), UIKit.SUB, false)
 	name_label.text_overrun_behavior = TextServer.OVERRUN_TRIM_ELLIPSIS
 	text.add_child(name_label)
-	text.add_child(UIKit.label(_status(song, open, is_next), UIKit.CAPTION, true))
+	var status := UIKit.label(_status(song, open, is_next), UIKit.CAPTION, true)
+	text.add_child(status)
 	var bells := BellMarks.new(UIKit.best_bells(song.id), 36.0)
+	if is_next:
+		# On the red of the next stop, gold and grey go muddy: bone reads.
+		name_label.add_theme_color_override("font_color", Palette.BONE)
+		status.add_theme_color_override("font_color", Color(Palette.BONE, 0.85))
 	bells.size_flags_vertical = Control.SIZE_SHRINK_CENTER
 	bells.visible = open
 	row.add_child(bells)

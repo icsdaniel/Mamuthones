@@ -50,6 +50,9 @@ func _refresh_look() -> void:
 	var bs := str(look.get("bell_set", "village"))
 	if m != portrait.mask or f != portrait.fleece or st != portrait.straps or bs != portrait.bell_set:
 		portrait.set_look(m, f, st, bs)
+		var walking := _body.get_node_or_null("Walking") as ProcessionScene if _body != null else null
+		if walking != null:
+			UIKit.show_look(walking)
 	var hp := part if tab == "mask" else ""
 	if portrait.highlight_part != hp:
 		portrait.highlight_part = hp
@@ -71,6 +74,22 @@ func _show_tab(t: String) -> void:
 		_:
 			_build_dress()
 	_refresh_look()
+
+
+## Under the bells and dress choices: your Mamuthone walking in the row, whole, bells and all, so a
+## choice is seen (and heard) on the move. It takes the room left on the page.
+func _walking_row() -> void:
+	var vh := get_viewport_rect().size.y if is_inside_tree() else 1440.0
+	var scene := ProcessionScene.new()
+	scene.name = "Walking"
+	scene.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	scene.custom_minimum_size = Vector2(0, clampf(vh - 1020.0, 240.0, 460.0))
+	scene.auto_bpm = 76.0
+	_body.add_child(scene)
+	scene.set_stop(1)
+	scene.set_unison(2)
+	scene.set_reduced_motion(UIKit.reduced_motion())
+	UIKit.show_look(scene)
 
 
 func _spec() -> Dictionary:
@@ -148,6 +167,7 @@ func _build_bells() -> void:
 	var ring := UIKit.button(tr("ws_ring"), _ring, UIKit.QUIET)
 	ring.name = "Ring"
 	_body.add_child(ring)
+	_walking_row()
 
 
 var _ring_up := true
@@ -165,6 +185,7 @@ func _build_dress() -> void:
 	_body.add_child(UIKit.label(tr("ws_straps"), UIKit.SUB))
 	_choice_row("straps", MaskSpec.STRAPS)
 	_body.add_child(UIKit.label(tr("ws_dress_note"), UIKit.CAPTION))
+	_walking_row()
 
 
 func _choice_row(key: String, ids: Array) -> void:

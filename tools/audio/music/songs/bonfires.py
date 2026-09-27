@@ -132,7 +132,7 @@ def build():
     s.bell_cue(b, rank=1, land="stomp")
     s.bell_cue(b + 8, rank=1, land="stomp")
     s.tenore(b + 8, 8, "drone", vowels="oa", vel=0.8)
-    s.stop(b + 9, 3)
+    s.stop(b + 9, 2)
     s.melody("boghe", b + 12, "1:4@o", vel=0.8, cands=False)
     s.tenore(b + 12, 4, "drone", vowels="o", vel=0.7, sustain_cands=False)
     s.bell_cue(b + 12, rank=1, land="stomp")

@@ -126,6 +126,9 @@ daily_none,No procession today.,Oggi nessuna processione.
 daily_mirrored,lanes mirrored,corsie a specchio
 daily_best_today,Your best today: %s,Il tuo record di oggi: %s
 daily_first,Not played at this level today yet.,Oggi non l'hai ancora giocata a questo livello.
+daily_week,Your last seven days,I tuoi ultimi sette giorni
+daily_week_days,"M,T,W,T,F,S,S","L,M,M,G,V,S,D"
+daily_week_count,%d of 7 walked,%d su 7
 daily_be_first,Be the first today.,Apri tu la classifica di oggi.
 daily_scores,Today's scores,Punteggi di oggi
 daily_play,Walk today's procession,Cammina nella processione di oggi
@@ -345,7 +348,7 @@ tut_leave,Leave,Esci
 tut_steps_title,Steps,I passi
 tut_steps,Notes come down the middle lane. Tap the middle button just as each one reaches the line.,Le note scendono nella corsia centrale. Tocca il tasto centrale proprio quando arrivano alla linea.
 tut_steps_short,Tap the middle button on the line,Tocca il tasto centrale sulla linea
-tut_fail_steps,Some taps came too early or too late. Listen to the drum: the notes land on its beat.,Alcuni tocchi erano in anticipo o in ritardo. Ascolta il tamburo: le note cadono sul suo battito.
+tut_fail_steps,"Some taps came too early or too late: blue arrows above the line mean early, orange ones below mean late. Listen to the drum: the notes land on its beat.","Alcuni tocchi erano in anticipo o in ritardo: le frecce azzurre sopra la linea vogliono dire in anticipo, quelle arancioni sotto in ritardo. Ascolta il tamburo: le note cadono sul suo battito."
 tut_lanes_title,Three lanes,Tre corsie
 tut_lanes,"Now the notes use all three lanes. Each button has its own step: left, middle, right.","Ora le note usano tutte e tre le corsie. Ogni tasto ha il suo passo: sinistra, centro, destra."
 tut_lanes_short,"Left, middle, right","Sinistra, centro, destra"

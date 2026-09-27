@@ -26,6 +26,29 @@ class Veiled extends Control:
 		draw_rect(Rect2(Vector2.ZERO, size), Color(Palette.INK, 0.45))
 
 
+## One day of the last seven: a ring, filled in ember when that day's procession was walked, with a
+## brighter ring around today.
+class DayMark extends Control:
+	var walked := false
+	var today := false
+
+	func _init(p_walked: bool, p_today: bool) -> void:
+		walked = p_walked
+		today = p_today
+		custom_minimum_size = Vector2(44, 44)
+		mouse_filter = Control.MOUSE_FILTER_IGNORE
+
+	func _draw() -> void:
+		var c := size * 0.5
+		var r := minf(size.x, size.y) * 0.34
+		if walked:
+			draw_circle(c, r, Palette.EMBER)
+		else:
+			draw_arc(c, r, 0.0, TAU, 32, Palette.BONE_DIM, 2.5, true)
+		if today:
+			draw_arc(c, r + 7.0, 0.0, TAU, 40, Palette.EMBER_HOT, 3.0, true)
+
+
 func build() -> void:
 	# args.date (tests, screenshots) stands in for today's UTC date.
 	_date = args.get("date", Time.get_date_dict_from_system(true))
@@ -80,6 +103,7 @@ func build() -> void:
 	var play := UIKit.button(tr("daily_play"), _play, UIKit.PRIMARY)
 	play.name = "Play"
 	cols[1].add_child(play)
+	_week(box)
 	# Nobody has a score for today yet: no empty scores link, an invitation instead.
 	played_today = not Profile.daily_best(date_key).is_empty()
 	if played_today:
@@ -90,6 +114,42 @@ func build() -> void:
 	if not start in _diff_buttons and not levels.is_empty():
 		start = str(levels[0])
 	_pick(start)
+
+
+## The last seven days, today last: which dailies were walked, so coming back each day shows.
+func _week(box: Container) -> void:
+	var c := UIKit.card(box)
+	c.name = "Week"
+	var head := HBoxContainer.new()
+	c.add_child(head)
+	var t := UIKit.label(tr("daily_week"), UIKit.SUB)
+	t.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	head.add_child(t)
+	var row := HBoxContainer.new()
+	row.alignment = BoxContainer.ALIGNMENT_CENTER
+	row.add_theme_constant_override("separation", 0)
+	c.add_child(row)
+	var letters := tr("daily_week_days").split(",")
+	var today_unix := Time.get_unix_time_from_datetime_dict(_date)
+	var walked := 0
+	for i in range(6, -1, -1):
+		var d := Time.get_datetime_dict_from_unix_time(today_unix - i * 86400)
+		var on := not Profile.daily_best(Daily.key(d)).is_empty()
+		walked += int(on)
+		var col := VBoxContainer.new()
+		col.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		col.add_theme_constant_override("separation", 4)
+		row.add_child(col)
+		# weekday: 0 = Sunday; the letters run Monday first
+		var wd := int(d.get("weekday", 0))
+		var letter := letters[(wd + 6) % 7] if letters.size() == 7 else ""
+		col.add_child(UIKit.label(letter, UIKit.CAPTION, false, HORIZONTAL_ALIGNMENT_CENTER))
+		var m := DayMark.new(on, i == 0)
+		m.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
+		col.add_child(m)
+	var count := UIKit.label(tr("daily_week_count") % walked, UIKit.CAPTION, false, HORIZONTAL_ALIGNMENT_RIGHT)
+	count.name = "WeekCount"
+	head.add_child(count)
 
 
 func _pick(d: String) -> void:

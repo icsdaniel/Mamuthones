@@ -234,8 +234,8 @@ func _moment(screen: Node, what: String) -> void:
 			target = minf(song_time_of(s, 0.4), s.notes[0].t - 0.2)
 		"early":
 			for n in s.notes:
-				if n.t >= from and n.kind == Note.Kind.STEP:
-					target = n.t - 0.05
+				if n.t >= from and n.kind == Note.Kind.STEP and _clear_of_rests(s, n):
+					target = n.t - _good_offset(s)
 					break
 		"wrong":
 			for i in s.notes.size():
@@ -253,10 +253,10 @@ func _moment(screen: Node, what: String) -> void:
 			var auto: Object = screen.get("autoplay")
 			for i in s.notes.size():
 				var n: Note = s.notes[i]
-				if n.t >= from and n.kind == Note.Kind.STEP:
+				if n.t >= from and n.kind == Note.Kind.STEP and _clear_of_rests(s, n):
 					if auto != null:
 						(auto.get("_plan") as Array)[i] = NAN   # the player hits this one late
-					target = n.t + 0.05
+					target = n.t + _good_offset(s)
 					break
 		"stillkept":
 			for n in s.notes:
@@ -295,16 +295,42 @@ func _moment(screen: Node, what: String) -> void:
 				s.tap(n.lane, c.song_time(), 7)
 				screen.call("_on_stepped", n.lane)
 				break
+	if what != "stillkept":
+		# Only the moment in the picture: no stand-still banner left over from before it (it lasts
+		# 1.5 s of real time, which a slow software render barely lets pass).
+		var sm: Object = screen.get("still_moment")
+		if sm != null:
+			sm.call("clear")
 	if what == "late":
 		for n in s.notes:
 			if not n.done and n.kind == Note.Kind.STEP and n.t < c.song_time():
 				s.tap(n.lane, c.song_time(), 7)
 				screen.call("_on_stepped", n.lane)
 				break
+	if what in ["early", "late"]:
+		# Hold the lanes' own clock so the 0.3 s tick is caught as the player sees it, not faded by a
+		# slow software render.
+		var lanes: Control = screen.get("lanes")
+		if lanes != null:
+			lanes.set_process(false)
 	if what == "wrong":
 		# The player's thumb lands on the left button while the right lane's note is due.
 		s.tap(0, c.song_time(), 7)
 		screen.call("_on_stepped", 0)
+
+
+## An offset inside Good and outside Perfect, so the hit shows its side.
+static func _good_offset(s: Session) -> float:
+	var w := s.window("touch")
+	return (w.x + w.y) * 0.5
+
+
+## No stand-still ended in the two seconds before n (so its moment is not in the picture).
+static func _clear_of_rests(s: Session, n: Note) -> bool:
+	for m in s.notes:
+		if m.kind == Note.Kind.REST and m.end_t <= n.t and m.end_t > n.t - 2.5:
+			return false
+	return true
 
 
 static func song_time_of(s: Session, beat: float) -> float:

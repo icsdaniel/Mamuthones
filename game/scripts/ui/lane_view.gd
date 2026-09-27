@@ -213,9 +213,9 @@ func _draw_timing_ticks(field: Rect2) -> void:
 			draw_line(Vector2(x0, y), Vector2(x0 + dash, y), Color(col, a), 5.0)
 
 
-## The step ticks: a short bold bar across the lane's middle with a point toward the side it was
-## off (up for early, where the note still was; down for late), in the early/late pair on an ink
-## outline, fading out over STEP_TICK_TIME.
+## The step ticks: a bold chevron at both edges of the lane, pointing up and cool above the hit line
+## for early (where the note still was), down and warm below it for late, on an ink outline. The
+## lane's middle stays clear for the judgement word. They fade out over STEP_TICK_TIME.
 func _draw_step_ticks(field: Rect2) -> void:
 	if _step_ticks.is_empty():
 		return
@@ -233,14 +233,15 @@ func _draw_step_ticks(field: Rect2) -> void:
 		var side := str(k[1])
 		var d := -1.0 if side == "early" else 1.0
 		var r: Rect2 = rects[clampi(int(k[0]), 0, 2)]
-		var cx := r.get_center().x
-		var y := hl + d * 44.0
-		var w := minf(r.size.x * 0.22, 46.0)
+		var half := minf(r.size.x * 0.09, 20.0)
+		var inset := half + 14.0
+		var y := hl + d * 30.0
 		var col := UIKit.side_color(side)
-		var tip := Vector2(cx, y + d * 14.0)
-		var pts := PackedVector2Array([Vector2(cx - w, y), Vector2(cx - 8.0, y), tip, Vector2(cx + 8.0, y), Vector2(cx + w, y)])
-		draw_polyline(pts, Color(Palette.INK, a * 0.9), 15.0, true)
-		draw_polyline(pts, Color(col, a), 8.0, true)
+		for cx in [r.position.x + inset, r.end.x - inset]:
+			var tip := Vector2(cx, y + d * half * 0.8)
+			var pts := PackedVector2Array([Vector2(cx - half, y - d * half * 0.2), tip, Vector2(cx + half, y - d * half * 0.2)])
+			draw_polyline(pts, Color(Palette.INK, a * 0.9), 16.0, true)
+			draw_polyline(pts, Color(col, a), 9.0, true)
 
 
 ## The early/late chevron over a burst: up and cool above the hit for early, down and warm below it

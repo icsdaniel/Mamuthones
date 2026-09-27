@@ -161,12 +161,12 @@ def build():
     # ---- outro: the voice alone with the theme, the bells walk away into the night
     b = s.sec("outro", 6, 0)
     harm(b // 4, [1, 1, 1, 1, 1, 1])
-    s.melody("boghe", b, THEME, vel=0.8, hold_min=99)
+    s.melody("boghe", b, THEME.replace("1:3 r:2", "1:2 r:3"), vel=0.8, hold_min=99)
     s.tenore(b, 16, "drone", vowels="oa", vel=0.6, sustain_cands=False)
     s.drums(b, 3, "D.......d.......")
     s.bell_cue(b, rank=1)
     s.bell_cue(b + 8, rank=1)
-    s.stop(b + 14, 2)
+    s.stop(b + 13, 3)
     s.bell_cue(b + 16, rank=1, land="frame")
     s.melody("boghe", b + 16, "1:8@o", vel=0.7, cands=False)
     for i in range(8):

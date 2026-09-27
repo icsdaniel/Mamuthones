@@ -31,7 +31,7 @@ DUCKED = {"pad", "sub"}
 # ...but inside a stand-still the music really stops: the drone drops out and ringing drum tails
 # are cut, so the rest is heard as a rest; the crowd only quietens, the fire keeps crackling
 STOP_DUCK_DEFAULT = -40.0
-STOP_DUCKED = {"tumbu": -30.0, "crowd": -8.0, "fire": 0.0, "rim": 0.0, "shake": 0.0, "calls": 0.0}
+STOP_DUCKED = {"tumbu": -30.0, "crowd": -14.0, "fire": 0.0, "rim": 0.0, "shake": 0.0, "calls": 0.0}
 
 
 def automation_gain(song, n, b0, b1, db, ramp_s=0.08):
