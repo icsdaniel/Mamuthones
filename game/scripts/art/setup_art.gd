@@ -174,7 +174,7 @@ static func _hand_back(ci: CanvasItem, body: PackedVector2Array, side: float, s:
 		var up := Vector2(0, -1)
 		var finger := WoodcutDraw.smooth_closed(PackedVector2Array([root + up * th * 0.5, mid + up * th * 0.55, tip + up * th * 0.35 + Vector2(side * 4.0, 0) * s,
 			tip + Vector2(side * 9.0, 3.0) * s, tip - up * th * 0.45, mid - up * th * 0.5, root - up * th * 0.5]), 3)
-		WoodcutDraw.fill(ci, finger, SKIN.darkened(0.12))
+		WoodcutDraw.fill(ci, finger, SKIN.darkened(0.04))
 		# Shadow plane on the underside, hatched.
 		var under := PackedVector2Array([root, mid + Vector2(0, 1.0) * s, tip + Vector2(side * 6.0, 2.0) * s, tip - up * th * 0.45, mid - up * th * 0.5, root - up * th * 0.5])
 		WoodcutDraw.fill(ci, under, Color(Palette.INK, 0.3), Palette.tex("hatch"), 1.0 / (60.0 * s))

@@ -12,6 +12,7 @@ var _date: Dictionary
 var _song: SongData
 var _diff_buttons := {}
 var _info: Label
+var played_today := false
 
 
 ## A neutral picture for a hidden song: the game's mask, dimmed, on dark wood.
@@ -79,9 +80,12 @@ func build() -> void:
 	var play := UIKit.button(tr("daily_play"), _play, UIKit.PRIMARY)
 	play.name = "Play"
 	cols[1].add_child(play)
-	var boards := UIKit.button(tr("title_boards"), func() -> void: app.open("boards"), UIKit.QUIET)
-	boards.name = "Boards"
-	box.add_child(boards)
+	# Nobody has a score for today yet: no empty scores link, an invitation instead.
+	played_today = not Profile.daily_best(date_key).is_empty()
+	if played_today:
+		var boards := UIKit.button(tr("daily_scores"), func() -> void: app.open("boards"), UIKit.QUIET)
+		boards.name = "Boards"
+		box.add_child(boards)
 	var start := str(pick.get("difficulty", ""))
 	if not start in _diff_buttons and not levels.is_empty():
 		start = str(levels[0])
@@ -98,6 +102,8 @@ func _pick(d: String) -> void:
 		_info.text = tr("daily_best_today") % UIKit.fmt_score(today)
 	elif not best.is_empty() and not song_hidden:
 		_info.text = tr("stop_best") % [UIKit.fmt_score(int(best.get("score", 0))), int(best.get("bells", 0))]
+	elif not played_today:
+		_info.text = tr("daily_be_first")
 	else:
 		_info.text = tr("daily_first")
 

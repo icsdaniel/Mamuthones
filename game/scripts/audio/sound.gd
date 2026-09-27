@@ -62,6 +62,7 @@ var _jangles := {}      # set id -> the load jangling on after a streak
 # row: [tight][down] -> takes
 var _row: Array = []
 var _feet: Array = []   # [lane] -> takes
+var _feet_ok: Array = []   # [lane] -> takes of the dull, off-beat step
 var _tones: Array = []  # [lane] -> 6 streams, for pitch classes 0, 2, .. 10
 var _drones: Array = [] # [lane] -> 12 looping streams
 var _calls: Array[AudioStream] = []
@@ -156,11 +157,27 @@ func set_volume(bus: String, linear: float) -> void:
 
 
 ## A footfall on stone and the lane's tuned knock (Left root, Middle fifth, Right octave).
-func step(lane: int) -> void:
+## quality (optional) lets the ear hear how the hit landed: "perfect" is the clean step,
+## "good" the same step a touch softer (-1.5 dB), "ok" (and "early", "late", "miss") a
+## duller, shorter foot (heel knock low-passed and softer, 3 dB down) with the knock
+## tone 2 dB down. Anything else plays as "perfect".
+func step(lane: int, quality := "perfect") -> void:
 	lane = clampi(lane, 0, LANES - 1)
+	var feet: Array = _feet[lane]
+	var slot := lane
+	var foot_db := 0.0
+	var tone_db := 0.0
+	match quality:
+		"good":
+			foot_db = -1.5
+			tone_db = -0.5
+		"ok", "early", "late", "miss":
+			feet = _feet_ok[lane]
+			slot = lane + LANES
+			tone_db = -2.0
 	# the footfall wanders +-3 % in pitch so no two steps are the same foot
-	_play(_foot_pool, 2, _pick(_feet[lane], lane), randf_range(-1.5, 0.5), randf_range(0.97, 1.03))
-	_play(_tone_pool, 3, _tones[lane][_key_pc >> 1], 0.0, _tone_pitch)
+	_play(_foot_pool, 2, _pick(feet, slot), foot_db + randf_range(-1.5, 0.5), randf_range(0.97, 1.03))
+	_play(_tone_pool, 3, _tones[lane][_key_pc >> 1], tone_db, _tone_pitch)
 
 
 ## Rings the player's bell load.
@@ -581,6 +598,7 @@ func _load_all() -> void:
 		_row.append(by_dir)
 	for lane in LANES:
 		_feet.append(_load_takes("steps/foot_%d_%%d.wav" % lane, TAKES))
+		_feet_ok.append(_load_takes("steps/foot_ok_%d_%%d.wav" % lane, TAKES))
 		var tones: Array = []
 		var drones: Array = []
 		for pc in 12:

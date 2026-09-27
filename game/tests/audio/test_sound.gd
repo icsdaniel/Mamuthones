@@ -198,13 +198,42 @@ func test_takes_do_not_repeat() -> void:
 		last = t
 
 
+func test_steps_tell_quality() -> void:
+	var s := _sound()
+	s.set_key(62)
+	for lane in 3:
+		check_eq(s._feet_ok[lane].size(), 3, "lane %d has three dull steps" % lane)
+		for k in 3:
+			var ok: AudioStream = s._feet_ok[lane][k]
+			var clean: AudioStream = s._feet[lane][k]
+			check(ok != null and ok.get_length() < clean.get_length() - 0.05, "the dull step %d/%d is shorter" % [lane, k])
+	for lane in 3:
+		s.step(lane)  # the old call still works: a clean step
+		var f := _last_player(s, s._foot_pool, 2)
+		check(s._feet[lane].has(f.stream), "step(%d) plays a clean foot" % lane)
+		check(f.volume_db >= -1.51 and f.volume_db <= 0.51, "at full level")
+		check_near(_last_player(s, s._tone_pool, 3).volume_db, 0.0, 0.01, "with the full knock")
+		s.step(lane, "good")
+		f = _last_player(s, s._foot_pool, 2)
+		check(s._feet[lane].has(f.stream), "a good step is the clean foot")
+		check(f.volume_db >= -3.01 and f.volume_db <= -0.99, "a touch softer (%.2f dB)" % f.volume_db)
+		for q in ["ok", "early", "late", "miss"]:
+			s.step(lane, q)
+			f = _last_player(s, s._foot_pool, 2)
+			check(s._feet_ok[lane].has(f.stream), "an %s step is the dull foot" % q)
+			check_near(_last_player(s, s._tone_pool, 3).volume_db, -2.0, 0.01, "with a softer knock")
+		s.step(lane, "nonsense")
+		check(s._feet[lane].has(_last_player(s, s._foot_pool, 2).stream), "an unknown quality plays clean")
+	await _settle()
+
+
 func test_hot_path_is_cheap() -> void:
 	# step, bell and the row are called on every hit: they must stay far below a frame
 	var s := _sound()
 	s.row_bells(5)
 	var t0 := Time.get_ticks_usec()
 	for i in 300:
-		s.step(i % 3)
+		s.step(i % 3, ["perfect", "good", "ok"][i % 3])
 		s.bell("full", i % 2 == 0, "perfect")
 	var per_call := float(Time.get_ticks_usec() - t0) / 600.0
 	check(per_call < 200.0, "step/bell cost %.1f us per call" % per_call)

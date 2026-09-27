@@ -469,11 +469,15 @@ def check_song(song: dict, audio_len: float | None = None):
                 errs.append(f"lesson {ls['topic']} has no {want[ls['topic']]} notes in easy")
             if ls["topic"] == "lanes" and len({n.get('lane') for n in inside}) < 3:
                 errs.append("lesson lanes must use all three lanes")
-    # difficulty order: density rises from easy to expert
+    # difficulty order: density rises from easy to expert, and so do the bells (story songs)
     if song["kind"] != "piazza" and all(summaries.get(d) for d in DIFFS):
         counts = [summaries[d]["notes"] for d in DIFFS]
         if counts != sorted(counts):
             errs.append(f"note counts do not rise with difficulty: {counts}")
+    if song["kind"] == "story" and all(d in song["charts"] for d in DIFFS):
+        bells = [sum(1 for n in song["charts"][d] if n.get("k") in ("bell", "ring")) for d in DIFFS]
+        if any(a >= b for a, b in zip(bells, bells[1:])):
+            errs.append(f"bells do not rise with difficulty: {bells}")
     return errs, summaries
 
 

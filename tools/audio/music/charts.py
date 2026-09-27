@@ -504,16 +504,20 @@ class Charter:
             run = run + 1 if n.lane == prev else 1
             prev = n.lane
 
+    PERMS = ({0: 0, 1: 1, 2: 2}, {0: 2, 1: 1, 2: 0}, {0: 1, 1: 2, 2: 0},
+             {0: 1, 1: 0, 2: 2}, {0: 2, 1: 0, 2: 1}, {0: 0, 1: 2, 2: 1})
+
     def vary_repeats(self, laned):
-        """When bars repeat the same figure, every other bar of the run answers it instead: mirrored,
-        or its lanes turned one step left or right, so a long repeated groove still has phrases."""
+        """Call and response. When the music repeats a bar, the chart does not: bars of a repeated
+        figure come in pairs, the call and its answer (the call mirrored), and each new pair turns
+        the figure to another lane shape. So a long repeated groove reads as phrases answering each
+        other: A A' B B' C C' ..., six shapes of one figure."""
         s = self.s
         bars = {}
         for n in laned:
             bars.setdefault(int((n.b + 1e-6) // s.bpb), []).append(n)
         run = 0
         prev_key = None
-        kind = 0
         for bi in sorted(bars):
             g = sorted(bars[bi], key=lambda n: n.b)
             key = tuple((round(n.b - bi * s.bpb, 3), n.lane, n.k) for n in g)
@@ -522,10 +526,8 @@ class Charter:
             else:
                 run = 0
             prev_key = key
-            if run % 2 == 1 and len(g) >= 2 and all(n.tag != "fixed" for n in g):
-                maps = ({0: 2, 1: 1, 2: 0}, {0: 1, 1: 2, 2: 0}, {0: 2, 1: 0, 2: 1})
-                m = maps[kind % 3]
-                kind += 1
+            if run and len(g) >= 2 and all(n.tag != "fixed" for n in g):
+                m = self.PERMS[run % 6]
                 for n in g:
                     n.lane = m[n.lane]
 
@@ -762,12 +764,36 @@ class Charter:
         return notes
 
 
+def rise_bells(song, built):
+    """Bells rise with the difficulty (Easy < Medium < Hard < Expert): where a lower chart has as many
+    bells as the one above it, its least important bells go (a full ring keeps its step)."""
+    if song.kind == "tutorial":
+        return built
+    for i in range(len(DIFFS) - 2, -1, -1):
+        lo, hi = DIFFS[i], DIFFS[i + 1]
+        n_hi = sum(1 for n in built[hi] if n.k in ("bell", "ring"))
+        k = 0
+        while True:
+            bells = [n for n in built[lo] if n.k in ("bell", "ring")]
+            if len(bells) < n_hi or len(bells) <= 1:
+                break
+            # weakest first: plain bells before rings, higher rank, then every other one in time
+            victim = max(bells, key=lambda n: (n.k == "bell", n.rank, (bells.index(n) + k) % 2))
+            k += 1
+            if victim.k == "ring":
+                victim.k = "step"
+            else:
+                built[lo] = [n for n in built[lo] if n is not victim]
+    return built
+
+
 def chart_song(song, heard=None):
     ch = Charter(song, heard)
     charts = {}
     sources = {}
+    built = rise_bells(song, {d: ch.build(d) for d in DIFFS})
     for d in DIFFS:
-        notes = ch.build(d)
+        notes = built[d]
         charts[d] = [n.json() for n in notes]
         sources[d] = [(n.b, n.k, n.stem, n.len) for n in notes]
     return charts, sources

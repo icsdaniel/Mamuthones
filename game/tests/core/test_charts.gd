@@ -110,6 +110,7 @@ func test_real_songs() -> void:
 	check(SongLibrary.load_errors.is_empty(), "every song file loads: %s" % [SongLibrary.load_errors])
 	if songs.is_empty():
 		return
+	var shares: Array[float] = []   # stillness share of a perfect Hard run, per story song
 	for song in songs:
 		check_eq(ChartRules.check_song(song), [] as Array[String], "%s passes the chart rules" % song.id)
 		check(ResourceLoader.exists(song.audio), "%s audio %s exists" % [song.id, song.audio])
@@ -121,6 +122,9 @@ func test_real_songs() -> void:
 			var s := Session.new(song, diff, "full", opts)
 			check(s.stats.total > 0, "%s/%s has notes" % [song.id, diff])
 			_play_all(s)
+			if song.kind == "story" and diff == "hard":
+				var bd := s.score_breakdown()
+				shares.append(bd.stills / maxf(bd.total, 1.0))
 			check_near(s.accuracy(), 1.0, 1e-9, "%s/%s: autoplay 100 %% (miss %d, wrong %d)" % [song.id, diff, s.stats.miss, s.stats.wrong])
 			check_eq(s.stats.silence, 0, "%s/%s: no bell in a stand-still" % [song.id, diff])
 			check_eq(s.stats.let_go, 0, "%s/%s: every hold kept" % [song.id, diff])
@@ -137,6 +141,12 @@ func test_real_songs() -> void:
 				var r := Session.new(song, diff, "light", {"remix": true})
 				_play_all(r)
 				check_near(r.accuracy(), 1.0, 1e-9, "%s/%s remix: autoplay 100 %%" % [song.id, diff])
+	# Stillness is worth chasing: about 8-12 % of a perfect run on a typical story song at Hard.
+	if not shares.is_empty():
+		shares.sort()
+		var med := shares[shares.size() >> 1]
+		check(med >= 0.08 and med <= 0.12, "stillness is %.1f %% of a typical Hard run (median of %d songs, %.1f..%.1f %%)" % [med * 100.0, shares.size(), shares[0] * 100.0, shares[-1] * 100.0])
+		print("  stillness share at Hard: " + ", ".join(shares.map(func(x): return "%.1f%%" % (x * 100.0))))
 	var story := SongLibrary.story()
 	for i in story.size():
 		check_eq(story[i].stop, i + 1, "story stops numbered 1..n in order (%s)" % story[i].id)

@@ -326,8 +326,8 @@ func test_stand_still() -> void:
 	var mid := s.score
 	s.update(_bt(23))
 	check_eq(s.stats.still_kept, 1, "the second rest was kept")
-	check_eq(s.score - mid, 150, "a kept stand-still earns 150 × unison × weight")
-	check_near(s.score_breakdown().stills, 150.0, 1e-9, "shown in the breakdown")
+	check_eq(s.score - mid, Session.STILL_BONUS * 2, "a kept 2-beat stand-still earns STILL_BONUS × 2 beats × unison × weight")
+	check_near(s.score_breakdown().stills, Session.STILL_BONUS * 2.0, 1e-9, "shown in the breakdown")
 	check_near(s.score_breakdown().penalties, 200.0, 1e-9, "penalties in the breakdown")
 
 
@@ -348,7 +348,7 @@ func test_still_bonus_scales_with_unison_and_weight() -> void:
 	check_eq(s.unison_level, 2, "unison ×2")
 	var before := s.score
 	s.update(_bt(27))
-	check_eq(s.score - before, 450, "150 × 2 × 1.5")
+	check_eq(s.score - before, roundi(Session.STILL_BONUS * 2 * 2 * 1.5), "per beat × 2 beats × unison 2 × weight 1.5")
 
 
 func test_kept_still_counts_four_hits_and_top_stats() -> void:
@@ -360,7 +360,7 @@ func test_kept_still_counts_four_hits_and_top_stats() -> void:
 		s.tap(1, _bt(i), 0)
 	check_eq(s.unison_level, 0, "8 hits: still ×1")
 	s.update(_bt(11))
-	check_eq(kept, [150.0], "still_kept signalled with its points")
+	check_eq(kept, [Session.STILL_BONUS * 2.0], "still_kept signalled with its points")
 	check_eq(s.unison_level, 1, "the stand-still counted as 4 hits: ×1.5")
 	check_eq(s.unison_streak, 0, "run of 12 used up")
 	check_eq(s.stats.unison_peak, 1.5, "peak multiplier so far")
@@ -393,21 +393,21 @@ func test_kept_still_counts_four_hits_and_top_stats() -> void:
 
 
 func test_still_bonus_per_beat_and_hit_cap() -> void:
-	# 75 per beat: a 3-beat stand-still is worth 225 × unison × weight and 6 hits.
+	# Per beat: a 3-beat stand-still is worth 3 × STILL_BONUS × unison × weight and 6 hits.
 	var s := Session.new(make(steps(6) + [{"b": 6, "k": "rest", "len": 3}]), "easy")
 	for i in 6:
 		s.tap(1, _bt(i), 0)
 	var before := s.score
 	s.update(_bt(10))
-	check_eq(s.score - before, 225, "3 beats: 75 × 3")
+	check_eq(s.score - before, Session.STILL_BONUS * 3, "3 beats")
 	check_eq(s.unison_level, 1, "6 hits + 6 for the 3-beat stand-still: up one level")
-	# A long stand-still counts at most 8 hits: 6 beats -> 450 points but 8 hits, not 12.
+	# A long stand-still counts at most 8 hits: 6 beats -> 6 × STILL_BONUS but 8 hits, not 12.
 	var l := Session.new(make(steps(3) + [{"b": 3, "k": "rest", "len": 6}]), "easy")
 	for i in 3:
 		l.tap(1, _bt(i), 0)
 	var lb := l.score
 	l.update(_bt(10))
-	check_eq(l.score - lb, 450, "6 beats: 75 × 6")
+	check_eq(l.score - lb, Session.STILL_BONUS * 6, "6 beats")
 	check_eq(l.unison_level, 0, "3 + 8 = 11 hits: not yet a level")
 	check_eq(l.unison_streak, 11, "the stand-still's hits are capped at 8")
 	check_near(l.still_beats(l.notes[3]), 6.0, 1e-9, "still_beats")
@@ -537,7 +537,7 @@ func test_reference_formula_on_random_runs() -> void:
 						run12 = 0
 				"still":
 					var beats: float = e[2]
-					total += 75 * beats * mults[level] * w
+					total += 800 * beats * mults[level] * w   # the reference keeps its own constant
 					run12 += mini(8, floori(2 * beats + 1e-6))
 					if run12 >= 12:
 						run12 -= 12

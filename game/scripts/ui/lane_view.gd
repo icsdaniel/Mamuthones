@@ -10,6 +10,7 @@ const FLASH_TIME := 0.14
 const CUE_TIME := 0.22          ## a button is "cued" when its next note is this close
 const MARK_TIME := 0.4          ## wrong-lane and rope marks
 const TICK_TIME := 1.6          ## timing ticks fade over this long
+const STEP_TICK_TIME := 0.3     ## the early/late tick on a step hit fades over this long
 
 var session: Session
 var song_time := 0.0
@@ -25,6 +26,7 @@ var _auto_pressed: Array[float] = [-9.0, -9.0, -9.0]
 var _first := 0                  ## first note that may still be drawn
 var _clock := 0.0                ## real seconds, for burst ages while paused
 var _offsets: Array = []         ## [offset s, time added, lane] of recent hits, for the timing ticks
+var _step_ticks: Array = []      ## [lane, side, time added]: the early/late tick of a step hit
 var _marks: Array = []           ## [kind, lane, time]: "wrong" X on a pressed button, "faint" ring on
                                  ## the note it was meant for, "rope" grip across the buttons
 
@@ -62,6 +64,7 @@ func word_spot(lane: int) -> Vector2:
 func reset() -> void:
 	_first = 0
 	_bursts.clear()
+	_step_ticks.clear()
 
 
 ## A button went down (player or autoplay): flash it now.
@@ -93,6 +96,26 @@ func add_offset(offset: float, lane := 1) -> void:
 	_offsets.append([offset, _clock, lane])
 	if _offsets.size() > 24:
 		_offsets.pop_front()
+
+
+## A Good or Ok step hit off time: a small tick at the lane, cool above the hit line when early,
+## warm below it when late, gone in STEP_TICK_TIME, so the side reads at a glance without words.
+func step_tick(lane: int, side: String) -> void:
+	if lane < 0 or lane > 2 or side == "":
+		return
+	_step_ticks.append([lane, side, _clock])
+	if _step_ticks.size() > 6:
+		_step_ticks.pop_front()
+	queue_redraw()
+
+
+## The sides of the step ticks still showing ("early"/"late"), oldest first.
+func step_ticks_shown() -> Array[String]:
+	var out: Array[String] = []
+	for k in _step_ticks:
+		if _clock - float(k[2]) <= STEP_TICK_TIME:
+			out.append(str(k[1]))
+	return out
 
 
 ## A step on the wrong lane: a red X on the button actually pressed, and a faint ring where the note
@@ -157,6 +180,7 @@ func _draw() -> void:
 		else:
 			_bursts.remove_at(i)
 	_draw_timing_ticks(field)
+	_draw_step_ticks(field)
 	if show_buttons:
 		_draw_buttons()
 		_draw_marks()
@@ -187,6 +211,36 @@ func _draw_timing_ticks(field: Rect2) -> void:
 		for x0 in [r.position.x + 6.0, r.end.x - 6.0 - dash]:
 			draw_line(Vector2(x0, y), Vector2(x0 + dash, y), Color(Palette.INK, a * 0.8), 9.0)
 			draw_line(Vector2(x0, y), Vector2(x0 + dash, y), Color(col, a), 5.0)
+
+
+## The step ticks: a short bold bar across the lane's middle with a point toward the side it was
+## off (up for early, where the note still was; down for late), in the early/late pair on an ink
+## outline, fading out over STEP_TICK_TIME.
+func _draw_step_ticks(field: Rect2) -> void:
+	if _step_ticks.is_empty():
+		return
+	var hl := LaneSkin.hit_line_y(field)
+	var rects := LaneSkin.lane_rects(field)
+	var i := 0
+	while i < _step_ticks.size():
+		var k: Array = _step_ticks[i]
+		var age := _clock - float(k[2])
+		if age > STEP_TICK_TIME:
+			_step_ticks.remove_at(i)
+			continue
+		i += 1
+		var a := clampf(1.0 - age / STEP_TICK_TIME, 0.0, 1.0)
+		var side := str(k[1])
+		var d := -1.0 if side == "early" else 1.0
+		var r: Rect2 = rects[clampi(int(k[0]), 0, 2)]
+		var cx := r.get_center().x
+		var y := hl + d * 44.0
+		var w := minf(r.size.x * 0.22, 46.0)
+		var col := UIKit.side_color(side)
+		var tip := Vector2(cx, y + d * 14.0)
+		var pts := PackedVector2Array([Vector2(cx - w, y), Vector2(cx - 8.0, y), tip, Vector2(cx + 8.0, y), Vector2(cx + w, y)])
+		draw_polyline(pts, Color(Palette.INK, a * 0.9), 15.0, true)
+		draw_polyline(pts, Color(col, a), 8.0, true)
 
 
 ## The early/late chevron over a burst: up and cool above the hit for early, down and warm below it

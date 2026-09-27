@@ -53,6 +53,7 @@ var _count_music_t := 0.0        ## song time the music starts from after the co
 var _played := false             ## the music has run since the last count-in
 var _audio_count := false        ## the song started at its own count-in (sticks in the music)
 var _tap_hit := false            ## the tap being handled judged a note (set by _on_judged)
+var _tap_quality := ""           ## how well it hit: perfect, good, ok (Sound.step's quality)
 var _clock := 0.0
 var _field_box: Control
 var _still := false
@@ -352,9 +353,29 @@ func _on_stepped(lane: int) -> void:
 		lanes.rope_grab(lane)
 		Sound.rope_grab()
 	else:
-		Sound.step(lane)
+		play_step(lane, _tap_quality if _tap_hit else "")
 		lanes.press(lane)
 	_tap_hit = false
+	_tap_quality = ""
+
+
+## The step's knock, duller on an Ok hit so the ear hears a sloppy step. Sound.step takes the hit
+## quality once Sound adds it; until then every step knocks the same.
+static func play_step(lane: int, quality: String) -> void:
+	if quality != "" and Sound.get_method_argument_count("step") >= 2:
+		Sound.call("step", lane, quality)
+	else:
+		Sound.step(lane)
+
+
+## Sound.step's quality for a judgement: perfect, good, ok (the Early/Late band), or "".
+static func step_quality(judgement: String) -> String:
+	match judgement:
+		"perfect", "good":
+			return judgement
+		"early", "late":
+			return "ok"
+	return ""
 
 
 func _swipe_open(t: float) -> bool:
@@ -398,6 +419,8 @@ func _on_judged(note: Note, judgement: String, offset: float) -> void:
 	var lane := note.lane if note != null and note.lane >= 0 else -1
 	if lane >= 0 and (good or soft) and note.kind != Note.Kind.RING:
 		_tap_hit = true
+		_tap_quality = step_quality(judgement)
+	var is_step := lane >= 0 and note != null and (note.kind == Note.Kind.STEP or note.kind == Note.Kind.HOLD)
 	var pos: Vector2
 	if lane >= 0:
 		pos = lanes.lane_center(lane)
@@ -407,7 +430,13 @@ func _on_judged(note: Note, judgement: String, offset: float) -> void:
 	# Early/late is shown only off Perfect (like FAST/SLOW): on Good by the offset, and on the Ok band,
 	# whose word is "Ok" with its side, so "early" and "late" only ever mean a side.
 	var side := hit_side(judgement, offset)
-	lanes.burst(pos, quality, side)
+	if is_step and (good or soft):
+		# A step says its side with a small tick at the lane (cool above the line, warm below),
+		# readable at a glance without the word; the spray is a plain Good.
+		lanes.burst(pos, "good" if soft else quality)
+		lanes.step_tick(lane, side)
+	else:
+		lanes.burst(pos, quality, side)
 	var word_key: String = JUDGE_WORDS.get(judgement, "")
 	if word_key != "":
 		words.show_word(tr(word_key), side, lanes.word_spot(lane), quality)

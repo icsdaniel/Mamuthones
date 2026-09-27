@@ -45,7 +45,9 @@ const RING_POINTS := {"perfect": 450, "good": 225, "early": 75, "late": 75}
 const HOLD_BONUS := 150
 const HOLD_GRACE := 0.120    ## a hold released up to 120 ms before its end still counts as kept
 const STILL_PENALTY := 100
-const STILL_BONUS := 75      ## a stand-still kept to its end: 75 × unison × weight per beat it lasts
+## A stand-still kept to its end: STILL_BONUS × beats × unison × weight. 800 puts stillness at about
+## 10 % of a perfect run's score on a typical story song at Hard (measured by test_charts).
+const STILL_BONUS := 800
 const STILL_HITS := 2        ## and 2 hits per beat toward the next unison level...
 const STILL_HITS_MAX := 8    ## ...at most 8
 const SILENCE_DEBOUNCE := 0.150  ## rings in a stand-still closer than this count once
