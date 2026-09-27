@@ -95,7 +95,7 @@ func test_kept_still_has_its_moment_and_share() -> void:
 		s.emit_signal("still_kept", rest, 300.0)
 		var m: StillMoment = play.get("still_moment")
 		check_eq(m.shown(), tr("still_moment"), "the row stands as one")
-		check(m.get_parent() == play.get("scene"), "over the procession, not the notes")
+		check(m.get_parent() == play.get("banner"), "over the top of the lanes, away from the hit tile")
 	UIHarness.free_app(app)
 	UIHarness.restore_profile()
 

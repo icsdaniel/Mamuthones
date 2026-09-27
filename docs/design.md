@@ -53,7 +53,7 @@ than touch.
 
 **Unison** is the multiplier: ×1, ×1.5, ×2, ×2.5, ×3, ×4. It goes up one level every 12 hits in a row
 that are Good or better. A miss drops it **two** levels and a wrong step one (never to zero), so the
-row can recover. It is shown as the row of Mamuthones in the procession scene getting tighter and louder.
+row can recover. It is shown as more of the Mamuthones beside the lanes jumping with you, and louder.
 
 **Weight** is the bell set's multiplier. Heavier sets score more and have stricter windows:
 
@@ -164,9 +164,14 @@ Woodcut prints and carved wood, in black (#141110), bone (#ede6da) and red (#c03
 (#e0a24a) for fire and highlights. Chisel marks, wood grain, ink edges, paper texture. Night, fire and
 winter fog. The logo is the black mask front and centre, with the red rope around it and a hint of bells.
 
-Portrait layout during play, top to bottom: HUD (score, unison, progress), the procession scene (your row
-of Mamuthones jolting with every hit, Issohadores ahead, crowd and fire behind), the three note lanes,
-and the three step buttons.
+Portrait layout during play, top to bottom: HUD (score, unison, progress), then the three note lanes
+and the three step buttons filling the rest of the screen, with a file of Mamuthones either side of
+them (Daniele, 2026-09-27: the scene on top took space and added little). The lanes are rows of tiles,
+one per beat, and notes hop down one tile per beat, landing on the beat, as in Rift of the NecroDancer,
+so the time to a note reads as a count of hops. Off-beat notes hop on half (or third) beats and sit on
+the seams between tiles. The Mamuthones jump on the beat, landing on it; more of them join as the
+unison grows, they stumble on a miss and stand still through a stand-still. The Piazza keeps the
+procession scene.
 
 ## 9. Setup and settings
 

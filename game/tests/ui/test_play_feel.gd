@@ -126,9 +126,10 @@ func test_the_count_in_is_seen_on_the_audio_sticks() -> void:
 	await _to_time(c, s.notes[0].t + 0.01)
 	await tree.process_frame
 	check(not cv.is_showing(), "nothing is shown once the notes arrive")
-	# The count is drawn over the procession, never over the lanes.
+	# The count is drawn over the top of the lanes, never over the hit tile where notes are stepped.
 	var lanes: LaneView = play.get("lanes")
-	check(not cv.get_global_rect().intersects(lanes.get_global_rect()), "the count-in sits off the notes")
+	var hit_tile_top := lanes.get_global_transform() * Vector2(0.0, LaneSkin.hit_line_y(lanes.field_rect()) - lanes.field_rect().size.y * 0.25)
+	check(cv.get_global_rect().end.y <= hit_tile_top.y, "the count-in sits well above the hit tile")
 	check(cv.get_global_rect().size.y > 150.0, "and is big (%.0f px tall)" % cv.get_global_rect().size.y)
 	_close(app)
 
@@ -249,3 +250,31 @@ func test_bell_cue_is_on_for_easy_and_medium_by_default() -> void:
 	Profile.set_setting("bell_cue", false)
 	check(not script.bell_cue_on("easy"), "Settings can turn it off")
 	UIHarness.restore_profile()
+
+
+## Notes hop one tile per beat: they stand still most of the beat, hop in its last part, and land on
+## the beat itself, so a note reaches the hit line exactly when it must be stepped.
+func test_notes_hop_and_land_on_the_beat() -> void:
+	check_eq(LaneView.hop_grid(7.0), 1.0, "on the beat: whole-beat hops")
+	check_eq(LaneView.hop_grid(7.5), 0.5, "off the beat: half-beat hops")
+	check_near(LaneView.hop_grid(7.0 + 1.0 / 3.0), 1.0 / 3.0, 1e-6, "triplets hop on thirds")
+	check_near(LaneView.hopped(3.0, 1.0), 3.0, 1e-6, "on the beat the grid has just landed")
+	check_near(LaneView.hopped(3.5, 1.0), 3.0, 1e-6, "mid-beat it stands still")
+	check_near(LaneView.hopped(3.999, 1.0), 4.0, 0.01, "and lands as the next beat arrives")
+	var prev := LaneView.hopped(3.0, 1.0)
+	for i in range(1, 101):
+		var h := LaneView.hopped(3.0 + i * 0.01, 1.0)
+		check(h >= prev - 1e-9, "never hops backwards")
+		prev = h
+	var lv := LaneView.new()
+	lv.size = Vector2(540, 1100)
+	lv.spb = 0.5
+	lv.beat_zero = 1.0
+	lv.song_time = 1.0 + 8.0 * 0.5          # beat 8
+	var f := lv.field_rect()
+	var hl := LaneSkin.hit_line_y(f)
+	check_near(lv.event_y(f, lv.song_time, 0.0, 8.0), hl, 0.5, "a note on this beat is on the hit line")
+	var y2 := lv.event_y(f, 1.0 + 10.0 * 0.5, 0.0, 10.0)
+	lv.song_time += 0.5 * 0.4                # 40% into the beat: nothing has moved yet
+	check_near(lv.event_y(f, 1.0 + 10.0 * 0.5, 0.0, 10.0), y2, 0.5, "between hops the note stands still")
+	lv.free()

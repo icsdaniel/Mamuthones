@@ -3,6 +3,12 @@ extends Control
 ## The three note lanes and the three step buttons, drawn with Art's LaneSkin. The play screen feeds it
 ## the session and the song time each frame; hits add bursts and button flashes the same frame the
 ## input arrives (flash() / burst() are called from the input signal handlers, then queue_redraw()).
+##
+## Hopping (set spb and beat_zero): the lanes are rows of tiles, one per beat, and every note hops down
+## one tile per beat, landing on the beat, instead of sliding. A note on the beat sits in a tile and
+## lands in the hit tile when it must be stepped, so "three hops, then tap" reads at a glance. Off-beat
+## notes hop on their own grid (half or third beats) and sit on the seams between tiles. With spb 0 the
+## notes slide as before (the Piazza and tests).
 
 const BUTTONS_H := 196.0        ## height of the button row
 const LOOKAHEAD := 1.5          ## seconds of notes visible at note speed 1.0
@@ -11,6 +17,8 @@ const CUE_TIME := 0.22          ## a button is "cued" when its next note is this
 const MARK_TIME := 0.4          ## wrong-lane and rope marks
 const TICK_TIME := 1.6          ## timing ticks fade over this long
 const STEP_TICK_TIME := 0.3     ## the early/late tick on a step hit fades over this long
+const VISIBLE_BEATS := 5.0      ## rows of tiles above the hit line at note speed 1.0 (hopping)
+const HOP := 0.3                ## share of each step spent hopping; the rest the note stands still
 
 var session: Session
 var song_time := 0.0
@@ -18,6 +26,8 @@ var note_speed := 1.0
 var router: InputRouter          ## for pressed state; null in autoplay
 var show_buttons := true
 var beat_pulse := 0.0
+var spb := 0.0                   ## seconds per beat; > 0 turns hopping on
+var beat_zero := 0.0             ## song time of beat 0
 
 var _bursts: Array = []          ## [pos: Vector2, quality: String, t0: float]
 var _flash: Array[float] = [-9.0, -9.0, -9.0]
@@ -150,7 +160,91 @@ func _process(delta: float) -> void:
 
 func _px_per_s() -> float:
 	var f := field_rect()
+	if hopping():
+		return _px_per_beat() / spb
 	return (LaneSkin.hit_line_y(f) - f.position.y) / (LOOKAHEAD / maxf(note_speed, 0.1))
+
+
+func hopping() -> bool:
+	return spb > 0.0
+
+
+func _px_per_beat() -> float:
+	var f := field_rect()
+	return (LaneSkin.hit_line_y(f) - f.position.y) / (VISIBLE_BEATS / maxf(note_speed, 0.1))
+
+
+## The beat grid a note hops on: whole beats, else halves, thirds or quarters; 0 = no grid (slides).
+static func hop_grid(beat: float) -> float:
+	for g: float in [1.0, 0.5, 1.0 / 3.0, 0.25]:
+		var k := beat / g
+		if absf(k - roundf(k)) < 0.02:
+			return g
+	return 0.0
+
+
+## How far the grid has moved at `beat`, in steps of `g`: whole steps plus the hop in progress. The
+## hop fills the last HOP of each step and ends exactly on the step, so a note lands on its beat.
+static func hopped(beat: float, g: float) -> float:
+	if g <= 0.0:
+		return beat
+	var k := floorf(beat / g)
+	var f := beat / g - k
+	var h := 0.0
+	if f > 1.0 - HOP:
+		var x := (f - (1.0 - HOP)) / HOP
+		h = x * x * (3.0 - 2.0 * x)
+	return (k + h) * g
+
+
+## Beats from now to `t` as drawn: hopped when hopping is on (the note's own grid), else exact.
+func shown_beats(t: float, note_beat := NAN) -> float:
+	var now := (song_time - beat_zero) / spb
+	var nb := note_beat if not is_nan(note_beat) else (t - beat_zero) / spb
+	var g := hop_grid(nb)
+	return nb - hopped(now, g)
+
+
+## Screen y of an event at song time t (a note's time, a hold's end).
+func event_y(field: Rect2, t: float, pps: float, note_beat := NAN) -> float:
+	if hopping():
+		return LaneSkin.hit_line_y(field) - shown_beats(t, note_beat) * _px_per_beat()
+	return LaneSkin.note_y(field, t - song_time, pps)
+
+
+## The tile rows: seams half a beat either side of each beat, so notes on the beat sit in a tile and
+## the hit tile is centred on the hit line. Every other row is shaded and bar lines are marked, and
+## the rows hop with the notes.
+func _draw_tiles(field: Rect2) -> void:
+	var ppb := _px_per_beat()
+	var hl := LaneSkin.hit_line_y(field)
+	var now := (song_time - beat_zero) / spb
+	var moved := hopped(now, 1.0)
+	var rects := LaneSkin.lane_rects(field)
+	var first := floori(moved - (field.end.y - hl) / ppb) - 1
+	var last := ceili(moved + (hl - field.position.y) / ppb) + 1
+	for k in range(first, last + 1):
+		var yc := hl - (float(k) - moved) * ppb
+		var top := maxf(yc - ppb * 0.5, field.position.y)
+		var bottom := minf(yc + ppb * 0.5, field.end.y)
+		if bottom <= top:
+			continue
+		if posmod(k, 2) == 1:
+			for r: Rect2 in rects:
+				draw_rect(Rect2(r.position.x, top, r.size.x, bottom - top), Color(Palette.INK, 0.3))
+		var seam := yc - ppb * 0.5
+		if seam > field.position.y and seam < field.end.y:
+			var bar := posmod(k, 4) == 0
+			for r: Rect2 in rects:
+				draw_line(Vector2(r.position.x + 4.0, seam), Vector2(r.end.x - 4.0, seam), Color(Palette.INK, 0.85), 8.0)
+				draw_line(Vector2(r.position.x + 12.0, seam + 4.0), Vector2(r.end.x - 12.0, seam + 4.0),
+					Color(Palette.EMBER, 0.45) if bar else Color(Palette.BONE, 0.12), 2.0)
+	# The hit tile, where every note lands on its beat: a warm frame around the hit line.
+	var ht := Rect2(field.position.x, hl - ppb * 0.5, field.size.x, ppb).intersection(field)
+	for r: Rect2 in rects:
+		var cell := Rect2(r.position.x + 6.0, ht.position.y + 4.0, r.size.x - 12.0, ht.size.y - 8.0)
+		draw_rect(cell, Color(Palette.EMBER, 0.07))
+		draw_rect(cell, Color(Palette.EMBER, 0.28), false, 3.0)
 
 
 func _draw() -> void:
@@ -162,6 +256,8 @@ func _draw() -> void:
 		else:
 			glow[lane] = clampf(1.0 - (_clock - _flash[lane]) / FLASH_TIME, 0.0, 1.0) * 0.7
 	LaneSkin.draw_lanes(self, field, glow)
+	if hopping():
+		_draw_tiles(field)
 	LaneSkin.draw_hit_line(self, field, beat_pulse)
 	if session != null:
 		_draw_notes(field)
@@ -289,7 +385,7 @@ func _draw_marks() -> void:
 func _draw_notes(field: Rect2) -> void:
 	var t := song_time
 	var pps := _px_per_s()
-	var horizon := t + (field.size.y / pps)
+	var horizon := t + (field.size.y / pps) + (spb if hopping() else 0.0)
 	var lanes := LaneSkin.lane_rects(field)
 	var notes := session.notes
 	# Skip notes that are over and gone for good.
@@ -303,7 +399,7 @@ func _draw_notes(field: Rect2) -> void:
 			break
 		if _gone(n, t):
 			continue
-		var y := LaneSkin.note_y(field, n.t - t, pps)
+		var y := event_y(field, n.t, pps, n.beat)
 		if n.kind != Note.Kind.REST and not n.done:
 			taken.append(y)
 		match n.kind:
@@ -315,7 +411,7 @@ func _draw_notes(field: Rect2) -> void:
 					var head := minf(y, LaneSkin.hit_line_y(field)) if n.holding else y
 					if n.done and not n.holding:
 						continue
-					LaneSkin.draw_hold(self, lanes[n.lane], head, LaneSkin.note_y(field, n.end_t - t, pps), n.holding)
+					LaneSkin.draw_hold(self, lanes[n.lane], head, event_y(field, n.end_t, pps), n.holding)
 			Note.Kind.BELL:
 				if not n.done:
 					LaneSkin.draw_bell(self, field, y, n.up)
@@ -327,7 +423,7 @@ func _draw_notes(field: Rect2) -> void:
 					LaneSkin.draw_swipe(self, field, y, n.dir)
 			Note.Kind.REST:
 				if not n.finished:
-					var y_end := LaneSkin.note_y(field, n.end_t - t, pps)
+					var y_end := event_y(field, n.end_t, pps)
 					LaneSkin.draw_rest(self, field, y_end, y)
 					rests.append([y_end, y])
 	for r in rests:

@@ -1,6 +1,7 @@
 extends Screen
-## Playing a song. Top to bottom: HUD, the procession scene, the three lanes and the three step buttons
-## (design section 8). Conductor keeps song time from the audio clock; InputRouter (or Autoplay) feeds
+## Playing a song. Top to bottom: HUD, then the three lanes of tiles and the three step buttons, with a
+## file of Mamuthones jumping on the beat either side of them (design section 8). The Piazza keeps the
+## procession scene over its cue instead. Conductor keeps song time from the audio clock; InputRouter (or Autoplay) feeds
 ## the Session; every hit is answered in the same frame with its sound, a button flash, a burst, a
 ## judgement word, a jolt of the row and a short vibration.
 ##
@@ -11,13 +12,15 @@ extends Screen
 ##       first note's bar, after a count-in, instead of the whole intro).
 ##
 ## Count-ins: a song started from its beginning has its count-in sticks in the music (beats -4..-1),
-## and the big 4-3-2-1 over the procession lands on them. A resume, a quick restart and a lesson
+## and the big 4-3-2-1 over the top of the lanes lands on them. A resume, a quick restart and a lesson
 ## count in with Sound.count_in() while the music waits on a bar line; the digits follow those sticks
 ## and the lanes keep moving so the approach replays, then the music starts on the next beat.
 
 signal finished(session: Session)
 
-const SCENE_SHARE := 0.27         ## share of the screen height given to the procession scene
+const SCENE_SHARE := 0.27         ## Piazza: share of the screen height given to the procession scene
+const GUTTER := 0.15              ## share of the width left each side of the lanes for the Mamuthones
+const BANNER_SHARE := 0.4         ## the count-in and the stand-still moment use this top share of the lanes
 const FIELD_MAX_W := 900.0        ## lanes and buttons stay thumb-sized on a tablet
 const JUDGE_WORDS := {
 	"perfect": "judge_perfect", "good": "judge_good", "early": "judge_ok", "late": "judge_ok",
@@ -32,7 +35,8 @@ var router: InputRouter
 var autoplay: Autoplay
 var ghost: Ghost
 var hud: Hud
-var scene: ProcessionScene
+var scene                         ## SideRows (songs) or ProcessionScene (Piazza): the same calls
+var banner: Control               ## over the top of the lanes: count-in and stand-still moment
 var lanes: LaneView
 var words: JudgementWords
 var cue: PiazzaCue
@@ -114,22 +118,45 @@ func build() -> void:
 	hud.setup(session, ghost)
 	hud.pause_pressed.connect(pause)
 
-	scene = ProcessionScene.new()
-	scene.name = "Procession"
-	scene.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	scene.size_flags_vertical = Control.SIZE_EXPAND_FILL
-	scene.size_flags_stretch_ratio = SCENE_SHARE / (1.0 - SCENE_SHARE)
-	col.add_child(scene)
-	scene.set_stop(song.stop)
-	UIKit.show_look(scene)
-	scene.set_reduced_motion(UIKit.reduced_motion())
-	scene.set_unison(0)
-
 	_field_box = CenterWidth.new()
 	(_field_box as CenterWidth).max_width = FIELD_MAX_W
 	_field_box.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	_field_box.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	col.add_child(_field_box)
+	if session.piazza:
+		var procession := ProcessionScene.new()
+		procession.name = "Procession"
+		procession.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		procession.size_flags_vertical = Control.SIZE_EXPAND_FILL
+		procession.size_flags_stretch_ratio = SCENE_SHARE / (1.0 - SCENE_SHARE)
+		col.add_child(procession)
+		procession.set_stop(song.stop)
+		scene = procession
+		col.add_child(_field_box)
+	else:
+		# The stage: the files of Mamuthones behind, the lanes between them.
+		var stage := Control.new()
+		stage.name = "Stage"
+		stage.size_flags_vertical = Control.SIZE_EXPAND_FILL
+		stage.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		col.add_child(stage)
+		var rows := SideRows.new()
+		rows.name = "SideRows"
+		rows.set_anchors_preset(Control.PRESET_FULL_RECT)
+		rows.bell_set = str(args.get("bell_set", "village"))
+		stage.add_child(rows)
+		scene = rows
+		var gut := MarginContainer.new()
+		gut.set_anchors_preset(Control.PRESET_FULL_RECT)
+		gut.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		var gw := int(round(get_viewport_rect().size.x * GUTTER)) if is_inside_tree() else 108
+		gut.add_theme_constant_override("margin_left", gw)
+		gut.add_theme_constant_override("margin_right", gw)
+		stage.add_child(gut)
+		gut.add_child(_field_box)
+	UIKit.show_look(scene)
+	scene.set_reduced_motion(UIKit.reduced_motion())
+	scene.set_unison(0)
+
 	lanes = LaneView.new()
 	lanes.name = "Lanes"
 	lanes.session = session
@@ -137,6 +164,10 @@ func build() -> void:
 	lanes.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	lanes.show_buttons = not session.piazza
 	lanes.visible = not session.piazza
+	if not session.piazza:
+		lanes.spb = _spb
+		lanes.beat_zero = song.offset_for(session.remix)
+		scene.lanes = lanes
 	_field_box.add_child(lanes)
 	words = JudgementWords.new()
 	words.set_anchors_preset(Control.PRESET_FULL_RECT)
@@ -184,13 +215,23 @@ func build() -> void:
 	session.wrong_step.connect(_on_wrong_step)
 	session.still_kept.connect(_on_still_kept)
 
-	# The count-in is drawn over the procession, never over the notes.
+	# The count-in and the stand-still moment: over the procession in the Piazza, else over the top of
+	# the lanes, far from the hit tiles where the next notes are read.
+	if session.piazza:
+		banner = scene
+	else:
+		banner = Control.new()
+		banner.name = "Banner"
+		banner.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		banner.anchor_right = 1.0
+		banner.anchor_bottom = BANNER_SHARE
+		lanes.add_child(banner)
 	count_view = CountInView.new()
 	count_view.name = "CountIn"
-	scene.add_child(count_view)
+	banner.add_child(count_view)
 	still_moment = StillMoment.new()
 	still_moment.name = "StillMoment"
-	scene.add_child(still_moment)
+	banner.add_child(still_moment)
 
 	_bell_cue = bell_cue_on(difficulty)
 	Sound.set_key(song.key_root)
@@ -282,6 +323,8 @@ func _process(delta: float) -> void:
 	lanes.song_time = t
 	var beat := (t - song.offset_for(session.remix)) / _spb
 	lanes.beat_pulse = 1.0 - fposmod(beat, 1.0) if beat >= 0.0 else 0.0
+	if scene is SideRows:
+		scene.beat = beat
 	hud.tick(t, delta)
 	if cue != null:
 		cue.song_time = t
@@ -563,6 +606,8 @@ func _tick_count() -> void:
 		var k := maxf((_clock - _count_from) / _spb, 0.0)
 		count_view.show_digit(clampi(4 - floori(k), 1, 4), fposmod(k, 1.0))
 		lanes.beat_pulse = 1.0 - fposmod(k, 1.0)
+		if scene is SideRows:
+			scene.beat = (tv - song.offset_for(session.remix)) / _spb
 		return
 	_resume_at = -1.0
 	count_view.clear()
