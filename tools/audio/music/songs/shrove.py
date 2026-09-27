@@ -106,7 +106,7 @@ def build():
         s.tenore(b + bar * 4, 2, "drone", vowels="oa"[bar % 2], vel=0.9)
         s.melody("boghe", b + bar * 4, ["5:2", "6:2", "7:2", "8:2"][bar], vel=0.9)
         s.drums(b + bar * 4, 1, "B...............")
-        s.stop(b + bar * 4 + 2, 2, tempt=(None, "shake", None, "call")[bar])
+        s.stop(b + bar * 4 + 2, 2, tempt=("call", "shake", "call", "shake")[bar])
     s.bell_cue(b + 16, rank=1)
 
     # ---- build: the fast figure, drums climbing

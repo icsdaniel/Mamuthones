@@ -59,6 +59,7 @@ static func headphones(ci: CanvasItem, rect: Rect2, lit := Palette.EMBER) -> voi
 		var yoke := PackedVector2Array([c + Vector2(sd * 136.0, 20.0) * s, cc + Vector2(-sd * 4.0, -40.0) * s])
 		WoodcutDraw.stroke(ci, yoke, Palette.INK, 16.0 * s, 12.0 * s)
 		WoodcutDraw.stroke(ci, yoke, Palette.BONE_DIM, 9.0 * s, 6.0 * s)
+		WoodcutDraw.stroke(ci, yoke, Color(Palette.INK, 0.35), 3.0 * s, 2.0 * s)
 		var shell := WoodcutDraw.rough(WoodcutDraw.ellipse(cc, Vector2(46.0, 64.0) * s, 24), 1.0 * s, 7 + int(sd), 6.0 * s)
 		WoodcutDraw.fill(ci, shell, Palette.WOOD)
 		WoodcutDraw.fill(ci, shell, Color(Palette.BONE, 0.1), Palette.tex("chisel"), 1.0 / (120.0 * s))
@@ -157,16 +158,33 @@ static func phone_in_hands(ci: CanvasItem, rect: Rect2, tilt := 0.0, left_presse
 	WoodcutDraw.end()
 
 
-## The back of a hand: fingertips curling round the side of the phone.
+## The back of a hand: three fingers curling round the side of the phone, each a carved shape in skin
+## with a hatched shadow plane underneath, a white-line cut along its lit top, a knuckle crease, the nail
+## edge and an ink outline (the same treatment as the thumbs).
 static func _hand_back(ci: CanvasItem, body: PackedVector2Array, side: float, s: float) -> void:
 	var a: Vector2 = body[1] if side > 0.0 else body[0]
 	var b: Vector2 = body[2] if side > 0.0 else body[3]
 	for i in 3:
-		var p := a.lerp(b, 0.5 + 0.13 * float(i)) + Vector2(side * 12.0 * s, 0)
-		var tip := WoodcutDraw.ellipse(p, Vector2(20.0, 15.0) * s, 12, side * 0.2)
-		WoodcutDraw.fill(ci, tip, SKIN.darkened(0.2))
-		WoodcutDraw.fill(ci, tip, Color(Palette.INK, 0.35), Palette.tex("hatch"), 1.0 / (70.0 * s))
-		WoodcutDraw.outline(ci, tip, Palette.INK, 3.0 * s, i)
+		var p := a.lerp(b, 0.5 + 0.13 * float(i))
+		# From behind the phone out past its edge, bending down at the tip.
+		var root := p + Vector2(-side * 8.0, 0.0) * s
+		var tip := p + Vector2(side * 30.0, 6.0 + 2.0 * float(i)) * s
+		var mid := (root + tip) * 0.5 + Vector2(0, 1.0 * s)
+		var th := (25.0 - 2.0 * float(i)) * s
+		var up := Vector2(0, -1)
+		var finger := WoodcutDraw.smooth_closed(PackedVector2Array([root + up * th * 0.5, mid + up * th * 0.55, tip + up * th * 0.35 + Vector2(side * 4.0, 0) * s,
+			tip + Vector2(side * 9.0, 3.0) * s, tip - up * th * 0.45, mid - up * th * 0.5, root - up * th * 0.5]), 3)
+		WoodcutDraw.fill(ci, finger, SKIN.darkened(0.12))
+		# Shadow plane on the underside, hatched.
+		var under := PackedVector2Array([root, mid + Vector2(0, 1.0) * s, tip + Vector2(side * 6.0, 2.0) * s, tip - up * th * 0.45, mid - up * th * 0.5, root - up * th * 0.5])
+		WoodcutDraw.fill(ci, under, Color(Palette.INK, 0.3), Palette.tex("hatch"), 1.0 / (60.0 * s))
+		WoodcutDraw.fill(ci, finger, Color(Palette.INK, 0.12), Palette.tex("chisel"), 1.0 / (90.0 * s))
+		# White-line cut along the lit top, a knuckle crease and the nail's edge.
+		WoodcutDraw.stroke(ci, PackedVector2Array([root + up * th * 0.3, mid + up * th * 0.35, tip + up * th * 0.2]), Color(Palette.BONE, 0.55), 0.6 * s, 0.6 * s, 2.4 * s)
+		var kn := root.lerp(tip, 0.45)
+		WoodcutDraw.stroke(ci, PackedVector2Array([kn + up * th * 0.4, kn - up * th * 0.3]), Color(Palette.INK, 0.6), 1.0 * s, 1.0 * s, 2.4 * s)
+		WoodcutDraw.stroke(ci, PackedVector2Array([tip + up * th * 0.25, tip + Vector2(side * 6.0, 0.5) * s]), Color(Palette.BONE, 0.6), 1.0 * s, 1.0 * s, 2.0 * s)
+		WoodcutDraw.outline(ci, finger, Palette.INK, 3.0 * s, i)
 
 
 ## The palm, cuff and thumb in front of the phone's lower corner. A pressed thumb lies flat on the glass
@@ -187,8 +205,15 @@ static func _hand_front(ci: CanvasItem, body: PackedVector2Array, side: float, p
 	WoodcutDraw.fill(ci, shade, Color(Palette.INK, 0.3), Palette.tex("hatch"), 1.0 / (80.0 * s))
 	WoodcutDraw.outline(ci, palm, Palette.INK, 4.0 * s, 13)
 	var cuff := PackedVector2Array([pc + Vector2(-side * 50, 44) * s, pc + Vector2(side * 46, 38) * s, pc + Vector2(side * 50, 90) * s, pc + Vector2(-side * 54, 90) * s])
-	WoodcutDraw.fill(ci, WoodcutDraw.rough(cuff, 1.0 * s, 17, 8.0 * s), Palette.WOOD)
-	WoodcutDraw.stroke(ci, PackedVector2Array([cuff[0], cuff[1]]), Color(Palette.BONE, 0.35), 1.0 * s, 1.0 * s, 4.0 * s)
+	var cuff_r := WoodcutDraw.rough(cuff, 1.0 * s, 17, 8.0 * s)
+	WoodcutDraw.fill(ci, cuff_r, Palette.WOOD)
+	WoodcutDraw.fill(ci, cuff_r, Color(Palette.BONE, 0.1), Palette.tex("grain"), 1.0 / (140.0 * s))
+	# Sleeve folds: dark cuts, and the lit hem.
+	for k in 3:
+		var x := lerpf(-side * 36.0, side * 34.0, (float(k) + 0.5) / 3.0)
+		WoodcutDraw.stroke(ci, PackedVector2Array([pc + Vector2(x, 50) * s, pc + Vector2(x + side * 4.0, 84) * s]), Color(Palette.INK, 0.6), 1.0 * s, 0.5 * s, 3.0 * s)
+	WoodcutDraw.stroke(ci, PackedVector2Array([cuff[0], cuff[1]]), Color(Palette.BONE, 0.45), 1.0 * s, 1.0 * s, 4.0 * s)
+	WoodcutDraw.outline(ci, cuff_r, Palette.INK, 3.0 * s, 19)
 	# The thumb: from the palm up and in over the glass.
 	var base := pc + Vector2(-side * 34.0, -40.0) * s
 	var tip := corner + up * 70.0 * s + inward * 58.0 * s

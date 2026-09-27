@@ -290,13 +290,20 @@ class Song:
 
     MIN_REST = 2.0
 
-    def stop(self, b, beats, tempt=None, at=0.5):
+    def stop(self, b, beats, tempt="auto", at=None):
         """A real musical rest: every non-sustaining instrument is silent in [b, b+beats). A stand-still
         lasts at least two beats. tempt puts something inside it the player must not answer:
-        "call" (an Issohadore's shout) or "shake" (the small bells shaking like a bell cue), at b+at."""
+        "call" (an Issohadore's shout) or "shake" (the small bells shaking like a bell cue), at b+at.
+        "auto" (the default) alternates the two through the song; None leaves the rest bare."""
         assert beats >= self.MIN_REST - 1e-9, f"stand-still at b={b} is shorter than {self.MIN_REST} beats"
         self.stops.append((b, beats))
         self.cand(b, "rest", None, rank=1, len=beats)
+        if tempt == "auto":
+            self._tempts = getattr(self, "_tempts", 0) + 1
+            tempt = "shake" if self._tempts % 2 else "call"
+        if at is None:
+            # a shake half a beat before a beat looks exactly like a bell's cue; a call lands early
+            at = (0.5 if tempt == "shake" else 0.5) if beats < 3 else (1.5 if tempt == "shake" else 1.0)
         if tempt == "call":
             self.ev("calls", b + at, 0.6, None, 0.8, kind="hei", tempt=True)
         elif tempt == "shake":

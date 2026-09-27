@@ -61,7 +61,7 @@ def build():
               chart={d: dict(steps=[("pulse", 3)], bells="none") for d in ("easy", "medium", "hard", "expert")})
     s.drums(b, 4, "D...d...D...d...")
     s.melody("boghe", b, "5:1@a 4 3 2 1:1 r:3 5:1 4 3 2 1:1 r:3", vel=0.7, cands=False)
-    s.stop(b + 5, 3)
+    s.stop(b + 5, 3, tempt=None)   # the first stand-still is met bare; the next one tempts
     s.stop(b + 13, 3)
     s.lesson("still", b, 16)
 

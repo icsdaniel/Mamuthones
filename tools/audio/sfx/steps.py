@@ -36,7 +36,9 @@ def mtof(m: float) -> float:
     return 440.0 * 2 ** ((m - 69) / 12)
 
 
-def footfall(lane: int, take: int) -> np.ndarray:
+def footfall(lane: int, take: int, dull: bool = False) -> np.ndarray:
+    """dull = an off-beat ("ok") step: the same foot landing flatter, heel knock
+    softened and low-passed, a little shorter."""
     rng = np.random.default_rng([31, lane, take])
     dur = 0.32
     n = int(dur * SR)
@@ -56,7 +58,9 @@ def footfall(lane: int, take: int) -> np.ndarray:
     he = rng.standard_normal(hn) * np.exp(-np.arange(hn) / (0.0025 * SR))
     heel = resonator(he, rng.uniform(1300, 1700) * (1.0, 0.9, 1.15)[lane], 4) + 0.6 * resonator(he, rng.uniform(2500, 3100), 5)
     # (lifted so the step's attack still reads over a remix's kick drum)
-    out[:hn] += heel * 2.4 / (np.max(np.abs(heel)) + 1e-9) * np.max(np.abs(thump))
+    if dull:
+        heel = lowpass(heel, 1100, 2)
+    out[:hn] += heel * (0.9 if dull else 2.4) / (np.max(np.abs(heel)) + 1e-9) * np.max(np.abs(thump))
     # grit crunching under the sole: sparse tiny impulses in the first 40 ms
     grit = np.zeros(n)
     for _ in range(int(rng.integers(10, 22))):
@@ -73,6 +77,11 @@ def footfall(lane: int, take: int) -> np.ndarray:
     ir = make_ir(0.35, 0.4, np.random.default_rng(5), stereo=False,
                  early=[(0.009, 0.3), (0.016, 0.2), (0.027, 0.12)], bright=5000)
     out = out + convolve_ir(out, ir)[:n] * db(-13)
+    if dull:
+        # grit and scuff dulled too, and the whole step cut short
+        out = lowpass(out, 2200, 2)
+        out = out[: int(0.22 * SR)]
+        out = out * np.exp(-np.arange(len(out)) / (0.09 * SR))
     return fade(out, 0.0005, 0.06)
 
 
@@ -147,6 +156,11 @@ def main() -> None:
             # the level, so the knock itself carries over a remix's kick drum
             x = limit(x * db(2.5) / np.max(np.abs(x)), -1.5)
             write_wav(f"steps/foot_{lane}_{k + 1}.wav", fade(x, 0.0005, 0.0))
+            # the dull "ok" step: same peak treatment, then 3 dB under the clean one's
+            y = footfall(lane, k, dull=True)
+            y = limit(y * db(2.5) / np.max(np.abs(y)), -1.5)
+            y = y * np.sqrt(np.mean(x[: int(0.15 * SR)] ** 2) / np.mean(y[: int(0.15 * SR)] ** 2)) * db(-3)
+            write_wav(f"steps/foot_ok_{lane}_{k + 1}.wav", fade(np.clip(y, -0.84, 0.84), 0.0005, 0.0))
     tones = {}
     for lane in range(3):
         for pc in range(0, 12, 2):
