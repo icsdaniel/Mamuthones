@@ -84,7 +84,7 @@ def build():
     s.drums(b, 8, "B.......B...b.b.")
     for bar in range(8):
         s.bell_cue(b + bar * 4, rank=1 if bar % 2 == 0 else 2)
-    s.stop(b + 29, 3)
+    s.stop(b + 30, 2)
 
     # ---- A3: the tune with throws and shouts
     b = s.sec("tune3", 8, 2)
@@ -108,11 +108,11 @@ def build():
     harm(b // 4, [1, 1, 1, 1])
     s.drone("tumbu", b, 16, tumbu, vel=0.5)
     for half, tempt in ((0, "call"), (8, "shake")):
-        s.melody("mancosedda", b + half, "5:.25 4 5 4 5 4 5 4 8:1 r:4 7:.5 6", vel=0.95, octave=1, hold_min=99)
-        s.drums(b + half, 2, ["B...B...B.......", "............B.B."])
+        s.melody("mancosedda", b + half, "5:.25 4 5 4 5 4 5 4 8:1 r:3 7:.5 6 5 4", vel=0.95, octave=1, hold_min=99)
+        s.drums(b + half, 2, ["B...B...B.......", "........B...B.B."])
         s.bell_cue(b + half + 2, rank=1, ring=True)
-        # four beats of stillness; a shout or a shake in the middle that must not be answered
-        s.stop(b + half + 3, 4, tempt=tempt, at=1.0 if tempt == "call" else 1.5)
+        # three beats of stillness; a shout or a shake in the middle that must not be answered
+        s.stop(b + half + 3, 3, tempt=tempt, at=1.0 if tempt == "call" else 1.5)
 
     # ---- build: sixteenths on the pipes, the drum climbs
     b = s.sec("build", 8, 2)
@@ -155,7 +155,7 @@ def build():
         s.bell_cue(b + bar * 4, rank=1 if bar % 2 == 0 else 2)
     s.ev("calls", b + 15, 0.6, None, 0.85, kind="hei")
     s.rope(b + 16, 1)
-    s.stop(b + 29, 3)
+    # (no halt here: chant 2 runs straight into the last climax)
 
     # ---- climax 2: the fast figure over everything
     b = s.sec("climax2", 8, 3)

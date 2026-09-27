@@ -94,7 +94,7 @@ def build():
             s.offcall(b + bar * 4 + 3.5)
     throw(b, 1)
     throw(b + 16, -1)
-    s.stop(b + 30, 2)
+    s.stop(b + 29, 3)
 
     # ---- question and answer: the boghe asks, the tenore answers (holds), someone gets caught
     b = s.sec("answer", 8, 1)
@@ -137,7 +137,7 @@ def build():
             s.bell_cue(b + bar * 4, rank=1, ring=True)
         s.offcall(b + bar * 4 + 2.5)
     s.ev("crowd", b, 32, None, 0.5)
-    s.stop(b + 30, 2, tempt="shake")
+    s.stop(b + 29, 3, tempt="shake")
 
     # ---- climax: everything - the tune at full tilt, throws, shouts, leaps
     b = s.sec("climax", 8, 3)

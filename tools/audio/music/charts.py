@@ -272,6 +272,9 @@ class Charter:
                             break
                 if any(n.call for n in lst):
                     pick.call = pick.k == "step"
+                if pick.sig is None:
+                    # a signature note keeps its place in the motif whatever else shares its beat
+                    pick.sig = next((n.sig for n in lst if n.sig is not None), None)
                 merged.append(pick)
             else:
                 merged.append(lst[0])
@@ -320,6 +323,7 @@ class Charter:
             notes = [n for n in notes if id(n) not in gone]
             bells = keep_b
         out = []
+        notes_drop = set()
         bell_bs = {n.b: n for n in bells}
         for n in notes:
             if n.k not in ("step", "hold"):
@@ -331,7 +335,15 @@ class Charter:
                 bl = bell_bs[n.b]
                 # rings where the score marks a leap (the bell cue lands with a step); at Expert
                 # also on the strongest bells, the rest of Expert's bells stay free of the steps
-                if n.k == "step" and ring_ok and (bl.tag in ("ring", "triple") or (lv >= 3 and bl.rank == 1)):
+                sig_climax = n.k == "step" and n.sig is not None and self.in_climax(n.b) and lv >= 1
+                if sig_climax and not ring_ok:
+                    # the climax restates the signature: its note keeps the beat, the bell yields
+                    notes_drop.add(id(bl))
+                    out.append(n)
+                    continue
+                if sig_climax:
+                    bl.sig = n.sig
+                if n.k == "step" and ring_ok and (sig_climax or bl.tag in ("ring", "triple") or (lv >= 3 and bl.rank == 1)):
                     bl.k = "ring"
                     bl.pitch = n.pitch if n.pitch is not None else bl.pitch
                     bl.role = n.role
@@ -343,7 +355,7 @@ class Charter:
             if near < clear - 1e-6:
                 continue
             out.append(n)
-        notes = out
+        notes = [n for n in out if id(n) not in notes_drop]
 
         # 5. holds: nothing on their lane (decided after lanes), at medium nothing at all inside
         # 6. thin by overall gap, keeping the most important notes

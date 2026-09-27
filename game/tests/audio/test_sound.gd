@@ -395,8 +395,12 @@ func test_steals_the_oldest_voice() -> void:
 			if p.get_playback_position() > best:
 				best = p.get_playback_position()
 				oldest = p
+		var ending := {}  # voices within 50 ms of their end may finish on the mixer thread first
+		for p: AudioStreamPlayer in s._bell_pool:
+			ending[p] = p.stream.get_length() - p.get_playback_position() < 0.05
 		s.bell("full", true, "perfect")
-		check(_last_player(s, s._bell_pool, 0) == oldest, "with every voice busy, the oldest ring is the one cut")
+		var took := _last_player(s, s._bell_pool, 0)
+		check(took == oldest or ending[took], "with every voice busy, the oldest ring is the one cut")
 		check(oldest == first or best > 0.2, "and it is one of the first rung")
 	else:
 		check(true, "a voice finished early; nothing to steal")

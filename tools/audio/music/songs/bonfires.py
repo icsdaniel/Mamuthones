@@ -65,7 +65,7 @@ def build():
         s.bell_cue(b + bar * 4, rank=1 if bar % 2 == 0 else 2, land="stomp")
         if bar % 2 == 1:
             s.bell_cue(b + bar * 4 + 2, rank=3, land="stomp", big=False)
-    s.stop(b + 30, 2)
+    s.stop(b + 29, 3)
 
     # ---- B1: the circle turns slowly - long tenore chords (holds), the boghe answers above
     b = s.sec("turn1", 8, 1, chart={"medium": dict(steps=[("pulse", 3), ("mel", 3)], holds=3, bells="phrase"),
@@ -79,7 +79,7 @@ def build():
     s.drums(b, 8, "D.....d.....")
     for bar in range(0, 8, 2):
         s.bell_cue(b + bar * 4 + 2, rank=1, land="stomp")
-    s.stop(b + 30, 2, tempt="call")
+    s.stop(b + 29, 3, tempt="call")
 
     # ---- A3: back into the dance, claps on the off-beats
     b = s.sec("dance3", 8, 2, chart=hard_mid)
