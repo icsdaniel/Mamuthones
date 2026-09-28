@@ -161,23 +161,27 @@ func leader(s: int) -> Array:
 	return _place(s, 0)
 
 
-## The sprite drawn at file place k of side s (0 the Issohadore), standing (not in a jump).
-func sprite_name(s: int, k: int) -> String:
-	var suf := "_r" if s == 1 else ""
+## The sprite drawn at file place k of side s (0 the Issohadore), standing (not in a jump). The right
+## file uses the same sprites mirrored (they face the road, lit from the fire's side).
+func sprite_name(_s: int, k: int, pose := "stand") -> String:
 	if k == 0:
-		return "issohadore" + suf
-	var fl := fleece if fleece in ["black", "dark_brown"] else "black"
-	return "mamuthone_%s_a%s" % [fl, suf]
+		return FigureSprites.issohadore("throw" if pose == "throw" else "stand")
+	return FigureSprites.mamuthone(fleece, pose)
+
+
+## Screen pixels per art pixel for sprite `name` drawn h tall.
+func _px(name: String, h: float) -> float:
+	return h / FigureSprites.art_height(name)
 
 
 ## The screen box of the figure at file place k of side s, standing, in this control's coordinates.
 func figure_box(s: int, k: int) -> Rect2:
 	var pl := _place(s, k)
-	return _box(sprite_name(s, k), pl[0], pl[1])
+	return _box(sprite_name(s, k), pl[0], pl[1], s == 1)
 
 
-func _box(name: String, feet: Vector2, h: float) -> Rect2:
-	var b := FireSkin.bounds(name, h / FireCells.FIG_H)
+func _box(name: String, feet: Vector2, h: float, flip := false) -> Rect2:
+	var b := FigureSprites.bounds(name, _px(name, h), flip)
 	return Rect2(feet + b.position, b.size)
 
 
@@ -196,7 +200,7 @@ func _place(s: int, k: int) -> Array:
 		var feet_y := e.y
 		var kw := f.size.x / 720.0
 		var name := sprite_name(s, k)
-		var b1 := FireSkin.bounds(name, 1.0 / FireCells.FIG_H)   # box of a figure 1 px tall
+		var b1 := FigureSprites.bounds(name, 1.0 / FigureSprites.art_height(name), s == 1)   # box of a figure 1 px tall
 		var h: float
 		if k == 0:
 			h = minf(LEADER_BOX.y / b1.size.y, LEADER_BOX.x / b1.size.x) * kw
@@ -253,7 +257,7 @@ func _draw_leader(side: int) -> void:
 	if age < 0.4:
 		y -= sin(age / 0.4 * PI) * 0.1 * h * amp
 	_shadow(feet, h * 0.8, clampf(-y / (0.1 * h), 0.0, 1.0))
-	_blit(sprite_name(side, 0), feet + Vector2(0.0, y), h, 0.0, 1.0, Color.WHITE)
+	_blit(sprite_name(side, 0, "throw" if age < 0.4 else "stand"), feet + Vector2(0.0, y), h, 0.0, 1.0, Color.WHITE, side == 1)
 
 
 ## A soft ground shadow under the feet, thrown a little away from the fire (toward the screen edge).
@@ -267,19 +271,9 @@ func _shadow(feet: Vector2, h: float, lift: float) -> void:
 	draw_set_transform(Vector2.ZERO)
 
 
-## A Fire Night figure sprite with its feet at `feet`, h tall (the right file's sprites are baked
-## facing left, lit from the fire on their left, so nothing is mirrored here).
-func _blit(name: String, feet: Vector2, h: float, rot: float, sq: float, tint: Color) -> void:
-	var t := FireSkin.tex(name)
-	if t == null or not FireCells.CELLS.has(name):
-		return
-	RenderingServer.canvas_item_set_default_texture_filter(get_canvas_item(), RenderingServer.CANVAS_ITEM_TEXTURE_FILTER_LINEAR_WITH_MIPMAPS)
-	var cell: Vector2 = FireCells.CELLS[name][0]
-	var a: Vector2 = FireCells.CELLS[name][1]
-	var k := h / FireCells.FIG_H
-	draw_set_transform(feet, rot, Vector2(k, k * sq))
-	draw_texture_rect(t, Rect2(-a, cell), false, tint)
-	draw_set_transform(Vector2.ZERO)
+## A pixel figure with its feet at `feet`, h tall (the right file's are mirrored to face the road).
+func _blit(name: String, feet: Vector2, h: float, rot: float, sq: float, tint: Color, flip := false) -> void:
+	FigureSprites.draw(self, name, feet, _px(name, h), flip, tint, rot, sq)
 
 
 func _draw_one(feet: Vector2, h: float, i: int, side: int) -> void:
@@ -319,7 +313,5 @@ func _draw_one(feet: Vector2, h: float, i: int, side: int) -> void:
 		var fade := clampf((_clock - _joined_at[i]) / 0.25, 0.0, 1.0)
 		tint = tint.lerp(dim, 1.0 - fade)
 	_shadow(feet, h, clampf(-y / (JUMP * h), 0.0, 1.0))
-	var name := sprite_name(side, i + 1)
-	if airborne:
-		name = name.replace("_a", "_b")
-	_blit(name, feet + Vector2(x, y), h, rot, sq, tint)
+	var name := sprite_name(side, i + 1, "air" if airborne else "stand")
+	_blit(name, feet + Vector2(x, y), h, rot, sq, tint, side == 1)

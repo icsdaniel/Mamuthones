@@ -18,6 +18,8 @@ import numpy as np
 from px import Canvas
 
 CELL = {"field": (88, 84), "big": (140, 132)}
+MAM_POSES = ("stand", "crouch", "air", "land")
+ISS_POSES = ("stand", "throw")
 FEET = {"field": (44, 80), "big": (70, 127)}
 
 
