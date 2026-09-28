@@ -166,8 +166,10 @@ winter fog. The logo is the black mask front and centre, with the red rope aroun
 
 Portrait layout during play, top to bottom: HUD (score, unison, progress), then the three note lanes
 and the three step buttons filling the rest of the screen, with a file of Mamuthones either side of
-them (Daniele, 2026-09-27: the scene on top took space and added little). Notes slide smoothly down
-the lanes to the hit line (Daniele, 2026-09-28: a tried Rift-style tile hop is rolled back). The Mamuthones jump on the beat, landing on it; more of them join as the
+the road's far end, smaller with distance (Daniele, 2026-09-27: the scene on top took space and added little). Notes slide smoothly down
+the lanes to the hit line (Daniele, 2026-09-28: a tried Rift-style tile hop is rolled back). The lanes
+are a road laid back in perspective (Daniele, 2026-09-28): full width at the hit line, narrowing to 55%
+at the far end, so notes come toward the player and grow as they near. The Mamuthones jump on the beat, landing on it; more of them join as the
 unison grows, they stumble on a miss and stand still through a stand-still. The Piazza keeps the
 procession scene.
 

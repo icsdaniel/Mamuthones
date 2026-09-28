@@ -58,7 +58,7 @@ func word_spot(lane: int) -> Vector2:
 	var f := field_rect()
 	var hl := LaneSkin.hit_line_y(f)
 	var x := lane_center(lane).x if lane >= 0 else f.get_center().x
-	return Vector2(x, hl + (f.end.y - hl) * 0.5)
+	return project(Vector2(x, hl + (f.end.y - hl) * 0.5))
 
 
 func reset() -> void:
@@ -154,17 +154,28 @@ func _px_per_s() -> float:
 
 
 func _draw() -> void:
+	if not _road_on():
+		_draw_field(self)
+	if show_buttons:
+		_draw_buttons()
+		_draw_marks()
+
+
+## Everything on the note field, in flat field coordinates: drawn straight onto this control, or into
+## the road's viewport to be laid back in perspective.
+func _draw_field(ci: CanvasItem) -> void:
 	var field := field_rect()
+	field.position = Vector2.ZERO
 	var glow: Array = [0.0, 0.0, 0.0]
 	for lane in 3:
 		if _is_pressed(lane):
 			glow[lane] = 1.0
 		else:
 			glow[lane] = clampf(1.0 - (_clock - _flash[lane]) / FLASH_TIME, 0.0, 1.0) * 0.7
-	LaneSkin.draw_lanes(self, field, glow)
-	LaneSkin.draw_hit_line(self, field, beat_pulse)
+	LaneSkin.draw_lanes(ci, field, glow)
+	LaneSkin.draw_hit_line(ci, field, beat_pulse)
 	if session != null:
-		_draw_notes(field)
+		_draw_notes(ci, field)
 	var i := 0
 	while i < _bursts.size():
 		var b: Array = _bursts[i]
@@ -172,25 +183,136 @@ func _draw() -> void:
 		var age := _clock - float(b[2])
 		# Early/late keep one language: the woodcut spray of a Good, plus the UI's own chevron.
 		var art_q := "good" if q == "early" or q == "late" else q
-		if LaneSkin.draw_hit_burst(self, b[0], art_q, age):
+		if LaneSkin.draw_hit_burst(ci, b[0], art_q, age):
 			var side: String = b[3] if q != "early" and q != "late" else q
 			if side != "":
-				_draw_chevron(b[0], side, age)
+				_draw_chevron(ci, b[0], side, age)
 			i += 1
 		else:
 			_bursts.remove_at(i)
-	_draw_timing_ticks(field)
-	_draw_step_ticks(field)
-	if show_buttons:
-		_draw_buttons()
-		_draw_marks()
+	_draw_timing_ticks(ci, field)
+	_draw_step_ticks(ci, field)
+
+
+# ------------------------------------------------------------------ the road (3D perspective)
+
+## The field is drawn flat into a viewport and shown as a road laid back toward the horizon: full width
+## at the hit line end, TOP_W of that at the far end, so notes come toward the player and grow as they
+## near. Straight lines stay straight (a true perspective), so lanes, bars and holds keep their shape.
+const TOP_W := 0.55
+const ROAD_SHADER := """
+shader_type canvas_item;
+uniform float top_w = 0.55;
+uniform vec4 fog : source_color = vec4(0.08, 0.066, 0.06, 1.0);
+void fragment() {
+	float w = top_w + (1.0 - top_w) * UV.y;
+	float u = 0.5 + (UV.x - 0.5) / w;
+	float v = (1.0 / top_w - 1.0 / w) / (1.0 / top_w - 1.0);
+	vec4 c = texture(TEXTURE, vec2(clamp(u, 0.0, 1.0), clamp(v, 0.0, 1.0)));
+	float far = 1.0 - (w - top_w) / (1.0 - top_w);
+	c.rgb = mix(c.rgb, fog.rgb, far * far * 0.45);
+	float edge = min(u, 1.0 - u);
+	c.a *= smoothstep(0.0, fwidth(u) * 1.5, edge) * smoothstep(0.0, 0.06, v);
+	COLOR = c;
+}
+"""
+
+var perspective := true          ## false: the flat lanes (the Piazza hides them anyway; tests may flatten)
+var _vp: SubViewport
+var _flat: Control
+var _road: TextureRect
+
+
+func _ready() -> void:
+	if not perspective:
+		return
+	_vp = SubViewport.new()
+	_vp.name = "RoadView"
+	_vp.transparent_bg = true
+	_vp.disable_3d = true
+	_vp.render_target_update_mode = SubViewport.UPDATE_ALWAYS
+	add_child(_vp)
+	_flat = _FlatField.new()
+	_flat.set("view", self)
+	_vp.add_child(_flat)
+	_road = TextureRect.new()
+	_road.name = "Road"
+	_road.texture = _vp.get_texture()
+	_road.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+	_road.stretch_mode = TextureRect.STRETCH_SCALE
+	_road.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_road.show_behind_parent = true
+	var sh := Shader.new()
+	sh.code = ROAD_SHADER
+	var mat := ShaderMaterial.new()
+	mat.shader = sh
+	mat.set_shader_parameter("top_w", TOP_W)
+	_road.material = mat
+	add_child(_road)
+	move_child(_road, 0)
+	resized.connect(_fit_road)
+	_fit_road()
+
+
+func _road_on() -> bool:
+	return _road != null
+
+
+func _fit_road() -> void:
+	var f := field_rect()
+	_vp.size = Vector2i(maxi(int(f.size.x), 1), maxi(int(f.size.y), 1))
+	_flat.size = f.size
+	_road.position = f.position
+	_road.size = f.size
+
+
+## Road width at flat depth y (0 at the far end, the field's height at the near end), as a share of
+## the near width.
+func road_scale(flat_y: float) -> float:
+	if not _road_on():
+		return 1.0
+	var v := flat_y / maxf(field_rect().size.y, 1.0)
+	return 1.0 / maxf(1.0 / TOP_W - v * (1.0 / TOP_W - 1.0), 0.05)
+
+
+## Where a point of the flat field shows on screen (this control's coordinates).
+func project(p: Vector2) -> Vector2:
+	var f := field_rect()
+	if not _road_on():
+		return p
+	var w := road_scale(p.y)
+	var y := f.size.y * (w - TOP_W) / (1.0 - TOP_W)
+	return f.position + Vector2(f.size.x * 0.5 + (p.x - f.size.x * 0.5) * w, y)
+
+
+## The road's left and right edge on screen at screen height y (this control's coordinates).
+func road_edges(y: float) -> Vector2:
+	var f := field_rect()
+	var w := 1.0
+	if _road_on():
+		w = TOP_W + (1.0 - TOP_W) * clampf((y - f.position.y) / maxf(f.size.y, 1.0), 0.0, 1.0)
+	return Vector2(f.get_center().x - f.size.x * 0.5 * w, f.get_center().x + f.size.x * 0.5 * w)
+
+
+class _FlatField extends Control:
+	var view: LaneView
+
+	func _init() -> void:
+		mouse_filter = Control.MOUSE_FILTER_IGNORE
+
+	func _process(_d: float) -> void:
+		queue_redraw()
+
+	func _draw() -> void:
+		if view != null:
+			view._draw_field(self)
 
 
 ## Timing ticks on the note axis: each hit leaves a short dash at both edges of its lane, above the
 ## hit line when early (where the note still was), below when late, cool or warm, fading out. Hits
 ## inside Core's dead zone sit on the line in bone. The dashes stay at the lane edges, clear of the
 ## judgement word in the middle.
-func _draw_timing_ticks(field: Rect2) -> void:
+func _draw_timing_ticks(ci: CanvasItem, field: Rect2) -> void:
 	if _offsets.is_empty():
 		return
 	var hl := LaneSkin.hit_line_y(field)
@@ -209,14 +331,14 @@ func _draw_timing_ticks(field: Rect2) -> void:
 		var r: Rect2 = rects[clampi(int(o[2]), 0, 2)]
 		var dash := minf(r.size.x * 0.14, 34.0)
 		for x0 in [r.position.x + 6.0, r.end.x - 6.0 - dash]:
-			draw_line(Vector2(x0, y), Vector2(x0 + dash, y), Color(Palette.INK, a * 0.8), 9.0)
-			draw_line(Vector2(x0, y), Vector2(x0 + dash, y), Color(col, a), 5.0)
+			ci.draw_line(Vector2(x0, y), Vector2(x0 + dash, y), Color(Palette.INK, a * 0.8), 9.0)
+			ci.draw_line(Vector2(x0, y), Vector2(x0 + dash, y), Color(col, a), 5.0)
 
 
 ## The step ticks: a bold chevron at both edges of the lane, pointing up and cool above the hit line
 ## for early (where the note still was), down and warm below it for late, on an ink outline. The
 ## lane's middle stays clear for the judgement word. They fade out over STEP_TICK_TIME.
-func _draw_step_ticks(field: Rect2) -> void:
+func _draw_step_ticks(ci: CanvasItem, field: Rect2) -> void:
 	if _step_ticks.is_empty():
 		return
 	var hl := LaneSkin.hit_line_y(field)
@@ -240,20 +362,20 @@ func _draw_step_ticks(field: Rect2) -> void:
 		for cx in [r.position.x + inset, r.end.x - inset]:
 			var tip := Vector2(cx, y + d * half * 0.8)
 			var pts := PackedVector2Array([Vector2(cx - half, y - d * half * 0.2), tip, Vector2(cx + half, y - d * half * 0.2)])
-			draw_polyline(pts, Color(Palette.INK, a * 0.9), 16.0, true)
-			draw_polyline(pts, Color(col, a), 9.0, true)
+			ci.draw_polyline(pts, Color(Palette.INK, a * 0.9), 16.0, true)
+			ci.draw_polyline(pts, Color(col, a), 9.0, true)
 
 
 ## The early/late chevron over a burst: up and cool above the hit for early, down and warm below it
 ## for late, cut out of an ink outline so it reads on any lane.
-func _draw_chevron(pos: Vector2, side: String, age: float) -> void:
+func _draw_chevron(ci: CanvasItem, pos: Vector2, side: String, age: float) -> void:
 	var t := clampf(age / LaneSkin.BURST_TIME, 0.0, 1.0)
 	var a := minf(1.0, pow(1.0 - t, 1.2) * 1.3)
 	var d := -1.0 if side == "early" else 1.0
 	var cp := pos + Vector2(0.0, d * (30.0 + 26.0 * (1.0 - pow(1.0 - t, 3.0))))
 	var chev := PackedVector2Array([cp + Vector2(-26.0, -d * 15.0), cp, cp + Vector2(26.0, -d * 15.0)])
-	draw_polyline(chev, Color(Palette.INK, a), 17.0, true)
-	draw_polyline(chev, Color(UIKit.side_color(side), a), 9.0, true)
+	ci.draw_polyline(chev, Color(Palette.INK, a), 17.0, true)
+	ci.draw_polyline(chev, Color(UIKit.side_color(side), a), 9.0, true)
 
 
 func _draw_marks() -> void:
@@ -277,7 +399,7 @@ func _draw_marks() -> void:
 					draw_line(c - dd, c + dd, Color(Palette.INK, a), 26.0)
 					draw_line(c - dd, c + dd, Color("#e2574a", a), 14.0)
 			"faint":
-				var p := lane_center(lane)
+				var p := project(lane_center(lane))
 				draw_arc(p, 40.0, 0.0, TAU, 32, Color(Palette.ASH, a * 0.45), 4.0)
 			"rope":
 				var y := r.position.y + 14.0
@@ -286,7 +408,7 @@ func _draw_marks() -> void:
 				draw_circle(Vector2(c.x, y), 16.0, Color(Palette.ROPE, a))
 
 
-func _draw_notes(field: Rect2) -> void:
+func _draw_notes(ci: CanvasItem, field: Rect2) -> void:
 	var t := song_time
 	var pps := _px_per_s()
 	var horizon := t + (field.size.y / pps)
@@ -309,36 +431,36 @@ func _draw_notes(field: Rect2) -> void:
 		match n.kind:
 			Note.Kind.STEP:
 				if not n.done:
-					LaneSkin.draw_step(self, lanes[n.lane], y, n.call)
+					LaneSkin.draw_step(ci, lanes[n.lane], y, n.call)
 			Note.Kind.HOLD:
 				if not n.finished:
 					var head := minf(y, LaneSkin.hit_line_y(field)) if n.holding else y
 					if n.done and not n.holding:
 						continue
-					LaneSkin.draw_hold(self, lanes[n.lane], head, LaneSkin.note_y(field, n.end_t - t, pps), n.holding)
+					LaneSkin.draw_hold(ci, lanes[n.lane], head, LaneSkin.note_y(field, n.end_t - t, pps), n.holding)
 			Note.Kind.BELL:
 				if not n.done:
-					LaneSkin.draw_bell(self, field, y, n.up)
+					LaneSkin.draw_bell(ci, field, y, n.up)
 			Note.Kind.RING:
 				if not n.done:
-					LaneSkin.draw_ring(self, field, lanes[n.lane], y, n.up)
+					LaneSkin.draw_ring(ci, field, lanes[n.lane], y, n.up)
 			Note.Kind.SWIPE:
 				if not n.done:
-					LaneSkin.draw_swipe(self, field, y, n.dir)
+					LaneSkin.draw_swipe(ci, field, y, n.dir)
 			Note.Kind.REST:
 				if not n.finished:
 					var y_end := LaneSkin.note_y(field, n.end_t - t, pps)
-					LaneSkin.draw_rest(self, field, y_end, y)
+					LaneSkin.draw_rest(ci, field, y_end, y)
 					rests.append([y_end, y])
 	for r in rests:
-		_rest_words(field, r[0], r[1], taken)
+		_rest_words(ci, field, r[0], r[1], taken)
 
 
 ## Names a stand-still band on the lanes, so a rest reads as an instruction and not as empty
 ## space: the words sit in the visible part of the band, kept inside the field.
 ## The label goes in the band's visible part, at the place farthest from every note or bell bar
 ## crossing it (a bar is BAR_H tall), on an ink backing so it reads over the hatching.
-func _rest_words(field: Rect2, y_a: float, y_b: float, taken: Array[float] = []) -> void:
+func _rest_words(ci: CanvasItem, field: Rect2, y_a: float, y_b: float, taken: Array[float] = []) -> void:
 	var top := maxf(minf(y_a, y_b), field.position.y)
 	var bottom := minf(maxf(y_a, y_b), LaneSkin.hit_line_y(field))
 	if bottom - top < 60.0:
@@ -360,10 +482,10 @@ func _rest_words(field: Rect2, y_a: float, y_b: float, taken: Array[float] = [])
 			best_y = cy
 		cy += 6.0
 	var back := Rect2(field.get_center().x - w * 0.5 - 16.0, best_y - half, w + 32.0, half * 2.0)
-	draw_rect(back, Color(Palette.INK, 0.72))
+	ci.draw_rect(back, Color(Palette.INK, 0.72))
 	var pos := Vector2(field.get_center().x - w * 0.5, best_y + fs * 0.34)
-	draw_string_outline(font, pos, text, HORIZONTAL_ALIGNMENT_LEFT, -1, fs, 8, Palette.INK)
-	draw_string(font, pos, text, HORIZONTAL_ALIGNMENT_LEFT, -1, fs, Palette.BONE)
+	ci.draw_string_outline(font, pos, text, HORIZONTAL_ALIGNMENT_LEFT, -1, fs, 8, Palette.INK)
+	ci.draw_string(font, pos, text, HORIZONTAL_ALIGNMENT_LEFT, -1, fs, Palette.BONE)
 	_rest_label_y = best_y
 
 

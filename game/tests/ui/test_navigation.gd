@@ -214,11 +214,17 @@ func test_two_taps_to_a_song_and_lanes_dominate() -> void:
 		var h := play.size.y
 		print("  %s: lanes %.0f%% of height, %.0f%% of width" % [sz, lanes.size.y / h * 100.0, lanes.size.x / play.size.x * 100.0])
 		check(lanes.size.y >= h * 0.8, "%s: the lanes are the stage (%.0f%% of the height)" % [sz, lanes.size.y / h * 100.0])
-		var g: Array[Rect2] = rows.gutters()
-		check(g[0].size.x >= 60.0 and g[1].size.x >= 60.0, "%s: room for a file of Mamuthones each side (%.0f, %.0f)" % [sz, g[0].size.x, g[1].size.x])
-		var lr := lanes.get_global_rect()
-		var fh := rows.figure_h(g[0].size.x)
-		var left_feet := rows.get_global_transform() * rows.slot_feet(g[0], 0)
-		check(left_feet.x + fh * 0.4 <= lr.position.x + 12.0, "%s: the Mamuthones stand beside the lanes, not on them" % sz)
+		check(lanes.size.x >= minf(play.size.x * 0.95, 890.0), "%s: the road's near end fills the width (%.0f px)" % [sz, lanes.size.x])
+		var inv := lanes.get_global_transform().affine_inverse() * rows.get_global_transform()
+		for s in 2:
+			for i in SideRows.MAX_PER_SIDE:
+				var sl: Array = rows.slot(s, i)
+				var feet: Vector2 = inv * (sl[0] as Vector2)
+				var fh: float = sl[1]
+				var edges: Vector2 = lanes.road_edges(feet.y - fh * 0.5)
+				var inner := feet.x + fh * 0.42 if s == 0 else feet.x - fh * 0.42
+				check((inner <= edges.x + 6.0) if s == 0 else (inner >= edges.y - 6.0), "%s: Mamuthone %d/%d stands beside the road, not on it" % [sz, s, i])
+		check(float(rows.slot(0, 0)[1]) >= 70.0, "%s: the nearest Mamuthone is big enough to read (%.0f px)" % [sz, float(rows.slot(0, 0)[1])])
+		check(float(rows.slot(0, 0)[1]) > float(rows.slot(0, SideRows.MAX_PER_SIDE - 1)[1]), "%s: the file recedes with the road" % sz)
 		UIHarness.free_app(app)
 		UIHarness.restore_profile()

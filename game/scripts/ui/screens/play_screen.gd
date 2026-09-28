@@ -19,7 +19,7 @@ extends Screen
 signal finished(session: Session)
 
 const SCENE_SHARE := 0.27         ## Piazza: share of the screen height given to the procession scene
-const GUTTER := 0.15              ## share of the width left each side of the lanes for the Mamuthones
+const GUTTER := 0.0               ## the road fills the width; the Mamuthones stand beside its far end
 const BANNER_SHARE := 0.4         ## the count-in and the stand-still moment use this top share of the lanes
 const FIELD_MAX_W := 900.0        ## lanes and buttons stay thumb-sized on a tablet
 const JUDGE_WORDS := {

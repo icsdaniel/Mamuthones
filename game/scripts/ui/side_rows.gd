@@ -154,19 +154,50 @@ func slot_feet(g: Rect2, i: int) -> Vector2:
 	return Vector2(g.get_center().x, bottom - step * i)
 
 
+## Where slot i of side s stands: [feet, figure height], in this control's coordinates. Beside the
+## perspective road the files stand on the ground outside its edges, receding toward the far end:
+## slot 0 is the nearest (lowest, biggest), each next one further up the road and smaller.
+func slot(s: int, i: int) -> Array:
+	if lanes != null and lanes.has_method("road_edges") and lanes.is_inside_tree() and is_inside_tree() and lanes.call("_road_on"):
+		var f: Rect2 = lanes.call("field_rect")
+		var to_me := get_global_transform().affine_inverse() * lanes.get_global_transform()
+		var near_frac := 0.46
+		var ly := f.position.y + f.size.y * (near_frac - 0.085 * i)
+		var edges: Vector2 = lanes.call("road_edges", ly)
+		var w: float = (edges.y - edges.x) / maxf(f.size.x, 1.0)
+		# The nearest figure just fits its gap; the others shrink with the road.
+		var near_edges: Vector2 = lanes.call("road_edges", f.position.y + f.size.y * near_frac)
+		var near_w: float = (near_edges.y - near_edges.x) / maxf(f.size.x, 1.0)
+		var near_gap := near_edges.x - f.position.x
+		var base := near_gap / 0.9 / maxf(near_w, 0.1)
+		var h := clampf(base * w, 40.0, 280.0)
+		var gap := edges.x - f.position.x
+		var x := f.position.x + gap * 0.5 if s == 0 else f.end.x - gap * 0.5
+		return [to_me * Vector2(x, ly), h]
+	var g: Rect2 = gutters()[s]
+	return [slot_feet(g, i), figure_h(g.size.x) * (1.0 - 0.05 * i)]
+
+
 func _draw() -> void:
 	var sides := gutters()
 	var glow := Palette.tex("glow")
+	var road: bool = lanes != null and lanes.has_method("_road_on") and bool(lanes.call("_road_on"))
 	for s in 2:
 		var g: Rect2 = sides[s]
-		if g.size.x < 24.0:
+		if not road and g.size.x < 24.0:
 			continue
-		# Firelight down the gutter, so the dark fleece reads on the black.
+		# Firelight behind the file, so the dark fleece reads on the black.
 		if glow != null:
-			draw_texture_rect(glow, g.grow_individual(g.size.x * 0.6, 0.0, g.size.x * 0.6, 0.0), false, Color(Palette.EMBER, 0.22))
-		var h := figure_h(g.size.x)
+			var near: Array = slot(s, 0)
+			var far: Array = slot(s, MAX_PER_SIDE - 1)
+			var top: float = (far[0] as Vector2).y - float(far[1])
+			var bottom: float = (near[0] as Vector2).y
+			var cx: float = ((near[0] as Vector2).x + (far[0] as Vector2).x) * 0.5
+			var wd: float = float(near[1]) * 1.6
+			draw_texture_rect(glow, Rect2(cx - wd, top - 20.0, wd * 2.0, bottom - top + 60.0), false, Color(Palette.EMBER, 0.22))
 		for i in range(MAX_PER_SIDE - 1, -1, -1):
-			_draw_one(slot_feet(g, i), h * (1.0 - 0.05 * i), i, s)
+			var sl: Array = slot(s, i)
+			_draw_one(sl[0], float(sl[1]), i, s)
 
 
 func _draw_one(feet: Vector2, h: float, i: int, side: int) -> void:
