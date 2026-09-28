@@ -1,6 +1,6 @@
 class_name InputRouter
 extends Control
-## Turns touches on the step buttons, drags across them, keys and phone motion into Session calls,
+## Turns touches on the step buttons, keys and phone motion into Session calls,
 ## and tells sound and visuals what happened. Lay it over the play screen (full rect); it never
 ## blocks other controls (mouse_filter IGNORE, reads events in _input) and only consumes touches
 ## that start inside buttons_rect.
@@ -9,20 +9,19 @@ extends Control
 ## returning song time); router.buttons_rect = the three buttons' global rect.
 ## Motion: reads the sensors every frame and rings through a BellDetector built from Profile's
 ## calibration (or set `detector`); in slam mode the tilt is ignored and Left + Right ring instead.
-## Keys: A S D steps, Space bell, Q/E swipes left/right, Esc pause.
+## Keys: A S D steps, J K L the same buttons with the other thumb (S + K = a middle stomp), Space
+## bell, Esc pause.
 ##
 ## Additions beyond the architecture doc: conductor, time_source, enabled, read_motion, motion,
 ## detector, motion_log, feed_motion(), release_all(), is_pressed(lane), lane_at(x), signals
-## lifted(lane) and pause_requested. Swipes are timed from the touch-down.
+## lifted(lane) and pause_requested.
 
 signal stepped(lane: int)
 signal lifted(lane: int)
 signal rang(result: Dictionary)
-signal swiped(dir: int)
 signal pause_requested
 
-const SWIPE_SHARE := 0.35    ## a drag this share of the row's width is a rope swipe
-const KEY_LANES := {KEY_A: 0, KEY_S: 1, KEY_D: 2}
+const KEY_LANES := {KEY_A: 0, KEY_S: 1, KEY_D: 2, KEY_J: 3, KEY_K: 4, KEY_L: 5}   ## 3-5: second thumb
 
 var session: Session:
 	set(value):
@@ -40,9 +39,9 @@ var detector: BellDetector
 ## Set to a MotionLog to record readings, touches and rings (for checking detection on real phones).
 var motion_log: MotionLog
 
-var _touches: Dictionary = {}   # touch index -> {lane, x0, swiped}
+var _touches: Dictionary = {}   # touch index -> {lane}
 var _pressed := [0, 0, 0]
-var _keys_down: Dictionary = {}  # lane -> true
+var _keys_down: Dictionary = {}  # key slot (0-5) -> true
 
 
 func _init() -> void:
@@ -97,7 +96,7 @@ func _input(event: InputEvent) -> void:
 			if _touches.has(e.index):
 				# The release of this finger never arrived: lift it first.
 				_lift(_touches[e.index].lane, t, e.index)
-			_touches[e.index] = {"lane": lane, "x0": e.position.x, "t0": t, "swiped": false}
+			_touches[e.index] = {"lane": lane}
 			_press(lane, t, e.index)
 			get_viewport().set_input_as_handled()
 		elif _touches.has(e.index):
@@ -105,16 +104,8 @@ func _input(event: InputEvent) -> void:
 			_touches.erase(e.index)
 			get_viewport().set_input_as_handled()
 	elif event is InputEventScreenDrag:
-		var d := event as InputEventScreenDrag
-		if not _touches.has(d.index):
-			return
-		var tc: Dictionary = _touches[d.index]
-		var dx: float = d.position.x - tc.x0
-		if not tc.swiped and absf(dx) >= SWIPE_SHARE * buttons_rect.size.x:
-			tc.swiped = true
-			# A rope swipe is timed from when the finger went down, like the throw it answers.
-			_swipe(1 if dx > 0.0 else -1, tc.t0)
-		get_viewport().set_input_as_handled()
+		if _touches.has((event as InputEventScreenDrag).index):
+			get_viewport().set_input_as_handled()
 	elif event is InputEventKey:
 		var k := event as InputEventKey
 		if k.echo:
@@ -122,22 +113,18 @@ func _input(event: InputEvent) -> void:
 		var code := k.physical_keycode
 		var t := now()
 		if KEY_LANES.has(code):
-			var lane: int = KEY_LANES[code]
+			var slot: int = KEY_LANES[code]
 			if k.pressed:
-				_keys_down[lane] = true
-				_press(lane, t, -1 - lane)
-			elif _keys_down.has(lane):
-				_keys_down.erase(lane)
-				_lift(lane, t, -1 - lane)
+				_keys_down[slot] = true
+				_press(slot % 3, t, -1 - slot)
+			elif _keys_down.has(slot):
+				_keys_down.erase(slot)
+				_lift(slot % 3, t, -1 - slot)
 		elif not k.pressed:
 			return
 		elif code == KEY_SPACE:
 			if session != null:
 				rang.emit(session.ring(t, false))
-		elif code == KEY_Q:
-			_swipe(-1, t)
-		elif code == KEY_E:
-			_swipe(1, t)
 		elif code == KEY_ESCAPE:
 			pause_requested.emit()
 		else:
@@ -157,9 +144,8 @@ func release_all() -> void:
 	for id in _touches.keys():
 		_lift(_touches[id].lane, t, id)
 	_touches.clear()
-	for lane in 3:
-		if _keys_down.has(lane):
-			_lift(lane, t, -1 - lane)
+	for slot in _keys_down:
+		_lift(slot % 3, t, -1 - slot)
 	_keys_down.clear()
 	_pressed = [0, 0, 0]
 
@@ -216,9 +202,3 @@ func _lift(lane: int, t: float, id: int) -> void:
 	if session != null:
 		session.release(t, id)
 	lifted.emit(lane)
-
-
-func _swipe(dir: int, t: float) -> void:
-	if session != null:
-		session.swipe(dir, t)
-	swiped.emit(dir)

@@ -143,7 +143,7 @@ func beat_at(t: float, use_remix := false) -> float:
 
 ## Fresh notes for a chart, sorted by time. Bells alternate up/down through the whole chart
 ## (bell and ring notes counted together), before any range filter.
-## mirror swaps lanes 0 and 2 and flips swipes; from_beat/to_beat keep notes with from <= b < to.
+## mirror swaps lanes 0 and 2; from_beat/to_beat keep notes with from <= b < to.
 func notes(difficulty: String, use_remix := false, mirror := false, from_beat := -INF, to_beat := INF) -> Array[Note]:
 	var out: Array[Note] = []
 	var raw: Array = charts.get(difficulty, [])
@@ -163,7 +163,6 @@ func notes(difficulty: String, use_remix := false, mirror := false, from_beat :=
 		n.end_t = n.t
 		n.lane = int(item.get("lane", -1))
 		n.call = bool(item.get("call", false))
-		n.dir = 1 if int(item.get("dir", 1)) >= 0 else -1
 		if n.kind == Note.Kind.HOLD:
 			n.end_t = n.t + float(item.get("len", 1.0)) * spb
 		elif n.kind == Note.Kind.REST:
@@ -171,14 +170,11 @@ func notes(difficulty: String, use_remix := false, mirror := false, from_beat :=
 		if n.is_bell():
 			n.up = next_up
 			next_up = not next_up
-		if n.kind != Note.Kind.SWIPE:
-			n.dir = 0
 		if not n.uses_lane():
 			n.lane = -1
 		if mirror:
 			if n.lane >= 0:
 				n.lane = 2 - n.lane
-			n.dir = -n.dir
 		if n.beat < from_beat or n.beat >= to_beat:
 			continue
 		n.index = out.size()

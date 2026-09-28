@@ -1,5 +1,5 @@
 extends Screen
-## The Workshop tutorial: the song's lessons one at a time (steps, lanes, bells, holds, still, swipes,
+## The Workshop tutorial: the song's lessons one at a time (steps, lanes, bells, holds, still, stomps,
 ## full). Each lesson: a short instruction with a picture of what to look for, an optional demo played
 ## by Autoplay, then the player's turn. Passed lessons move on; missed ones explain what went wrong and
 ## repeat. After the last lesson a card explains unison, then the whole song starts at Easy.
@@ -162,6 +162,9 @@ static func fail_lines(s: Session, t: String) -> Array[String]:
 		"still":
 			if int(st.silence) > 0:
 				out.append(UIKit.tr_("tut_why_silence") % int(st.silence))
+		"stomps":
+			if int(st.get("one_thumb", 0)) > 0:
+				out.append(UIKit.tr_("tut_why_one_thumb") % int(st.one_thumb))
 		"holds":
 			if int(st.get("holds", 0)) > 0:
 				out.append(UIKit.tr_("tut_why_holds") % [int(st.held), int(st.holds)])
@@ -169,8 +172,8 @@ static func fail_lines(s: Session, t: String) -> Array[String]:
 	var kinds := [Note.Kind.STEP, Note.Kind.HOLD, Note.Kind.RING]
 	if t == "bells":
 		kinds = [Note.Kind.BELL, Note.Kind.RING]
-	elif t == "swipes":
-		kinds = [Note.Kind.SWIPE]
+	elif t == "stomps":
+		kinds = [Note.Kind.STOMP]
 	var total := 0
 	var missed := 0
 	var lane_total := [0, 0, 0]

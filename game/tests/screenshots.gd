@@ -118,6 +118,9 @@ func _shots() -> Array:
 		{"file": "play_late", "screen": "play", "args": {"song_id": fires_id, "difficulty": "hard", "bell_set": "light", "autoplay": true}, "setup": "moment:late", "wait": 0.08},
 		{"file": "play_still_kept", "screen": "play", "args": {"song_id": fires_id, "difficulty": "hard", "bell_set": "light", "autoplay": true}, "setup": "moment:stillkept", "wait": 0.1},
 		{"file": "play_wrong", "screen": "play", "args": {"song_id": fires_id, "difficulty": "hard", "bell_set": "light", "autoplay": true}, "setup": "moment:wrong", "wait": 0.05},
+		{"file": "play_stomp", "screen": "play", "args": {"song_id": "rope", "difficulty": "hard", "bell_set": "light", "autoplay": true}, "setup": "moment:stomp", "wait": 0.05},
+		{"file": "play_stomp_outer", "screen": "play", "args": {"song_id": "rope", "difficulty": "expert", "bell_set": "light", "autoplay": true}, "setup": "moment:stomp", "wait": 0.05},
+		{"file": "play_stomped", "screen": "play", "args": {"song_id": "rope", "difficulty": "hard", "bell_set": "light", "autoplay": true}, "setup": "moment:stomped", "wait": 0.02},
 		{"file": "play_tutorial", "screen": "play", "args": {"song_id": tut_id, "difficulty": "easy", "bell_set": "light", "autoplay": true}, "setup": "advance:0.25"},
 		{"file": "pause", "screen": "play", "args": {"song_id": fires_id, "difficulty": "medium", "bell_set": "light", "autoplay": true}, "setup": "pause"},
 		{"file": "results", "screen": "results", "setup": "results", "wait": 1.3},
@@ -222,7 +225,8 @@ func _advance(screen: Node, share: float) -> void:
 
 ## Moves a play screen to a telling moment of its song on a manual clock: "dense" (the busiest two
 ## seconds), "hold" (half-way through a held note), "bell" (a bell cue about to reach the line),
-## "still" (inside a stand-still rest) or "miss" (just after a note Autoplay lets go by).
+## "still" (inside a stand-still rest), "miss" (just after a note Autoplay lets go by), "stomp" (a
+## two-thumb stomp on its way) or "stomped" (just after one lands).
 func _moment(screen: Node, what: String) -> void:
 	var c: Conductor = screen.get("conductor")
 	var s: Session = screen.get("session")
@@ -260,7 +264,7 @@ func _moment(screen: Node, what: String) -> void:
 					continue
 				var lone := true
 				for m in s.notes:
-					if m != n and absf(m.t - n.t) < 0.6 and (m.lane == 0 or m.is_bell() or m.kind == Note.Kind.SWIPE):
+					if m != n and absf(m.t - n.t) < 0.6 and (m.lane == 0 or m.is_bell() or m.kind == Note.Kind.STOMP):
 						lone = false
 				if lone:
 					target = n.t - 0.03
@@ -284,9 +288,9 @@ func _moment(screen: Node, what: String) -> void:
 				if n.t >= from and n.kind == Note.Kind.REST:
 					target = n.end_t + 0.45
 					break
-		"hold", "bell", "still", "miss", "rang":
+		"hold", "bell", "still", "miss", "rang", "stomp", "stomped":
 			var kinds := {"hold": [Note.Kind.HOLD], "bell": [Note.Kind.BELL, Note.Kind.RING], "rang": [Note.Kind.BELL, Note.Kind.RING],
-				"still": [Note.Kind.REST], "miss": [Note.Kind.STEP]}
+				"still": [Note.Kind.REST], "miss": [Note.Kind.STEP], "stomp": [Note.Kind.STOMP], "stomped": [Note.Kind.STOMP]}
 			for i in s.notes.size():
 				var n: Note = s.notes[i]
 				if n.t < from or not n.kind in kinds[what]:
@@ -298,6 +302,10 @@ func _moment(screen: Node, what: String) -> void:
 						target = n.t - 0.45
 					"rang":
 						target = n.t + 0.08
+					"stomp":
+						target = n.t - 0.45
+					"stomped":
+						target = n.t + 0.06
 					"miss":
 						var auto: Object = screen.get("autoplay")
 						if auto != null:

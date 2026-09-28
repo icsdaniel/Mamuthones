@@ -216,6 +216,7 @@ judge_late,Late,Tardi
 judge_ok,Ok,Ok
 judge_miss,Miss,Mancato
 judge_wrong,Wrong lane,Corsia sbagliata
+judge_one_thumb,Two thumbs!,Due pollici!
 judge_held,Held,Tenuto
 judge_let_go,Let go,Lasciato
 judge_silence,Stand still,Fermo!
@@ -297,6 +298,7 @@ tut_why_early,"You were early, by about %d ms.","Eri in anticipo, di circa %d ms
 tut_why_late,"You were late, by about %d ms.","Eri in ritardo, di circa %d ms."
 tut_why_wrong,Taps on the wrong lane: %d,Tocchi nella corsia sbagliata: %d
 tut_why_silence,Bells rung in the grey: %d,Campanacci suonati nel grigio: %d
+tut_why_one_thumb,Played with one thumb: %d,Suonati con un pollice solo: %d
 tut_why_holds,Long notes held to the end: %d of %d,Note lunghe tenute fino in fondo: %d su %d
 res_closest,Closest unlock,Sblocco più vicino
 res_unison_head,Unison peak %s,Unisono massimo %s
@@ -381,10 +383,10 @@ tut_still_title,Stand still,Fermi
 tut_still,"Grey bars mean the procession stops. Keep stepping on the notes, but don't ring the bells until the grey has passed.","Le barre grigie vogliono dire che la processione si ferma. Continua con i passi, ma non suonare i campanacci finché il grigio non è passato."
 tut_still_short,No bells in the grey,Niente campanacci nel grigio
 tut_fail_still,The bells rang during a stand-still. Hold the phone steady while the grey bars pass.,I campanacci hanno suonato durante una sosta. Tieni fermo il telefono mentre passano le barre grigie.
-tut_swipes_title,The rope,La soha
-tut_swipes,"When the Issohadore throws the rope, drag a finger across the buttons the way the arrow points.","Quando l'Issohadore lancia la soha, la fune, trascina un dito sui tasti nel verso della freccia."
-tut_swipes_short,Drag across with the arrow,Trascina seguendo la freccia
-tut_fail_swipes,"Drag in one quick stroke across all three buttons, in the arrow's direction.","Trascina con un solo gesto veloce su tutti e tre i tasti, nel verso della freccia."
+tut_stomps_title,Two thumbs,Due pollici
+tut_stomps,"Two gems side by side on one button: press that button with both thumbs at once, on the beat.","Due gemme affiancate su un tasto: premi quel tasto con entrambi i pollici insieme, a tempo."
+tut_stomps_short,Both thumbs on one button,Due pollici sullo stesso tasto
+tut_fail_stomps,Put both thumbs down on the same button together. One thumb alone counts for less.,"Appoggia entrambi i pollici sullo stesso tasto, insieme. Un pollice solo vale meno."
 tut_full_title,Full ring,Colpo pieno
 tut_full,A step and a bell on the same beat: tap the button and flick the phone together.,Un passo e un campanaccio sullo stesso battito: tocca il tasto e dai il colpo al telefono insieme.
 tut_full_slam,"A step and a bell on the same beat. In slam mode, just tap the step right on the line: its bell rings with it.",Un passo e un campanaccio sullo stesso battito. In modalità colpo basta toccare il passo proprio sulla linea: il campanaccio suona insieme.

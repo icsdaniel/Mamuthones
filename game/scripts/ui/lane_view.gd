@@ -9,7 +9,7 @@ const BUTTONS_H := 196.0        ## height of the button row
 const LOOKAHEAD := 1.5          ## seconds of notes visible at note speed 1.0
 const FLASH_TIME := 0.14
 const CUE_TIME := 0.22          ## a button is "cued" when its next note is this close
-const MARK_TIME := 0.4          ## wrong-lane and rope marks
+const MARK_TIME := 0.4          ## wrong-lane and stomp marks
 const TICK_TIME := 1.6          ## timing ticks fade over this long
 const STEP_TICK_TIME := 0.3     ## the early/late tick on a step hit fades over this long
 
@@ -29,7 +29,7 @@ var _clock := 0.0                ## real seconds, for burst ages while paused
 var _offsets: Array = []         ## [offset s, time added, lane] of recent hits, for the timing ticks
 var _step_ticks: Array = []      ## [lane, side, time added]: the early/late tick of a step hit
 var _marks: Array = []           ## [kind, lane, time]: "wrong" X on a pressed button, "faint" ring on
-                                 ## the note it was meant for, "rope" grip across the buttons
+                                 ## the note it was meant for, "stomp" / "stomp1" on a stomped button
 
 
 func field_rect() -> Rect2:
@@ -130,10 +130,10 @@ func mark_wrong(pressed_lane: int, note_lane := -1) -> void:
 	queue_redraw()
 
 
-## A finger landed on the buttons while a rope is due: the rope is "caught" at once, with no step.
-func rope_grab(lane: int) -> void:
-	_marks.append(["rope", lane, _clock])
-	_auto_pressed[clampi(lane, 0, 2)] = _clock
+## A stomp was judged (placeholder hit effect for the art pass; see handoff/stomp.md): both thumbs
+## stamp two prints on the button, one thumb only leaves one dim print.
+func stomp_hit(lane: int, _judgement: String, both: bool) -> void:
+	_marks.append(["stomp" if both else "stomp1", clampi(lane, 0, 2), _clock])
 	queue_redraw()
 
 
@@ -619,11 +619,13 @@ func _draw_marks() -> void:
 			"faint":
 				var p := project(lane_center(lane))
 				draw_arc(p, 40.0, 0.0, TAU, 32, Color(Palette.ASH, a * 0.45), 4.0)
-			"rope":
-				var y := r.position.y + 14.0
-				draw_line(Vector2(r.position.x + 20.0, y), Vector2(r.end.x - 20.0, y), Color(Palette.ROPE_DARK, a), 16.0)
-				draw_line(Vector2(r.position.x + 20.0, y), Vector2(r.end.x - 20.0, y), Color(Palette.ROPE, a), 9.0)
-				draw_circle(Vector2(c.x, y), 16.0, Color(Palette.ROPE, a))
+			"stomp", "stomp1":
+				var both := str(m[0]) == "stomp"
+				var s := minf(w, r.size.y) * (0.16 + 0.1 * (1.0 - a))
+				for dx in ([-1.0, 1.0] if both else [0.0]):
+					var p := c + Vector2(dx * w * 0.2, 0.0)
+					draw_circle(p, s, Color(FireSkin.CRIMSON, a * (0.8 if both else 0.4)))
+					draw_arc(p, s, 0.0, TAU, 24, Color(Palette.INK, a), 5.0)
 
 
 ## The notes on screen now, far to near: [note, y, y_end] in flat field coordinates.
@@ -660,13 +662,19 @@ func _draw_flat_notes(ci: CanvasItem, field: Rect2) -> void:
 			Note.Kind.BELL, Note.Kind.RING:
 				if not n.done:
 					FireSkin.draw_bar(ci, field, y, n.up)
+			Note.Kind.STOMP:
+				if not n.done:
+					# A slab the width of the lane under the two gems: this button, both thumbs.
+					var lr: Rect2 = lanes[n.lane]
+					ci.draw_rect(Rect2(lr.position.x + 10.0, y - 16.0, lr.size.x - 20.0, 32.0), Color(FireSkin.CRIMSON, 0.85))
+					ci.draw_rect(Rect2(lr.position.x + 10.0, y - 16.0, lr.size.x - 20.0, 32.0), Color(Palette.INK, 0.9), false, 4.0)
 			Note.Kind.REST:
 				if not n.finished:
 					FireSkin.draw_band(ci, field, e[2], y)
 
 
 ## What stands on the road, upright and scaled with it: gems (steps, hold heads), hold rings, bell
-## badges, the rope, and the stand-still label. Far notes fade in out of the fire's haze.
+## badges, stomps, and the stand-still label. Far notes fade in out of the fire's haze.
 func _draw_upright() -> void:
 	var field := field_rect()
 	field.position = Vector2.ZERO
@@ -710,14 +718,22 @@ func _draw_upright() -> void:
 					var p := project(Vector2(lanes[n.lane].get_center().x, y))
 					draw_polyline(FireSkin.ellipse_pts(p, 88.0 * sc, 36.0 * sc), Color(FireSkin.CRIMSON, a), maxf(3.0, 7.0 * sc), true)
 					FireSkin.draw_gem(self, p, sc, false, a)
-			Note.Kind.SWIPE:
+			Note.Kind.STOMP:
 				if not n.done:
-					FireSkin.draw_rope(self, project(Vector2(field.get_center().x, y)), road_scale(y) * field.size.x, n.dir, a)
+					draw_stomp(project(Vector2(lanes[n.lane].get_center().x, y)), upright_scale(y), a * (0.6 if n.thumbs > 0 else 1.0))
 			Note.Kind.REST:
 				if not n.finished:
 					rests.append([e[2], y])
 	for r in rests:
 		_rest_words(field, r[0], r[1], taken)
+
+
+## A stomp note (placeholder for the art pass; see handoff/stomp.md): two gems side by side, one
+## per thumb, in a crimson bracket, at pos (on screen) scaled like a gem.
+func draw_stomp(pos: Vector2, sc: float, alpha: float) -> void:
+	draw_polyline(FireSkin.ellipse_pts(pos, 100.0 * sc, 40.0 * sc), Color(FireSkin.CRIMSON, alpha), maxf(3.0, 8.0 * sc), true)
+	for dx in [-1.0, 1.0]:
+		FireSkin.draw_gem(self, pos + Vector2(dx * 42.0 * sc, 0.0), sc * 0.8, false, alpha)
 
 
 ## "Raise … Bells" (or "Lower … Bells") carved into the bell bar either side of its badge, upright,
