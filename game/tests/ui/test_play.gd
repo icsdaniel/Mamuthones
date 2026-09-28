@@ -66,7 +66,7 @@ func test_tutorial_passes_under_autoplay() -> void:
 	var lessons: Array = tut.get("lessons")
 	check(lessons.size() >= 5, "the tutorial has its lessons")
 	var topics := lessons.map(func(l: Dictionary) -> String: return str(l.topic))
-	for t in ["steps", "bells", "holds", "still", "swipes"]:
+	for t in ["steps", "bells", "holds", "still", "stomps"]:
 		check(t in topics, "a lesson teaches %s" % t)
 	var frames := 0
 	while tut.find_child("Finale", true, false) == null and frames < 20000:

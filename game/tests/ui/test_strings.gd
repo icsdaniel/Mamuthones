@@ -36,7 +36,7 @@ func test_every_used_key_exists() -> void:
 		for m in re.search_all(src):
 			check(t.has(m.get_string(1)), "%s uses missing key %s" % [path.get_file(), m.get_string(1)])
 	# Keys built from parts.
-	for topic in ["steps", "lanes", "bells", "holds", "still", "swipes", "full"]:
+	for topic in ["steps", "lanes", "bells", "holds", "still", "stomps", "full"]:
 		for pat in ["tut_%s_title", "tut_%s", "tut_%s_short", "tut_fail_%s"]:
 			check(t.has(pat % topic), "tutorial key %s" % (pat % topic))
 	for n in range(1, 8):

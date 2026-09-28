@@ -1,7 +1,7 @@
 """Charts written from the score.
 
 Every note is taken from a chart candidate: an audible event the score wrote (a drum stroke, a
-sung syllable, a reed note, a bell cue's landing, a rope crack, a musical stop). Each section says,
+sung syllable, a reed note, a bell cue's landing, a rope crack (a two-thumb stomp), a musical stop). Each section says,
 per difficulty, which layers of the music the player follows; then rules refine the result:
 
 - bells on strong cues only (the score's bell cues always have a rim click before them);
@@ -74,7 +74,7 @@ ENERGY_FACTOR = {0: 0.6, 1: 0.85, 2: 1.05, 3: 1.4}
 ENERGY_FACTOR_EASY = {0: 0.5, 1: 0.7, 2: 0.8, 3: 1.4}
 EXPERT_PEAK = 4.3   # expert climaxes reach at least this (notes per second) when the music allows
 
-PRIO = {"rest": 0, "swipe": 1, "ring": 2, "bell": 3, "hold": 4, "call": 5, "step": 6}
+PRIO = {"rest": 0, "stomp": 1, "ring": 2, "bell": 3, "hold": 4, "call": 5, "step": 6}
 ROLE_PRIO = {"mel": 0, "fast": 1, "pulse": 2, "chorus": 3, "perc": 4}
 
 
@@ -103,14 +103,12 @@ class N:
 
     def json(self):
         d = {"b": self.b, "k": self.k}
-        if self.k in ("step", "hold", "ring"):
+        if self.k in ("step", "hold", "ring", "stomp"):
             d["lane"] = int(self.lane)
         if self.k == "hold":
             d["len"] = self.len
         if self.k == "rest" and abs(self.len - 1) > 1e-9:
             d["len"] = self.len
-        if self.k == "swipe":
-            d["dir"] = int(self.dir)
         if self.k == "step" and self.call:
             d["call"] = True
         return d
@@ -125,8 +123,10 @@ def allowed(song, diff, mech, spec):
         return "hold" in song.mechanics and lv >= 1
     if mech == "ring":
         return "ring" in song.mechanics and lv >= 2
-    if mech in ("swipe", "call"):
-        return mech in song.mechanics and lv >= 2
+    if mech == "stomp":
+        return "stomp" in song.mechanics and lv >= 1
+    if mech == "call":
+        return "call" in song.mechanics and lv >= 2
     if mech == "triple":
         return "triple" in song.mechanics and lv >= 3
     return True
@@ -213,11 +213,14 @@ class Charter:
                         if c.b + ln > hi:
                             ln = max(1.0, int((hi - c.b - 0.25) * 2) / 2)
                         notes.append(N(c.b, "hold", c.rank, "hold", c.pitch, c.stem, len=ln, src=c))
-            # swipes and calls
-            if sp.get("swipes", True) and allowed(s, diff, "swipe", sp):
+            # stomps (both thumbs on one button, on the rope's crack) and calls. Medium and Hard stomp
+            # on the middle button, where both thumbs reach easily; Expert follows the rope's throw
+            # to the outer button on its side.
+            if sp.get("stomps", True) and allowed(s, diff, "stomp", sp):
                 for c in inside:
-                    if c.role == "swipe":
-                        notes.append(N(c.b, "swipe", 1, "swipe", None, c.stem, dir=c.dir, src=c))
+                    if c.role == "stomp":
+                        lane = (2 if c.dir >= 0 else 0) if diff == "expert" and s.kind != "tutorial" else 1
+                        notes.append(N(c.b, "stomp", 1, "stomp", None, c.stem, lane=lane, dir=c.dir, src=c))
             if sp.get("calls", True) and allowed(s, diff, "call", sp):
                 for c in inside:
                     if c.role == "call":
@@ -289,9 +292,9 @@ class Charter:
                     n.len = max(0.0, int((r.b - n.b - 0.5) * 2) / 2)
             notes = [n for n in notes if not (n.k == "hold" and n.len < 1.0)]
 
-        # 3. swipes need a free hand: clear around them
+        # 3. stomps need both hands free: clear around them
         clear = 1.0 if lv <= 1 else (0.75 if lv == 2 else 0.5)
-        for sw in [n for n in notes if n.k == "swipe"]:
+        for sw in [n for n in notes if n.k == "stomp"]:
             notes = [n for n in notes if n is sw or n.k == "rest" or abs(n.b - sw.b) >= clear - 1e-6]
 
         # 4. bells against steps, by difficulty. A bell tilts the phone, so both thumbs leave the
@@ -647,7 +650,7 @@ class Charter:
                 if h is n:
                     continue
                 if h.b - 1e-6 <= n.b <= h.b + h.len + 1e-6:
-                    if n.lane == h.lane or n.k in ("swipe", "hold"):
+                    if n.lane == h.lane or n.k in ("stomp", "hold"):
                         bad = True
                     elif diff in ("easy", "medium") and n.k != "rest":
                         bad = True
@@ -692,7 +695,7 @@ class Charter:
                         n.lane = old
                     if not moved:
                         drop.add(i)
-                elif n.k in ("step", "ring", "hold", "swipe"):
+                elif n.k in ("step", "ring", "hold", "stomp"):
                     drop.add(i)
             notes = [n for j, n in enumerate(notes) if j not in drop]
         return notes
@@ -704,7 +707,7 @@ class Charter:
         return False
 
     def isolate_firsts(self, notes, diff):
-        """The first time each extra (bell, hold, rest-free extras, ring, swipe, call) appears,
+        """The first time each extra (bell, hold, rest-free extras, ring, stomp, call) appears,
         no other extra is within two beats of it, so it is met alone before it is combined."""
         def mech(n):
             return "call" if n.call else n.k

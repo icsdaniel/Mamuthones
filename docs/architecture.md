@@ -62,7 +62,7 @@ sensor access, so headless tests can drive them.
 - `sections` name the song's parts in beats (intro, verse, build, climax, outro...) for the progress
   bar and for practice.
 - `lessons` exist only in the tutorial song: `topic` is `steps`, `lanes`, `bells`, `holds`, `still`,
-  `swipes` or `full`; the tutorial plays one lesson at a time and repeats it until it's passed.
+  `stomps` or `full`; the tutorial plays one lesson at a time and repeats it until it's passed.
 - `offset` is the time in seconds of beat 0 in the audio file. A note's time is `offset + b * 60 / bpm`.
   Tempo is constant within a song.
 - `remix`, when present, is a second track that uses the same charts with its own `offset`/`audio`
@@ -73,7 +73,7 @@ sensor access, so headless tests can drive them.
   - `bell` — a tilt. Direction is not stored: bells alternate up, down, up, down through the chart,
     counting `bell` and `ring` notes together.
   - `ring` — full ring: a step on `lane` and a bell on the same beat.
-  - `swipe` — `dir` 1 (to the right) or −1.
+  - `stomp` — both thumbs on `lane` at once (the two touches within 80 ms).
   - `rest` — stand still. Optional `len` in beats (default 1).
 - `tools/audio/validate_charts.py` and the core tests check every chart against the readability rules in
   `docs/design.md` section 4.
@@ -83,11 +83,11 @@ sensor access, so headless tests can drive them.
 - `SongLibrary.all() -> Array[SongData]`, `SongLibrary.get_song(id) -> SongData`, `SongLibrary.story()`.
 - `SongData`: `id`, `title(lang)`, `stop`, `kind`, `bpm`, `offset`, `audio`, `remix` (Dictionary or
   empty), `length`, `preview`, `difficulties()`, `notes(difficulty) -> Array[Note]`, `time_of(beat)`.
-- `Note`: `kind` (`Note.Kind.STEP/HOLD/BELL/RING/SWIPE/REST`), `t`, `end_t`, `lane`, `up` (bells, rings),
+- `Note`: `kind` (`Note.Kind.STEP/HOLD/BELL/RING/STOMP/REST`), `t`, `end_t`, `lane`, `up` (bells, rings),
   `dir`, `call`, `beat`, plus play state (`done`, `holding`, `finished`, `hit_at`, `judgement`).
 - `Session.new(song: SongData, difficulty: String, bell_set: String, options := {})`, options
   `slam: bool`, `piazza: bool`, `remix: bool`. Times are seconds of song time.
-  - Input: `tap(lane, t, touch_id)`, `release(t, touch_id)`, `swipe(dir, t)`, `ring(t) -> Dictionary`
+  - Input: `tap(lane, t, touch_id)`, `release(t, touch_id)`, `ring(t) -> Dictionary`
     (`{up: bool, quality: "perfect"|"good"|"ok"|"miss"|"silence"|"free"}` so the bell sound can match).
   - `update(t)` every frame; `is_over(t)`.
   - Signals: `judged(note, judgement, offset)` with judgement `perfect|good|early|late|miss|wrong|held|let_go|silence`,
@@ -101,10 +101,10 @@ sensor access, so headless tests can drive them.
   never backwards, includes output latency and the player's audio offset), `pause()`, `resume()`,
   `finished` signal. Tests can drive it with `use_manual_clock(true)` and `advance(delta)`.
 - `InputRouter` (Control, full rect): turns touches in the button row, keys and motion into `Session`
-  calls, handles slam mode, emits `stepped(lane)`, `rang(result)`, `swiped(dir)` for sound and visuals.
+  calls, handles slam mode, emits `stepped(lane)` and `rang(result)` for sound and visuals.
   Needs `buttons_rect: Rect2` set by the play screen.
 - `Autoplay.new(session, human := false)`: `update(t)` plays the session perfectly (or with small
-  human-like errors) and emits `stepped(lane)`, `rang(result)`, `swiped(dir)` like `InputRouter`, for
+  human-like errors) and emits `stepped(lane)` and `rang(result)` like `InputRouter`, for
   demos, recordings and tests.
 - `Ghost`: `from_session(session)`, `score_at(t)`, `to_dict()`, `from_dict()`.
 - `Progression`: story order, `is_unlocked(song_id)`, `remix_unlocked(song_id)`, `bell_set_unlocked(id)`,

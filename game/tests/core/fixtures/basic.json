@@ -20,8 +20,8 @@
       {"b": 8, "k": "rest", "len": 2},
       {"b": 12, "k": "bell"},
       {"b": 14, "k": "hold", "lane": 1, "len": 2},
-      {"b": 18, "k": "swipe", "dir": 1},
-      {"b": 20, "k": "swipe", "dir": -1},
+      {"b": 18, "k": "stomp", "lane": 1},
+      {"b": 20, "k": "stomp", "lane": 1},
       {"b": 22, "k": "ring", "lane": 0},
       {"b": 24, "k": "bell"}
     ],

@@ -4,8 +4,8 @@ extends TestCase
 
 const SONG_DIR := "res://data/songs"
 const DIFFS: Array[String] = ["easy", "medium", "hard", "expert"]
-const KINDS: Array[String] = ["step", "hold", "bell", "ring", "swipe", "rest"]
-const TOPICS: Array[String] = ["steps", "lanes", "bells", "holds", "still", "swipes", "full"]
+const KINDS: Array[String] = ["step", "hold", "bell", "ring", "stomp", "rest"]
+const TOPICS: Array[String] = ["steps", "lanes", "bells", "holds", "still", "stomps", "full"]
 const EPS := 0.001
 
 
@@ -116,12 +116,10 @@ func _check_chart(where: String, s: Dictionary, notes: Array) -> void:
 		prev = b
 		check(b >= 0.0, "%s beat >= 0" % where)
 		check(k in KINDS, "%s kind %s" % [where, k])
-		if k in ["step", "hold", "ring"]:
+		if k in ["step", "hold", "ring", "stomp"]:
 			check(int(n.get("lane", -1)) in [0, 1, 2], "%s lane at b=%s" % [where, b])
 		if k == "hold":
 			check(float(n.get("len", 0)) >= 0.5, "%s hold length at b=%s" % [where, b])
-		if k == "swipe":
-			check(int(n.get("dir", 0)) in [1, -1], "%s swipe dir at b=%s" % [where, b])
 		if k in ["bell", "ring"]:
 			check(b - last_bell >= 0.5 - EPS, "%s bells half a beat apart at b=%s" % [where, b])
 			last_bell = b

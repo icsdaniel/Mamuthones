@@ -3,9 +3,9 @@ extends RefCounted
 ## One chart note in song time (seconds), plus its play state inside a Session.
 ## Built by SongData.notes(); every call returns fresh Note objects, so each Session owns its copies.
 
-enum Kind { STEP, HOLD, BELL, RING, SWIPE, REST }
+enum Kind { STEP, HOLD, BELL, RING, STOMP, REST }
 
-const KIND_NAMES := {"step": Kind.STEP, "hold": Kind.HOLD, "bell": Kind.BELL, "ring": Kind.RING, "swipe": Kind.SWIPE, "rest": Kind.REST}
+const KIND_NAMES := {"step": Kind.STEP, "hold": Kind.HOLD, "bell": Kind.BELL, "ring": Kind.RING, "stomp": Kind.STOMP, "rest": Kind.REST}
 
 var kind: Kind = Kind.STEP
 var beat := 0.0
@@ -16,8 +16,6 @@ var end_t := 0.0
 var lane := -1
 ## Bells and rings: the direction shown (bells alternate through the chart, up first).
 var up := true
-## Swipes: 1 to the right, -1 to the left.
-var dir := 0
 ## Steps with an Issohadore's call (off-beat hits). The name is from the song format; it hides
 ## Object.call() on notes, which nothing uses.
 @warning_ignore("shadowed_variable_base_class")
@@ -34,13 +32,14 @@ var finished := false    ## holds/rests: over, nothing more can happen
 var hit_at := NAN        ## input time that judged it
 var judgement := ""      ## perfect|good|early|late|miss|wrong|silence|still ("" while open)
 var side := ""           ## hits: "early" or "late" (more than 10 ms off), "" when dead on
-var step_at := NAN       ## full rings: time of the step half
+var step_at := NAN       ## full rings: time of the step half; stomps: time of the first thumb
 var bell_at := NAN       ## full rings: time of the bell half
-var touch_id := -1       ## holds: the touch holding it
+var touch_id := -1       ## holds: the touch holding it; stomps: the first thumb's touch
+var thumbs := 0          ## stomps: thumbs that landed (0, 1 or 2)
 
 
 func uses_lane() -> bool:
-	return kind == Kind.STEP or kind == Kind.HOLD or kind == Kind.RING
+	return kind == Kind.STEP or kind == Kind.HOLD or kind == Kind.RING or kind == Kind.STOMP
 
 
 func is_bell() -> bool:
