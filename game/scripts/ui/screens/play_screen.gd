@@ -514,6 +514,8 @@ func _on_judged(note: Note, judgement: String, offset: float) -> void:
 		UIKit.vibrate(30 if note != null and note.is_bell() else 14)
 	elif judgement in ["miss", "silence"]:
 		scene.jolt("miss")
+		if judgement == "miss":
+			Sound.miss()  # the music is muffled for a moment: the procession stumbles
 
 
 ## A stomp judged (both thumbs, or one when the second never came): its sound and the prints on the

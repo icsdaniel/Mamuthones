@@ -15,7 +15,7 @@ MIX = {
     "bassu": (0.95, -0.12, 0.18), "contra": (0.8, 0.14, 0.18), "mesu": (0.62, -0.3, 0.2),
     "boghe": (0.8, 0.04, 0.24), "calls": (0.75, 0.35, 0.3),
     "tumbu": (0.5, 0.0, 0.12), "mancosa": (0.95, -0.18, 0.16), "mancosedda": (0.72, 0.22, 0.16),
-    "frame": (2.0, 0.18, 0.14), "rim": (2.0, 0.18, 0.14), "shake": (0.8, None, 0.25), "bass": (1.0, 0.0, 0.1), "stomp": (0.7, -0.1, 0.1),
+    "frame": (2.6, 0.18, 0.14), "rim": (2.6, 0.18, 0.14), "shake": (0.8, None, 0.25), "bass": (1.6, 0.0, 0.08), "stomp": (0.7, -0.1, 0.1),
     "clap": (0.55, 0.25, 0.2), "count": (0.6, 0.0, 0.05),
     "bells": (0.8, None, 0.25), "rope": (0.8, None, 0.1), "fire": (0.45, None, 0.0),
     "crowd": (0.6, None, 0.15),
@@ -27,11 +27,33 @@ MIX = {
 
 # instruments that keep sounding through a stand-still (sustains without new onsets)
 THROUGH = {"fire", "crowd", "tumbu"}
-DUCKED = {"pad", "sub"}
+# sustained parts that breathe with the big drum (or the remix kick): how deep each one dips on
+# the hit, so every beat pushes the chorus and pipes back a little and the pulse reads clearly
+DUCKED = {"pad": 0.6, "sub": 0.6, "bassu": 0.4, "contra": 0.35, "mesu": 0.3, "tumbu": 0.35,
+          "mancosa": 0.2, "mancosedda": 0.2, "boghe": 0.15, "lead": 0.2, "chop": 0.2}
 # ...but inside a stand-still the music really stops: the drone drops out and ringing drum tails
 # are cut, so the rest is heard as a rest; the crowd only quietens, the fire keeps crackling
 STOP_DUCK_DEFAULT = -40.0
 STOP_DUCKED = {"tumbu": -30.0, "crowd": -14.0, "fire": 0.0, "rim": 0.0, "shake": 0.0, "calls": 0.0}
+
+
+def pump_env(x, att, rel):
+    """Causal envelope for the pump: rises over att seconds from the hit, falls back
+    exponentially over rel (worked out at 1 kHz, then stretched back to the sample rate)."""
+    hop = SR // 1000
+    m = len(x) // hop + 1
+    pad = np.zeros(m * hop)
+    pad[:len(x)] = np.abs(x)
+    pk = pad.reshape(m, hop).max(axis=1)
+    out = np.empty(m)
+    cur = 0.0
+    up = 1.0 / max(1.0, att * 1000)
+    down = np.exp(-1.0 / (rel * 1000))
+    for i in range(m):
+        v = pk[i]
+        cur = min(v, cur + up * v) if v > cur else v + (cur - v) * down
+        out[i] = cur
+    return np.interp(np.arange(len(x)) / hop, np.arange(m), out)
 
 
 def automation_gain(song, n, b0, b1, db, ramp_s=0.08):
@@ -121,15 +143,17 @@ def mix(song, stems, n):
     wet_in = np.zeros((n, 2))
     over = getattr(song, "mix", {}) or {}
     kick_env = None
-    if "kick" in stems:
-        kick_env = dsp.envelope_follow(stems["kick"], 0.001, 0.12)
-        kick_env = kick_env / (kick_env.max() + 1e-9)
+    key = [stems[k] for k in ("kick", "bass") if k in stems]
+    if key:
+        k = sum(dsp.lowpass(y if y.ndim == 1 else y.mean(axis=1), 200) for y in key)
+        kick_env = pump_env(k, 0.004, 0.18)
+        kick_env = np.minimum(1.0, kick_env / (np.percentile(kick_env, 99.5) + 1e-9))
     for inst, y in stems.items():
         g, p, send = MIX[inst]
         g *= over.get(inst, 1.0)
         st = y * g if y.ndim == 2 else dsp.pan(y * g, p if p is not None else 0.0)
         if kick_env is not None and inst in DUCKED:
-            st = st * (1 - 0.6 * kick_env)[:, None]
+            st = st * (1 - DUCKED[inst] * kick_env)[:, None]
         for (a0, a1, db, insts) in getattr(song, "automation", []):
             if inst in insts:
                 st = st * automation_gain(song, len(st), a0, a1, db)[:, None]
@@ -144,10 +168,13 @@ def mix(song, stems, n):
     wet = dsp.convolve_reverb(wet_in, ir) * rv.get("wet", 1.0)
     out = dry + wet
     out = dsp.highpass(out, 28)
-    # leave room for the player's bells and steps: a gentle, wide dip where they live
+    # the tone of the whole mix: weight under the big drum and the bassu, the chorus's boxy
+    # middle eased back, a gentle dip where the player's bells and steps live, and a lift on
+    # top for the reeds' and bells' shimmer, the drums' snap and the voices' breath
+    out = dsp.shelf(out, 100, 2.0, high=False)
+    out = dsp.peaking(out, 300, -1.5, 0.9)
     out = dsp.peaking(out, 2300, -2.0, 0.8)
-    # a little air on top: the reeds' and bells' shimmer, the voices' breath
-    out = dsp.peaking(out, 7500, 2.5, 0.6)
+    out = dsp.shelf(out, 3200, 3.0)
     # keep the tail tidy
     fade = int(min(song.tail, 2.5) * SR)
     out[-fade:] *= np.linspace(1, 0, fade)[:, None] ** 2

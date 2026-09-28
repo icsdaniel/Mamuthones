@@ -12,6 +12,7 @@ from __future__ import annotations
 
 import glob
 import os
+import zlib
 
 import numpy as np
 import soundfile as sf
@@ -21,6 +22,11 @@ from scipy.ndimage import uniform_filter1d
 from dsp import SR, add_at, bandpass, highpass, lowpass, peaking, pink, resonator, rng, smooth_noise
 
 # ------------------------------------------------------------------ helpers
+
+
+def seed_of(*parts):
+    """A stable seed from names (Python's hash() changes every run, so renders didn't repeat)."""
+    return zlib.crc32("/".join(map(str, parts)).encode()) % 1000
 
 
 def mtof(m):
@@ -245,7 +251,7 @@ def _vowel_gain(v, fs):
 
 def render_voice(kind):
     def f(song, evs, n):
-        return voice_line(song, evs, n, kind, seed=hash((song.id, kind)) % 1000)
+        return voice_line(song, evs, n, kind, seed=seed_of(song.id, kind))
     return f
 
 
@@ -291,7 +297,7 @@ PIPE = {
 def render_pipe(kind):
     def f(song, evs, n):
         prof = PIPE[kind]
-        r = rng(hash((song.id, kind)) % 1000)
+        r = rng(seed_of(song.id, kind))
         freq = np.full(n, np.nan)
         amp = np.zeros(n)
         dips = np.zeros(n)
@@ -360,22 +366,26 @@ def _t(sec):
     return np.arange(int(sec * SR)) / SR
 
 
-def drum_hit(inst, hit, vel, r):
+def drum_hit(inst, hit, vel, r, hz=None):
     if inst == "frame":
         if hit == "dum":
             t = _t(0.6)
             f = 92 * (1 + 0.6 * np.exp(-t / 0.012)) * r.uniform(0.98, 1.02)
             ph = 2 * np.pi * np.cumsum(f / SR)
-            y = np.sin(ph) * np.exp(-t / 0.2) + 0.45 * np.sin(2.29 * ph) * np.exp(-t / 0.07)
+            y = 0.7 * np.sin(ph) * np.exp(-t / 0.16) + 0.45 * np.sin(2.29 * ph) * np.exp(-t / 0.07)
             y += 0.25 * np.sin(3.6 * ph) * np.exp(-t / 0.04)
             y += lowpass(r.standard_normal(len(t)), 1500) * np.exp(-t / 0.008) * 0.6
-            return y * vel
+            # the hand's slap on the skin: the attack that lets the dum read over the voices
+            y += bandpass(r.standard_normal(len(t)), 1500, 5000) * np.exp(-t / 0.003) * 0.45
+            return np.tanh(y * 1.3) * vel
         if hit in ("tak", "slap"):
             t = _t(0.3)
             modes = [(310, 0.05), (590, 0.035), (880, 0.025), (1230, 0.018)]
             y = sum(np.sin(2 * np.pi * fm * r.uniform(0.98, 1.02) * t) * np.exp(-t / d) for fm, d in modes) * 0.35
-            nz = bandpass(r.standard_normal(len(t)), 900 if hit == "tak" else 700, 6000)
-            y += nz * np.exp(-t / (0.012 if hit == "tak" else 0.025)) * (0.9 if hit == "tak" else 1.6)
+            nz = bandpass(r.standard_normal(len(t)), 900 if hit == "tak" else 700, 8000)
+            y += nz * np.exp(-t / (0.012 if hit == "tak" else 0.025)) * (1.1 if hit == "tak" else 1.8)
+            # the fingertip's crack, up where the voices leave room
+            y += highpass(r.standard_normal(len(t)), 3500) * np.exp(-t / 0.0018) * 0.5
             return y * vel * (0.8 if hit == "tak" else 1.1)
         if hit == "rim":
             t = _t(0.15)
@@ -384,13 +394,20 @@ def drum_hit(inst, hit, vel, r):
             y += bandpass(r.standard_normal(len(t)), 2000, 9000) * np.exp(-t / 0.004) * 1.2
             return y * vel * 0.8
     if inst == "bass":
-        t = _t(1.2)
-        f = 52 * (1 + 1.0 * np.exp(-t / 0.025)) * r.uniform(0.99, 1.01)
+        # the procession's big drum, tuned to the chord root (hz) so its long boom is the bass line:
+        # a fast pitch drop into a sub tail, driven so its 2nd and 3rd harmonics carry the bass on
+        # earbuds and phone speakers, a chest knock at ~150 Hz and a felt beater's click on top
+        f0 = (hz or 52) * r.uniform(0.995, 1.005)
+        t = _t(1.3)
+        f = f0 * (1 + 1.6 * np.exp(-t / 0.018))
         ph = 2 * np.pi * np.cumsum(f / SR)
-        y = np.sin(ph) * np.exp(-t / 0.5) + 0.3 * np.sin(1.47 * ph) * np.exp(-t / 0.25)
-        y += 0.15 * np.sin(2.1 * ph) * np.exp(-t / 0.12)
-        y += lowpass(r.standard_normal(len(t)), 2500) * np.exp(-t / 0.005) * 0.8
-        return np.tanh(y * 1.3) * vel
+        body = np.sin(ph) * (0.75 * np.exp(-t / 0.42) + 0.25 * np.exp(-t / 0.09))
+        body += 0.22 * np.sin(1.5 * ph) * np.exp(-t / 0.08)
+        knock = np.sin(2 * np.pi * 150 * r.uniform(0.97, 1.03) * t) * np.exp(-t / 0.022) * 0.45
+        click = bandpass(r.standard_normal(len(t)), 1800, 6500) * np.exp(-t / 0.0025) * 0.55
+        thud = lowpass(r.standard_normal(len(t)), 900) * np.exp(-t / 0.006) * 0.5
+        y = np.tanh((body + knock) * 1.9) * 0.95 + click + thud
+        return y * vel
     if inst == "stomp":
         t = _t(0.35)
         f = 70 * (1 + 0.8 * np.exp(-t / 0.01))
@@ -424,10 +441,11 @@ def fade_tail(y, sec=0.05):
 
 def render_drum(inst):
     def f(song, evs, n):
-        r = rng(hash((song.id, inst)) % 1000)
+        r = rng(seed_of(song.id, inst))
         out = np.zeros(n)
         for e in evs:
-            y = fade_tail(drum_hit(inst, e.p.get("hit", "hit"), e.vel, r))
+            hz = low_hz(song.pitch(song.root_at(e.b)), 46) if inst == "bass" else None
+            y = fade_tail(drum_hit(inst, e.p.get("hit", "hit"), e.vel, r, hz))
             add_at(out, y, s_of(song, e.b))
         return out
     return f
@@ -451,6 +469,8 @@ def bell_bank():
         y = y.mean(axis=1)
         if sr != SR:
             y = signal.resample_poly(y, SR, sr)
+        # the row's bells are metal only: the impact boom under a ring is the player's own
+        y = highpass(y, 260, 4)
         bank.append(y / (np.max(np.abs(y)) + 1e-9))
     if not bank:
         r = rng(3)
@@ -472,7 +492,7 @@ def synth_bell(f0, r, decay=0.9):
 
 def render_bells(song, evs, n):
     """A row of Mamuthones jumping: many bells struck within a few tens of ms, stereo spread."""
-    r = rng(hash((song.id, "bells")) % 1000)
+    r = rng(seed_of(song.id, "bells"))
     bank = bell_bank()
     out = np.zeros((n, 2))
     for e in evs:
@@ -497,40 +517,47 @@ def render_bells(song, evs, n):
 
 
 def render_rope(song, evs, n):
-    """Whoosh sweeping across the stereo field in the throw's direction, cracking on the beat."""
+    """The stomp accent (the "rope" events are where the stomp notes sit): the whole row gathers
+    with a quick rising shake of bells, then stamps together on the beat, a deep driven boom
+    with the stone's slap and every load crashing at once."""
     r = rng(11)
     out = np.zeros((n, 2))
+    bank = bell_bank()
     for e in evs:
         s = s_of(song, e.b)
-        pre = int(0.38 * SR)
-        t = np.linspace(0, 1, pre)
-        nz = r.standard_normal(pre)
-        # swept band: rising centre frequency and loudness
-        y = np.zeros(pre)
-        blocks = 16
-        for i in range(blocks):
-            a, b = i * pre // blocks, (i + 1) * pre // blocks
-            fc = 300 * (10 ** (i / blocks * 1.1))
-            seg = bandpass(nz[max(0, a - 400):b], fc * 0.6, fc * 1.8)[-(b - a):]
-            y[a:b] = seg
-        y *= t ** 2.2 * 0.8
-        crack_t = _t(0.12)
-        crack = bandpass(r.standard_normal(len(crack_t)), 1200, 9000) * np.exp(-crack_t / 0.012) * 1.6
-        crack[:30] += np.hanning(60)[30:] * 1.5 * np.sign(r.standard_normal(30))
         d = e.p.get("dir", 1)
-        pos = -d * (1 - t) + d * t * 0.6
-        a = (pos + 1) * np.pi / 4
-        add_at(out[:, 0], y * np.cos(a), s - pre)
-        add_at(out[:, 1], y * np.sin(a), s - pre)
-        ae = (d * 0.7 + 1) * np.pi / 4
-        add_at(out[:, 0], crack * np.cos(ae) * e.vel, s)
-        add_at(out[:, 1], crack * np.sin(ae) * e.vel, s)
+        # the gathering: bells shaken faster and louder into the beat (an audible cue)
+        pre = int(min(0.36, 0.5 * song.spb) * SR)
+        sh = np.zeros(pre)
+        tt = 0.0
+        while tt < pre / SR - 0.02:
+            x = highpass(bank[r.integers(len(bank))][: int(0.25 * SR)], 900)
+            g = (tt / (pre / SR)) ** 1.8
+            add_at(sh, x * np.exp(-np.arange(len(x)) / (0.05 * SR)) * g * 0.35, int(tt * SR))
+            tt += 0.055 * (1 - 0.5 * tt / (pre / SR))
+        sh = sh[:pre]
+        add_at(out[:, 0], sh * 0.8, s - pre)
+        add_at(out[:, 1], sh * 0.8, s - pre)
+        # the stamp
+        t = _t(0.9)
+        f = 50 * (1 + 2.2 * np.exp(-t / 0.012))
+        boom = np.tanh(np.sin(2 * np.pi * np.cumsum(f / SR)) * np.exp(-t / 0.22) * 2.4) / np.tanh(2.4)
+        slap = bandpass(r.standard_normal(len(t)), 200, 3500) * np.exp(-t / 0.016)
+        crack = bandpass(r.standard_normal(len(t)), 1500, 9000) * np.exp(-t / 0.004) * 0.8
+        hit = (boom * 1.1 + slap * 0.9 + crack) * e.vel
+        crash = np.zeros(len(t))
+        for j in range(4):
+            x = highpass(bank[r.integers(len(bank))][: len(t)], 300)
+            add_at(crash, x * 0.45, int(r.uniform(0, 0.012) * SR))
+        for c, gside in ((0, 1 - 0.25 * d), (1, 1 + 0.25 * d)):
+            add_at(out[:, c], hit * 0.9, s)
+            add_at(out[:, c], crash * gside * e.vel, s)
     return out * 0.8
 
 
 def render_fire(song, evs, n):
     """Bonfire ambience: low roar plus random crackles (stereo). Events give level over spans."""
-    r = rng(hash((song.id, "fire")) % 1000)
+    r = rng(seed_of(song.id, "fire"))
     level = np.zeros(n)
     for e in evs:
         s, end = s_of(song, e.b), s_of(song, e.b + e.dur)
@@ -566,7 +593,7 @@ def render_fire(song, evs, n):
 def render_crowd(song, evs, n):
     """Piazza crowd: a babble of formant voices on random syllables plus shaped noise and cheers."""
     from score import Ev
-    r = rng(hash((song.id, "crowd")) % 1000)
+    r = rng(seed_of(song.id, "crowd"))
     level = np.zeros(n)
     cheers = []
     for e in evs:
@@ -613,12 +640,12 @@ def render_crowd(song, evs, n):
 # ------------------------------------------------------------------ remix kit
 
 
-def low_hz(midi):
-    """A pitch folded into the kick's range (35-70 Hz)."""
+def low_hz(midi, lo=35.0):
+    """A pitch folded into a drum's range, one octave up from lo (the kick's is 35-70 Hz)."""
     f = 440.0 * 2 ** ((midi - 69) / 12)
-    while f >= 70:
+    while f >= 2 * lo:
         f /= 2
-    while f < 35:
+    while f < lo:
         f *= 2
     return f
 
@@ -659,7 +686,7 @@ def hat(vel, r, open_=False):
 
 def render_kit(inst):
     def f(song, evs, n):
-        r = rng(hash((song.id, inst)) % 1000)
+        r = rng(seed_of(song.id, inst))
         out = np.zeros(n)
         for e in evs:
             st = e.p.get("style", "")

@@ -482,3 +482,47 @@ func test_rings_duck_the_music() -> void:
 	s.set_volume("music", 1.0)
 	check_near(AudioServer.get_bus_volume_db(AudioServer.get_bus_index("Bells")), 0.0, 0.01, "Bells bus has no trim")
 	await _settle()
+
+
+func test_stomp_sounds() -> void:
+	var s := _sound()
+	s.set_key(62)
+	check_eq(s._stomps.size(), 3, "three full stomps")
+	check_eq(s._stomps_ok.size(), 2, "two dull stomps")
+	check_eq(s._stomp_halves.size(), 2, "two one-thumb stomps")
+	for lane in 3:
+		s.stomp(lane)
+		var p := _last_player(s, s._bell_pool, 0)
+		check(s._stomps.has(p.stream), "stomp(%d) plays a full stomp" % lane)
+		check_eq(String(p.bus), "Bells", "on the heavy-hit bus")
+		check(s._duck_hold > 0.0, "and the music steps back for it")
+		s.stomp(lane, "good")
+		check(_last_player(s, s._bell_pool, 0).volume_db <= -1.49, "a good stomp is softer")
+		s._duck_hold = 0.0
+		s.stomp(lane, "ok")
+		check(s._stomps_ok.has(_last_player(s, s._bell_pool, 0).stream), "an ok stomp is the dull one")
+		check_eq(s._duck_hold, 0.0, "which doesn't duck the music")
+		s.stomp_half(lane)
+		check(s._stomp_halves.has(_last_player(s, s._foot_pool, 2).stream), "stomp_half(%d) is one foot" % lane)
+	for x in s._stomps:
+		check(s._stomps_ok[0].get_length() < (x as AudioStream).get_length(), "the dull stomp is shorter")
+	await _settle()
+
+
+func test_miss_muffles_the_music() -> void:
+	var s := _sound()
+	var music := AudioServer.get_bus_index("Music")
+	s._process(1.0)
+	check(not AudioServer.is_bus_effect_enabled(music, 0), "the music's low-pass is off while open")
+	s.miss()
+	check(AudioServer.is_bus_effect_enabled(music, 0), "a miss switches it on")
+	check_near(s._music_lp.cutoff_hz, s.MISS_CUTOFF, 1.0, "muffled at once")
+	s._process(s.MISS_RECOVER * 0.5)
+	check(s._music_lp.cutoff_hz > s.MISS_CUTOFF * 2.0, "opening back up (%.0f Hz)" % s._music_lp.cutoff_hz)
+	s._process(s.MISS_RECOVER)
+	check(not AudioServer.is_bus_effect_enabled(music, 0), "and fully open within %.2f s" % s.MISS_RECOVER)
+	s.bell("full", true, "miss")
+	check(AudioServer.is_bus_effect_enabled(music, 0), "a missed bell muffles too")
+	s.bell("full", true, "perfect")
+	s._process(s.MISS_RECOVER + 0.1)
+	await _settle()
