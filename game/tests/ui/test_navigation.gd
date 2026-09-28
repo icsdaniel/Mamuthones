@@ -214,7 +214,6 @@ func test_two_taps_to_a_song_and_lanes_dominate() -> void:
 		var h := play.size.y
 		print("  %s: lanes %.0f%% of height, %.0f%% of width" % [sz, lanes.size.y / h * 100.0, lanes.size.x / play.size.x * 100.0])
 		check(lanes.size.y >= h * 0.8, "%s: the lanes are the stage (%.0f%% of the height)" % [sz, lanes.size.y / h * 100.0])
-		check(lanes.hopping(), "%s: notes hop on the beat grid" % sz)
 		var g: Array[Rect2] = rows.gutters()
 		check(g[0].size.x >= 60.0 and g[1].size.x >= 60.0, "%s: room for a file of Mamuthones each side (%.0f, %.0f)" % [sz, g[0].size.x, g[1].size.x])
 		var lr := lanes.get_global_rect()

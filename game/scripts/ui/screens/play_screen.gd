@@ -165,8 +165,6 @@ func build() -> void:
 	lanes.show_buttons = not session.piazza
 	lanes.visible = not session.piazza
 	if not session.piazza:
-		lanes.spb = _spb
-		lanes.beat_zero = song.offset_for(session.remix)
 		scene.lanes = lanes
 	_field_box.add_child(lanes)
 	words = JudgementWords.new()
@@ -216,7 +214,7 @@ func build() -> void:
 	session.still_kept.connect(_on_still_kept)
 
 	# The count-in and the stand-still moment: over the procession in the Piazza, else over the top of
-	# the lanes, far from the hit tiles where the next notes are read.
+	# the lanes, far from the hit line where the next notes are read.
 	if session.piazza:
 		banner = scene
 	else:
