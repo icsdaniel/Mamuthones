@@ -199,10 +199,10 @@ func _draw_field(ci: CanvasItem) -> void:
 ## The field is drawn flat into a viewport and shown as a road laid back toward the horizon: full width
 ## at the hit line end, TOP_W of that at the far end, so notes come toward the player and grow as they
 ## near. Straight lines stay straight (a true perspective), so lanes, bars and holds keep their shape.
-const TOP_W := 0.55
+const TOP_W := 0.42
 const ROAD_SHADER := """
 shader_type canvas_item;
-uniform float top_w = 0.55;
+uniform float top_w = 0.42;
 uniform vec4 fog : source_color = vec4(0.08, 0.066, 0.06, 1.0);
 void fragment() {
 	float w = top_w + (1.0 - top_w) * UV.y;
