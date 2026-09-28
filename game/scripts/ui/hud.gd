@@ -1,7 +1,8 @@
 class_name Hud
 extends Control
 ## The strip at the top of the play screen: score, unison (level, multiplier and the streak toward the
-## next level), progress through the song's sections, and the ghost (ahead or behind your best).
+## next level), progress through the song's sections, the ghost (ahead or behind your best) and
+## health (HealthPips).
 ## A pause button sits at the right. Text uses the theme's HUD styles so it reads over the scene.
 
 signal pause_pressed
@@ -19,6 +20,7 @@ var _bar: SectionBar
 var _shown_score := 0.0
 var _pause: Button
 var _ribbon: Control
+var _health: HealthPips
 
 
 func _init() -> void:
@@ -43,6 +45,15 @@ func setup(p_session: Session, p_ghost: Ghost) -> void:
 	FireSkin.carve_label(_ghost, 24, Color("#d9a24a"), Color(0, 0, 0, 0), 6)
 	_ghost.position = Vector2(-2.0, 50.0)
 	add_child(_ghost)
+	# Health: ten flames under the ghost line (hidden where health is off: Piazza, lessons, autoplay).
+	_health = HealthPips.new()
+	_health.name = "Health"
+	_health.session = session
+	_health.reduced_motion = UIKit.reduced_motion()
+	_health.position = Vector2(0.0, 82.0)
+	_health.size = _health.custom_minimum_size
+	_health.visible = session.health_on
+	add_child(_health)
 	_unison = UIKit.label("", UIKit.HUD, false, HORIZONTAL_ALIGNMENT_RIGHT)
 	_unison.name = "Unison"
 	FireSkin.carve_label(_unison, 32, Color.WHITE, Color(0, 0, 0, 0), 6, 0.3)

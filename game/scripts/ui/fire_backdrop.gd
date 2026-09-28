@@ -23,6 +23,7 @@ shader_type canvas_item;
 // The mockup's flame field: turbulent value noise inside a tall cone, through the fire's colour ramp,
 // rising over time. UV spans FIRE_RECT in the mockup's pixels.
 uniform float pulse = 0.0;
+uniform float low = 0.0;   // 0..1: the fire burns lower (the player's health is low)
 uniform float t0 = 0.0;
 float h(vec2 p) { return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453); }
 float vn(vec2 p) {
@@ -60,7 +61,7 @@ void fragment() {
 	float uu = u + (t1 - 0.5) * 0.9 * vp + (t2 - 0.5) * 0.25;
 	float w = max(0.02, 1.05 * pow(1.0 - min(vp, 1.0), 0.85));
 	float I = (1.0 - abs(uu) / w) * 1.35 - vp * 0.55 + 0.1 + (t2 - 0.5) * 0.5 + (t1 - 0.5) * 0.35;
-	I *= 0.92 + 0.06 * pulse;
+	I *= (0.92 + 0.06 * pulse) * (1.0 - 0.3 * low);
 	if (v < 0.0) { I *= 1.0 + v * 8.0; }
 	vec4 c = ramp(I);
 	c.a *= step(0.0, I) * smoothstep(-0.05, 0.0, v) * (1.0 - smoothstep(0.93, 0.999, v));
@@ -70,6 +71,8 @@ void fragment() {
 
 var lanes: LaneView
 var beat := -1000.0
+## 0..1: the bonfire dims and burns lower (the play screen sets it while health is low).
+var dim := 0.0
 
 var _fire: ColorRect
 var _glow: Control
@@ -113,6 +116,9 @@ func _process(delta: float) -> void:
 	_clock += delta
 	_place_fire()
 	(_fire.material as ShaderMaterial).set_shader_parameter("pulse", pulse())
+	(_fire.material as ShaderMaterial).set_shader_parameter("low", dim)
+	_glow.modulate = Color(1, 1, 1, 1.0 - 0.5 * dim)
+	_fire.modulate = Color(1.0, 1.0 - 0.2 * dim, 1.0 - 0.2 * dim, 1.0 - 0.25 * dim)
 	_glow.queue_redraw()
 	_front.queue_redraw()
 	queue_redraw()

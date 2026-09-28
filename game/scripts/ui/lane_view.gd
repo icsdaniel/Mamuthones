@@ -686,7 +686,10 @@ func _draw_upright() -> void:
 		match n.kind:
 			Note.Kind.STEP:
 				if not n.done:
-					FireSkin.draw_gem(self, project(Vector2(lanes[n.lane].get_center().x, y)), upright_scale(y), n.call, a, _off_beat(n))
+					if n.heal:
+						FireSkin.draw_heal_gem(self, project(Vector2(lanes[n.lane].get_center().x, y)), upright_scale(y), a, _clock)
+					else:
+						FireSkin.draw_gem(self, project(Vector2(lanes[n.lane].get_center().x, y)), upright_scale(y), n.call, a, _off_beat(n))
 			Note.Kind.HOLD:
 				if n.finished or (n.done and not n.holding):
 					continue

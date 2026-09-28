@@ -142,6 +142,16 @@ static func draw_gem(ci: CanvasItem, at: Vector2, sc: float, call := false, alph
 	blit(ci, "gem_call" if call else "gem", at, sc * (0.78 if off else 1.0), Color(1, 1, 1, alpha))
 
 
+## A healing step: the bone-and-gold gem with its ember flame, breathing with a soft glow (clock in
+## seconds drives the pulse).
+static func draw_heal_gem(ci: CanvasItem, at: Vector2, sc: float, alpha := 1.0, clock := 0.0) -> void:
+	_mip(ci)
+	var p := 0.5 + 0.5 * sin(clock * TAU * 1.5)
+	var r := 0.33 * REF_LANE * sc * (1.5 + 0.25 * p)
+	ci.draw_texture_rect(glow(), Rect2(at - Vector2(r, r * 0.7), Vector2(r * 2.0, r * 1.2)), false, Color(1.0, 0.8, 0.4, (0.25 + 0.2 * p) * alpha))
+	blit(ci, "gem_heal", at, sc * (1.0 + 0.04 * p), Color(1, 1, 1, alpha))
+
+
 ## The end of a hold: a hollow gold ring.
 static func draw_hold_ring(ci: CanvasItem, at: Vector2, sc: float, alpha := 1.0) -> void:
 	_mip(ci)
@@ -326,6 +336,13 @@ static func draw_burst(ci: CanvasItem, at: Vector2, quality: String, age: float,
 				var k := lerpf(1.08, float(ring[0]) * (1.0 if quality == "perfect" else 0.9), grow)
 				_ellipse(ci, at, rx * k, ry * k, Color(hot, float(ring[1]) * fade), float(ring[2]) * maxf(sc, 0.7))
 			_embers(ci, at, rx, sc, t, fade, 13 if quality == "perfect" else 7, warm)
+		"heal":
+			# A healing step taken: a tall golden flare, a bone ring opening wide and a spray of embers.
+			ci.draw_texture_rect(g, Rect2(at - Vector2(110, 230) * sc * (0.8 + 0.4 * grow), Vector2(220, 280) * sc * (0.8 + 0.4 * grow)), false, Color(1.0, 0.78, 0.35, 0.9 * fade))
+			for i in 2:
+				var k := lerpf(1.05, 2.4 - 0.6 * i, grow)
+				_ellipse(ci, at, rx * k, ry * k, Color(1.0, 0.95, 0.78, (0.9 - 0.4 * i) * fade), (5.0 - 2.0 * i) * maxf(sc, 0.7))
+			_embers(ci, at, rx, sc, t, fade, 18, Color(1.0, 0.8, 0.4))
 		"held":
 			ci.draw_texture_rect(g, Rect2(at - Vector2(70, 150) * sc, Vector2(140, 190) * sc), false, Color(1.0, 0.55, 0.15, 0.8 * fade))
 			_ellipse(ci, at, rx * lerpf(1.05, 1.4, grow), ry * lerpf(1.05, 1.4, grow), Color(1.0, 0.85, 0.55, 0.7 * fade), 3.0)

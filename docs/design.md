@@ -85,6 +85,15 @@ Other rules:
 - The bell sound itself reacts to play: Perfect rings clean and full, Good slightly softer, Early/Late
   clanks, a miss is a dull knock. High unison adds the whole row's bells behind yours.
 
+**Health** (as in Rift of the NecroDancer): a song starts with 10. Every missed note of any kind costs
+1 (a wrong-way swipe uses its note up, so it counts too); wrong-lane steps and rings in a stand-still
+cost none, they have their own penalties. About one step every 20 s on Easy, 25 on Medium, 30 on Hard
+and 40 on Expert (none in the first 8 s) is a healing step, a bone-and-gold gem with a small flame,
+picked from on-beat plain steps right after the busiest stretch; hitting it at Ok or better gives back
+2, up to 10. Health shows as ten flames under the score; at 3 or less they burn red and the bonfire
+dims. At 0 the fire goes out: the music fades, the notes stop, and the player restarts the song (or
+quits); a failed run records nothing. The Piazza, lessons, practice and autoplay have no health.
+
 ## 4. Difficulty
 
 Every song has four charts, all written to the music:

@@ -54,6 +54,35 @@ function settsJob() {
 // The step: matte deep red with an ember core, its halo and its reflection on the stone. At its size
 // on the mockup's hit line (a 240 px lane).
 function gemJob(off) { return () => gem(128, 62, 1, { off }); }
+// A healing step: the same stone cut in bone and gold, a small ember flame burning in its face, so it
+// reads at once as not a red step.
+function healGemJob() {
+  const x = 128, y = 62, rx = 0.3 * 240, ry = rx * 0.38, t = rx * 0.18;
+  g.globalCompositeOperation = 'lighter';
+  g.fillStyle = rg(x, y, 0, rx * 1.7, [[0, 'rgba(255,210,120,0.42)'], [1, 'rgba(0,0,0,0)']]); g.save(); g.translate(x, y); g.scale(1, 0.55); g.translate(-x, -y); g.fillRect(x - rx * 1.8, y - rx * 1.8, rx * 3.6, rx * 3.6); g.restore();
+  g.fillStyle = rg(x, y + t + ry * 1.6, 0, rx * 0.9, [[0, 'rgba(255,200,110,0.32)'], [1, 'rgba(0,0,0,0)']]); g.save(); g.translate(x, y + t + ry * 1.6); g.scale(0.7, 1.6); g.translate(-x, -(y + t + ry * 1.6)); g.fillRect(x - rx, y + t + ry * 1.6 - rx, 2 * rx, 2 * rx); g.restore();
+  g.globalCompositeOperation = 'source-over';
+  noteShadow(x, y + t, rx, ry);
+  // side: dark bronze
+  g.beginPath(); g.moveTo(x - rx, y); g.lineTo(x - rx, y + t); g.ellipse(x, y + t, rx, ry, 0, Math.PI, 0, true); g.lineTo(x + rx, y); g.closePath();
+  g.fillStyle = lg(x - rx, 0, x + rx, 0, [[0, '#3a2408'], [0.55, '#8a5a18'], [1, '#4a2e0a']]); g.fill();
+  // face: bone to gold
+  g.fillStyle = lg(0, y - ry, 0, y + ry, [[0, '#fff2cc'], [0.55, '#f0cf82'], [1, '#c8902e']]); ell(x, y, rx, ry); g.fill();
+  g.strokeStyle = 'rgba(120,70,10,0.6)'; g.lineWidth = 2; ell(x, y, rx * 0.8, ry * 0.76); g.stroke();
+  // the ember flame, standing up out of the face
+  const fx = x, fy = y + ry * 0.35, fh = ry * 2.5, fw = rx * 0.26;
+  g.save(); g.shadowColor = 'rgba(255,120,30,0.9)'; g.shadowBlur = 12;
+  g.beginPath(); g.moveTo(fx, fy - fh);
+  g.bezierCurveTo(fx + fw * 0.35, fy - fh * 0.65, fx + fw * 1.1, fy - fh * 0.45, fx + fw, fy - fh * 0.12);
+  g.bezierCurveTo(fx + fw * 0.95, fy + fh * 0.05, fx + fw * 0.4, fy + fh * 0.1, fx, fy + fh * 0.1);
+  g.bezierCurveTo(fx - fw * 0.4, fy + fh * 0.1, fx - fw * 0.95, fy + fh * 0.05, fx - fw, fy - fh * 0.12);
+  g.bezierCurveTo(fx - fw * 1.1, fy - fh * 0.45, fx - fw * 0.35, fy - fh * 0.65, fx, fy - fh); g.closePath();
+  g.fillStyle = lg(0, fy - fh, 0, fy + fh * 0.1, [[0, '#ffd24a'], [0.45, '#ff7a1f'], [1, '#c8201a']]); g.fill(); g.restore();
+  g.beginPath(); g.ellipse(fx, fy - fh * 0.1, fw * 0.32, fh * 0.2, 0, 0, Math.PI * 2); g.fillStyle = 'rgba(255,236,170,0.9)'; g.fill();
+  // gold rim and a highlight toward the fire
+  g.strokeStyle = 'rgba(255,245,210,0.8)'; g.lineWidth = 1.6; g.beginPath(); g.ellipse(x, y, rx, ry, 0, Math.PI * 1.1, Math.PI * 1.9); g.stroke();
+  g.strokeStyle = '#5a3406'; g.lineWidth = 2; ell(x, y + t * 0.5, rx + 1, ry + t * 0.5 + 1); g.stroke();
+}
 // End of a hold: the hollow gold ring.
 function ringJob() { const x = 80, y = 40, rx = 0.24 * 240, ry = rx * 0.38; g.save(); g.shadowColor = 'rgba(255,200,90,0.9)'; g.shadowBlur = 14; g.strokeStyle = '#ffd27a'; g.lineWidth = 8; ell(x, y, rx, ry); g.stroke(); g.restore(); g.strokeStyle = 'rgba(255,250,225,0.9)'; g.lineWidth = 2; g.beginPath(); g.ellipse(x, y, rx, ry, 0, Math.PI * 1.1, Math.PI * 1.9); g.stroke(); }
 // The woven sash of a hold, one repeat, in flat road pixels (a 240 px lane, 0.34 of it wide).
@@ -168,6 +197,7 @@ const JOBS = [
   job('setts', SETT_W, SETT_H, 1.5, 0, 0, settsJob),
   job('gem', 256, 250, 2, 128, 62, gemJob(false)),
   job('gem_call', 256, 250, 2, 128, 62, gemJob(true)),
+  job('gem_heal', 256, 250, 2, 128, 62, healGemJob),
   job('hold_ring', 160, 80, 2, 80, 40, ringJob),
   job('sash', SASH_W, SASH_H, 2, 0, 0, sashJob),
   job('bar_up', 720, 90, 2, 360, 45, barJob(1)),

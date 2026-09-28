@@ -22,6 +22,8 @@ var dir := 0
 ## Object.call() on notes, which nothing uses.
 @warning_ignore("shadowed_variable_base_class")
 var call := false
+## A healing step (chosen by Session at the start, not in the chart): hitting it restores health.
+var heal := false
 ## Position in the session's note list.
 var index := 0
 

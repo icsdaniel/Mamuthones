@@ -82,3 +82,81 @@ func test_tutorial_passes_under_autoplay() -> void:
 	check(Profile.has_flag("tutorial_done"), "the tutorial is marked done")
 	UIHarness.free_app(app)
 	UIHarness.restore_profile()
+
+
+## Health on the play screen: the pips show in a played song; letting every note go by runs health out,
+## the music stops, the notes freeze and the fail menu offers Restart (the same song, difficulty and
+## bell set, counted in again) and Quit; a failed run records nothing.
+func test_health_runs_out_and_restart_replays_the_song() -> void:
+	UIHarness.fresh_profile()
+	var song := SongLibrary.story()[1]
+	var args := {"song_id": song.id, "difficulty": "hard", "bell_set": "full"}
+	var app := UIHarness.make_app(tree, "play", args)
+	await UIHarness.frames(tree, 3)
+	var play := app.current()
+	var s: Session = play.get("session")
+	check(s.health_on, "health is on in a played song")
+	var pips := play.find_child("Health", true, false) as Control
+	check(pips != null and pips.is_visible_in_tree(), "the health flames show on the HUD")
+	check(not s.heal_notes().is_empty(), "the song has healing steps")
+	var c: Conductor = play.get("conductor")
+	c.use_manual_clock(true)
+	var guard := 0
+	while not s.has_failed and guard < 4000:
+		c.advance(0.05)
+		guard += 1
+		await tree.process_frame
+	check(s.has_failed, "missing every note runs out of health")
+	check_eq(s.health, 0, "health is 0")
+	check(play.get("failed"), "the play screen knows the run failed")
+	var lanes: LaneView = play.get("lanes")
+	var at := lanes.song_time
+	var t0 := Time.get_ticks_msec()
+	while play.find_child("FailMenu", true, false) == null and Time.get_ticks_msec() - t0 < 3000:
+		c.advance(0.05)
+		await tree.process_frame
+	check_near(lanes.song_time, at, 0.001, "the notes stop where they are")
+	var menu := play.find_child("FailMenu", true, false)
+	check(menu != null, "the fail menu is up")
+	var title := play.find_child("Title", true, false) as Label
+	check(title != null and title.text == tr("fail_title"), "it says the fire goes out")
+	check(UIHarness.find_button(play, "Restart") != null and UIHarness.find_button(play, "Quit") != null, "Restart and Quit")
+	check(Profile.best(song.id, "hard").is_empty() or int(Profile.best(song.id, "hard").get("score", 0)) == 0, "a failed run records no result")
+	check(UIHarness.press(play, "Restart"), "Restart")
+	await UIHarness.frames(tree, 3)
+	var again := app.current()
+	check(again != play and again.screen_name() == "play_screen", "Restart builds a new play screen")
+	var s2: Session = again.get("session")
+	check(s2 != null and s2.song.id == song.id and s2.difficulty == "hard" and s2.bell_set == "full", "the same song, difficulty and bell set")
+	check_eq(s2.health, Session.MAX_HEALTH, "with full health")
+	check(again.get("paused"), "counted in from the start")
+	UIHarness.free_app(app)
+	UIHarness.restore_profile()
+
+
+## Autoplay, the Piazza and the tutorial never show health and never fail.
+func test_exempt_modes_never_fail() -> void:
+	UIHarness.fresh_profile()
+	var story := SongLibrary.story()
+	var piazza := SongLibrary.piazza()
+	var cases := [{"song_id": story[1].id, "difficulty": "hard", "bell_set": "light", "autoplay": true, "human": true}]
+	if not piazza.is_empty():
+		cases.append({"song_id": piazza[0].id, "difficulty": "piazza", "bell_set": "light", "piazza": true})
+	var r := story[0].lesson_range(1)
+	cases.append({"song_id": story[0].id, "difficulty": "easy", "bell_set": "light", "from_beat": r.x, "to_beat": r.y})
+	for a in cases:
+		var app := UIHarness.make_app(tree, "play", a)
+		await UIHarness.frames(tree, 3)
+		var play := app.current()
+		var s: Session = play.get("session")
+		check(not s.health_on, "%s: health is off" % a.song_id)
+		var pips := play.find_child("Health", true, false) as Control
+		check(pips == null or not pips.is_visible_in_tree(), "%s: no health flames" % a.song_id)
+		var c: Conductor = play.get("conductor")
+		c.use_manual_clock(true)
+		for i in 300:
+			c.advance(0.1)
+			await tree.process_frame
+		check(not s.has_failed and not play.get("failed"), "%s: never fails" % a.song_id)
+		UIHarness.free_app(app)
+	UIHarness.restore_profile()

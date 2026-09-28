@@ -235,6 +235,8 @@ pause_resume,Resume,Riprendi
 pause_restart,Restart,Ricomincia
 pause_quit,Quit,Esci
 pause_hint,Resuming counts you back in.,Alla ripresa si riparte con il conteggio.
+fail_title,The fire goes out,Il fuoco si spegne
+fail_hint,Too many misses. Try the song again from the start.,Troppi errori. Riprova il brano dall’inizio.
 section_intro,Intro,Intro
 section_verse,Verse,Strofa
 section_build,Build,Crescendo
