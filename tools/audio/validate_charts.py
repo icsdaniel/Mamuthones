@@ -22,7 +22,7 @@ GAME = os.path.join(ROOT, "game")
 SONGS = os.path.join(GAME, "data", "songs")
 
 DIFFS = ("easy", "medium", "hard", "expert")
-KINDS = ("step", "hold", "bell", "ring", "swipe", "rest")
+KINDS = ("step", "hold", "bell", "ring", "stomp", "rest")
 EPS = 1e-3
 
 # Readability rules (design section 4). Gaps are in beats; "third" means a compound (triplet)
@@ -52,7 +52,7 @@ RULES = {
     "easy_peak_nps": 1.5,            # easy stays beginner friendly
     "peak_window_s": 4.0,
     # first difficulty (index into DIFFS) where each extra may appear in a story song
-    "min_level": {"hold": 1, "swipe": 2, "call": 2, "ring": 2, "triple": 3},
+    "min_level": {"hold": 1, "stomp": 1, "call": 2, "ring": 2, "triple": 3},
 }
 
 
@@ -117,7 +117,8 @@ def _val(x, b):
 
 
 def assign_hands(notes, hand_gap, bell_clear=None):
-    """Greedy hand assignment: lane 0 left, lane 2 right, lane 1 and swipes whichever hand is free.
+    """Greedy hand assignment: lane 0 left, lane 2 right, lane 1 whichever hand is free; a stomp takes
+    both hands on its button (both free and rested, nothing else on its beat).
     hand_gap (and bell_clear) are beats, or functions of the beat. A bell or full ring tilts the
     phone: no other input may sit closer than bell_clear to it (a step on its own beat is part of a
     full or triple ring). Returns a list of (note index, message) for inputs no hand can play."""
@@ -146,7 +147,21 @@ def assign_hands(notes, hand_gap, bell_clear=None):
             problems.append((i, f"input at b={b} too close after the bell at b={last_bell}"))
         lane = n.get("lane", 1)
         taken = used_at.get(round(b, 3), set())
-        if k == "swipe" or lane == 1:
+        if k == "stomp":
+            if taken:
+                problems.append((i, f"two inputs for one hand at b={b}"))
+                continue
+            gap = _val(hand_gap, b)
+            for h in ("L", "R"):
+                if busy[h] > b + EPS:
+                    problems.append((i, f"hand {h} is holding a note at b={b} (a stomp needs both)"))
+                elif b - last[h] < gap - EPS:
+                    problems.append((i, f"hand {h} too fast for the stomp at b={b} (gap {b - last[h]:.3f} < {gap:.3f} beats)"))
+                last[h] = b
+                last_i[h] = i
+            used_at[round(b, 3)] = {"L", "R"}
+            continue
+        if lane == 1:
             cands = [h for h in ("L", "R") if h not in taken]
             cands.sort(key=lambda h: (busy[h] > b + EPS, last[h]))
             h = cands[0] if cands else "L"
@@ -174,7 +189,7 @@ def jacks(notes, spb):
     probs = []
     by_lane = {}
     for i, n in enumerate(notes):
-        if n["k"] in ("step", "hold", "ring"):
+        if n["k"] in ("step", "hold", "ring", "stomp"):
             by_lane.setdefault(n["lane"], []).append(i)
     for lane, idx in by_lane.items():
         idx.sort(key=lambda i: notes[i]["b"])
@@ -270,7 +285,7 @@ def check_chart(song: dict, name: str, notes: list, audio_len: float | None):
             continue
         if kind == "piazza" and k != "bell":
             errs.append(f"{where}: piazza charts hold bells only")
-        if k in ("step", "hold", "ring"):
+        if k in ("step", "hold", "ring", "stomp"):
             if n.get("lane") not in (0, 1, 2):
                 errs.append(f"{where}: {k} needs lane 0, 1 or 2")
         elif "lane" in n:
@@ -284,11 +299,9 @@ def check_chart(song: dict, name: str, notes: list, audio_len: float | None):
         elif k == "rest" and n.get("len", 1) < RULES["rest_min_beats"] - EPS:
             errs.append(f"{where}: stand-still of {n.get('len', 1)} beats is shorter than "
                         f"{RULES['rest_min_beats']:g} beats")
-        if k == "swipe" and n.get("dir") not in (1, -1):
-            errs.append(f"{where}: swipe dir must be 1 or -1")
         if "call" in n and (k != "step" or n["call"] is not True):
             errs.append(f"{where}: call is only for steps and must be true")
-        extra = set(n) - {"b", "k", "lane", "len", "dir", "call"}
+        extra = set(n) - {"b", "k", "lane", "len", "call"}
         if extra:
             errs.append(f"{where}: unknown fields {sorted(extra)}")
     if errs:
@@ -429,7 +442,7 @@ def check_song(song: dict, audio_len: float | None = None):
         errs.append(f"charts must be {DIFFS}")
     if song["kind"] == "tutorial":
         topics = [ls.get("topic") for ls in song.get("lessons", [])]
-        for t in ("steps", "lanes", "bells", "holds", "still", "swipes", "full"):
+        for t in ("steps", "lanes", "bells", "holds", "still", "stomps", "full"):
             if t not in topics:
                 errs.append(f"tutorial lacks lesson {t}")
     elif "lessons" in song:
@@ -461,7 +474,7 @@ def check_song(song: dict, audio_len: float | None = None):
     # lessons contain their mechanic in the easy chart
     if song["kind"] == "tutorial":
         want = {"steps": "step", "lanes": "step", "bells": "bell", "holds": "hold", "still": "rest",
-                "swipes": "swipe", "full": "ring"}
+                "stomps": "stomp", "full": "ring"}
         for ls in song.get("lessons", []):
             inside = [n for n in song["charts"].get("easy", []) if ls["b"] <= n["b"] < ls["b"] + ls["len"]]
             kinds = {n["k"] for n in inside}
@@ -482,7 +495,7 @@ def check_song(song: dict, audio_len: float | None = None):
 
 
 def fmt_mech(m):
-    order = ["step", "hold", "bell", "ring", "triple", "swipe", "call", "rest"]
+    order = ["step", "hold", "bell", "ring", "triple", "stomp", "call", "rest"]
     return " ".join(f"{k}:{m[k]}" for k in order if m.get(k))
 
 

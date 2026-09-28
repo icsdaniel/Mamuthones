@@ -8,10 +8,10 @@ extends RefCounted
 ## human = true adds small timing errors (about ±20 ms), an occasional early hold release and a
 ## rare miss (1 %, or `p_miss_rate` when given: tests use 0.25 for a player who should run out of
 ## health); `p_seed` makes that repeatable. In slam mode it rings with the buttons (two thumbs).
+## Stomps get both thumbs on the button, the second 25 ms after the first.
 
 signal stepped(lane: int)
 signal rang(result: Dictionary)
-signal swiped(dir: int)
 
 const TOUCH_BASE := 1000
 
@@ -85,9 +85,11 @@ func _play(n: Note, at: float) -> void:
 			_tap(n.lane, at, id, 0.03)
 			if not session.slam:   # in slam a full ring is its step alone
 				rang.emit(session.ring(at))
-		Note.Kind.SWIPE:
-			session.swipe(n.dir, at)
-			swiped.emit(n.dir)
+		Note.Kind.STOMP:
+			# Both thumbs, the second a little after the first (about 25 ms, as real thumbs land).
+			_tap(n.lane, at, id, 0.03)
+			var gap := clampf(0.025 + (rng.randfn(0.0, 0.012) if human else 0.0), 0.0, 0.07)
+			_tap(n.lane, at + gap, id + 300000, 0.03)
 
 
 # Slam bell with two thumbs: both outer buttons together, or, while one thumb keeps a hold, the

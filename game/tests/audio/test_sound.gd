@@ -111,6 +111,9 @@ func test_api_calls_headless() -> void:
 	s.call_out()
 	s.rope()
 	s.rope_grab()
+	for q in ["perfect", "good", "ok"]:
+		s.stomp(1, q)
+	s.stomp_half(0)
 	s.stop_count_in()
 	for n in ["tap", "back", "unlock", "carve", "result", "cue"]:
 		s.ui(n)

@@ -2,7 +2,7 @@ class_name LessonPicture
 extends Control
 ## A small animated picture of one lesson, drawn with the same LaneSkin as the play screen, so the
 ## player sees exactly what to look for: notes slide down to the line and the right button lights up
-## (or the phone tilts, or a finger drags across) as they arrive.
+## (or the phone tilts, or both thumbs land on one button) as they arrive.
 
 const LOOP := 2.4
 
@@ -55,9 +55,13 @@ func _draw() -> void:
 			pressed[1] = lit
 		"still":
 			LaneSkin.draw_rest(self, field, LaneSkin.note_y(field, dt + 0.6, pps), y)
-		"swipes":
+		"stomps":
+			# Two gems side by side on the middle lane: one per thumb.
 			if dt > -0.05:
-				LaneSkin.draw_swipe(self, field, y, 1)
+				var r: Rect2 = lanes[1]
+				for k in 2:
+					LaneSkin.draw_step(self, Rect2(r.position.x + r.size.x * 0.5 * k, r.position.y, r.size.x * 0.5, r.size.y), y, false)
+			pressed[1] = lit
 		"full":
 			if dt > -0.05:
 				LaneSkin.draw_ring(self, field, lanes[0], y, true)
@@ -71,10 +75,10 @@ func _draw() -> void:
 			i, "pressed" if pressed[i] else "idle")
 	if lit and topic in ["bells", "full"] and not slam:
 		_draw_tilt(Vector2(area.end.x - 70.0, field.position.y + 90.0))
-	if topic == "swipes" and absf(dt) < 0.35:
-		var k := clampf((0.35 - dt) / 0.7, 0.0, 1.0)
-		var fx := lerpf(br.position.x + 40.0, br.end.x - 40.0, k)
-		draw_circle(Vector2(fx, br.get_center().y), 26.0, Color(Palette.BONE, 0.85))
+	if topic == "stomps" and lit:
+		# Two thumbprints on the middle button.
+		for dx in [-1.0, 1.0]:
+			draw_circle(Vector2(br.get_center().x + dx * bw * 0.18, br.get_center().y), 22.0, Color(Palette.BONE, 0.85))
 
 
 ## A phone outline tipping toward the player, beside the lanes.

@@ -22,7 +22,7 @@ def build():
     s = Song("piazza", "The Piazza", "La piazza", 6, "story", 144, 4, 59, "aeolian")
     s.reverb = {"t60": 1.6, "wet": 0.2, "predelay": 0.025, "bright": 6500,
                 "early": ((0.052, 0.3), (0.083, 0.22), (0.121, 0.15))}
-    s.mechanics = {"step", "bell", "rest", "hold", "ring", "swipe", "call"}
+    s.mechanics = {"step", "bell", "rest", "hold", "ring", "stomp", "call"}
     s.signature = {"medium": [2, 0, 2, 0, 1], "hard": [2, 0, 2, 0, 1], "expert": [2, 0, 2, 0, 1]}
     s.countin()
     tumbu = s.key_root - 12

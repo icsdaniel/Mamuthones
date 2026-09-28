@@ -65,15 +65,15 @@ def build():
     s.stop(b + 13, 3)
     s.lesson("still", b, 16)
 
-    # ---- lesson 6: swipes. The Issohadore calls, then the rope cracks: swipe with it.
-    b = s.sec("lesson_swipes", 4, 0, listen_bar=True,
-              chart={d: dict(steps=[], bells="none", swipes=True) for d in ("easy", "medium", "hard", "expert")})
+    # ---- lesson 6: stomps. The Issohadore calls, then the rope cracks: stomp with both thumbs.
+    b = s.sec("lesson_stomps", 4, 0, listen_bar=True,
+              chart={d: dict(steps=[], bells="none", stomps=True) for d in ("easy", "medium", "hard", "expert")})
     s.drums(b, 4, "d.......d.......")
     # a demonstration throw in the listening bar, then one per bar
     for i, rb in enumerate((b + 2, b + 4, b + 6, b + 8, b + 10, b + 12, b + 14)):
         s.ev("calls", rb - 1, 0.6, None, 0.8, kind="hei" if i % 2 else "ohi")
         s.rope(rb, 1 if i % 2 == 0 else -1)
-    s.lesson("swipes", b, 16)
+    s.lesson("stomps", b, 16)
 
     # ---- lesson 7: full ring. Step and bell together on the big stroke.
     b = s.sec("lesson_full", 4, 0, listen_bar=True,
@@ -86,10 +86,10 @@ def build():
 
     # ---- together: the theme with the drum, everything once more in turn
     b = s.sec("together", 8, 1, chart={
-        "easy": dict(steps=[("pulse", 2)], bells="phrase", holds=5, swipes=True, rings=False),
-        "medium": dict(steps=[("pulse", 3), ("mel", 3)], bells="bar", holds=5, swipes=True),
-        "hard": dict(steps=[("pulse", 3), ("mel", 4)], bells="accent", holds=5, swipes=True, rings=True),
-        "expert": dict(steps=[("pulse", 4), ("mel", 4), ("perc", 4)], bells="all", holds=5, swipes=True, rings=True),
+        "easy": dict(steps=[("pulse", 2)], bells="phrase", holds=5, stomps=True, rings=False),
+        "medium": dict(steps=[("pulse", 3), ("mel", 3)], bells="bar", holds=5, stomps=True),
+        "hard": dict(steps=[("pulse", 3), ("mel", 4)], bells="accent", holds=5, stomps=True, rings=True),
+        "expert": dict(steps=[("pulse", 4), ("mel", 4), ("perc", 4)], bells="all", holds=5, stomps=True, rings=True),
     })
     s.drums(b, 8, ["D..tD.t.D..tD.t.", "D..tD.t.D.t.D.tt"])
     s.melody("boghe", b, THEME_A, vel=0.85)
