@@ -42,6 +42,21 @@ def peaking(x, fc, gain_db, q=1.0):
     return signal.lfilter(np.array(b) / a[0], np.array(a) / a[0], x, axis=0)
 
 
+def shelf(x, fc, gain_db, high=True, s=0.8):
+    """RBJ shelving EQ: a high shelf (or a low one with high=False)."""
+    a_ = 10 ** (gain_db / 40)
+    w0 = 2 * np.pi * fc / SR
+    cw, sw = np.cos(w0), np.sin(w0)
+    alpha = sw / 2 * np.sqrt((a_ + 1 / a_) * (1 / s - 1) + 2)
+    k = 2 * np.sqrt(a_) * alpha
+    sg = 1 if high else -1
+    b = [a_ * ((a_ + 1) + sg * (a_ - 1) * cw + k), -sg * 2 * a_ * ((a_ - 1) + sg * (a_ + 1) * cw),
+         a_ * ((a_ + 1) + sg * (a_ - 1) * cw - k)]
+    a = [(a_ + 1) - sg * (a_ - 1) * cw + k, sg * 2 * ((a_ - 1) - sg * (a_ + 1) * cw),
+         (a_ + 1) - sg * (a_ - 1) * cw - k]
+    return signal.lfilter(np.array(b) / a[0], np.array(a) / a[0], x, axis=0)
+
+
 def resonator(x, fc, bw):
     """Two-pole resonator with unity gain at DC (Klatt style), for cascade formants."""
     r = np.exp(-np.pi * bw / SR)

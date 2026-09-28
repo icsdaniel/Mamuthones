@@ -4,6 +4,7 @@
 """
 import bells
 import fx
+import hits
 import measure
 import steps
 import voices
@@ -13,4 +14,5 @@ if __name__ == "__main__":
     steps.main()
     voices.main()
     fx.main()
+    hits.main()
     measure.main()

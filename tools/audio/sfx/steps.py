@@ -49,6 +49,13 @@ def footfall(lane: int, take: int, dull: bool = False) -> np.ndarray:
     fr = f * (1 + 0.8 * np.exp(-t / 0.012))
     thump = np.sin(2 * np.pi * np.cumsum(fr) / SR) * np.exp(-t / 0.03)
     out += thump * (0.9, 1.0, 0.75)[lane] * 0.3
+    # the stamp: the whole weight coming down through the heel, a short punchy kick under
+    # the step (driven, so its overtones carry on earbuds) that makes each tap land
+    fs = (62, 56, 70)[lane] * rng.uniform(0.97, 1.03)
+    fr2 = fs * (1 + 2.2 * np.exp(-t / 0.009))
+    stamp = np.sin(2 * np.pi * np.cumsum(fr2) / SR) * np.exp(-t / (0.05 if not dull else 0.03))
+    stamp = np.tanh(stamp * 2.0) / np.tanh(2.0)
+    out += stamp * (0.55 if not dull else 0.3)
     # sole contact: band-limited noise, the stone's hard slap
     slap = bandpass(rng.standard_normal(n), 250, 2600, 2) * np.exp(-t / 0.012)
     out += slap * 0.75

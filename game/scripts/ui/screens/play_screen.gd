@@ -533,6 +533,8 @@ func _on_judged(note: Note, judgement: String, offset: float) -> void:
 		UIKit.vibrate(30 if note != null and note.is_bell() else 14)
 	elif judgement in ["miss", "silence"]:
 		scene.jolt("miss")
+		if judgement == "miss":
+			Sound.miss()  # the music is muffled for a moment: the procession stumbles
 
 
 ## The side shown for a judgement: none on Perfect, the offset's side on Good, the band's own side on

@@ -17,13 +17,18 @@ extends Node
 const SFX_DIR := "res://audio/sfx/"
 const BUS_NAMES: Array[String] = ["Music", "Bells", "Sfx", "Ambience"]
 ## Fixed trim under each bus's user volume (set_volume adds it).
-const BUS_TRIM_DB := {"Music": -2.0, "Bells": 0.0, "Sfx": -7.0, "Ambience": 0.0}
+const BUS_TRIM_DB := {"Music": -2.0, "Bells": 0.0, "Sfx": -5.0, "Ambience": 0.0}
 ## Each ring of the player's bells dips the music this much for DUCK_HOLD seconds, so
 ## the ring lands on top of the music (the bells are the reward).
-const DUCK_DB := 3.0
-const DUCK_ATTACK := 0.015
-const DUCK_HOLD := 0.13
-const DUCK_RELEASE := 0.12
+const DUCK_DB := 5.0
+const DUCK_ATTACK := 0.012
+const DUCK_HOLD := 0.15
+const DUCK_RELEASE := 0.2
+## A miss muffles the music for a moment (the procession stumbles): the Music bus's
+## low-pass drops to MISS_CUTOFF and opens back up over MISS_RECOVER seconds.
+const MISS_CUTOFF := 650.0
+const MISS_RECOVER := 0.45
+const OPEN_CUTOFF := 20000.0
 const BELL_SETS: Array[String] = ["light", "village", "full"]
 ## Index = quality slot used by bell(): perfect, good, ok, miss, early, late.
 const QUALITIES: Array[String] = ["perfect", "good", "ok", "miss", "early", "late"]
@@ -67,6 +72,9 @@ var _tones: Array = []  # [lane] -> 6 streams, for pitch classes 0, 2, .. 10
 var _drones: Array = [] # [lane] -> 12 looping streams
 var _calls: Array[AudioStream] = []
 var _ropes: Array[AudioStream] = []
+var _stomps: Array[AudioStream] = []
+var _stomps_ok: Array[AudioStream] = []
+var _stomp_halves: Array[AudioStream] = []
 var _grabs: Array[AudioStream] = []
 var _ui := {}           # name -> Array[AudioStream]
 var _amb_streams: Array[AudioStream] = []
@@ -102,6 +110,8 @@ var _user_db := {"Music": 0.0, "Bells": 0.0, "Sfx": 0.0, "Ambience": 0.0}
 var _music_bus := -1
 var _duck := 0.0        # 0..1, how far the music is dipped
 var _duck_hold := 0.0   # seconds left at full dip
+var _muffle := 0.0      # 0..1, how muffled the music is after a miss
+var _music_lp: AudioEffectLowPassFilter
 
 
 func _ready() -> void:
@@ -218,6 +228,8 @@ func bell(set_id: String, up: bool, quality: String, strength := 0.5) -> void:
 	_play(_bell_pool, 0, _pick(takes, 100 + q * 2 + d), gain, pitch, bus)
 	if q != 3:
 		_duck_hold = DUCK_HOLD  # the music steps back for the ring (see _process)
+	elif quality == "miss":
+		miss()
 	if hard:
 		var acc: Array = _accents[load_id][d]
 		_play(_bell_pool, 0, _pick(acc, 120 + d), gain, pitch, bus)
@@ -228,6 +240,38 @@ func bell(set_id: String, up: bool, quality: String, strength := 0.5) -> void:
 		var rt: Array = _row[tight][d]
 		_play(_row_pool, 1, _pick(rt, 200 + tight * 2 + d), rgain + randf_range(-1.0, 0.0), randf_range(0.996, 1.004), BUS_BELLS)
 	_update_jangle(load_id, q, quality)
+
+
+## Both thumbs on a stomp note: both feet stamped into the stone, the body and the full load
+## dropping together, and the lane's tuned knock. quality: perfect, good (1.5 dB softer) or
+## ok (a dull, short stamp with no crash). The music steps back for it like for a ring.
+func stomp(lane: int, quality := "perfect") -> void:
+	lane = clampi(lane, 0, LANES - 1)
+	var takes := _stomps
+	var gain := randf_range(-0.5, 0.0)
+	match quality:
+		"good":
+			gain -= 1.5
+		"ok", "early", "late":
+			takes = _stomps_ok
+	_play(_bell_pool, 0, _pick(takes, 130 if takes == _stomps else 131), gain, randf_range(0.99, 1.01), BUS_BELLS)
+	_play(_tone_pool, 3, _tones[lane][_key_pc >> 1], 0.0 if takes == _stomps else -2.0, _tone_pitch)
+	if takes == _stomps:
+		_duck_hold = DUCK_HOLD
+
+
+## Only one thumb came down on a stomp note: a single heavy foot, darker, no crash.
+func stomp_half(lane: int) -> void:
+	lane = clampi(lane, 0, LANES - 1)
+	_play(_foot_pool, 2, _pick(_stomp_halves, 132), randf_range(-1.0, 0.0), randf_range(0.98, 1.02))
+	_play(_tone_pool, 3, _tones[lane][_key_pc >> 1], -2.0, _tone_pitch)
+
+
+## A note was missed: the music is muffled for a moment and opens back up, so the player
+## feels the procession stumble. A missed bell also calls this through bell().
+func miss() -> void:
+	_muffle = 1.0
+	_set_muffle()
 
 
 ## Unison level 0..5 (Session.unison_level): how much of the row rings with your bells.
@@ -362,6 +406,8 @@ func stop_all() -> void:
 	if _count_player:
 		_count_player.stop()
 		_count_stopping = false
+	_muffle = 0.0
+	_set_muffle()
 	_hold_gain.fill(0.0)
 	_hold_dir.fill(0)
 	_hold_idle.fill(0.0)
@@ -383,6 +429,9 @@ func _process(delta: float) -> void:
 		duck = move_toward(duck, 1.0, delta / DUCK_ATTACK)
 	else:
 		duck = move_toward(duck, 0.0, delta / DUCK_RELEASE)
+	if _muffle > 0.0:
+		_muffle = maxf(0.0, _muffle - delta / MISS_RECOVER)
+		_set_muffle()
 	if duck != _duck:
 		_duck = duck
 		AudioServer.set_bus_volume_db(_music_bus, _user_db["Music"] + BUS_TRIM_DB["Music"] - DUCK_DB * _duck)
@@ -430,6 +479,15 @@ func _process(delta: float) -> void:
 		if _jangle_player.volume_db <= -60.0:
 			_jangle_player.stop()
 			_jangle_choking = false
+
+
+func _set_muffle() -> void:
+	if _music_lp == null:
+		return
+	# exponential sweep, so the opening sounds even; off entirely once open
+	var on := _muffle > 0.0
+	AudioServer.set_bus_effect_enabled(_music_bus, 0, on)
+	_music_lp.cutoff_hz = MISS_CUTOFF * pow(OPEN_CUTOFF / MISS_CUTOFF, 1.0 - _muffle * _muffle)
 
 
 func _update_jangle(load_id: String, q: int, quality: String) -> void:
@@ -561,6 +619,13 @@ func _make_buses() -> void:
 			pan.pan = pair[1]
 			AudioServer.add_bus_effect(idx, pan)
 	_music_bus = AudioServer.get_bus_index("Music")
+	if AudioServer.get_bus_effect_count(_music_bus) == 0:
+		var lp := AudioEffectLowPassFilter.new()
+		lp.cutoff_hz = OPEN_CUTOFF
+		lp.resonance = 0.7
+		AudioServer.add_bus_effect(_music_bus, lp)
+	_music_lp = AudioServer.get_bus_effect(_music_bus, 0) as AudioEffectLowPassFilter
+	AudioServer.set_bus_effect_enabled(_music_bus, 0, false)
 	var master := AudioServer.get_bus_index("Master")
 	var has_limiter := false
 	for i in AudioServer.get_bus_effect_count(master):
@@ -612,6 +677,9 @@ func _load_all() -> void:
 	_calls.assign(_load_takes("voice/call_%d.wav", 4))
 	_ropes.assign(_load_takes("fx/rope_%d.wav", TAKES))
 	_grabs.assign(_load_takes("fx/grab_%d.wav", TAKES))
+	_stomps.assign(_load_takes("fx/stomp_%d.wav", TAKES))
+	_stomps_ok.assign(_load_takes("fx/stomp_ok_%d.wav", 2))
+	_stomp_halves.assign(_load_takes("fx/stomp_half_%d.wav", 2))
 	_ui["cue"] = _load_takes("ui/cue_%d.wav", TAKES)
 	_ui["tap"] = _load_takes("ui/tap_%d.wav", TAKES)
 	_ui["back"] = _load_takes("ui/back_%d.wav", 1)

@@ -140,7 +140,7 @@ QUALITY = {
     "perfect": dict(spread=0.010, part=1.00, strength=1.00, fc=6500, second=0.55, damp=1.00, clanks=0, settle=0.6, gain=0.0, level=0.0),
     "good":    dict(spread=0.022, part=0.92, strength=0.80, fc=3000, second=0.40, damp=0.92, clanks=0, settle=0.5, gain=-2.5, level=-3.0),
     "ok":      dict(spread=0.090, part=0.45, strength=0.55, fc=3000, second=0.15, damp=0.30, clanks=3, settle=0.3, gain=-6.0, level=-7.5),
-    "miss":    dict(spread=0.030, part=0.60, strength=0.35, fc=650,  second=0.00, damp=0.035, clanks=0, settle=0.0, gain=-11.0, level=-11.0),
+    "miss":    dict(spread=0.030, part=0.60, strength=0.35, fc=650,  second=0.00, damp=0.035, clanks=0, settle=0.0, gain=-11.0, level=-17.0),
     # early: the jolt comes before the body is set, so the small bells lead and are
     # choked against the sheepskin; late: a heavy flam, the big bells dragging behind
     "early":   dict(spread=0.015, part=0.85, strength=0.70, fc=6000, second=0.10, damp=0.22, clanks=1, settle=0.0, gain=-5.0, level=-5.0),
@@ -159,6 +159,31 @@ def body_thump(rng: np.random.Generator, level: float, f: float = 85.0, dur: flo
     noise = lowpass(rng.standard_normal(n), 400, 2) * np.exp(-t / 0.02) * 0.5
     x = (tone + noise) * level
     return fade(x, 0.001, 0.02)
+
+
+# How much the load's weight lands with each ring (the impact layer), per set and quality
+WEIGHT = {"light": 0.35, "village": 0.7, "full": 1.0}
+IMPACT_F = {"light": 66.0, "village": 56.0, "full": 47.0}
+IMPACT_Q = {"perfect": 1.0, "good": 0.8, "ok": 0.5, "miss": 0.0, "early": 0.45, "late": 0.85}
+
+
+def impact(rng: np.random.Generator, set_id: str, up: bool, scale: float = 1.0) -> np.ndarray:
+    """The weight of the load arriving: the Mamuthone's whole body and thirty kilos of iron
+    dropping into the step. A deep boom falling to the set's pitch (saturated, so its
+    harmonics carry on earbuds), a soft chest whump and the sheepskin's slap. Heavier sets
+    boom lower and longer; the upswing lands lighter than the drop."""
+    w = WEIGHT[set_id]
+    n = int(0.9 * SR)
+    t = np.arange(n) / SR
+    f_end = IMPACT_F[set_id] * (1.12 if up else 1.0) * rng.uniform(0.98, 1.02)
+    fr = f_end * (1 + 1.5 * np.exp(-t / 0.028))
+    ph = 2 * np.pi * np.cumsum(fr) / SR
+    boom = np.sin(ph) * (0.7 * np.exp(-t / (0.10 + 0.22 * w)) + 0.3 * np.exp(-t / 0.05))
+    boom = np.tanh(boom * 2.4) / np.tanh(2.4)
+    whump = lowpass(rng.standard_normal(n), 520, 2) * np.exp(-t / 0.014) * 0.9
+    hide = bandpass(rng.standard_normal(n), 260, 1500, 2) * np.exp(-t / 0.022) * 0.45
+    x = (boom + whump + hide) * scale * (0.72 if up else 1.0)
+    return fade(x, 0.0006, 0.08)
 
 
 def render_ring(set_id: str, up: bool, quality: str, take: int, bells: list[Bell] | None = None) -> np.ndarray:
@@ -251,12 +276,14 @@ def render_ring(set_id: str, up: bool, quality: str, take: int, bells: list[Bell
         th *= 1.2
     tf = {"light": 110.0, "village": 92.0, "full": 74.0}[set_id]
     add_at(out, place(body_thump(rng, th * np.max(np.abs(out) + 1e-9) * 2.0, tf * (1.1 if up else 1.0)), 0.0), 0)
+    if IMPACT_Q[quality] > 0:
+        add_at(out, place(impact(rng, set_id, up, IMPACT_Q[quality] * WEIGHT[set_id] * np.max(np.abs(out)) * 0.5), 0.0), 0)
     # street reflections (stone walls), low in the mix
     ir = make_ir(0.9, 1.0, np.random.default_rng(99), stereo=stereo,
                  early=[(0.011, 0.35), (0.017, 0.25), (0.029, 0.18), (0.041, 0.12), (0.063, 0.08)],
                  bright=4500)
     wet = convolve_ir(out, ir)[: len(out)]
-    out = out + wet * db(-11 if quality != "miss" else -20)
+    out = out + wet * db({"perfect": -8, "good": -9, "miss": -20}.get(quality, -11))
     out *= db(q["gain"])
     return out
 
@@ -275,6 +302,7 @@ def render_accent(set_id: str, up: bool, take: int, bells: list[Bell]) -> np.nda
         x = strike_response(b, n - start, 1.2 * (0.5 + b.size), 9000 * cfg["hard"], rng, 0.45)
         add_at(out, x, start)
     add_at(out, body_thump(rng, cfg["thump"] * 2.5 * np.max(np.abs(out)), {"light": 120.0, "village": 98.0, "full": 80.0}[set_id]), 0)
+    add_at(out, impact(rng, set_id, up, 0.5 * WEIGHT[set_id] * np.max(np.abs(out))), 0)
     return fade(out, 0.0008, 0.12)
 
 
@@ -309,7 +337,8 @@ def render_set(set_id: str) -> dict[str, np.ndarray]:
     def loud(x):
         # power as the game plays it: a mono sample goes to both ears at full level,
         # so it counts twice; a stereo one is the sum of its two channels
-        y = x[: int(0.3 * SR)]
+        # the metal sets the level: the impact's boom is added on top of it
+        y = highpass(x[: int(0.3 * SR)], 180, 2)
         return np.sqrt(np.mean(y ** 2) * 2 if y.ndim == 1 else np.mean(y ** 2) * y.shape[1]) + 1e-12
     ref = np.mean([loud(v) for k, v in res.items() if "_down_perfect_" in k])
     for up in ("up", "down"):
