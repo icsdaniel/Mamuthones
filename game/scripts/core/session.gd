@@ -20,6 +20,13 @@ extends RefCounted
 ## Signals wrong_step(lane, note, offset) (the pressed lane of a wrong step) and still_kept(note,
 ## points); stats unison_peak (the highest multiplier reached) and time_at_top (seconds at ×4).
 ##
+## Health (Rift of the NecroDancer style): `health` starts at MAX_HEALTH; every missed note costs 1
+## (a wrong-way swipe uses its note up, so it counts as a miss too); wrong-lane steps and rings in a
+## stand-still cost none. Healing steps (Note.heal, picked at the start from on-beat steps, about one
+## every HEAL_EVERY[difficulty] seconds) restore HEAL when hit at Ok or better. At 0 `failed` fires
+## once; the rules keep judging, the play screen ends the run. Off (health_on false) in the Piazza,
+## lessons and practice (from_beat/to_beat) and with options.health = false (autoplay demos).
+##
 ## Matching uses note-lock: an input goes to the EARLIEST open note whose window contains it, so a
 ## late player in a fast stream reads as late instead of drifting onto the next note.
 
@@ -32,6 +39,10 @@ signal hold_ended(lane: int, kept: bool)
 signal wrong_step(lane: int, note: Note, offset: float)
 ## A stand-still was kept to its end (at note.end_t); `points` is what it added.
 signal still_kept(note: Note, points: float)
+## Health went up or down by delta (health is the new value).
+signal health_changed(health: int, delta: int)
+## Health ran out (fires once).
+signal failed()
 
 # Timing windows for the Light set, in seconds (half-widths).
 const PERFECT := 0.045
@@ -60,6 +71,12 @@ const WRONG_REACH := 2.0     ## the pressed lane's own note within 2 × Early/La
 const SILENCE_DROP := 1
 const LET_GO_DROP := 1
 const SLAM_GAP := 0.080      ## Left and Right pressed within 80 ms of each other = one slam bell
+const MAX_HEALTH := 10
+const HEAL := 2              ## health a healing step restores (at Ok or better)
+## Seconds between healing steps, by difficulty; none in the first HEAL_GRACE seconds of play.
+const HEAL_EVERY := {"easy": 20.0, "medium": 25.0, "hard": 30.0, "expert": 40.0}
+const HEAL_GRACE := 8.0
+const HEAL_DENSITY_SPAN := 4.0   ## a healing step comes right after the busiest this-many seconds
 
 var song: SongData
 var difficulty := ""
@@ -71,6 +88,9 @@ var remix := false
 var mirror := false
 var daily := ""
 var notes: Array[Note] = []
+var health_on := true
+var health := MAX_HEALTH
+var has_failed := false
 
 var score := 0
 var unison_level := 0
@@ -167,6 +187,81 @@ func _init(p_song: SongData, p_difficulty: String, p_bell_set: String = "light",
 	else:
 		_end_time = maxf(song.length_for(remix), last_end + 1.0)
 	score_timeline.append(Vector2(notes[0].t - 1.0 if not notes.is_empty() else 0.0, 0.0))
+	health_on = not piazza and not options.has("from_beat") and not options.has("to_beat") and bool(options.get("health", true))
+	if health_on:
+		_pick_heals()
+
+
+# ---------------------------------------------------------------- health
+
+
+## Marks the healing steps: the play from HEAL_GRACE s after the first note is cut into windows of
+## HEAL_EVERY s, and in each the on-beat plain step (no hold, ring, call or off-beat) right after
+## the busiest HEAL_DENSITY_SPAN seconds is the healing one (the earliest on a tie), at least half a
+## window after the one before. Deterministic: the same chart always heals on the same notes.
+func _pick_heals() -> void:
+	if notes.is_empty():
+		return
+	var every: float = HEAL_EVERY.get(difficulty, 30.0)
+	var start := notes[0].t + HEAL_GRACE
+	var windows: Dictionary = {}   # window -> [[density, note], ...] in time order
+	var lo := 0
+	for n in notes:
+		if n.kind != Note.Kind.STEP or n.call or n.t < start:
+			continue
+		if absf(n.beat - roundf(n.beat)) > 0.02:
+			continue
+		while notes[lo].t < n.t - HEAL_DENSITY_SPAN:
+			lo += 1
+		var dens := 0
+		for i in range(lo, n.index):
+			if notes[i].kind != Note.Kind.REST:
+				dens += 1
+		var w := floori((n.t - start) / every)
+		if not windows.has(w):
+			windows[w] = []
+		windows[w].append([dens, n])
+	var keys := windows.keys()
+	keys.sort()
+	var last := -INF
+	for w in keys:
+		var pick: Note = null
+		var most := -1
+		for c in windows[w]:
+			var n: Note = c[1]
+			if n.t - last >= every * 0.5 and int(c[0]) > most:
+				most = int(c[0])
+				pick = n
+		if pick != null:
+			pick.heal = true
+			last = pick.t
+
+
+## The healing steps of this run, in order.
+func heal_notes() -> Array[Note]:
+	var out: Array[Note] = []
+	for n in notes:
+		if n.heal:
+			out.append(n)
+	return out
+
+
+func _hurt() -> void:
+	if not health_on or has_failed:
+		return
+	health -= 1
+	health_changed.emit(health, -1)
+	if health <= 0:
+		has_failed = true
+		failed.emit()
+
+
+func _heal() -> void:
+	if not health_on or has_failed or health >= MAX_HEALTH:
+		return
+	var d := mini(HEAL, MAX_HEALTH - health)
+	health += d
+	health_changed.emit(health, d)
 
 
 # ---------------------------------------------------------------- state
@@ -383,6 +478,7 @@ func swipe(dir: int, t: float) -> Dictionary:
 		n.hit_at = t
 		stats.notes += 1
 		_wrong(n, t, off, MISS_DROP)   # a wrong-way swipe uses its note up
+		_hurt()                        # ...so it costs health like a miss
 	else:
 		_hit(n, t, _grade(off, win_swipe), off, POINTS)
 	res.judgement = n.judgement
@@ -618,6 +714,8 @@ func _hit(n: Note, t: float, g: String, off: float, table: Dictionary) -> void:
 	else:
 		unison_streak = 0
 	judged.emit(n, g, off)
+	if n.heal:
+		_heal()
 
 
 func _finish_ring(n: Note) -> void:
@@ -640,6 +738,7 @@ func _miss(n: Note, t: float) -> void:
 	_set_unison(unison_level - MISS_DROP, t)
 	score_timeline.append(Vector2(t, score))
 	judged.emit(n, "miss", t - n.t)
+	_hurt()
 
 
 func _wrong(n: Note, t: float, off: float, drop: int) -> void:

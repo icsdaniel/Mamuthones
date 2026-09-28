@@ -6,7 +6,8 @@ extends RefCounted
 ## update(t) sends every input that is due by song time t (with its exact time stamp), then calls
 ## session.update(t), so the play screen can call autoplay.update(t) in place of session.update(t).
 ## human = true adds small timing errors (about ±20 ms), an occasional early hold release and a
-## rare miss; `p_seed` makes that repeatable. In slam mode it rings with the buttons (two thumbs).
+## rare miss (1 %, or `p_miss_rate` when given: tests use 0.25 for a player who should run out of
+## health); `p_seed` makes that repeatable. In slam mode it rings with the buttons (two thumbs).
 
 signal stepped(lane: int)
 signal rang(result: Dictionary)
@@ -23,14 +24,15 @@ var _releases: Array = []              # [t, touch_id]
 var _holding: Dictionary = {}          # touch_id -> lane of holds being kept
 
 
-func _init(p_session: Session, p_human := false, p_seed := 12345) -> void:
+func _init(p_session: Session, p_human := false, p_seed := 12345, p_miss_rate := -1.0) -> void:
 	session = p_session
 	human = p_human
 	rng.seed = p_seed
+	var miss_rate := p_miss_rate if p_miss_rate >= 0.0 else 0.01
 	for n in session.notes:
 		var t := n.t
 		if human:
-			if rng.randf() < 0.01:
+			if rng.randf() < miss_rate:
 				t = NAN
 			else:
 				t += clampf(rng.randfn(0.0, 0.018), -0.06, 0.06)

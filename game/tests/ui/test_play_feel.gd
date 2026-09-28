@@ -126,15 +126,17 @@ func test_the_count_in_is_seen_on_the_audio_sticks() -> void:
 	await _to_time(c, s.notes[0].t + 0.01)
 	await tree.process_frame
 	check(not cv.is_showing(), "nothing is shown once the notes arrive")
-	# The count is drawn over the procession, never over the lanes.
+	# The count is drawn over the top of the lanes, never near the hit line where notes are stepped.
 	var lanes: LaneView = play.get("lanes")
-	check(not cv.get_global_rect().intersects(lanes.get_global_rect()), "the count-in sits off the notes")
+	var hit_zone_top := lanes.get_global_transform() * Vector2(0.0, LaneSkin.hit_line_y(lanes.field_rect()) - lanes.field_rect().size.y * 0.25)
+	check(cv.get_global_rect().end.y <= hit_zone_top.y, "the count-in sits well above the hit line")
 	check(cv.get_global_rect().size.y > 150.0, "and is big (%.0f px tall)" % cv.get_global_rect().size.y)
 	_close(app)
 
 
 func test_wrong_lane_marks_the_pressed_button() -> void:
-	var r: Array = await _open({"song_id": "carnival", "difficulty": "hard", "bell_set": "light"})
+	# Health off: the run skips every note before the target, which would otherwise run health out.
+	var r: Array = await _open({"song_id": "carnival", "difficulty": "hard", "bell_set": "light", "health": false})
 	var app: App = r[0]
 	var play: Node = r[1]
 	var c: Conductor = r[2]
@@ -249,3 +251,4 @@ func test_bell_cue_is_on_for_easy_and_medium_by_default() -> void:
 	Profile.set_setting("bell_cue", false)
 	check(not script.bell_cue_on("easy"), "Settings can turn it off")
 	UIHarness.restore_profile()
+

@@ -10,6 +10,9 @@ func _init() -> void:
 	var total_checks := 0
 	var total_failures := 0
 	await process_frame
+	# The title's Quit and Android back must not end the test run.
+	var title: GDScript = load("res://scripts/ui/screens/title_screen.gd")
+	title.really_quit = false
 	for path in files:
 		if only != "" and not path.begins_with("res://tests/%s/" % only):
 			continue

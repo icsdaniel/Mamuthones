@@ -82,6 +82,7 @@ func _show_start() -> void:
 
 func _clear_actions() -> void:
 	for c in _actions.get_children():
+		_actions.remove_child(c)   # so a new button can take the same name at once
 		c.queue_free()
 
 
@@ -101,6 +102,15 @@ func _begin() -> void:
 	_next_click = 0
 	_running = true
 	_status.text = tr("lat_listen")
+	# The way out stays on screen while the test runs: it is never a trap.
+	var skip := UIKit.button(tr("lat_skip"), _skip_now, UIKit.QUIET)
+	skip.name = "Skip"
+	_actions.add_child(skip)
+
+
+func _skip_now() -> void:
+	_running = false
+	_next()
 
 
 func _process(_delta: float) -> void:
@@ -140,6 +150,7 @@ func _on_tap() -> void:
 
 
 func _finish() -> void:
+	_clear_actions()
 	var r := test.result()
 	_meter.offsets = PackedFloat32Array(test.offsets())
 	_meter.visible = true
@@ -160,9 +171,20 @@ func _finish() -> void:
 		var again := UIKit.button(tr("lat_again"), _begin, UIKit.PRIMARY)
 		again.name = "Again"
 		_actions.add_child(again)
+		# Enough taps but uneven: the median is still a fair guess, so it can be kept.
+		if int(r.get("count", 0)) >= LatencyTest.MIN_TAPS:
+			var keep := UIKit.button(tr("lat_keep") % roundi(float(r.offset) * 1000.0), _keep.bind(float(r.offset)))
+			keep.name = "Keep"
+			_actions.add_child(keep)
 		var skip := UIKit.button(tr("lat_skip"), _next, UIKit.QUIET)
 		skip.name = "Skip"
 		_actions.add_child(skip)
+
+
+func _keep(offset: float) -> void:
+	Profile.set_setting("audio_offset", offset)
+	Profile.set_flag("latency_tested", true)
+	_next()
 
 
 func _next() -> void:

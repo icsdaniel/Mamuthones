@@ -53,7 +53,7 @@ than touch.
 
 **Unison** is the multiplier: ×1, ×1.5, ×2, ×2.5, ×3, ×4. It goes up one level every 12 hits in a row
 that are Good or better. A miss drops it **two** levels and a wrong step one (never to zero), so the
-row can recover. It is shown as the row of Mamuthones in the procession scene getting tighter and louder.
+row can recover. It is shown as more of the Mamuthones beside the lanes jumping with you, and louder.
 
 **Weight** is the bell set's multiplier. Heavier sets score more and have stricter windows:
 
@@ -84,6 +84,15 @@ Other rules:
   1 to 3 bell rating (≥ 70 %, ≥ 85 %, ≥ 95 %). Bells are the stars of the game.
 - The bell sound itself reacts to play: Perfect rings clean and full, Good slightly softer, Early/Late
   clanks, a miss is a dull knock. High unison adds the whole row's bells behind yours.
+
+**Health** (as in Rift of the NecroDancer): a song starts with 10. Every missed note of any kind costs
+1 (a wrong-way swipe uses its note up, so it counts too); wrong-lane steps and rings in a stand-still
+cost none, they have their own penalties. About one step every 20 s on Easy, 25 on Medium, 30 on Hard
+and 40 on Expert (none in the first 8 s) is a healing step, a bone-and-gold gem with a small flame,
+picked from on-beat plain steps right after the busiest stretch; hitting it at Ok or better gives back
+2, up to 10. Health shows as ten flames under the score; at 3 or less they burn red and the bonfire
+dims. At 0 the fire goes out: the music fades, the notes stop, and the player restarts the song (or
+quits); a failed run records nothing. The Piazza, lessons, practice and autoplay have no health.
 
 ## 4. Difficulty
 
@@ -164,9 +173,14 @@ Woodcut prints and carved wood, in black (#141110), bone (#ede6da) and red (#c03
 (#e0a24a) for fire and highlights. Chisel marks, wood grain, ink edges, paper texture. Night, fire and
 winter fog. The logo is the black mask front and centre, with the red rope around it and a hint of bells.
 
-Portrait layout during play, top to bottom: HUD (score, unison, progress), the procession scene (your row
-of Mamuthones jolting with every hit, Issohadores ahead, crowd and fire behind), the three note lanes,
-and the three step buttons.
+Portrait layout during play, top to bottom: HUD (score, unison, progress), then the three note lanes
+and the three step buttons filling the rest of the screen, with a file of Mamuthones either side of
+the road's far end, smaller with distance (Daniele, 2026-09-27: the scene on top took space and added little). Notes slide smoothly down
+the lanes to the hit line (Daniele, 2026-09-28: a tried Rift-style tile hop is rolled back). The lanes
+are a road laid back in perspective (Daniele, 2026-09-28): full width at the hit line, narrowing to 42%
+at the far end, so notes come toward the player and grow as they near. The Mamuthones jump on the beat, landing on it; more of them join as the
+unison grows, they stumble on a miss and stand still through a stand-still. The Piazza keeps the
+procession scene.
 
 ## 9. Setup and settings
 

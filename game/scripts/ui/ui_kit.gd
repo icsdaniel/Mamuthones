@@ -56,7 +56,7 @@ static func reduced_motion() -> bool:
 static func first_screen() -> String:
 	if not Profile.has_flag("language_chosen"):
 		return "language"
-	if not Profile.has_flag("tutorial_done"):
+	if not Profile.has_flag("headphones_seen"):
 		return "headphones"
 	return "title"
 
@@ -279,8 +279,8 @@ static func apply_volumes() -> void:
 	Sound.set_volume("sfx", sfx)
 
 
-## Shows the player's own Mamuthone (mask, fleece, straps) in a procession scene.
-static func show_look(scene: ProcessionScene) -> void:
+## Shows the player's own Mamuthone (mask, fleece, straps) in a procession scene or the side rows.
+static func show_look(scene) -> void:
 	var look: Dictionary = Profile.get_look()
 	scene.set_look(look.get("mask", MaskSpec.default()), str(look.get("fleece", "black")), str(look.get("straps", "natural")))
 

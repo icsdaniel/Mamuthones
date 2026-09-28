@@ -121,6 +121,11 @@ func _shots() -> Array:
 		{"file": "play_tutorial", "screen": "play", "args": {"song_id": tut_id, "difficulty": "easy", "bell_set": "light", "autoplay": true}, "setup": "advance:0.25"},
 		{"file": "pause", "screen": "play", "args": {"song_id": fires_id, "difficulty": "medium", "bell_set": "light", "autoplay": true}, "setup": "pause"},
 		{"file": "results", "screen": "results", "setup": "results", "wait": 1.3},
+		# Health: full, mid-run at 6 with a healing step on the road, low at 2, and the fail menu.
+		{"file": "play_health_full", "screen": "play", "args": {"song_id": fires_id, "difficulty": "hard", "bell_set": "light", "autoplay": true, "health": true}, "setup": "moment:dense", "wait": 0.1},
+		{"file": "play_health_mid", "screen": "play", "args": {"song_id": fires_id, "difficulty": "hard", "bell_set": "light", "autoplay": true, "health": true}, "setup": "moment:heal", "health": 6, "wait": 0.1},
+		{"file": "play_health_low", "screen": "play", "args": {"song_id": fires_id, "difficulty": "hard", "bell_set": "light", "autoplay": true, "health": true}, "setup": "moment:dense", "health": 2, "wait": 0.3},
+		{"file": "play_fail", "screen": "play", "args": {"song_id": fires_id, "difficulty": "hard", "bell_set": "light", "autoplay": true, "health": true}, "setup": "fail", "wait": 1.2},
 	]
 	var piazza := SongLibrary.piazza()
 	if not piazza.is_empty():
@@ -177,6 +182,17 @@ func _render(shot: Dictionary, size: Vector2i, locale: String, dir: String) -> v
 	elif setup == "pause" and screen != null:
 		await _advance(screen, 0.2)
 		screen.call("pause")
+	elif setup == "fail" and screen != null:
+		await _advance(screen, 0.35)
+		var fs: Session = screen.get("session")
+		while not fs.has_failed:
+			fs.call("_hurt")
+	if shot.has("health") and screen != null:
+		# Health as the shot asks; the pips read it every frame and the bonfire dims when it is low.
+		var hs: Session = screen.get("session")
+		hs.health = int(shot.health)
+		if hs.health <= HealthPips.LOW:
+			screen.set("_dim", 1.0)
 	var wait := float(shot.get("wait", 0.5))
 	var frames := int(wait * 60.0)
 	for i in frames:
@@ -257,6 +273,11 @@ func _moment(screen: Node, what: String) -> void:
 					if auto != null:
 						(auto.get("_plan") as Array)[i] = NAN   # the player hits this one late
 					target = n.t + _good_offset(s)
+					break
+		"heal":
+			for n in s.notes:
+				if n.heal and n.t >= from:
+					target = n.t - 0.9
 					break
 		"stillkept":
 			for n in s.notes:

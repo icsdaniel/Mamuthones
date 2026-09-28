@@ -1,6 +1,7 @@
 class_name SectionBar
 extends Control
-## Progress through the song, with a tick at the start of every section (intro, verse, build, climax…).
+## Progress through the song, with a tick at the start of every section (intro, verse, build, climax…):
+## a thin line along the top edge of the play screen.
 
 var progress := 0.0:
 	set(v):
@@ -54,14 +55,21 @@ func section_name(t: float) -> String:
 	return out + (" " + num if num != "" else "")
 
 
+## A 4 px line along the screen's top edge: dark, filling ember to gold, a tick at each section start
+## (bone once passed), and a glowing head.
 func _draw() -> void:
-	var h := size.y * 0.5
-	var y := (size.y - h) * 0.5
-	draw_rect(Rect2(0.0, y, size.x, h), Color(Palette.INK, 0.75))
-	draw_rect(Rect2(0.0, y, size.x * progress, h), Palette.RED)
-	draw_rect(Rect2(0.0, y, size.x, h), Color(Palette.BONE, 0.5), false, 2.0)
+	var h := 4.0
+	draw_rect(Rect2(0.0, 0.0, size.x, h), Color(0.12, 0.07, 0.13, 0.95))
+	var w := size.x * clampf(progress, 0.0, 1.0)
+	if w > 1.0:
+		var c0 := Color("#7a2a0c")
+		var c1 := Color("#ffc86a")
+		draw_polygon(PackedVector2Array([Vector2(0, 0), Vector2(w, 0), Vector2(w, h), Vector2(0, h)]), PackedColorArray([c0, c1, c1, c0]))
 	for m in _marks:
 		if m <= 0.001:
 			continue
 		var x := size.x * m
-		draw_line(Vector2(x, 0.0), Vector2(x, size.y), Palette.BONE if m <= progress else Palette.BONE_DIM, 3.0)
+		draw_rect(Rect2(x - 1.0, 0.0, 2.0, 8.0), Color("#fff0c8") if m <= progress else Color("#6a5a70"))
+	if w > 1.0:
+		var g := FireSkin.glow()
+		draw_texture_rect(g, Rect2(w - 18.0, -16.0, 36.0, 36.0), false, Color(1.0, 0.9, 0.67, 0.9))

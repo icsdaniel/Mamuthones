@@ -1,6 +1,7 @@
 extends Screen
-## Playing a song. Top to bottom: HUD, the procession scene, the three lanes and the three step buttons
-## (design section 8). Conductor keeps song time from the audio clock; InputRouter (or Autoplay) feeds
+## Playing a song. Top to bottom: HUD, then the three lanes of tiles and the three step buttons, with a
+## file of Mamuthones jumping on the beat either side of them (design section 8). The Piazza keeps the
+## procession scene over its cue instead. Conductor keeps song time from the audio clock; InputRouter (or Autoplay) feeds
 ## the Session; every hit is answered in the same frame with its sound, a button flash, a burst, a
 ## judgement word, a jolt of the row and a short vibration.
 ##
@@ -8,16 +9,23 @@ extends Screen
 ##       autoplay (bool), human (autoplay with small errors), from_beat/to_beat (a lesson),
 ##       embedded (emit `finished` instead of opening the results), lead_in (seconds before the first
 ##       note when starting mid-song, with no count), quick (restart / retry: start a bar before the
-##       first note's bar, after a count-in, instead of the whole intro).
+##       first note's bar, after a count-in, instead of the whole intro), health (bool: health on;
+##       defaults to on except in autoplay, which tests and screenshots may turn on).
+##
+## Health (Session): at 0 the music fades, the notes stop and FailMenu offers Restart (the same
+## song, difficulty and bell set, counted in) or Quit. A failed run records nothing.
 ##
 ## Count-ins: a song started from its beginning has its count-in sticks in the music (beats -4..-1),
-## and the big 4-3-2-1 over the procession lands on them. A resume, a quick restart and a lesson
+## and the big 4-3-2-1 over the top of the lanes lands on them. A resume, a quick restart and a lesson
 ## count in with Sound.count_in() while the music waits on a bar line; the digits follow those sticks
 ## and the lanes keep moving so the approach replays, then the music starts on the next beat.
 
 signal finished(session: Session)
 
-const SCENE_SHARE := 0.27         ## share of the screen height given to the procession scene
+const SCENE_SHARE := 0.27         ## Piazza: share of the screen height given to the procession scene
+const GUTTER := 0.0               ## the road fills the width; the Mamuthones stand beside its far end
+const BANNER_SHARE := 0.4         ## the count-in and the stand-still moment use this top share of the lanes
+const FAIL_MENU_DELAY := 0.5      ## seconds from running out of health to the fail menu
 const FIELD_MAX_W := 900.0        ## lanes and buttons stay thumb-sized on a tablet
 const JUDGE_WORDS := {
 	"perfect": "judge_perfect", "good": "judge_good", "early": "judge_ok", "late": "judge_ok",
@@ -32,8 +40,10 @@ var router: InputRouter
 var autoplay: Autoplay
 var ghost: Ghost
 var hud: Hud
-var scene: ProcessionScene
+var scene                         ## SideRows (songs) or ProcessionScene (Piazza): the same calls
+var banner: Control               ## over the top of the lanes: count-in and stand-still moment
 var lanes: LaneView
+var backdrop: FireBackdrop        ## the night, the bonfire and the square behind the road (songs)
 var words: JudgementWords
 var cue: PiazzaCue
 var paused := false
@@ -58,6 +68,10 @@ var _tap_quality := ""           ## how well it hit: perfect, good, ok (Sound.st
 var _clock := 0.0
 var _field_box: Control
 var _still := false
+var _fail_panel: Control
+var failed := false               ## health ran out: the run is over and records nothing
+var _fail_at := -1.0              ## _clock when the fail menu comes up (-1: not pending)
+var _dim := 0.0                   ## how far the bonfire is dimmed for low health (0..1)
 
 
 func build() -> void:
@@ -79,6 +93,7 @@ func build() -> void:
 	if args.has("from_beat"):
 		options.from_beat = float(args.from_beat)
 		options.to_beat = float(args.to_beat)
+	options.health = bool(args.get("health", not auto))
 	session = Session.new(song, difficulty, _bell_set, options)
 	_spb = 60.0 / song.bpm
 	_first_t = session.notes[0].t if not session.notes.is_empty() else song.time_of(0.0, session.remix)
@@ -87,8 +102,15 @@ func build() -> void:
 	if gd is Dictionary and not (gd as Dictionary).is_empty() and not session.piazza:
 		ghost = Ghost.from_dict(gd)
 
-	var bg := ColorRect.new()
-	bg.color = Palette.BLACK
+	# The Piazza keeps its plain black ground under the procession; songs play on the Fire Night.
+	var bg: Control
+	if session.piazza:
+		bg = ColorRect.new()
+		(bg as ColorRect).color = Palette.BLACK
+	else:
+		backdrop = FireBackdrop.new()
+		backdrop.name = "Backdrop"
+		bg = backdrop
 	bg.set_anchors_preset(Control.PRESET_FULL_RECT)
 	bg.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	add_child(bg)
@@ -114,22 +136,45 @@ func build() -> void:
 	hud.setup(session, ghost)
 	hud.pause_pressed.connect(pause)
 
-	scene = ProcessionScene.new()
-	scene.name = "Procession"
-	scene.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	scene.size_flags_vertical = Control.SIZE_EXPAND_FILL
-	scene.size_flags_stretch_ratio = SCENE_SHARE / (1.0 - SCENE_SHARE)
-	col.add_child(scene)
-	scene.set_stop(song.stop)
-	UIKit.show_look(scene)
-	scene.set_reduced_motion(UIKit.reduced_motion())
-	scene.set_unison(0)
-
 	_field_box = CenterWidth.new()
 	(_field_box as CenterWidth).max_width = FIELD_MAX_W
 	_field_box.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	_field_box.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	col.add_child(_field_box)
+	if session.piazza:
+		var procession := ProcessionScene.new()
+		procession.name = "Procession"
+		procession.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		procession.size_flags_vertical = Control.SIZE_EXPAND_FILL
+		procession.size_flags_stretch_ratio = SCENE_SHARE / (1.0 - SCENE_SHARE)
+		col.add_child(procession)
+		procession.set_stop(song.stop)
+		scene = procession
+		col.add_child(_field_box)
+	else:
+		# The stage: the files of Mamuthones behind, the lanes between them.
+		var stage := Control.new()
+		stage.name = "Stage"
+		stage.size_flags_vertical = Control.SIZE_EXPAND_FILL
+		stage.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		col.add_child(stage)
+		var rows := SideRows.new()
+		rows.name = "SideRows"
+		rows.set_anchors_preset(Control.PRESET_FULL_RECT)
+		rows.bell_set = str(args.get("bell_set", "village"))
+		stage.add_child(rows)
+		scene = rows
+		var gut := MarginContainer.new()
+		gut.set_anchors_preset(Control.PRESET_FULL_RECT)
+		gut.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		var gw := int(round(get_viewport_rect().size.x * GUTTER)) if is_inside_tree() else 108
+		gut.add_theme_constant_override("margin_left", gw)
+		gut.add_theme_constant_override("margin_right", gw)
+		stage.add_child(gut)
+		gut.add_child(_field_box)
+	UIKit.show_look(scene)
+	scene.set_reduced_motion(UIKit.reduced_motion())
+	scene.set_unison(0)
+
 	lanes = LaneView.new()
 	lanes.name = "Lanes"
 	lanes.session = session
@@ -137,6 +182,10 @@ func build() -> void:
 	lanes.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	lanes.show_buttons = not session.piazza
 	lanes.visible = not session.piazza
+	lanes.spb = _spb
+	if not session.piazza:
+		scene.lanes = lanes
+		backdrop.lanes = lanes
 	_field_box.add_child(lanes)
 	words = JudgementWords.new()
 	words.set_anchors_preset(Control.PRESET_FULL_RECT)
@@ -183,14 +232,25 @@ func build() -> void:
 	session.hold_ended.connect(func(lane: int, _kept: bool) -> void: Sound.hold_stop(lane))
 	session.wrong_step.connect(_on_wrong_step)
 	session.still_kept.connect(_on_still_kept)
+	session.failed.connect(_on_failed)
 
-	# The count-in is drawn over the procession, never over the notes.
+	# The count-in and the stand-still moment: over the procession in the Piazza, else over the top of
+	# the lanes, far from the hit line where the next notes are read.
+	if session.piazza:
+		banner = scene
+	else:
+		banner = Control.new()
+		banner.name = "Banner"
+		banner.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		banner.anchor_right = 1.0
+		banner.anchor_bottom = BANNER_SHARE
+		lanes.add_child(banner)
 	count_view = CountInView.new()
 	count_view.name = "CountIn"
-	scene.add_child(count_view)
+	banner.add_child(count_view)
 	still_moment = StillMoment.new()
 	still_moment.name = "StillMoment"
-	scene.add_child(still_moment)
+	banner.add_child(still_moment)
 
 	_bell_cue = bell_cue_on(difficulty)
 	Sound.set_key(song.key_root)
@@ -266,6 +326,9 @@ func _layout_router() -> void:
 
 func _process(delta: float) -> void:
 	_clock += delta
+	if _fail_at >= 0.0 and _clock >= _fail_at:
+		_fail_at = -1.0
+		_open_fail_menu()
 	if done or session == null or conductor == null:
 		return
 	_tap_hit = false
@@ -282,7 +345,9 @@ func _process(delta: float) -> void:
 	lanes.song_time = t
 	var beat := (t - song.offset_for(session.remix)) / _spb
 	lanes.beat_pulse = 1.0 - fposmod(beat, 1.0) if beat >= 0.0 else 0.0
+	_set_beat(beat)
 	hud.tick(t, delta)
+	_tick_health(delta)
 	if cue != null:
 		cue.song_time = t
 	_schedule(t)
@@ -291,6 +356,15 @@ func _process(delta: float) -> void:
 		scene.set_ghost_delta(ghost.lead_seconds(session.score, t))
 	if session.is_over(t):
 		_finish()
+
+
+## The beat now, for everything that moves with it: the rows' jumps, the beads on the rails, the fire.
+func _set_beat(beat: float) -> void:
+	lanes.beat = beat
+	if scene is SideRows:
+		scene.beat = beat
+	if backdrop != null:
+		backdrop.beat = beat
 
 
 ## Things that happen on the music, not on the player: the Issohadore's call with off-beat steps (a
@@ -425,6 +499,8 @@ func _on_judged(note: Note, judgement: String, offset: float) -> void:
 		_tap_hit = true
 		_tap_quality = step_quality(judgement)
 	var is_step := lane >= 0 and note != null and (note.kind == Note.Kind.STEP or note.kind == Note.Kind.HOLD)
+	if note != null and note.heal and (good or soft) and session.health_on:
+		lanes.burst(pos_of(note), "heal")
 	var pos: Vector2
 	if lane >= 0:
 		pos = lanes.lane_center(lane)
@@ -496,11 +572,60 @@ func _on_unison(level: int) -> void:
 	scene.set_unison(level)
 
 
+# ---------------------------------------------------------------- health
+
+
+## The bonfire burns lower while health is low.
+func _tick_health(delta: float) -> void:
+	if backdrop == null or not session.health_on:
+		return
+	var want := 1.0 if session.health <= HealthPips.LOW else 0.0
+	_dim = move_toward(_dim, want, delta * 1.5)
+	backdrop.dim = _dim
+
+
+## Where a lane note's burst goes (its lane at the hit line).
+func pos_of(note: Note) -> Vector2:
+	return lanes.lane_center(note.lane) if note.lane >= 0 else Vector2(lanes.size.x * 0.5, lanes.lane_center(1).y)
+
+
+## Health ran out: the music fades out fast, the notes stop where they are, and the fail menu comes up.
+func _on_failed() -> void:
+	if failed or done:
+		return
+	failed = true
+	done = true
+	if _pause_panel != null:
+		_pause_panel.queue_free()
+		_pause_panel = null
+	router.release_all()
+	router.enabled = false
+	for lane in 3:
+		Sound.hold_stop(lane)
+	scene.set_still(true)
+	if backdrop != null:
+		backdrop.dim = 1.0
+	var fade := create_tween()
+	fade.tween_property(conductor.player, "volume_db", -40.0, 0.6)
+	fade.tween_callback(conductor.player.stop)   # the clock runs on silently; nothing reads it now
+	UIKit.vibrate(60)
+	_fail_at = _clock + FAIL_MENU_DELAY
+
+
+func _open_fail_menu() -> void:
+	if _fail_panel != null or not is_inside_tree():
+		return
+	_fail_panel = FailMenu.new()
+	_fail_panel.name = "FailMenu"
+	add_child(_fail_panel)
+	(_fail_panel as FailMenu).chosen.connect(_on_pause_choice)
+
+
 # ---------------------------------------------------------------- pause
 
 
 func pause() -> void:
-	if done or session == null or _pause_panel != null:
+	if done or failed or session == null or _pause_panel != null:
 		return
 	if _resume_at >= 0.0:
 		# Focus lost (or pause pressed) during a count-in: stop the count and ask again. The music
@@ -563,6 +688,7 @@ func _tick_count() -> void:
 		var k := maxf((_clock - _count_from) / _spb, 0.0)
 		count_view.show_digit(clampi(4 - floori(k), 1, 4), fposmod(k, 1.0))
 		lanes.beat_pulse = 1.0 - fposmod(k, 1.0)
+		_set_beat((tv - song.offset_for(session.remix)) / _spb)
 		return
 	_resume_at = -1.0
 	count_view.clear()
@@ -574,6 +700,10 @@ func _tick_count() -> void:
 
 
 func on_back() -> void:
+	if failed:
+		if _fail_panel != null:
+			_on_pause_choice("quit")
+		return
 	if paused and _pause_panel != null:
 		_on_pause_choice("resume")
 	else:

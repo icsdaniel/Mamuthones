@@ -136,8 +136,9 @@ func _start(demo: bool) -> void:
 
 func _on_lesson_done(session: Session, demo: bool) -> void:
 	if session == null:
-		# Quit from the pause menu.
-		_intro()
+		# Quit from the pause menu leaves the tutorial.
+		_play = null
+		_leave()
 		return
 	if demo:
 		_intro(false, true)
@@ -291,12 +292,18 @@ func _play_song() -> void:
 		"bell_set": str(Profile.get_look().get("bell_set", "light"))})
 
 
+func _leave() -> void:
+	if app.stack.size() > 1:
+		app.back()
+	else:
+		app.reset("title")
+
+
 func on_back() -> void:
 	if _play != null:
 		(_play as Screen).on_back()
 	elif args.get("first_run", false):
 		UIKit.confirm(self, tr("tut_leave_q"), tr("tut_leave"), func() -> void:
-			Profile.set_flag("tutorial_done", true)
 			app.reset("title"))
 	else:
-		app.back()
+		_leave()

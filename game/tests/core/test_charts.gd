@@ -150,3 +150,34 @@ func test_real_songs() -> void:
 	var story := SongLibrary.story()
 	for i in story.size():
 		check_eq(story[i].stop, i + 1, "story stops numbered 1..n in order (%s)" % story[i].id)
+
+
+## Health is fair: a human-like player (Autoplay's human mode: ±18 ms, a hold let go early now and
+## then, 1 % of notes missed) finishes every song on every difficulty with health to spare, and one
+## who misses about a quarter of the notes runs out on Hard.
+func test_health_is_fair() -> void:
+	SongLibrary.reset()
+	for song in SongLibrary.all():
+		if song.kind == "piazza":
+			continue
+		for diff in song.difficulties():
+			if not diff in SongData.DIFFICULTIES:
+				continue
+			for seed_ in [3, 11]:
+				var s := Session.new(song, diff, "full")
+				var low := [Session.MAX_HEALTH]
+				s.health_changed.connect(func(h: int, _d: int) -> void: low[0] = mini(low[0], h))
+				_play_human(s, seed_, -1.0)
+				check(not s.has_failed, "%s/%s (seed %d): a human-like run does not fail (lowest %d)" % [song.id, diff, seed_, low[0]])
+			if diff == "hard":
+				var bad := Session.new(song, diff, "full")
+				_play_human(bad, 5, 0.25)
+				check(bad.has_failed, "%s/hard: missing a quarter of the notes runs out of health" % song.id)
+
+
+func _play_human(s: Session, seed_: int, miss_rate: float) -> void:
+	var ap := Autoplay.new(s, true, seed_, miss_rate)
+	var t := (s.notes[0].t - 1.0) if not s.notes.is_empty() else 0.0
+	while not s.is_over(t):
+		t += 1.0 / 60.0
+		ap.update(t)

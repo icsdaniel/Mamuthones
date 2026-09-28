@@ -741,3 +741,149 @@ func test_frame_cost() -> void:
 	check_near(s.accuracy(), 1.0, 1e-9, "dense chart all perfect")
 	check(per_frame < 100.0, "rules + autoplay cost %.1f µs per frame (limit 100)" % per_frame)
 	print("  frame cost: %.1f µs per frame over %d frames, %d notes" % [per_frame, frames, s.notes.size()])
+
+
+# ---------------------------------------------------------------- health
+
+
+func _run(s: Session, until: float) -> void:
+	var t := 0.0
+	while t < until:
+		t += 1.0 / 60.0
+		s.update(t)
+
+
+func test_health_misses_cost_one() -> void:
+	var s := Session.new(make(steps(12)), "easy")
+	var seen := []
+	var fails := [0]
+	s.health_changed.connect(func(h: int, d: int) -> void: seen.append([h, d]))
+	s.failed.connect(func() -> void: fails[0] += 1)
+	check(s.health_on, "health is on for a song")
+	check_eq(s.health, Session.MAX_HEALTH, "health starts full")
+	check_eq(Session.MAX_HEALTH, 10, "ten health")
+	s.tap(1, _bt(0))
+	_run(s, _bt(2) + 0.2)   # beats 1 and 2 pass unplayed
+	check_eq(s.health, 8, "two misses cost two")
+	check_eq(seen, [[9, -1], [8, -1]], "health_changed reports each loss")
+	_run(s, _bt(20))
+	check_eq(s.health, 0, "every miss costs one, down to 0")
+	check_eq(fails[0], 1, "failed fires once")
+	check(s.has_failed, "the run has failed")
+	check_eq(s.stats.miss, 11, "the rules keep judging after the fail")
+
+
+func test_health_every_kind_of_miss() -> void:
+	var chart := [
+		{"b": 0, "k": "step", "lane": 0}, {"b": 2, "k": "hold", "lane": 1, "len": 2},
+		{"b": 6, "k": "bell"}, {"b": 8, "k": "ring", "lane": 2}, {"b": 10, "k": "swipe", "dir": 1},
+		{"b": 12, "k": "swipe", "dir": 1},
+	]
+	var s := Session.new(make(chart), "easy")
+	_run(s, _bt(11))
+	check_eq(s.health, 5, "missed step, hold head, bell, ring and swipe each cost one")
+	s.swipe(-1, _bt(12))
+	check_eq(s.health, 4, "a wrong-way swipe uses its note up and costs one")
+
+
+func test_health_spares_wrong_steps_and_still_rings() -> void:
+	var chart := [
+		{"b": 0, "k": "step", "lane": 0}, {"b": 2, "k": "rest", "len": 4}, {"b": 8, "k": "step", "lane": 1},
+	]
+	var s := Session.new(make(chart), "easy")
+	s.tap(2, _bt(0))              # wrong lane: the note is still open
+	check_eq(s.stats.wrong, 1, "a wrong step")
+	check_eq(s.health, 10, "a wrong step costs no health")
+	s.tap(0, _bt(0) + 0.02)
+	s.update(_bt(3))
+	s.ring(_bt(3))
+	s.ring(_bt(4))
+	check_eq(s.stats.silence, 2, "rang twice into the stand-still")
+	check_eq(s.health, 10, "rings in a stand-still cost no health")
+
+
+func test_health_heals_two_and_caps() -> void:
+	var s := Session.new(make(steps(80)), "easy")
+	var heals := s.heal_notes()
+	check(heals.size() >= 1, "a long song has healing steps")
+	var h := heals[0]
+	check_eq(h.kind, Note.Kind.STEP, "a healing step is a step")
+	# Miss the three steps before it, then hit it late (Ok): +2.
+	for n in s.notes:
+		if n.index < h.index - 3:
+			s.tap(n.lane, n.t)
+	s.update(h.t - 0.2)
+	var before := s.health
+	check_eq(before, 7, "missed three on the way")
+	var dh := [0]
+	s.health_changed.connect(func(_h: int, d: int) -> void: dh[0] = d)
+	s.tap(h.lane, h.t + 0.12)
+	check_eq(s.notes[h.index].judgement, "late", "hit in the Ok band")
+	check_eq(s.health, mini(before + 2, 10), "an Ok hit on a healing step restores 2")
+	# At full health it stays at 10; at 8 it goes to 10.
+	for missed in [0, 2]:
+		var c := Session.new(make(steps(80)), "easy")
+		var ch := c.heal_notes()[0]
+		for n in c.notes:
+			if n.t < ch.t and n.index >= missed:
+				c.tap(n.lane, n.t)
+		c.update(ch.t - 0.2)
+		check_eq(c.health, 10 - missed, "%d misses before the healing step" % missed)
+		c.tap(ch.lane, ch.t)
+		check_eq(c.health, 10, "healing from %d stops at 10" % (10 - missed))
+
+
+func test_health_heal_spacing() -> void:
+	# 160 on-beat steps at 120 bpm: 80 s of play.
+	var chart := []
+	for i in 160:
+		chart.append({"b": i, "k": "step", "lane": i % 3})
+	chart.append({"b": 40.5, "k": "step", "lane": 0})
+	var charts := {}
+	for d in ["easy", "medium", "hard", "expert"]:
+		charts[d] = chart
+	var song_ := SongData.from_dict({"id": "t", "bpm": 120, "offset": 1.0, "length": 0.0, "charts": charts})
+	for d in Session.HEAL_EVERY:
+		var s := Session.new(song_, d)
+		var hs := s.heal_notes()
+		var every: float = Session.HEAL_EVERY[d]
+		var span := s.notes[-1].t - s.notes[0].t - Session.HEAL_GRACE
+		check(hs.size() >= floori(span / every) and hs.size() <= ceili(span / every), "%s: about one heal every %d s (%d)" % [d, every, hs.size()])
+		check(hs[0].t >= s.notes[0].t + Session.HEAL_GRACE, "%s: none in the first 8 s" % d)
+		for i in range(1, hs.size()):
+			check(hs[i].t - hs[i - 1].t >= every * 0.5, "%s: heals are spaced" % d)
+		for h in hs:
+			check(h.kind == Note.Kind.STEP and not h.call and is_equal_approx(h.beat, roundf(h.beat)), "%s: heals are on-beat plain steps" % d)
+		var again := Session.new(song_, d).heal_notes()
+		check_eq(again.map(func(n: Note) -> int: return n.index), hs.map(func(n: Note) -> int: return n.index), "%s: the same notes every time" % d)
+	var easy := Session.new(song_, "easy").heal_notes().size()
+	var expert := Session.new(song_, "expert").heal_notes().size()
+	check(easy > expert, "Easy heals more often than Expert (%d, %d)" % [easy, expert])
+
+
+func test_health_never_on_holds_rings_calls_or_off_beats() -> void:
+	var chart := []
+	for i in 120:
+		var k: String = ["hold", "ring", "step"][i % 3]
+		var n := {"b": i * 1.0 + (0.5 if k == "step" else 0.0), "k": k, "lane": i % 3}
+		if k == "hold":
+			n.len = 0.5
+		chart.append(n)
+	for i in 40:
+		chart.append({"b": 200 + i, "k": "step", "lane": 1, "call": true})
+	var s := Session.new(make(chart), "easy")
+	check(s.heal_notes().is_empty(), "no heal on a hold, ring, off-beat or call step")
+
+
+func test_health_exempt_modes_never_fail() -> void:
+	var s1 := SongData.load_file(FIX + "story/s1.json")
+	var r := s1.lesson_range(1)
+	for opts in [{"piazza": true}, {"from_beat": r.x, "to_beat": r.y}, {"health": false}]:
+		var s := Session.new(s1, "easy", "light", opts)
+		var fails := [0]
+		s.failed.connect(func() -> void: fails[0] += 1)
+		_run(s, s.end_time() + 1.0)
+		check(not s.health_on, "%s: health is off" % [opts])
+		check(s.heal_notes().is_empty(), "%s: no healing steps" % [opts])
+		check_eq(s.health, Session.MAX_HEALTH, "%s: health never drops" % [opts])
+		check_eq(fails[0], 0, "%s: never fails" % [opts])

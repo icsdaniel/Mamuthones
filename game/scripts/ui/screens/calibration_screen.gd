@@ -213,6 +213,8 @@ func _use_slam() -> void:
 func _next() -> void:
 	if args.get("first_run", false):
 		app.replace("latency", {"first_run": true})
+	elif args.get("then_latency", false):
+		app.replace("latency")
 	else:
 		app.back()
 
