@@ -21,8 +21,8 @@ func _init() -> void:
 func _draw() -> void:
 	var n := Session.UNISON_MULTS.size()
 	var step := size.x / float(n)
-	var r := minf(step * 0.4, (size.y - 8.0) * 0.5)
-	var cy := r + 1.0
+	var r := minf(step * 0.36, (size.y - 10.0) * 0.5)
+	var cy := r + 3.0
 	for i in n:
 		var c := Vector2(step * (i + 0.5), cy)
 		var lit := i <= level
@@ -30,7 +30,7 @@ func _draw() -> void:
 			draw_texture_rect(FireSkin.glow(), Rect2(c - Vector2(r, r) * 1.8, Vector2(r, r) * 3.6), false, Color(1.0, 0.7, 0.3, 0.45))
 		_bell(c, r, lit)
 	var y := cy + r + 5.0
-	var bar := Rect2(step * 0.2, y, size.x - step * 0.4, 3.0)
+	var bar := Rect2(step * 0.2, y, size.x - step * 0.4, 2.0)
 	draw_rect(bar, Color(0.05, 0.02, 0.06, 0.8))
 	draw_rect(Rect2(bar.position, Vector2(bar.size.x * clampf(fill, 0.0, 1.0), bar.size.y)), Color("#ffd98a"))
 

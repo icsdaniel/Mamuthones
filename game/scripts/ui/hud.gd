@@ -29,92 +29,81 @@ func _init() -> void:
 func setup(p_session: Session, p_ghost: Ghost) -> void:
 	session = p_session
 	ghost = p_ghost
-	var col := VBoxContainer.new()
-	col.set_anchors_preset(Control.PRESET_FULL_RECT)
-	col.add_theme_constant_override("separation", 8)
-	col.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	add_child(col)
-	var top := HBoxContainer.new()
-	top.add_theme_constant_override("separation", 12)
-	top.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	col.add_child(top)
-	# The score in a framed plate, the ghost line under it.
-	var holder := Control.new()
-	holder.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	holder.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	var plate := PanelContainer.new()
-	plate.name = "ScorePlate"
-	plate.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	plate.add_theme_stylebox_override("panel", _plate_style())
-	plate.size_flags_horizontal = Control.SIZE_SHRINK_BEGIN
-	top.add_child(plate)
-	var left := VBoxContainer.new()
-	left.add_theme_constant_override("separation", -6)
-	left.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	plate.add_child(left)
+	# Everything sits in the top ~110 px, the centre left open for the fire: the score top-left in the
+	# carved serif with the ghost under it; unison, its bells, the pause button and the section tag
+	# top-right; the song's progress a thin line along the screen's very top edge.
 	_score = UIKit.label("0", "BigNumberLabel", false)
 	_score.name = "Score"
-	FireSkin.style_label(_score, 64, Color.WHITE, 9)
-	_score.custom_minimum_size.x = 250
-	_gradient(_score, FireSkin.text_gradient())
-	left.add_child(_score)
+	FireSkin.carve_label(_score, 50, Color.WHITE, Color(1.0, 0.84, 0.55, 0.5), 8, 0.45)
+	_gradient(_score, FireSkin.text_gradient(Color("#fff6e2"), Color("#f0dcb2"), Color("#d4a45a")))
+	_score.position = Vector2(-4.0, -8.0)
+	add_child(_score)
 	_ghost = UIKit.label("", UIKit.HUD, false)
 	_ghost.name = "Ghost"
-	FireSkin.style_label(_ghost, 24, Color.WHITE, 5)
-	left.add_child(_ghost)
-	top.add_child(holder)
-	var mid := VBoxContainer.new()
-	mid.add_theme_constant_override("separation", 2)
-	mid.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	mid.alignment = BoxContainer.ALIGNMENT_CENTER
-	top.add_child(mid)
+	FireSkin.carve_label(_ghost, 24, Color("#d9a24a"), Color(0, 0, 0, 0), 6)
+	_ghost.position = Vector2(-2.0, 50.0)
+	add_child(_ghost)
 	_unison = UIKit.label("", UIKit.HUD, false, HORIZONTAL_ALIGNMENT_RIGHT)
 	_unison.name = "Unison"
-	_unison.uppercase = true
-	FireSkin.style_label(_unison, 28, Color.WHITE, 7)
-	_gradient(_unison, FireSkin.text_gradient(Color.WHITE, Color("#fff3dc"), Color("#ffc86a")))
-	mid.add_child(_unison)
+	FireSkin.carve_label(_unison, 32, Color.WHITE, Color(0, 0, 0, 0), 6, 0.3)
+	_gradient(_unison, FireSkin.text_gradient(Color("#fff6e0"), Color("#efe2c6"), Color("#e0a040")))
+	add_child(_unison)
 	_meter = UnisonMeter.new()
-	_meter.custom_minimum_size = Vector2(204, 38)
-	mid.add_child(_meter)
+	_meter.name = "Meter"
+	add_child(_meter)
 	_pause = UIKit.button("", func() -> void: pause_pressed.emit(), UIKit.QUIET)
 	_pause.custom_minimum_size = Vector2(UIKit.TOUCH, UIKit.TOUCH)
+	_pause.size = _pause.custom_minimum_size
 	_pause.name = "Pause"
 	_pause.tooltip_text = tr("play_pause")
-	_pause.size_flags_vertical = Control.SIZE_SHRINK_CENTER
 	for st in ["normal", "hover", "pressed", "focus", "disabled", "hover_pressed"]:
 		_pause.add_theme_stylebox_override(st, StyleBoxEmpty.new())
 	_pause.draw.connect(_draw_pause)
-	top.add_child(_pause)
-	var bottom := HBoxContainer.new()
-	bottom.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	bottom.add_theme_constant_override("separation", 14)
-	col.add_child(bottom)
-	_bar = SectionBar.new()
-	_bar.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	_bar.custom_minimum_size.y = 30
-	_bar.size_flags_vertical = Control.SIZE_SHRINK_CENTER
-	_bar.setup(session)
-	bottom.add_child(_bar)
+	add_child(_pause)
+	# The section: gold small caps after a hairline and a diamond, right under the pause button.
+	var tag := Control.new()
+	tag.name = "SectionTag"
+	tag.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	tag.draw.connect(_draw_tag.bind(tag))
+	add_child(tag)
 	_section = UIKit.label("", UIKit.CAPTION, false, HORIZONTAL_ALIGNMENT_RIGHT)
 	_section.name = "Section"
-	_section.uppercase = true
-	_section.custom_minimum_size = Vector2(150, 34)
+	FireSkin.carve_label(_section, 24, Color("#e8c070"), Color(0, 0, 0, 0), 5)
 	_section.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
-	_section.add_theme_font_override("font", Palette.text_font("ExtraBold"))
-	_section.add_theme_font_size_override("font_size", 24)
-	_section.add_theme_color_override("font_color", Color("#fff3dc"))
-	var ribbon := Control.new()
-	ribbon.name = "Ribbon"
-	ribbon.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	ribbon.custom_minimum_size = _section.custom_minimum_size
-	ribbon.draw.connect(_draw_ribbon.bind(ribbon))
-	bottom.add_child(ribbon)
 	_section.set_anchors_preset(Control.PRESET_FULL_RECT)
-	_section.offset_right = -6.0
-	ribbon.add_child(_section)
-	_ribbon = ribbon
+	tag.add_child(_section)
+	_ribbon = tag
+	# The progress line runs across the whole screen at its top edge, outside the HUD's margins.
+	_bar = SectionBar.new()
+	_bar.name = "Progress"
+	_bar.top_level = true
+	_bar.setup(session)
+	add_child(_bar)
+	resized.connect(_layout)
+	_layout()
 	set_unison(session.unison_level, false)
+
+
+func _layout() -> void:
+	var w := size.x
+	_unison.position = Vector2(w - 330.0, 6.0)
+	_unison.size = Vector2(262.0, 40.0)
+	_meter.position = Vector2(w - 236.0, 44.0)
+	_meter.size = Vector2(172.0, 34.0)
+	# The disc sits 24 px in from the HUD's right edge; its touch target runs off to the screen edge.
+	_pause.position = Vector2(w - 80.0, -8.0)
+	_ribbon.position = Vector2(w - 330.0, 80.0)
+	_ribbon.size = Vector2(330.0, 32.0)
+	_place_bar()
+
+
+func _place_bar() -> void:
+	if _bar == null or not is_inside_tree():
+		return
+	var vp := get_viewport_rect().size
+	var top := maxf(global_position.y - 8.0, 0.0)
+	_bar.global_position = Vector2(0.0, top)
+	_bar.size = Vector2(vp.x, 12.0)
 
 
 ## Gives a label a gradient fill that follows its height.
@@ -123,47 +112,31 @@ static func _gradient(l: Label, m: ShaderMaterial) -> void:
 	l.resized.connect(func() -> void: m.set_shader_parameter("height", maxf(l.size.y, 1.0)))
 
 
-static func _plate_style() -> StyleBoxFlat:
-	var sb := StyleBoxFlat.new()
-	sb.bg_color = Color(0.08, 0.04, 0.12, 0.82)
-	sb.border_color = Color("#c8862e")
-	sb.set_border_width_all(3)
-	sb.set_corner_radius_all(14)
-	sb.content_margin_left = 18.0
-	sb.content_margin_right = 22.0
-	sb.content_margin_top = 0.0
-	sb.content_margin_bottom = 8.0
-	sb.shadow_color = Color(0, 0, 0, 0.4)
-	sb.shadow_size = 6
-	return sb
-
-
-## The round pause button: a dark disc with a bronze rim and two bars.
+## The round pause button: a dark disc with a bronze rim and two bars, near the top-right corner.
 func _draw_pause() -> void:
-	var c := _pause.size * 0.5
-	var r := minf(minf(c.x, c.y) - 6.0, 27.0)
+	var c := Vector2(56.0, 40.0)
+	var r := 21.0
 	var down := _pause.button_pressed or _pause.is_hovered()
-	_pause.draw_circle(c, r, Color(0.12, 0.06, 0.16, 0.92))
-	_pause.draw_arc(c, r, 0.0, TAU, 40, Color("#ffc84a") if down else Color("#c8862e"), 3.0, true)
-	var h := r * 0.9
-	for dx in [-r * 0.28, r * 0.28]:
-		_pause.draw_rect(Rect2(c.x + dx - r * 0.13, c.y - h * 0.5, r * 0.26, h), Color("#fff3dc"))
+	_pause.draw_circle(c, r, Color(0.12, 0.06, 0.16, 0.9))
+	_pause.draw_arc(c, r, 0.0, TAU, 40, Color("#ffc84a") if down else Color("#c8862e"), 2.0, true)
+	for dx in [-5.5, 5.5]:
+		_pause.draw_rect(Rect2(c.x + dx - 3.0, c.y - 10.0, 6.0, 20.0), Color("#fff3dc"))
 
 
-## The section's name on a red ribbon running off the right edge.
-func _draw_ribbon(rb: Control) -> void:
+## A gold hairline and a diamond before the section's name.
+func _draw_tag(tag: Control) -> void:
 	if _section.text == "":
 		return
 	var font := _section.get_theme_font("font")
 	var fs := _section.get_theme_font_size("font_size")
-	var tw := font.get_string_size(_section.text.to_upper(), HORIZONTAL_ALIGNMENT_LEFT, -1, fs).x + 30.0
-	var w := rb.size.x + 16.0
-	var h := minf(rb.size.y, 34.0)
-	var y := (rb.size.y - h) * 0.5
-	var x0 := w - tw
-	var pts := PackedVector2Array([Vector2(x0, y), Vector2(w, y), Vector2(w, y + h), Vector2(x0, y + h), Vector2(x0 - 9.0, y + h * 0.5)])
-	rb.draw_colored_polygon(pts, Color("#c8181e"))
-	rb.draw_line(Vector2(x0, y + 1.5), Vector2(w, y + 1.5), Color(1.0, 0.5, 0.45, 0.6), 2.0)
+	var tw := font.get_string_size(_section.text, HORIZONTAL_ALIGNMENT_LEFT, -1, fs).x
+	var y := tag.size.y * 0.5 + 1.0
+	var x := tag.size.x - tw - 12.0
+	var col := Color(0.91, 0.75, 0.44, 0.75)
+	tag.draw_rect(Rect2(x - 44.0, y, 34.0, 1.0), col)
+	tag.draw_set_transform(Vector2(x - 4.0, y + 0.5), PI * 0.25)
+	tag.draw_rect(Rect2(-3.0, -3.0, 6.0, 6.0), Color("#e8c070"))
+	tag.draw_set_transform(Vector2.ZERO)
 
 
 func set_pause_visible(v: bool) -> void:
@@ -180,6 +153,7 @@ func tick(t: float, delta: float) -> void:
 	_score.text = UIKit.fmt_score(roundi(_shown_score))
 	_meter.fill = float(session.unison_streak) / float(Session.UNISON_STEP) if session.unison_level < 5 else 1.0
 	_bar.progress = session.progress(t)
+	_place_bar()
 	var sec := _bar.section_name(t)
 	if sec != _section.text:
 		_section.text = sec

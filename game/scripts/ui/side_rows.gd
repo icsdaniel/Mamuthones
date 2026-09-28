@@ -12,8 +12,17 @@ extends Control
 ## black fleece, bronze bells, a carved mask, lit warm from the fire's side and cool from the night's,
 ## each file led by a red Issohadore. The player's fleece colour is kept; the mask is the carved one.
 
-const MAX_PER_SIDE := 5
-const ACTIVE := [1, 2, 3, 4, 5]     ## Mamuthones jumping per side at unison 0..4
+const MAX_PER_SIDE := 3
+const ACTIVE := [1, 2, 2, 3, 3]     ## Mamuthones jumping per side at unison 0..4
+## Where the figures stand, as a share of the way from the road's far end (0) to the hit line (1): the
+## Issohadore off the hit rings, the Mamuthones receding toward the fire. From the Fire Night mockup.
+const LEADER_AT := 0.75
+const FILE_AT := [0.44, 0.24, 0.08]
+## Their size on a 720-wide road (scaled with the road): the Issohadore's whole sprite (soha and all)
+## at most this tall and wide, and each Mamuthone's height, nearest first, if its gap allows.
+const LEADER_BOX := Vector2(90.0, 210.0)
+const FILE_H := [190.0, 150.0, 120.0]
+const CLEAR := 14.0                 ## px kept between a figure's box and the road edge (tests ask 12)
 const JUMP := 0.16                  ## jump height, in figure heights
 const AIR := 0.55                   ## share of the beat spent in the air (ends on the beat)
 const WAVE := 0.035                 ## beats of delay from one Mamuthone to the next down the file
@@ -152,24 +161,55 @@ func leader(s: int) -> Array:
 	return _place(s, 0)
 
 
-## Place k of side s's file (0 the Issohadore, 1.. the Mamuthones): [feet, figure height].
+## The sprite drawn at file place k of side s (0 the Issohadore), standing (not in a jump).
+func sprite_name(s: int, k: int) -> String:
+	var suf := "_r" if s == 1 else ""
+	if k == 0:
+		return "issohadore" + suf
+	var fl := fleece if fleece in ["black", "dark_brown"] else "black"
+	return "mamuthone_%s_a%s" % [fl, suf]
+
+
+## The screen box of the figure at file place k of side s, standing, in this control's coordinates.
+func figure_box(s: int, k: int) -> Rect2:
+	var pl := _place(s, k)
+	return _box(sprite_name(s, k), pl[0], pl[1])
+
+
+func _box(name: String, feet: Vector2, h: float) -> Rect2:
+	var b := FireSkin.bounds(name, h / FireCells.FIG_H)
+	return Rect2(feet + b.position, b.size)
+
+
+## Place k of side s's file (0 the Issohadore, 1.. the Mamuthones): [feet, figure height]. Each figure
+## is as big as the mockup has it (scaled with the road), shrunk if needed so its box stays CLEAR px
+## outside the road edge at its feet (the road only narrows above them) and on the screen.
 func _place(s: int, k: int) -> Array:
 	if lanes != null and lanes.has_method("road_edges") and lanes.is_inside_tree() and is_inside_tree() and lanes.call("_road_on"):
 		var f: Rect2 = lanes.call("field_rect")
 		var to_me := get_global_transform().affine_inverse() * lanes.get_global_transform()
-		var near_frac := 0.47
-		var ly := f.position.y + f.size.y * (near_frac - 0.083 * k)
+		var hit_y: float = (lanes.call("project", Vector2(0.0, LaneSkin.hit_line_y(f))) as Vector2).y
+		var at: float = LEADER_AT if k == 0 else float(FILE_AT[clampi(k - 1, 0, FILE_AT.size() - 1)])
+		var ly := f.position.y + (hit_y - f.position.y) * at
 		var edges: Vector2 = lanes.call("road_edges", ly)
-		var w: float = (edges.y - edges.x) / maxf(f.size.x, 1.0)
-		# The nearest figure just fits its gap; the others shrink with the road.
-		var near_edges: Vector2 = lanes.call("road_edges", f.position.y + f.size.y * near_frac)
-		var near_w: float = (near_edges.y - near_edges.x) / maxf(f.size.x, 1.0)
-		var near_gap := near_edges.x - f.position.x
-		var base := near_gap / 0.9 / maxf(near_w, 0.1)
-		var h := clampf(base * w * 0.9, 40.0, 280.0)
-		var gap := edges.x - f.position.x
-		var x := f.position.x + gap * 0.5 if s == 0 else f.end.x - gap * 0.5
-		return [to_me * Vector2(x, ly), h]
+		var e := (to_me * Vector2(edges.x if s == 0 else edges.y, ly))
+		var feet_y := e.y
+		var kw := f.size.x / 720.0
+		var name := sprite_name(s, k)
+		var b1 := FireSkin.bounds(name, 1.0 / FireCells.FIG_H)   # box of a figure 1 px tall
+		var h: float
+		if k == 0:
+			h = minf(LEADER_BOX.y / b1.size.y, LEADER_BOX.x / b1.size.x) * kw
+		else:
+			h = float(FILE_H[clampi(k - 1, 0, FILE_H.size() - 1)]) * kw
+		var room := (e.x - CLEAR - 2.0) if s == 0 else (size.x - 2.0 - e.x - CLEAR)
+		h = clampf(minf(h, room / maxf(b1.size.x, 0.01)), 8.0, 400.0)
+		var x := (e.x - CLEAR - b1.end.x * h) if s == 0 else (e.x + CLEAR - b1.position.x * h)
+		if k == 0:
+			# The Issohadore stands about 40 px in from the screen edge (mockup), never nearer the road.
+			var want := 40.0 * kw if s == 0 else size.x - 40.0 * kw
+			x = minf(x, maxf(want, 2.0 - b1.position.x * h)) if s == 0 else maxf(x, minf(want, size.x - 2.0 - b1.end.x * h))
+		return [Vector2(x, feet_y), h]
 	var g: Rect2 = gutters()[s]
 	var i := maxi(k - 1, 0)
 	var h0 := figure_h(g.size.x) * (1.0 - 0.05 * i)
@@ -190,7 +230,7 @@ func _draw() -> void:
 		var top: float = (far[0] as Vector2).y - float(far[1])
 		var bottom: float = (near[0] as Vector2).y
 		var cx: float = ((near[0] as Vector2).x + (far[0] as Vector2).x) * 0.5
-		var wd: float = float(near[1]) * 1.2
+		var wd: float = float(near[1]) * 0.6
 		draw_texture_rect(glow, Rect2(cx - wd, top - 20.0, wd * 2.0, bottom - top + 60.0), false, Color(1.0, 0.45, 0.15, 0.16))
 		for i in range(MAX_PER_SIDE - 1, -1, -1):
 			var sl: Array = slot(s, i)
@@ -212,26 +252,32 @@ func _draw_leader(side: int) -> void:
 	var age := _clock - _throw_at
 	if age < 0.4:
 		y -= sin(age / 0.4 * PI) * 0.1 * h * amp
-	_shadow(feet, h, clampf(-y / (0.1 * h), 0.0, 1.0))
-	_blit("issohadore", feet + Vector2(0.0, y), h, 0.0, 1.0, Color.WHITE, side == 1)
+	_shadow(feet, h * 0.8, clampf(-y / (0.1 * h), 0.0, 1.0))
+	_blit(sprite_name(side, 0), feet + Vector2(0.0, y), h, 0.0, 1.0, Color.WHITE)
 
 
+## A soft ground shadow under the feet, thrown a little away from the fire (toward the screen edge).
 func _shadow(feet: Vector2, h: float, lift: float) -> void:
-	draw_set_transform(feet + Vector2(0.0, 2.0), 0.0, Vector2(1.0, 0.25))
-	draw_circle(Vector2.ZERO, h * 0.28 * (1.0 - 0.3 * lift), Color(0, 0, 0, 0.6))
+	var r := h * 0.3 * (1.0 - 0.3 * lift)
+	var away := -1.0 if feet.x < size.x * 0.5 else 1.0
+	var c := feet + Vector2(away * r * 0.25, 1.0)
+	draw_texture_rect(FireSkin.glow(), Rect2(c - Vector2(r, r * 0.26), Vector2(r * 2.0, r * 0.52)), false, Color(0, 0, 0, 0.85 * (1.0 - 0.4 * lift)))
+	draw_set_transform(c, 0.0, Vector2(1.0, 0.22))
+	draw_circle(Vector2.ZERO, r * 0.55, Color(0, 0, 0, 0.35))
 	draw_set_transform(Vector2.ZERO)
 
 
-## A Fire Night figure sprite with its feet at `feet`, h tall; flip faces it left (the right file).
-func _blit(name: String, feet: Vector2, h: float, rot: float, sq: float, tint: Color, flip: bool) -> void:
+## A Fire Night figure sprite with its feet at `feet`, h tall (the right file's sprites are baked
+## facing left, lit from the fire on their left, so nothing is mirrored here).
+func _blit(name: String, feet: Vector2, h: float, rot: float, sq: float, tint: Color) -> void:
 	var t := FireSkin.tex(name)
-	if t == null:
+	if t == null or not FireCells.CELLS.has(name):
 		return
 	RenderingServer.canvas_item_set_default_texture_filter(get_canvas_item(), RenderingServer.CANVAS_ITEM_TEXTURE_FILTER_LINEAR_WITH_MIPMAPS)
-	var cell: Vector2 = FireSkin.FIG[0]
-	var a: Vector2 = FireSkin.FIG[1]
-	var k := h / float(FireSkin.FIG[2])
-	draw_set_transform(feet, rot, Vector2(-k if flip else k, k * sq))
+	var cell: Vector2 = FireCells.CELLS[name][0]
+	var a: Vector2 = FireCells.CELLS[name][1]
+	var k := h / FireCells.FIG_H
+	draw_set_transform(feet, rot, Vector2(k, k * sq))
 	draw_texture_rect(t, Rect2(-a, cell), false, tint)
 	draw_set_transform(Vector2.ZERO)
 
@@ -273,5 +319,7 @@ func _draw_one(feet: Vector2, h: float, i: int, side: int) -> void:
 		var fade := clampf((_clock - _joined_at[i]) / 0.25, 0.0, 1.0)
 		tint = tint.lerp(dim, 1.0 - fade)
 	_shadow(feet, h, clampf(-y / (JUMP * h), 0.0, 1.0))
-	var fl := fleece if fleece in ["black", "dark_brown"] else "black"
-	_blit("mamuthone_%s_%s" % [fl, "b" if airborne else "a"], feet + Vector2(x, y), h, rot, sq, tint, side == 1)
+	var name := sprite_name(side, i + 1)
+	if airborne:
+		name = name.replace("_a", "_b")
+	_blit(name, feet + Vector2(x, y), h, rot, sq, tint)

@@ -220,6 +220,9 @@ judge_held,Held,Tenuto
 judge_let_go,Let go,Lasciato
 judge_silence,Stand still,Fermo!
 lane_still,Stand still,Fermi
+lane_raise,Raise,Alza
+lane_lower,Lower,Abbassa
+lane_bells,Bells,Campanacci
 judge_still_kept,Still!,Immobili!
 still_moment,The row stands as one,"La fila immobile, come un corpo solo"
 count_ready,Get ready,Pronti

@@ -14,7 +14,8 @@ const REF_TOPY := 195.0
 const REF_FAR_W := 302.0
 const SKY_TOP := Color("#05041a")
 const GROUND_Y0 := 150.0
-const FIRE_RECT := Rect2(170.0, -30.0, 380.0, 240.0)   ## the flame field, around the fire at (360, 200)
+const FIRE_RECT := Rect2(196.0, 62.0, 328.0, 140.0)    ## the flame field: the whole fire sits between the
+                                                       ## HUD (y 110) and the road's far end, base at (360, 198)
 const SPARKS := 70
 
 const FLAME_SHADER := """
@@ -49,21 +50,20 @@ vec4 ramp(float t) {
 }
 void fragment() {
 	float tm = TIME + t0;
-	float x = 170.0 + UV.x * 380.0;
-	float y = -30.0 + UV.y * 240.0;
-	float v = (200.0 - y) / (225.0 * (1.0 + 0.06 * pulse));
-	float u = (x - 360.0) / 150.0;
-	float yr = y + tm * 70.0;
-	float t1 = fbm(vec2(x * 0.018 + sin(tm * 0.7) * 0.3, yr * 0.009 - 3.0), 0.0);
-	float t2 = fbm(vec2(x * 0.045, (y + tm * 120.0) * 0.02), 17.0);
+	float x = 196.0 + UV.x * 328.0;
+	float y = 62.0 + UV.y * 140.0;
+	float v = (198.0 - y) / (105.0 * (1.0 + 0.05 * pulse));
+	float u = (x - 360.0) / 135.0;
+	float t1 = fbm(vec2(x * 0.03 + sin(tm * 0.7) * 0.25, (y + tm * 60.0) * 0.016 - 3.0), 0.0);
+	float t2 = fbm(vec2(x * 0.07, (y + tm * 110.0) * 0.035), 17.0);
 	float vp = max(0.0, v);
 	float uu = u + (t1 - 0.5) * 0.9 * vp + (t2 - 0.5) * 0.25;
-	float w = max(0.02, 1.05 * pow(1.0 - min(vp, 1.0), 0.9));
-	float I = (1.0 - abs(uu) / w) * 1.35 - vp * 0.6 + 0.08 + (t2 - 0.5) * 0.5 + (t1 - 0.5) * 0.35;
-	I *= 0.9 + 0.07 * pulse;
+	float w = max(0.02, 1.05 * pow(1.0 - min(vp, 1.0), 0.85));
+	float I = (1.0 - abs(uu) / w) * 1.35 - vp * 0.55 + 0.1 + (t2 - 0.5) * 0.5 + (t1 - 0.5) * 0.35;
+	I *= 0.92 + 0.06 * pulse;
 	if (v < 0.0) { I *= 1.0 + v * 8.0; }
 	vec4 c = ramp(I);
-	c.a *= step(0.0, I) * smoothstep(-0.05, 0.0, v);
+	c.a *= step(0.0, I) * smoothstep(-0.05, 0.0, v) * (1.0 - smoothstep(0.93, 0.999, v));
 	COLOR = c;
 }
 """
@@ -198,8 +198,8 @@ class _Glow extends Control:
 		var t := backdrop._clock
 		var g := FireSkin.glow()
 		var flick := 0.92 + 0.08 * sin(t * 11.0) * sin(t * 7.3)
-		var r := 290.0 * kf * (1.0 + 0.05 * p)
-		draw_texture_rect(g, Rect2(c + Vector2(-r, -80.0 * kf - r), Vector2(r, r) * 2.0), false, Color(1.0, 0.45, 0.15, (0.14 + 0.1 * p) * flick))
+		var r := 240.0 * kf * (1.0 + 0.05 * p)
+		draw_texture_rect(g, Rect2(c + Vector2(-r, -37.0 * kf - r), Vector2(r, r) * 2.0), false, Color(1.0, 0.5, 0.18, (0.2 + 0.1 * p) * flick))
 		var rb := 150.0 * kf
 		draw_texture_rect(g, Rect2(c + Vector2(-rb, -rb * 0.45), Vector2(rb * 2.0, rb * 0.9)), false, Color(1.0, 0.7, 0.35, 0.32 * flick))
 		# Rings rolling out across the square, one per beat (the road covers their middle).
@@ -217,13 +217,16 @@ class _Glow extends Control:
 					pts.append(c + Vector2(cos(ang) * rx, 8.0 * k + sin(ang) * ry))
 				draw_polyline(pts, Color(1.0, 0.59, 0.24, a), 5.0 * k, true)
 				draw_polyline(pts, Color(1.0, 0.86, 0.6, a * 0.6), 1.5 * k, true)
-		# Sparks rising from the fire.
+		# Sparks rising from the fire, kept below the HUD's corners (mockup y 8..148).
 		for i in SPARKS:
 			var sp := 0.25 + 0.3 * WoodcutDraw.hash01(i, 41)
 			var ph := fposmod(WoodcutDraw.hash01(i, 43) + t * sp, 1.0)
-			var spread := (WoodcutDraw.hash01(i, 47) - 0.5) * 320.0 * (0.3 + ph)
-			var x := c.x + (spread + sin(t * 1.7 + float(i)) * 8.0 * ph) * kf
-			var y := c.y + (-60.0 - ph * 260.0) * kf
+			var spread := (WoodcutDraw.hash01(i, 47) - 0.5) * 300.0 * (0.3 + ph) + sin(t * 1.7 + float(i)) * 8.0 * ph
+			var ry := -47.0 - ph * 140.0      # mockup y 148 .. 8, relative to the far end (195)
+			if REF_TOPY + ry < 108.0 and absf(spread) > 110.0:
+				continue
+			var x := c.x + spread * kf
+			var y := c.y + ry * kf
 			var s := (2.0 if WoodcutDraw.hash01(i, 53) < 0.75 else 3.0) * maxf(kf, 1.0)
 			var col := Color(1.0, 0.9, 0.55) if i % 2 == 0 else Color(1.0, 0.5, 0.16)
 			draw_rect(Rect2(x, y, s, s), Color(col, (1.0 - ph) * (0.6 + 0.4 * p)))

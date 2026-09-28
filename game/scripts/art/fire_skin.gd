@@ -15,16 +15,8 @@ extends RefCounted
 const DIR := "res://art/fire/"
 const REF_LANE := 240.0
 
-## Sprite cells [size, anchor] in reference pixels (the PNGs are baked at 2x, figures at 1.5x).
-const GEM := [Vector2(256, 140), Vector2(128, 62)]
-const HOLD_RING := [Vector2(160, 80), Vector2(80, 40)]
-const BADGE := [Vector2(120, 104), Vector2(60, 52)]
-const ROPE := [Vector2(720, 110), Vector2(360, 55)]
-const BAR := [Vector2(720, 90), Vector2(360, 45)]
+## Sprite cells (size, anchor, drawn bounds) come from FireCells, generated with the sprites.
 const SASH := Vector2(82, 64)
-const BUTTON := [Vector2(272, 228), Vector2(26, 26)]   ## panel 220x176 inside a 26 px margin
-const FOOT := [Vector2(60, 100), Vector2(30, 50)]
-const FIG := [Vector2(234, 261), Vector2(119, 252), 180.0]   ## cell, feet, figure height
 const BUTTON_STATES := ["idle", "cued", "pressed", "hit", "miss"]
 
 const GOLD := Color("#ffc84a")
@@ -97,11 +89,12 @@ static func _mip(ci: CanvasItem) -> void:
 	RenderingServer.canvas_item_set_default_texture_filter(ci.get_canvas_item(), RenderingServer.CANVAS_ITEM_TEXTURE_FILTER_LINEAR_WITH_MIPMAPS)
 
 
-## Draws a sprite cell [size, anchor] with its anchor at `at`, scaled by sc (flip mirrors it).
-static func blit(ci: CanvasItem, name: String, cell: Array, at: Vector2, sc: float, modulate := Color.WHITE, flip := false) -> void:
+## Draws sprite `name` with its anchor at `at`, scaled by sc (reference pixels to screen); flip mirrors it.
+static func blit(ci: CanvasItem, name: String, at: Vector2, sc: float, modulate := Color.WHITE, flip := false) -> void:
 	var t := tex(name)
-	if t == null:
+	if t == null or not FireCells.CELLS.has(name):
 		return
+	var cell: Array = FireCells.CELLS[name]
 	var sz: Vector2 = cell[0]
 	var a: Vector2 = cell[1]
 	if flip:
@@ -113,30 +106,58 @@ static func blit(ci: CanvasItem, name: String, cell: Array, at: Vector2, sc: flo
 		ci.draw_texture_rect(t, r, false, modulate)
 
 
+## Where sprite `name` actually draws, relative to its anchor, at scale sc (flip mirrors it).
+static func bounds(name: String, sc: float, flip := false) -> Rect2:
+	if not FireCells.CELLS.has(name):
+		return Rect2()
+	var b: Rect2 = FireCells.CELLS[name][2]
+	b = Rect2(b.position * sc, b.size * sc)
+	if flip:
+		b.position.x = -b.end.x
+	return b
+
+
 # ------------------------------------------------------------------ upright (screen space)
 
 ## A step: a bevelled gem, gold face in a crimson rim, with its halo and its shadow on the road.
-static func draw_gem(ci: CanvasItem, at: Vector2, sc: float, call := false, alpha := 1.0) -> void:
+## An off-beat step (off) is smaller, inside a dashed bone ring.
+static func draw_gem(ci: CanvasItem, at: Vector2, sc: float, call := false, alpha := 1.0, off := false) -> void:
 	_mip(ci)
-	blit(ci, "gem_call" if call else "gem", GEM, at, sc, Color(1, 1, 1, alpha))
+	if off:
+		var rx := 0.3 * REF_LANE * sc * 0.78
+		var c := at + Vector2(0.0, rx * 0.09)
+		var erx := rx * 1.3
+		var ery := rx * 0.38 * 1.35 + rx * 0.09
+		var n := 28
+		for i in n:
+			if i % 2 == 1:
+				continue
+			var a0 := TAU * float(i) / float(n)
+			var a1 := TAU * float(i + 1) / float(n)
+			var pts := PackedVector2Array()
+			for j in 4:
+				var a := lerpf(a0, a1, float(j) / 3.0)
+				pts.append(c + Vector2(cos(a) * erx, sin(a) * ery))
+			ci.draw_polyline(pts, Color(0.94, 0.886, 0.776, 0.85 * alpha), maxf(1.5, 2.0 * sc), true)
+	blit(ci, "gem_call" if call else "gem", at, sc * (0.78 if off else 1.0), Color(1, 1, 1, alpha))
 
 
 ## The end of a hold: a hollow gold ring.
 static func draw_hold_ring(ci: CanvasItem, at: Vector2, sc: float, alpha := 1.0) -> void:
 	_mip(ci)
-	blit(ci, "hold_ring", HOLD_RING, at, sc, Color(1, 1, 1, alpha))
+	blit(ci, "hold_ring", at, sc, Color(1, 1, 1, alpha))
 
 
 ## The bell bar's red badge, upright at the bar's middle.
 static func draw_badge(ci: CanvasItem, at: Vector2, sc: float, alpha := 1.0) -> void:
 	_mip(ci)
-	blit(ci, "badge", BADGE, at, sc, Color(1, 1, 1, alpha))
+	blit(ci, "badge", at, sc, Color(1, 1, 1, alpha))
 
 
 ## The rope across the road: `road_w` is the road's width on screen at its depth, dir 1 right.
 static func draw_rope(ci: CanvasItem, at: Vector2, road_w: float, dir: int, alpha := 1.0) -> void:
 	_mip(ci)
-	blit(ci, "rope_r" if dir >= 0 else "rope_l", ROPE, at, road_w / 720.0, Color(1, 1, 1, alpha))
+	blit(ci, "rope_r" if dir >= 0 else "rope_l", at, road_w / 720.0, Color(1, 1, 1, alpha))
 
 
 ## The hit line: a heavy glowing bar across the whole width at y, with a bronze receptor ring at each
@@ -206,8 +227,9 @@ static func draw_bar(ci: CanvasItem, field: Rect2, y: float, up: bool) -> void:
 		ci.draw_rect(Rect2(field.position.x, y - 23.0, field.size.x, 46.0), GOLD)
 		return
 	_mip(ci)
-	var sz: Vector2 = BAR[0]
-	var a: Vector2 = BAR[1]
+	var cell: Array = FireCells.CELLS["bar_up"]
+	var sz: Vector2 = cell[0]
+	var a: Vector2 = cell[1]
 	# Drawn a little slimmer than its judged height, so it stays a bar and not a slab near the line.
 	var k := 0.72
 	ci.draw_texture_rect(t, Rect2(field.position.x, y - a.y * k, field.size.x, sz.y * k), false)
@@ -229,96 +251,100 @@ static func draw_band(ci: CanvasItem, field: Rect2, y_top: float, y_bottom: floa
 
 # ------------------------------------------------------------------ buttons
 
-## A step button: a framed dark panel with a gold rim and its footprints; hot red when pressed or hit.
+## A step button: a lacquered plate in a bronze frame with the sash's lozenge band, and toeless soles
+## engraved in bone; hot red when pressed or hit.
 static func draw_button(ci: CanvasItem, rect: Rect2, lane: int, state: String) -> void:
 	if not (state in BUTTON_STATES):
 		state = "idle"
 	_mip(ci)
-	var t := tex("button_" + state)
-	var sz: Vector2 = BUTTON[0]
-	var m: Vector2 = BUTTON[1]
-	var k := rect.size / (sz - m * 2.0)
-	if t != null:
-		ci.draw_texture_rect(t, Rect2(rect.position - m * k, sz * k), false)
+	var name := "button_" + state
+	var t := tex(name)
+	var k := minf(rect.size.x / 220.0, rect.size.y / 176.0)
+	if t != null and FireCells.CELLS.has(name):
+		var cell: Array = FireCells.CELLS[name]
+		var kk := rect.size / Vector2(220.0, 176.0)
+		var a: Vector2 = cell[1]
+		ci.draw_texture_rect(t, Rect2(rect.position - a * kk, (cell[0] as Vector2) * kk), false)
 	else:
 		ci.draw_rect(rect, Color("#241a30"))
-	var glyph := Color("#f0e2c4")
+	var tint := Color.WHITE
 	match state:
 		"cued":
-			glyph = Color("#ffd98a")
+			tint = Color(1.08, 0.95, 0.75)
 		"pressed", "hit":
-			glyph = Color("#fff6de")
+			tint = Color(1.12, 1.1, 1.06)
 		"miss":
-			glyph = Color("#6a6070")
-	var c := rect.get_center()
-	var s := minf(rect.size.x / 220.0, rect.size.y / 176.0)
+			tint = Color(0.5, 0.47, 0.52)
+	var c := rect.get_center() + Vector2(0, 14) * k
 	if state in ["pressed", "hit"]:
-		ci.draw_texture_rect(glow(), Rect2(c - Vector2(90, 70) * s, Vector2(180, 140) * s), false, Color(1.0, 0.85, 0.55, 0.45))
-	if lane == 1:
-		blit(ci, "foot_l", FOOT, c + Vector2(-22, 0) * s, 1.25 * s, glyph)
-		blit(ci, "foot_r", FOOT, c + Vector2(22, 6) * s, 1.25 * s, glyph)
-	else:
-		blit(ci, "foot_l" if lane == 0 else "foot_r", FOOT, c, 1.4 * s, glyph)
+		ci.draw_texture_rect(glow(), Rect2(c - Vector2(90, 70) * k, Vector2(180, 140) * k), false, Color(1.0, 0.88, 0.6, 0.5))
+	for pass_ in 2:
+		var shadow := pass_ == 0
+		var off := Vector2(0, 3) * k if shadow else Vector2.ZERO
+		var col := Color(0, 0, 0, 0.55) if shadow else tint
+		if lane == 1:
+			blit(ci, "foot_l", c + off + Vector2(-22, 0) * k, 1.25 * k, col)
+			blit(ci, "foot_r", c + off + Vector2(22, 6) * k, 1.25 * k, col)
+		else:
+			blit(ci, "foot_l" if lane == 0 else "foot_r", c + off, 1.4 * k, col)
 
 
 # ------------------------------------------------------------------ bursts (additive)
 
-## A hit burst at `at` (screen), sc = lane scale; returns false once it is over (LaneSkin.BURST_TIME).
-## Draw on an additive canvas item. perfect: a big radial blaze with star rays, a ring and sparks;
-## good / early / late: smaller and fewer rays; held: a warm column; miss / wrong: a dull ash puff.
+## A hit burst at `at` (screen), sc = lane scale, rx = the receptor ring's half width there; returns
+## false once it is over (LaneSkin.BURST_TIME). Draw on an additive canvas item. A soft glow, rings of
+## light pulsing outward from the receptor (never over it, so the ring stays readable) and embers
+## rising: perfect the most, good fewer, early / late in their cool and warm colours; held a warm column;
+## miss / wrong a dull ash puff.
 static func draw_burst(ci: CanvasItem, at: Vector2, quality: String, age: float, sc := 1.0) -> bool:
 	var life := LaneSkin.BURST_TIME
 	if age < 0.0 or age > life:
 		return false
 	var t := age / life
 	var fade := pow(1.0 - t, 1.3)
-	var grow := 1.0 - pow(1.0 - t, 3.0)
+	var grow := 1.0 - pow(1.0 - t, 2.5)
 	var g := glow()
+	var rx := 0.33 * REF_LANE * sc
+	var ry := rx * 0.38
 	match quality:
 		"perfect", "good", "early", "late":
-			var big := 1.0 if quality == "perfect" else 0.62
-			var hot := Color(1.0, 0.97, 0.86)
-			var warm := Color(1.0, 0.55, 0.15)
+			var big := 1.0 if quality == "perfect" else 0.7
+			var warm := Color(1.0, 0.59, 0.24)
+			var hot := Color(1.0, 0.87, 0.59)
 			if quality == "early":
 				warm = Palette.EARLY
+				hot = Palette.EARLY.lightened(0.3)
 			elif quality == "late":
 				warm = Palette.LATE
-			var r := 200.0 * sc * big * (0.6 + 0.4 * grow)
-			ci.draw_texture_rect(g, Rect2(at - Vector2(r, r * 0.8), Vector2(r * 2.0, r * 1.6)), false, Color(warm, 0.8 * fade))
-			ci.draw_texture_rect(g, Rect2(at - Vector2(r, r) * 0.45, Vector2(r, r) * 0.9), false, Color(hot, fade))
-			# Star rays: thin wedges, hot at the root and gone at the tip.
-			var n := 14 if quality == "perfect" else 9
+				hot = Palette.LATE.lightened(0.3)
+			var r := 170.0 * sc * big
+			ci.draw_texture_rect(g, Rect2(at - Vector2(r, r * 0.55), Vector2(r * 2.0, r * 1.1)), false, Color(warm, 0.7 * fade))
+			var rings := [[1.32, 0.95, 5.0], [1.7, 0.5, 3.0], [2.15, 0.22, 2.0]]
+			var n := 3 if quality == "perfect" else 2
 			for i in n:
-				var a := float(i) / float(n) * TAU + WoodcutDraw.hash01(i, 3) * 0.3 + t * 0.4
-				var len := (90.0 + 120.0 * WoodcutDraw.hash01(i, 5)) * sc * big * (0.45 + 0.55 * grow)
-				var wd := (5.0 + 7.0 * WoodcutDraw.hash01(i, 7)) * sc * big
-				var dir := Vector2(cos(a), sin(a) * 0.55)
-				var nrm := Vector2(-sin(a), cos(a) * 0.55) * wd
-				ci.draw_polygon(PackedVector2Array([at + nrm, at + dir * len, at - nrm]),
-					PackedColorArray([Color(hot, 0.9 * fade), Color(warm, 0.0), Color(hot, 0.9 * fade)]))
-			var rr := lerpf(60.0, 150.0, grow) * sc * big
-			_ellipse(ci, at, rr, rr * 0.39, Color(1.0, 0.92, 0.7, 0.9 * fade), 5.0 * sc)
-			_ellipse(ci, at, rr * 1.17, rr * 0.45, Color(warm, 0.55 * fade), 3.0 * sc)
-			_sparks(ci, at, sc * big, t, fade, 26 if quality == "perfect" else 12, warm)
+				var ring: Array = rings[i]
+				var k := lerpf(1.08, float(ring[0]) * (1.0 if quality == "perfect" else 0.9), grow)
+				_ellipse(ci, at, rx * k, ry * k, Color(hot, float(ring[1]) * fade), float(ring[2]) * maxf(sc, 0.7))
+			_embers(ci, at, rx, sc, t, fade, 13 if quality == "perfect" else 7, warm)
 		"held":
-			ci.draw_texture_rect(g, Rect2(at - Vector2(70, 150) * sc, Vector2(140, 190) * sc), false, Color(1.0, 0.55, 0.15, 0.9 * fade))
-			_sparks(ci, at, sc * 0.7, t, fade, 12, EMBER, true)
+			ci.draw_texture_rect(g, Rect2(at - Vector2(70, 150) * sc, Vector2(140, 190) * sc), false, Color(1.0, 0.55, 0.15, 0.8 * fade))
+			_ellipse(ci, at, rx * lerpf(1.05, 1.4, grow), ry * lerpf(1.05, 1.4, grow), Color(1.0, 0.85, 0.55, 0.7 * fade), 3.0)
+			_embers(ci, at, rx, sc, t, fade, 9, EMBER)
 		_:
 			var r := lerpf(30.0, 80.0, grow) * sc
 			ci.draw_texture_rect(g, Rect2(at - Vector2(r, r * 0.6), Vector2(r * 2.0, r * 1.2)), false, Color(0.45, 0.42, 0.5, 0.5 * fade))
 	return true
 
 
-static func _sparks(ci: CanvasItem, at: Vector2, sc: float, t: float, fade: float, n: int, warm: Color, rising := false) -> void:
+## Embers rising from around a receptor: tall specks drifting up and out as they fade.
+static func _embers(ci: CanvasItem, at: Vector2, rx: float, sc: float, t: float, fade: float, n: int, warm: Color) -> void:
 	for i in n:
-		var a := WoodcutDraw.hash01(i, 11) * TAU
-		if rising:
-			a = -PI * 0.5 + (WoodcutDraw.hash01(i, 11) - 0.5) * 1.6
-		var d := (40.0 + 150.0 * WoodcutDraw.hash01(i, 13)) * sc * (0.3 + 0.7 * (1.0 - pow(1.0 - t, 2.0)))
-		var p := at + Vector2(cos(a), sin(a) * 0.55) * d + Vector2(0, -10.0 * sc + 60.0 * sc * t * t)
-		var s := (3.0 + 4.0 * WoodcutDraw.hash01(i, 17)) * maxf(sc, 0.6)
-		var c := Color(1.0, 0.94, 0.7) if i % 2 == 0 else warm
-		ci.draw_rect(Rect2(p - Vector2(s, s) * 0.5, Vector2(s, s)), Color(c, fade))
+		var a := -PI * (0.1 + 0.8 * WoodcutDraw.hash01(i, 3))
+		var d := rx * (1.1 + 0.9 * WoodcutDraw.hash01(i, 5)) * (0.6 + 0.4 * t)
+		var p := at + Vector2(cos(a) * d, sin(a) * d * 0.8 - (30.0 * WoodcutDraw.hash01(i, 7) + 60.0 * t) * sc)
+		var s := (2.0 + 3.0 * WoodcutDraw.hash01(i, 9)) * maxf(sc, 0.7)
+		var c := Color(1.0, 0.93, 0.67) if i % 2 == 0 else warm
+		ci.draw_rect(Rect2(p, Vector2(s, s * 1.6)), Color(c, 0.95 * fade))
 
 
 # ------------------------------------------------------------------ helpers
@@ -413,3 +439,48 @@ static func style_label(l: Label, size: int, color := Color.WHITE, outline := 8)
 	l.add_theme_constant_override("shadow_offset_x", 0)
 	l.add_theme_constant_override("shadow_offset_y", 3)
 	l.add_theme_constant_override("shadow_outline_size", outline + 4)
+
+
+## Styles a label in the carved serif (IM Fell English SC: small caps): `color` fill (white for a
+## gradient material), an optional gold hairline, and a dark cut shadow just below with a soft halo.
+static var _carved: Dictionary = {}
+
+
+## The carved serif (IM Fell English SC), optionally emboldened for the big numbers so it holds up
+## over the fire like the mockup's bold serif.
+static func carved_font(embolden := 0.0) -> Font:
+	if _carved.has(embolden):
+		return _carved[embolden]
+	var f := FontVariation.new()
+	f.base_font = Palette.display_font()
+	f.variation_embolden = embolden
+	f.fallbacks = [Palette.text_font("Bold")]   # the few signs the serif lacks (−)
+	_carved[embolden] = f
+	return f
+
+
+## A label in the carved serif small caps: colour (white under a gradient), a thin hairline outline,
+## and a cut shadow under it with a dark halo so it reads over the fire.
+static func carve_label(l: Label, size: int, color := Color.WHITE, hair := Color(0, 0, 0, 0), halo := 6, embolden := 0.0) -> void:
+	l.add_theme_font_override("font", carved_font(embolden))
+	l.add_theme_font_size_override("font_size", size)
+	l.add_theme_color_override("font_color", color)
+	l.add_theme_color_override("font_outline_color", hair)
+	l.add_theme_constant_override("outline_size", 2 if hair.a > 0.0 else 0)
+	l.add_theme_color_override("font_shadow_color", Color(0.04, 0.01, 0.02, 0.85))
+	l.add_theme_constant_override("shadow_offset_x", 0)
+	l.add_theme_constant_override("shadow_offset_y", maxi(1, int(round(size * 0.06))))
+	l.add_theme_constant_override("shadow_outline_size", halo)
+
+
+## The road's basalt setts, flat in the field (the road's perspective lays them back): a tile of 12
+## blocks across, repeated down the field.
+static func draw_setts(ci: CanvasItem, field: Rect2) -> void:
+	var t := tex("setts")
+	if t == null:
+		return
+	RenderingServer.canvas_item_set_default_texture_repeat(ci.get_canvas_item(), RenderingServer.CANVAS_ITEM_TEXTURE_REPEAT_ENABLED)
+	var cell: Vector2 = FireCells.CELLS["setts"][0]
+	var k := field.size.x / cell.x
+	var th := cell.y * k
+	ci.draw_texture_rect_region(t, field, Rect2(0.0, 0.0, float(t.get_width()), field.size.y / th * float(t.get_height())))

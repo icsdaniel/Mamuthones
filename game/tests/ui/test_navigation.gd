@@ -215,16 +215,43 @@ func test_two_taps_to_a_song_and_lanes_dominate() -> void:
 		print("  %s: lanes %.0f%% of height, %.0f%% of width" % [sz, lanes.size.y / h * 100.0, lanes.size.x / play.size.x * 100.0])
 		check(lanes.size.y >= h * 0.8, "%s: the lanes are the stage (%.0f%% of the height)" % [sz, lanes.size.y / h * 100.0])
 		check(lanes.size.x >= minf(play.size.x * 0.95, 890.0), "%s: the road's near end fills the width (%.0f px)" % [sz, lanes.size.x])
-		var inv := lanes.get_global_transform().affine_inverse() * rows.get_global_transform()
-		for s in 2:
-			for i in SideRows.MAX_PER_SIDE:
-				var sl: Array = rows.slot(s, i)
-				var feet: Vector2 = inv * (sl[0] as Vector2)
-				var fh: float = sl[1]
-				var edges: Vector2 = lanes.road_edges(feet.y - fh * 0.5)
-				var inner := feet.x + fh * 0.42 if s == 0 else feet.x - fh * 0.42
-				check((inner <= edges.x + 6.0) if s == 0 else (inner >= edges.y - 6.0), "%s: Mamuthone %d/%d stands beside the road, not on it" % [sz, s, i])
 		check(float(rows.slot(0, 0)[1]) >= 70.0, "%s: the nearest Mamuthone is big enough to read (%.0f px)" % [sz, float(rows.slot(0, 0)[1])])
 		check(float(rows.slot(0, 0)[1]) > float(rows.slot(0, SideRows.MAX_PER_SIDE - 1)[1]), "%s: the file recedes with the road" % sz)
+		UIHarness.free_app(app)
+		UIHarness.restore_profile()
+
+
+## No side figure stands on the road: at every store size, each Issohadore and Mamuthone sprite box
+## (standing, as SideRows places it) stays at least 12 px outside the road edge at the box's own height,
+## and on the screen.
+func test_side_figures_stay_off_the_road() -> void:
+	for sz in [Vector2i(720, 1440), Vector2i(720, 1280), Vector2i(720, 1600), Vector2i(1080, 1920), Vector2i(1536, 2048)]:
+		UIHarness.fresh_profile()
+		var app := UIHarness.make_app(tree, "", {}, sz)
+		await UIHarness.frames(tree, 2)
+		UIHarness.press(app, "PlayNext")
+		await UIHarness.settle(tree)
+		UIHarness.press(app.current(), "Play")
+		await UIHarness.settle(tree)
+		var play := app.current()
+		var lanes: LaneView = play.get("lanes")
+		var rows: SideRows = play.get("scene")
+		var inv := lanes.get_global_transform().affine_inverse() * rows.get_global_transform()
+		var nearest := INF
+		# Every side figure (the Issohadore, k = 0, and the Mamuthones behind him) keeps its whole
+		# sprite box at least 12 px off the road at its own height (the road widens downward, so the
+		# box's bottom is where it comes nearest), and on the screen.
+		for s in 2:
+			for k in SideRows.MAX_PER_SIDE + 1:
+				var box: Rect2 = rows.figure_box(s, k)
+				var a: Vector2 = inv * box.position
+				var e: Vector2 = inv * box.end
+				var edges: Vector2 = lanes.road_edges(e.y)
+				var gap := edges.x - e.x if s == 0 else a.x - edges.y
+				nearest = minf(nearest, gap)
+				check(gap >= 12.0, "%s: side figure %d/%d stays 12 px clear of the road (%.1f px)" % [sz, s, k, gap])
+				check(box.position.x >= 0.0 and box.end.x <= rows.size.x, "%s: side figure %d/%d is on the screen" % [sz, s, k])
+		print("  %s: side figures at least %.0f px off the road" % [sz, nearest])
+		check(float(rows.leader(0)[1]) > float(rows.slot(0, 0)[1]) * 0.6, "%s: the Issohadore reads at hit-line depth" % sz)
 		UIHarness.free_app(app)
 		UIHarness.restore_profile()

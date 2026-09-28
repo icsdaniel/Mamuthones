@@ -181,6 +181,7 @@ func _draw() -> void:
 func _draw_field(ci: CanvasItem) -> void:
 	var field := field_rect()
 	field.position = Vector2.ZERO
+	FireSkin.draw_setts(ci, field)
 	if session != null:
 		_draw_flat_notes(ci, field)
 	_draw_timing_ticks(ci, field)
@@ -218,7 +219,7 @@ void fragment() {
 }
 """
 ## Road surface colours from the far end (by the fire) to the buttons.
-const ROAD_STOPS := [[0.0, Color("#3a1d22")], [0.18, Color("#23142a")], [0.55, Color("#130d22")], [1.0, Color("#0b0816")]]
+const ROAD_STOPS := [[0.0, Color("#2a1c22")], [0.25, Color("#1a1520")], [0.6, Color("#131018")], [1.0, Color("#0c0a12")]]
 
 var perspective := true          ## false: the flat lanes (the Piazza hides them anyway; tests may flatten)
 var beat := -1000.0              ## the song's beat now (fractional), for the beads on the rails
@@ -376,33 +377,29 @@ func _draw_surface(ci: CanvasItem) -> void:
 	for i in ROAD_STOPS.size() - 1:
 		var k := i * 2
 		ci.draw_polygon(PackedVector2Array([pts[k], pts[k + 1], pts[k + 3], pts[k + 2]]), PackedColorArray([cols[k], cols[k + 1], cols[k + 3], cols[k + 2]]))
-	# The fire's reflection: one soft warm light down the middle, fading long before the hit line.
+	# Lane dividers: warm, 2 px, 35% up to the hit line and half that below it.
+	var ff := Rect2(Vector2.ZERO, f.size)
+	var hl := LaneSkin.hit_line_y(ff)
+	for u in [1.0 / 3.0, 2.0 / 3.0]:
+		var a := project(Vector2(ff.size.x * u, 0.0))
+		var m := project(Vector2(ff.size.x * u, hl))
+		var b := project(Vector2(ff.size.x * u, ff.size.y))
+		ci.draw_line(a, m, Color(1.0, 0.75, 0.47, 0.35), 2.0, true)
+		ci.draw_line(m, b, Color(1.0, 0.75, 0.47, 0.18), 2.0, true)
+
+
+## A soft glow (centre c, radii rx, ry on screen) laid on the road only: the glow texture mapped onto
+## the road's outline, so nothing spills onto the square or the figures.
+func _road_glow(ci: CanvasItem, c: Vector2, rx: float, ry: float, col: Color) -> void:
+	var f := field_rect()
 	var top := road_edges(f.position.y)
 	var bottom := road_edges(f.end.y)
 	var quad := PackedVector2Array([Vector2(top.x, f.position.y), Vector2(top.y, f.position.y), Vector2(bottom.y, f.end.y), Vector2(bottom.x, f.end.y)])
-	var k := f.size.x / 720.0
-	var gc := Vector2(f.get_center().x, f.position.y)
-	var gr := 560.0 * k
 	var uvs := PackedVector2Array()
 	for p in quad:
-		uvs.append((p - gc) / (gr * 2.0) + Vector2(0.5, 0.5))
-	ci.draw_polygon(quad, PackedColorArray([Color(1.0, 0.5, 0.2, 0.3)]), uvs, FireSkin.glow())
-	# Faint cobble courses (low contrast, so the notes stay clean).
-	var ff := Rect2(Vector2.ZERO, f.size)
-	var v := 0.04
-	while v < 1.0:
-		var p := project(Vector2(0.0, ff.size.y * v))
-		var e := road_edges(p.y)
-		ci.draw_line(Vector2(e.x, p.y), Vector2(e.y, p.y), Color(1.0, 0.8, 0.63, 0.025 + 0.02 * (1.0 - v)), 1.0)
-		v += 0.075
-	# Lane dividers: thin warm light, wider as they near.
-	for u in [1.0 / 3.0, 2.0 / 3.0]:
-		var a := project(Vector2(ff.size.x * u, 0.0))
-		var b := project(Vector2(ff.size.x * u, ff.size.y))
-		var wa := 0.7
-		var wb := 1.8 * k
-		ci.draw_polygon(PackedVector2Array([a - Vector2(wa, 0), a + Vector2(wa, 0), b + Vector2(wb, 0), b - Vector2(wb, 0)]),
-			PackedColorArray([Color(1.0, 0.77, 0.47, 0.45), Color(1.0, 0.77, 0.47, 0.45), Color(1.0, 0.77, 0.47, 0.22), Color(1.0, 0.77, 0.47, 0.22)]))
+		uvs.append(Vector2((p.x - c.x) / (rx * 2.0), (p.y - c.y) / (ry * 2.0)) + Vector2(0.5, 0.5))
+	RenderingServer.canvas_item_set_default_texture_repeat(ci.get_canvas_item(), RenderingServer.CANVAS_ITEM_TEXTURE_REPEAT_DISABLED)
+	ci.draw_polygon(quad, PackedColorArray([col]), uvs, FireSkin.glow())
 
 
 ## Additive, under the notes: the ember rails on the road's edges with beads riding them down to the
@@ -444,17 +441,48 @@ func _draw_under(ci: CanvasItem) -> void:
 			for u in [1.0 / 3.0, 2.0 / 3.0]:
 				var p := project(Vector2(ff.size.x * u, y))
 				ci.draw_texture_rect(g, Rect2(p - Vector2(r * 0.25, r * 0.9), Vector2(r * 0.5, r * 1.8)), false, Color(1.0, 0.7, 0.4, 0.3 * fade))
-	# The fire's light spilling onto the road's far end, breathing with the beat.
+	# The fire's light across the far third of the road and its long reflection down the middle,
+	# breathing with the beat; the hit line pours a little warm light on the stone nearest the player.
 	var fe := far_end()
-	var hr := fe.size.x * (0.75 + 0.08 * pulse)
-	ci.draw_texture_rect(FireSkin.glow(), Rect2(fe.get_center() - Vector2(hr, hr * 0.35), Vector2(hr * 2.0, hr * 0.7)), false, Color(1.0, 0.55, 0.2, 0.45 + 0.15 * pulse))
+	var fc := fe.get_center()
+	var flick := 0.94 + 0.06 * sin(_clock * 9.0) * sin(_clock * 5.3)
+	_road_glow(ci, fc, 470.0 * k, 470.0 * k, Color(1.0, 0.55, 0.2, (0.42 + 0.1 * pulse) * flick))
+	_road_glow(ci, fc, 196.0 * k, 700.0 * k, Color(1.0, 0.67, 0.31, (0.34 + 0.08 * pulse) * flick))
+	var hp := project(Vector2(ff.size.x * 0.5, LaneSkin.hit_line_y(ff)))
+	_road_glow(ci, hp, 420.0 * k, 420.0 * k, Color(1.0, 0.47, 0.16, 0.14))
+	# Divider glow, soft and faint.
+	for u in [1.0 / 3.0, 2.0 / 3.0]:
+		ci.draw_line(project(Vector2(ff.size.x * u, 0.0)), project(Vector2(ff.size.x * u, LaneSkin.hit_line_y(ff))), Color(1.0, 0.6, 0.3, 0.1), 7.0 * k, true)
+	# Ember specks drifting along the road's outer margins, outside the gem paths.
+	for i in 46:
+		var v := fposmod(WoodcutDraw.hash01(i, 61) + _clock * 0.02 * (0.5 + WoodcutDraw.hash01(i, 67)), 1.0)
+		var y := ff.size.y * v * 0.95
+		var side := -1.0 if i % 2 == 0 else 1.0
+		var u := 0.5 + side * (0.45 + 0.04 * WoodcutDraw.hash01(i, 71))
+		var p := project(Vector2(ff.size.x * u, y))
+		var sz := (1.0 + 2.0 * WoodcutDraw.hash01(i, 73)) * road_scale(y) * k
+		var tw := 0.5 + 0.5 * sin(_clock * (2.0 + 3.0 * WoodcutDraw.hash01(i, 79)) + float(i))
+		ci.draw_rect(Rect2(p, Vector2(sz, sz)), Color(1.0, 0.55 + 0.35 * WoodcutDraw.hash01(i, 83), 0.24, (0.35 + 0.5 * WoodcutDraw.hash01(i, 89)) * tw))
 	var hy := project(Vector2(0.0, LaneSkin.hit_line_y(ff))).y
 	var span := _screen_span()
 	FireSkin.draw_hit_glow(ci, span.x, span.y, hy, pulse)
 
 
-## Additive, over the notes: the hit bursts, upright at their projected place.
+## Additive, over the notes: the hit bursts, upright at their projected place, and sparks thrown up
+## from a pressed plate.
 func _draw_fx(ci: CanvasItem) -> void:
+	if show_buttons:
+		var r := buttons_rect()
+		var w := r.size.x / 3.0
+		for lane in 3:
+			var st := _button_state(lane)
+			if st != "pressed" and st != "hit":
+				continue
+			for j in 14:
+				var ph := fposmod(WoodcutDraw.hash01(j, 91 + lane) + _clock * (1.2 + WoodcutDraw.hash01(j, 97)), 1.0)
+				var x := r.position.x + w * (lane + 0.5) + (WoodcutDraw.hash01(j, 101) - 0.5) * w * 0.8
+				var y := r.position.y + 8.0 - ph * 46.0
+				ci.draw_rect(Rect2(x, y, 2.0, 2.0 + 3.0 * WoodcutDraw.hash01(j, 103)), Color(1.0, 0.6 + 0.35 * WoodcutDraw.hash01(j, 107), 0.27, (0.9 - 0.8 * ph)))
 	var i := 0
 	while i < _bursts.size():
 		var b: Array = _bursts[i]
@@ -658,7 +686,7 @@ func _draw_upright() -> void:
 		match n.kind:
 			Note.Kind.STEP:
 				if not n.done:
-					FireSkin.draw_gem(self, project(Vector2(lanes[n.lane].get_center().x, y)), upright_scale(y), n.call, a)
+					FireSkin.draw_gem(self, project(Vector2(lanes[n.lane].get_center().x, y)), upright_scale(y), n.call, a, _off_beat(n))
 			Note.Kind.HOLD:
 				if n.finished or (n.done and not n.holding):
 					continue
@@ -670,6 +698,7 @@ func _draw_upright() -> void:
 				FireSkin.draw_gem(self, project(Vector2(cx, head)), upright_scale(head), false, a)
 			Note.Kind.BELL:
 				if not n.done:
+					_bell_words(field, y, n.up, a)
 					FireSkin.draw_badge(self, project(Vector2(field.get_center().x, y)), upright_scale(y), a)
 			Note.Kind.RING:
 				if not n.done:
@@ -686,6 +715,33 @@ func _draw_upright() -> void:
 					rests.append([e[2], y])
 	for r in rests:
 		_rest_words(field, r[0], r[1], taken)
+
+
+## "Raise … Bells" (or "Lower … Bells") carved into the bell bar either side of its badge, upright,
+## sized to the bar's height on screen.
+func _bell_words(field: Rect2, y: float, up: bool, a: float) -> void:
+	var w := road_scale(y)
+	var bar_h := float((FireCells.CELLS["bar_up"][0] as Vector2).y) * 0.72 * w * w / TOP_W if _road_on() else 65.0
+	var fs := int(round(minf(34.0 * w, bar_h * 0.5)))
+	if fs < 9:
+		return
+	var font := FireSkin.carved_font(0.3)
+	for sd in [-1.0, 1.0]:
+		var text := tr("lane_bells") if sd > 0.0 else tr("lane_raise" if up else "lane_lower")
+		var p := project(Vector2(field.get_center().x + sd * field.size.x * 0.21, y))
+		var tw := font.get_string_size(text, HORIZONTAL_ALIGNMENT_LEFT, -1, fs).x
+		var pos := Vector2(p.x - tw * 0.5, p.y + fs * 0.32)
+		draw_string(font, pos + Vector2(0.0, 1.0), text, HORIZONTAL_ALIGNMENT_LEFT, -1, fs, Color(1.0, 0.9, 0.6, 0.35 * a))
+		draw_string(font, pos, text, HORIZONTAL_ALIGNMENT_LEFT, -1, fs, Color(0.16, 0.07, 0.016, a))
+
+
+## Whether a note falls between the beats (drawn smaller, in a dashed ring).
+func _off_beat(n: Note) -> bool:
+	if spb <= 0.0 or beat <= -999.0:
+		return false
+	var nb := beat + (n.t - song_time) / spb
+	var fr := fposmod(nb, 1.0)
+	return fr > 0.12 and fr < 0.88
 
 
 ## Notes emerge from the fire's haze at the far end of the road.
@@ -712,10 +768,10 @@ func _rest_words(field: Rect2, y_a: float, y_b: float, taken: Array[float] = [])
 			best_gap = gap
 			best_y = cy
 		cy += 6.0
-	var font := Palette.text_font("ExtraBold")
+	var font := FireSkin.carved_font(0.3)
 	var sc := clampf(road_scale(best_y), 0.6, 1.0)
 	var fs := int(round(30.0 * sc))
-	var text := tr("lane_still").to_upper()
+	var text := tr("lane_still")
 	var w := font.get_string_size(text, HORIZONTAL_ALIGNMENT_LEFT, -1, fs).x
 	var p := project(Vector2(field.get_center().x, best_y))
 	var half := fs * 0.72
@@ -740,6 +796,15 @@ func _gone(n: Note, t: float) -> bool:
 
 func _draw_buttons() -> void:
 	var r := buttons_rect()
+	# The panel under the plates, across the whole screen: near-black, with a thin ember line and the
+	# hit line's glow spilling over its top edge.
+	var span := _screen_span()
+	var pr := Rect2(span.x, r.position.y, span.y - span.x, r.size.y + 400.0)
+	draw_polygon(PackedVector2Array([pr.position, Vector2(pr.end.x, pr.position.y), pr.end, Vector2(pr.position.x, pr.end.y)]),
+		PackedColorArray([Color("#0b0712"), Color("#0b0712"), Color("#050309"), Color("#050309")]))
+	draw_polygon(PackedVector2Array([pr.position, Vector2(pr.end.x, pr.position.y), Vector2(pr.end.x, pr.position.y + 40.0), Vector2(pr.position.x, pr.position.y + 40.0)]),
+		PackedColorArray([Color(1.0, 0.47, 0.16, 0.3), Color(1.0, 0.47, 0.16, 0.3), Color(1.0, 0.47, 0.16, 0.0), Color(1.0, 0.47, 0.16, 0.0)]))
+	draw_line(pr.position, Vector2(pr.end.x, pr.position.y), Color(1.0, 0.55, 0.2, 0.55), 1.5)
 	var w := r.size.x / 3.0
 	var pad := 10.0
 	for lane in 3:
