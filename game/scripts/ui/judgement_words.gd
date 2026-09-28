@@ -7,10 +7,11 @@ extends Control
 
 const LIFE := 0.3
 const COLORS := {
-	"perfect": Color("#f3cf85"), "good": Color("#ede6da"), "early": UIKit.EARLY,
+	"perfect": Color("#ffd060"), "good": Color("#fff0d0"), "early": UIKit.EARLY,
 	"late": UIKit.LATE, "miss": Color("#b9ae9e"), "held": Color("#f3cf85"), "wrong": Color("#e2574a"),
 }
 
+var _gold: ShaderMaterial
 var _spots := {}   # int key -> [HBoxContainer, Label, Label, Tween]
 
 
@@ -30,7 +31,8 @@ func show_word(word: String, side: String, at: Vector2, quality: String, life :=
 		box.mouse_filter = Control.MOUSE_FILTER_IGNORE
 		var w := UIKit.label("", UIKit.HUD, false, HORIZONTAL_ALIGNMENT_CENTER)
 		var h := UIKit.label("", UIKit.HUD, false, HORIZONTAL_ALIGNMENT_CENTER)
-		h.add_theme_font_size_override("font_size", 24)
+		FireSkin.style_label(w, 50, Color.WHITE, 10)
+		FireSkin.style_label(h, 26, Color.WHITE, 7)
 		h.size_flags_vertical = Control.SIZE_SHRINK_END
 		box.add_child(w)
 		box.add_child(h)
@@ -43,7 +45,19 @@ func show_word(word: String, side: String, at: Vector2, quality: String, life :=
 	w.text = word
 	h.text = tr("judge_hint_" + side) if side != "" else ""
 	h.visible = side != ""
-	w.add_theme_color_override("font_color", COLORS.get(quality, Palette.BONE))
+	# Perfect and held burn gold (a gradient over the white fill); the rest in their own colour.
+	var gold := quality == "perfect" or quality == "held"
+	w.add_theme_color_override("font_color", Color.WHITE if gold else COLORS.get(quality, Palette.BONE))
+	w.add_theme_font_size_override("font_size", 58 if quality == "perfect" else 48)
+	w.uppercase = true
+	if gold:
+		if _gold == null:
+			_gold = FireSkin.text_gradient(Color("#fff8dc"), Color("#ffd060"), Color("#ff7a1f"))
+		w.material = _gold
+		w.reset_size()
+		_gold.set_shader_parameter("height", maxf(w.get_combined_minimum_size().y, 1.0))
+	else:
+		w.material = null
 	if side != "":
 		h.add_theme_color_override("font_color", UIKit.side_color(side))
 	box.reset_size()

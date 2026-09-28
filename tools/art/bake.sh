@@ -5,6 +5,8 @@
 set -e
 ROOT="$(cd "$(dirname "$0")/../.." && pwd)"
 python3 "$ROOT/tools/art/make_textures.py"
+# The Fire Night play-screen sprites, cut from the mockup's canvas code (Node + Playwright's Chromium).
+if command -v node >/dev/null; then node "$ROOT/tools/art/fire_night/render.js"; fi
 WORK="${ART_WORK:-/tmp/w-art-bake}"
 mkdir -p "$WORK/game"
 find "$WORK/game" -mindepth 1 -maxdepth 1 ! -name .godot -exec rm -rf {} +

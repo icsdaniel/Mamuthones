@@ -38,6 +38,7 @@ var hud: Hud
 var scene                         ## SideRows (songs) or ProcessionScene (Piazza): the same calls
 var banner: Control               ## over the top of the lanes: count-in and stand-still moment
 var lanes: LaneView
+var backdrop: FireBackdrop        ## the night, the bonfire and the square behind the road (songs)
 var words: JudgementWords
 var cue: PiazzaCue
 var paused := false
@@ -91,8 +92,15 @@ func build() -> void:
 	if gd is Dictionary and not (gd as Dictionary).is_empty() and not session.piazza:
 		ghost = Ghost.from_dict(gd)
 
-	var bg := ColorRect.new()
-	bg.color = Palette.BLACK
+	# The Piazza keeps its plain black ground under the procession; songs play on the Fire Night.
+	var bg: Control
+	if session.piazza:
+		bg = ColorRect.new()
+		(bg as ColorRect).color = Palette.BLACK
+	else:
+		backdrop = FireBackdrop.new()
+		backdrop.name = "Backdrop"
+		bg = backdrop
 	bg.set_anchors_preset(Control.PRESET_FULL_RECT)
 	bg.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	add_child(bg)
@@ -164,8 +172,10 @@ func build() -> void:
 	lanes.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	lanes.show_buttons = not session.piazza
 	lanes.visible = not session.piazza
+	lanes.spb = _spb
 	if not session.piazza:
 		scene.lanes = lanes
+		backdrop.lanes = lanes
 	_field_box.add_child(lanes)
 	words = JudgementWords.new()
 	words.set_anchors_preset(Control.PRESET_FULL_RECT)
@@ -321,8 +331,7 @@ func _process(delta: float) -> void:
 	lanes.song_time = t
 	var beat := (t - song.offset_for(session.remix)) / _spb
 	lanes.beat_pulse = 1.0 - fposmod(beat, 1.0) if beat >= 0.0 else 0.0
-	if scene is SideRows:
-		scene.beat = beat
+	_set_beat(beat)
 	hud.tick(t, delta)
 	if cue != null:
 		cue.song_time = t
@@ -332,6 +341,15 @@ func _process(delta: float) -> void:
 		scene.set_ghost_delta(ghost.lead_seconds(session.score, t))
 	if session.is_over(t):
 		_finish()
+
+
+## The beat now, for everything that moves with it: the rows' jumps, the beads on the rails, the fire.
+func _set_beat(beat: float) -> void:
+	lanes.beat = beat
+	if scene is SideRows:
+		scene.beat = beat
+	if backdrop != null:
+		backdrop.beat = beat
 
 
 ## Things that happen on the music, not on the player: the Issohadore's call with off-beat steps (a
@@ -604,8 +622,7 @@ func _tick_count() -> void:
 		var k := maxf((_clock - _count_from) / _spb, 0.0)
 		count_view.show_digit(clampi(4 - floori(k), 1, 4), fposmod(k, 1.0))
 		lanes.beat_pulse = 1.0 - fposmod(k, 1.0)
-		if scene is SideRows:
-			scene.beat = (tv - song.offset_for(session.remix)) / _spb
+		_set_beat((tv - song.offset_for(session.remix)) / _spb)
 		return
 	_resume_at = -1.0
 	count_view.clear()

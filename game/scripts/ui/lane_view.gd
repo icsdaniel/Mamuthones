@@ -1,6 +1,7 @@
 class_name LaneView
 extends Control
-## The three note lanes and the three step buttons, drawn with Art's LaneSkin. The play screen feeds it
+## The road of three lanes and the three step buttons, in the "Fire Night" look (Art's FireSkin; LaneSkin
+## keeps the layout: lane rects, hit line, note positions). The play screen feeds it
 ## the session and the song time each frame; hits add bursts and button flashes the same frame the
 ## input arrives (flash() / burst() are called from the input signal handlers, then queue_redraw()).
 
@@ -88,6 +89,8 @@ func flash(lane: int, good: bool) -> void:
 func burst(pos: Vector2, quality: String, side := "") -> void:
 	_bursts.append([pos, quality, _clock, side])
 	queue_redraw()
+	if _fx != null:
+		_fx.queue_redraw()
 
 
 ## A judged hit's offset (negative = early), shown as a tick at the lane's hit line: above the line
@@ -145,7 +148,13 @@ func marks_shown() -> Array[String]:
 
 func _process(delta: float) -> void:
 	_clock += delta
+	if session != null:
+		while _first < session.notes.size() and _gone(session.notes[_first], song_time):
+			_first += 1
 	queue_redraw()
+	for c in [_surface, _under, _fx]:
+		if c != null:
+			c.queue_redraw()
 
 
 func _px_per_s() -> float:
@@ -153,45 +162,35 @@ func _px_per_s() -> float:
 	return (LaneSkin.hit_line_y(f) - f.position.y) / (LOOKAHEAD / maxf(note_speed, 0.1))
 
 
+## Screen drawing on top of the road: the hit line and its receptors, then everything standing on the
+## road (gems, rings, badges, the rope, labels), then the buttons.
 func _draw() -> void:
 	if not _road_on():
 		_draw_field(self)
+	_draw_hit_line()
+	if session != null:
+		_draw_upright()
+	_draw_chevrons()
 	if show_buttons:
 		_draw_buttons()
 		_draw_marks()
 
 
-## Everything on the note field, in flat field coordinates: drawn straight onto this control, or into
-## the road's viewport to be laid back in perspective.
+## Things lying flat on the road, in flat field coordinates: drawn straight onto this control, or into
+## the road's viewport to be laid back in perspective. Sashes, bell bars, stand-still bands, ticks.
 func _draw_field(ci: CanvasItem) -> void:
 	var field := field_rect()
 	field.position = Vector2.ZERO
-	var glow: Array = [0.0, 0.0, 0.0]
-	for lane in 3:
-		if _is_pressed(lane):
-			glow[lane] = 1.0
-		else:
-			glow[lane] = clampf(1.0 - (_clock - _flash[lane]) / FLASH_TIME, 0.0, 1.0) * 0.7
-	LaneSkin.draw_lanes(ci, field, glow)
-	LaneSkin.draw_hit_line(ci, field, beat_pulse)
 	if session != null:
-		_draw_notes(ci, field)
-	var i := 0
-	while i < _bursts.size():
-		var b: Array = _bursts[i]
-		var q: String = b[1]
-		var age := _clock - float(b[2])
-		# Early/late keep one language: the woodcut spray of a Good, plus the UI's own chevron.
-		var art_q := "good" if q == "early" or q == "late" else q
-		if LaneSkin.draw_hit_burst(ci, b[0], art_q, age):
-			var side: String = b[3] if q != "early" and q != "late" else q
-			if side != "":
-				_draw_chevron(ci, b[0], side, age)
-			i += 1
-		else:
-			_bursts.remove_at(i)
+		_draw_flat_notes(ci, field)
 	_draw_timing_ticks(ci, field)
 	_draw_step_ticks(ci, field)
+
+
+func _lane_glow(lane: int) -> float:
+	if _is_pressed(lane):
+		return 1.0
+	return clampf(1.0 - (_clock - _flash[lane]) / FLASH_TIME, 0.0, 1.0) * 0.7
 
 
 # ------------------------------------------------------------------ the road (3D perspective)
@@ -199,59 +198,85 @@ func _draw_field(ci: CanvasItem) -> void:
 ## The field is drawn flat into a viewport and shown as a road laid back toward the horizon: full width
 ## at the hit line end, TOP_W of that at the far end, so notes come toward the player and grow as they
 ## near. Straight lines stay straight (a true perspective), so lanes, bars and holds keep their shape.
+## What lies on the road foreshortens with it; what stands on it (gems, badges, the rope) is drawn
+## upright on screen at its projected place, scaled with the road.
 const TOP_W := 0.42
 const ROAD_SHADER := """
 shader_type canvas_item;
 uniform float top_w = 0.42;
-uniform vec4 fog : source_color = vec4(0.08, 0.066, 0.06, 1.0);
+uniform vec4 fog : source_color = vec4(0.23, 0.11, 0.12, 1.0);
 void fragment() {
 	float w = top_w + (1.0 - top_w) * UV.y;
 	float u = 0.5 + (UV.x - 0.5) / w;
 	float v = (1.0 / top_w - 1.0 / w) / (1.0 / top_w - 1.0);
 	vec4 c = texture(TEXTURE, vec2(clamp(u, 0.0, 1.0), clamp(v, 0.0, 1.0)));
 	float far = 1.0 - (w - top_w) / (1.0 - top_w);
-	c.rgb = mix(c.rgb, fog.rgb, far * far * 0.45);
+	c.rgb = mix(c.rgb, fog.rgb, far * far * 0.5);
 	float edge = min(u, 1.0 - u);
 	c.a *= smoothstep(0.0, fwidth(u) * 1.5, edge) * smoothstep(0.0, 0.06, v);
 	COLOR = c;
 }
 """
+## Road surface colours from the far end (by the fire) to the buttons.
+const ROAD_STOPS := [[0.0, Color("#3a1d22")], [0.18, Color("#23142a")], [0.55, Color("#130d22")], [1.0, Color("#0b0816")]]
 
 var perspective := true          ## false: the flat lanes (the Piazza hides them anyway; tests may flatten)
+var beat := -1000.0              ## the song's beat now (fractional), for the beads on the rails
+var spb := 0.0                   ## seconds per beat (0: no beads)
 var _vp: SubViewport
 var _flat: Control
 var _road: TextureRect
+var _surface: Control            ## the road's stone, dividers and far-end haze (behind everything)
+var _under: Control              ## additive, under the notes: rail glow, beads, the hit line's glow
+var _fx: Control                 ## additive, over the notes: hit bursts
 
 
 func _ready() -> void:
-	if not perspective:
-		return
-	_vp = SubViewport.new()
-	_vp.name = "RoadView"
-	_vp.transparent_bg = true
-	_vp.disable_3d = true
-	_vp.render_target_update_mode = SubViewport.UPDATE_ALWAYS
-	add_child(_vp)
-	_flat = _FlatField.new()
-	_flat.set("view", self)
-	_vp.add_child(_flat)
-	_road = TextureRect.new()
-	_road.name = "Road"
-	_road.texture = _vp.get_texture()
-	_road.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
-	_road.stretch_mode = TextureRect.STRETCH_SCALE
-	_road.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	_road.show_behind_parent = true
-	var sh := Shader.new()
-	sh.code = ROAD_SHADER
-	var mat := ShaderMaterial.new()
-	mat.shader = sh
-	mat.set_shader_parameter("top_w", TOP_W)
-	_road.material = mat
-	add_child(_road)
-	move_child(_road, 0)
-	resized.connect(_fit_road)
-	_fit_road()
+	_surface = _Layer.new(self, "_draw_surface")
+	_surface.name = "Surface"
+	_surface.show_behind_parent = true
+	add_child(_surface)
+	move_child(_surface, 0)
+	if perspective:
+		_vp = SubViewport.new()
+		_vp.name = "RoadView"
+		_vp.transparent_bg = true
+		_vp.disable_3d = true
+		_vp.render_target_update_mode = SubViewport.UPDATE_ALWAYS
+		add_child(_vp)
+		_flat = _FlatField.new()
+		_flat.set("view", self)
+		_vp.add_child(_flat)
+		_road = TextureRect.new()
+		_road.name = "Road"
+		_road.texture = _vp.get_texture()
+		_road.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+		_road.stretch_mode = TextureRect.STRETCH_SCALE
+		_road.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		_road.show_behind_parent = true
+		var sh := Shader.new()
+		sh.code = ROAD_SHADER
+		var mat := ShaderMaterial.new()
+		mat.shader = sh
+		mat.set_shader_parameter("top_w", TOP_W)
+		_road.material = mat
+		add_child(_road)
+		move_child(_road, 1)
+		resized.connect(_fit_road)
+		_fit_road()
+	var add := CanvasItemMaterial.new()
+	add.blend_mode = CanvasItemMaterial.BLEND_MODE_ADD
+	_under = _Layer.new(self, "_draw_under")
+	_under.name = "Glow"
+	_under.show_behind_parent = true
+	_under.material = add
+	add_child(_under)
+	move_child(_under, 2 if perspective else 1)
+	_fx = _Layer.new(self, "_draw_fx")
+	_fx.name = "Bursts"
+	_fx.material = add
+	add_child(_fx)
+	move_child(_fx, _under.get_index() + 1)
 
 
 func _road_on() -> bool:
@@ -294,6 +319,18 @@ func road_edges(y: float) -> Vector2:
 	return Vector2(f.get_center().x - f.size.x * 0.5 * w, f.get_center().x + f.size.x * 0.5 * w)
 
 
+## Scale of things standing on the road at flat depth y: the lane's width on screen / FireSkin's 240.
+func upright_scale(flat_y: float) -> float:
+	return road_scale(flat_y) * field_rect().size.x / 3.0 / FireSkin.REF_LANE
+
+
+## The far end of the road on screen (centre x, y) and its width, where it meets the fire.
+func far_end() -> Rect2:
+	var f := field_rect()
+	var e := road_edges(f.position.y)
+	return Rect2(e.x, f.position.y, e.y - e.x, 0.0)
+
+
 class _FlatField extends Control:
 	var view: LaneView
 
@@ -306,6 +343,159 @@ class _FlatField extends Control:
 	func _draw() -> void:
 		if view != null:
 			view._draw_field(self)
+
+
+## A drawing layer of the lanes (its own canvas item, for its place in the order and its blend mode).
+class _Layer extends Control:
+	var view: LaneView
+	var method: String
+
+	func _init(p_view: LaneView, p_method: String) -> void:
+		view = p_view
+		method = p_method
+		mouse_filter = Control.MOUSE_FILTER_IGNORE
+		set_anchors_preset(Control.PRESET_FULL_RECT)
+
+	func _draw() -> void:
+		view.call(method, self)
+
+
+## The road's stone: dark and calm, warm where the fire falls on its far end, with faint cobble
+## courses and two thin lane dividers. Nothing busy where the notes travel.
+func _draw_surface(ci: CanvasItem) -> void:
+	var f := field_rect()
+	var pts := PackedVector2Array()
+	var cols := PackedColorArray()
+	for s in ROAD_STOPS:
+		var y: float = f.position.y + f.size.y * float(s[0])
+		var e := road_edges(y)
+		pts.append(Vector2(e.x, y))
+		pts.append(Vector2(e.y, y))
+		cols.append(s[1])
+		cols.append(s[1])
+	for i in ROAD_STOPS.size() - 1:
+		var k := i * 2
+		ci.draw_polygon(PackedVector2Array([pts[k], pts[k + 1], pts[k + 3], pts[k + 2]]), PackedColorArray([cols[k], cols[k + 1], cols[k + 3], cols[k + 2]]))
+	# The fire's reflection: one soft warm light down the middle, fading long before the hit line.
+	var top := road_edges(f.position.y)
+	var bottom := road_edges(f.end.y)
+	var quad := PackedVector2Array([Vector2(top.x, f.position.y), Vector2(top.y, f.position.y), Vector2(bottom.y, f.end.y), Vector2(bottom.x, f.end.y)])
+	var k := f.size.x / 720.0
+	var gc := Vector2(f.get_center().x, f.position.y)
+	var gr := 560.0 * k
+	var uvs := PackedVector2Array()
+	for p in quad:
+		uvs.append((p - gc) / (gr * 2.0) + Vector2(0.5, 0.5))
+	ci.draw_polygon(quad, PackedColorArray([Color(1.0, 0.5, 0.2, 0.3)]), uvs, FireSkin.glow())
+	# Faint cobble courses (low contrast, so the notes stay clean).
+	var ff := Rect2(Vector2.ZERO, f.size)
+	var v := 0.04
+	while v < 1.0:
+		var p := project(Vector2(0.0, ff.size.y * v))
+		var e := road_edges(p.y)
+		ci.draw_line(Vector2(e.x, p.y), Vector2(e.y, p.y), Color(1.0, 0.8, 0.63, 0.025 + 0.02 * (1.0 - v)), 1.0)
+		v += 0.075
+	# Lane dividers: thin warm light, wider as they near.
+	for u in [1.0 / 3.0, 2.0 / 3.0]:
+		var a := project(Vector2(ff.size.x * u, 0.0))
+		var b := project(Vector2(ff.size.x * u, ff.size.y))
+		var wa := 0.7
+		var wb := 1.8 * k
+		ci.draw_polygon(PackedVector2Array([a - Vector2(wa, 0), a + Vector2(wa, 0), b + Vector2(wb, 0), b - Vector2(wb, 0)]),
+			PackedColorArray([Color(1.0, 0.77, 0.47, 0.45), Color(1.0, 0.77, 0.47, 0.45), Color(1.0, 0.77, 0.47, 0.22), Color(1.0, 0.77, 0.47, 0.22)]))
+
+
+## Additive, under the notes: the ember rails on the road's edges with beads riding them down to the
+## hit line on every beat, pulses on the dividers, the fire's haze at the far end, the hit line's
+## glow and the light of a pressed lane.
+func _draw_under(ci: CanvasItem) -> void:
+	var f := field_rect()
+	var ff := Rect2(Vector2.ZERO, f.size)
+	var k := f.size.x / 720.0
+	var pulse := clampf(beat_pulse, 0.0, 1.0)
+	var soft := FireSkin.soft()
+	for side in 2:
+		var xa := 0.0 if side == 0 else ff.size.x
+		var a := project(Vector2(xa, 0.0))
+		var b := project(Vector2(xa, ff.size.y))
+		var wa := 10.0 * k
+		var wb := 22.0 * k
+		ci.draw_polygon(PackedVector2Array([a - Vector2(wa, 0), a + Vector2(wa, 0), b + Vector2(wb, 0), b - Vector2(wb, 0)]),
+			PackedColorArray([Color(1.0, 0.75, 0.4, 0.8), Color(1.0, 0.75, 0.4, 0.8), Color(1.0, 0.35, 0.1, 0.7), Color(1.0, 0.35, 0.1, 0.7)]),
+			PackedVector2Array([Vector2(0, 0), Vector2(1, 0), Vector2(1, 1), Vector2(0, 1)]), soft)
+		ci.draw_line(a, b, Color(1.0, 0.55, 0.2, 0.9), 4.0 * k)
+		ci.draw_line(a, b, Color(1.0, 0.95, 0.85, 0.9), 1.5)
+	# Beads: one per beat on each rail, arriving at the hit line on the beat.
+	if spb > 0.0 and beat > -999.0:
+		var pps := _px_per_s()
+		var hl := LaneSkin.hit_line_y(ff)
+		var b0 := floori(beat)
+		var g := FireSkin.glow()
+		for n in range(b0, b0 + int(LOOKAHEAD / maxf(note_speed, 0.1) / spb) + 3):
+			var y := hl - (float(n) - beat) * spb * pps
+			if y < 0.0 or y > ff.size.y:
+				continue
+			var w := road_scale(y)
+			var fade := clampf(y / (ff.size.y * 0.08), 0.0, 1.0)
+			var r := (10.0 * w + 3.0) * k * 4.0
+			for xa in [0.0, ff.size.x]:
+				var p := project(Vector2(xa, y))
+				ci.draw_texture_rect(g, Rect2(p - Vector2(r, r), Vector2(r, r) * 2.0), false, Color(1.0, 0.75, 0.4, 0.95 * fade))
+			for u in [1.0 / 3.0, 2.0 / 3.0]:
+				var p := project(Vector2(ff.size.x * u, y))
+				ci.draw_texture_rect(g, Rect2(p - Vector2(r * 0.25, r * 0.9), Vector2(r * 0.5, r * 1.8)), false, Color(1.0, 0.7, 0.4, 0.3 * fade))
+	# The fire's light spilling onto the road's far end, breathing with the beat.
+	var fe := far_end()
+	var hr := fe.size.x * (0.75 + 0.08 * pulse)
+	ci.draw_texture_rect(FireSkin.glow(), Rect2(fe.get_center() - Vector2(hr, hr * 0.35), Vector2(hr * 2.0, hr * 0.7)), false, Color(1.0, 0.55, 0.2, 0.45 + 0.15 * pulse))
+	var hy := project(Vector2(0.0, LaneSkin.hit_line_y(ff))).y
+	var span := _screen_span()
+	FireSkin.draw_hit_glow(ci, span.x, span.y, hy, pulse)
+
+
+## Additive, over the notes: the hit bursts, upright at their projected place.
+func _draw_fx(ci: CanvasItem) -> void:
+	var i := 0
+	while i < _bursts.size():
+		var b: Array = _bursts[i]
+		var age := _clock - float(b[2])
+		var pos: Vector2 = b[0]
+		if FireSkin.draw_burst(ci, project(pos), str(b[1]), age, upright_scale(pos.y)):
+			i += 1
+		else:
+			_bursts.remove_at(i)
+
+
+## The hit line across the whole width, a bronze receptor on each lane.
+func _draw_hit_line() -> void:
+	var xs := []
+	var lit := []
+	for lane in 3:
+		xs.append(project(lane_center(lane)).x)
+		lit.append(_lane_glow(lane))
+	var hl := LaneSkin.hit_line_y(field_rect())
+	var y := project(Vector2(0.0, hl)).y
+	var span := _screen_span()
+	FireSkin.draw_hit_line(self, span.x, span.y, y, xs, 0.33 * FireSkin.REF_LANE * upright_scale(hl), lit, clampf(beat_pulse, 0.0, 1.0))
+
+
+## The whole screen's width in this control's coordinates (x from, x to): the hit line runs edge to
+## edge even where the lanes are narrower than the screen (tablets).
+func _screen_span() -> Vector2:
+	if not is_inside_tree():
+		return Vector2(0.0, size.x)
+	var inv := get_global_transform().affine_inverse()
+	var vr := get_viewport_rect()
+	return Vector2((inv * vr.position).x, (inv * vr.end).x)
+
+
+## Early/late chevrons over the bursts that carry a side.
+func _draw_chevrons() -> void:
+	for b in _bursts:
+		var q: String = b[1]
+		var side: String = b[3] if q != "early" and q != "late" else q
+		if side != "":
+			_draw_chevron(self, project(b[0]), side, _clock - float(b[2]))
 
 
 ## Timing ticks on the note axis: each hit leaves a short dash at both edges of its lane, above the
@@ -408,17 +598,13 @@ func _draw_marks() -> void:
 				draw_circle(Vector2(c.x, y), 16.0, Color(Palette.ROPE, a))
 
 
-func _draw_notes(ci: CanvasItem, field: Rect2) -> void:
+## The notes on screen now, far to near: [note, y, y_end] in flat field coordinates.
+func _notes_shown(field: Rect2) -> Array:
+	var out := []
 	var t := song_time
 	var pps := _px_per_s()
 	var horizon := t + (field.size.y / pps)
-	var lanes := LaneSkin.lane_rects(field)
 	var notes := session.notes
-	# Skip notes that are over and gone for good.
-	while _first < notes.size() and _gone(notes[_first], t):
-		_first += 1
-	var rests: Array = []        # [y_a, y_b] of rest bands on screen, labelled after the notes
-	var taken: Array[float] = []  # y of every other note drawn, for the labels to avoid
 	for i in range(_first, notes.size()):
 		var n := notes[i]
 		if n.t > horizon:
@@ -426,54 +612,99 @@ func _draw_notes(ci: CanvasItem, field: Rect2) -> void:
 		if _gone(n, t):
 			continue
 		var y := LaneSkin.note_y(field, n.t - t, pps)
+		var y_end := LaneSkin.note_y(field, n.end_t - t, pps) if n.kind == Note.Kind.HOLD or n.kind == Note.Kind.REST else y
+		out.append([n, y, y_end])
+	return out
+
+
+## What lies flat on the road: hold sashes, bell bars, stand-still bands.
+func _draw_flat_notes(ci: CanvasItem, field: Rect2) -> void:
+	var lanes := LaneSkin.lane_rects(field)
+	var hl := LaneSkin.hit_line_y(field)
+	for e in _notes_shown(field):
+		var n: Note = e[0]
+		var y: float = e[1]
+		match n.kind:
+			Note.Kind.HOLD:
+				if not n.finished and not (n.done and not n.holding):
+					var head := minf(y, hl) if n.holding else y
+					FireSkin.draw_sash(ci, lanes[n.lane], head, e[2], n.holding, field)
+			Note.Kind.BELL, Note.Kind.RING:
+				if not n.done:
+					FireSkin.draw_bar(ci, field, y, n.up)
+			Note.Kind.REST:
+				if not n.finished:
+					FireSkin.draw_band(ci, field, e[2], y)
+
+
+## What stands on the road, upright and scaled with it: gems (steps, hold heads), hold rings, bell
+## badges, the rope, and the stand-still label. Far notes fade in out of the fire's haze.
+func _draw_upright() -> void:
+	var field := field_rect()
+	field.position = Vector2.ZERO
+	var lanes := LaneSkin.lane_rects(field)
+	var hl := LaneSkin.hit_line_y(field)
+	var rests: Array = []
+	var taken: Array[float] = []
+	var shown := _notes_shown(field)
+	for e in shown:
+		var n: Note = e[0]
 		if n.kind != Note.Kind.REST and not n.done:
-			taken.append(y)
+			taken.append(float(e[1]))
+	for e in shown:
+		var n: Note = e[0]
+		var y: float = e[1]
+		var a := _haze(y, field)
 		match n.kind:
 			Note.Kind.STEP:
 				if not n.done:
-					LaneSkin.draw_step(ci, lanes[n.lane], y, n.call)
+					FireSkin.draw_gem(self, project(Vector2(lanes[n.lane].get_center().x, y)), upright_scale(y), n.call, a)
 			Note.Kind.HOLD:
-				if not n.finished:
-					var head := minf(y, LaneSkin.hit_line_y(field)) if n.holding else y
-					if n.done and not n.holding:
-						continue
-					LaneSkin.draw_hold(ci, lanes[n.lane], head, LaneSkin.note_y(field, n.end_t - t, pps), n.holding)
+				if n.finished or (n.done and not n.holding):
+					continue
+				var tail: float = e[2]
+				var cx := lanes[n.lane].get_center().x
+				if tail > -20.0:
+					FireSkin.draw_hold_ring(self, project(Vector2(cx, tail)), upright_scale(tail), _haze(tail, field))
+				var head := minf(y, hl) if n.holding else y
+				FireSkin.draw_gem(self, project(Vector2(cx, head)), upright_scale(head), false, a)
 			Note.Kind.BELL:
 				if not n.done:
-					LaneSkin.draw_bell(ci, field, y, n.up)
+					FireSkin.draw_badge(self, project(Vector2(field.get_center().x, y)), upright_scale(y), a)
 			Note.Kind.RING:
 				if not n.done:
-					LaneSkin.draw_ring(ci, field, lanes[n.lane], y, n.up)
+					var sc := upright_scale(y)
+					FireSkin.draw_badge(self, project(Vector2(field.get_center().x, y)), sc, a)
+					var p := project(Vector2(lanes[n.lane].get_center().x, y))
+					draw_polyline(FireSkin.ellipse_pts(p, 88.0 * sc, 36.0 * sc), Color(FireSkin.CRIMSON, a), maxf(3.0, 7.0 * sc), true)
+					FireSkin.draw_gem(self, p, sc, false, a)
 			Note.Kind.SWIPE:
 				if not n.done:
-					LaneSkin.draw_swipe(ci, field, y, n.dir)
+					FireSkin.draw_rope(self, project(Vector2(field.get_center().x, y)), road_scale(y) * field.size.x, n.dir, a)
 			Note.Kind.REST:
 				if not n.finished:
-					var y_end := LaneSkin.note_y(field, n.end_t - t, pps)
-					LaneSkin.draw_rest(ci, field, y_end, y)
-					rests.append([y_end, y])
+					rests.append([e[2], y])
 	for r in rests:
-		_rest_words(ci, field, r[0], r[1], taken)
+		_rest_words(field, r[0], r[1], taken)
 
 
-## Names a stand-still band on the lanes, so a rest reads as an instruction and not as empty
-## space: the words sit in the visible part of the band, kept inside the field.
+## Notes emerge from the fire's haze at the far end of the road.
+func _haze(y: float, field: Rect2) -> float:
+	return clampf(y / (field.size.y * 0.07), 0.0, 1.0)
+
+
+## Names a stand-still band on the road, so a rest reads as an instruction and not as empty space.
 ## The label goes in the band's visible part, at the place farthest from every note or bell bar
-## crossing it (a bar is BAR_H tall), on an ink backing so it reads over the hatching.
-func _rest_words(ci: CanvasItem, field: Rect2, y_a: float, y_b: float, taken: Array[float] = []) -> void:
+## crossing it, upright on screen in a framed tag.
+func _rest_words(field: Rect2, y_a: float, y_b: float, taken: Array[float] = []) -> void:
 	var top := maxf(minf(y_a, y_b), field.position.y)
 	var bottom := minf(maxf(y_a, y_b), LaneSkin.hit_line_y(field))
-	if bottom - top < 60.0:
+	if bottom - top < 40.0:
 		return
-	var font := get_theme_default_font()
-	var fs := 34
-	var text := tr("lane_still")
-	var w := font.get_string_size(text, HORIZONTAL_ALIGNMENT_LEFT, -1, fs).x
-	var half := fs * 0.75
 	var best_y := (top + bottom) * 0.5
 	var best_gap := -INF
-	var cy := top + half + 8.0
-	while cy <= bottom - half - 8.0:
+	var cy := top + 22.0
+	while cy <= bottom - 22.0:
 		var gap := INF
 		for ty in taken:
 			gap = minf(gap, absf(ty - cy))
@@ -481,11 +712,18 @@ func _rest_words(ci: CanvasItem, field: Rect2, y_a: float, y_b: float, taken: Ar
 			best_gap = gap
 			best_y = cy
 		cy += 6.0
-	var back := Rect2(field.get_center().x - w * 0.5 - 16.0, best_y - half, w + 32.0, half * 2.0)
-	ci.draw_rect(back, Color(Palette.INK, 0.72))
-	var pos := Vector2(field.get_center().x - w * 0.5, best_y + fs * 0.34)
-	ci.draw_string_outline(font, pos, text, HORIZONTAL_ALIGNMENT_LEFT, -1, fs, 8, Palette.INK)
-	ci.draw_string(font, pos, text, HORIZONTAL_ALIGNMENT_LEFT, -1, fs, Palette.BONE)
+	var font := Palette.text_font("ExtraBold")
+	var sc := clampf(road_scale(best_y), 0.6, 1.0)
+	var fs := int(round(30.0 * sc))
+	var text := tr("lane_still").to_upper()
+	var w := font.get_string_size(text, HORIZONTAL_ALIGNMENT_LEFT, -1, fs).x
+	var p := project(Vector2(field.get_center().x, best_y))
+	var half := fs * 0.72
+	var back := Rect2(p.x - w * 0.5 - 14.0 * sc, p.y - half, w + 28.0 * sc, half * 2.0)
+	draw_rect(back, Color("#10132e"))
+	draw_rect(back, FireSkin.STILL_BLUE, false, 2.0)
+	var pos := Vector2(p.x - w * 0.5, p.y + fs * 0.36)
+	draw_string(font, pos, text, HORIZONTAL_ALIGNMENT_LEFT, -1, fs, Color("#eef2ff"))
 	_rest_label_y = best_y
 
 
@@ -506,7 +744,7 @@ func _draw_buttons() -> void:
 	var pad := 10.0
 	for lane in 3:
 		var br := Rect2(r.position.x + w * lane + pad, r.position.y + pad, w - pad * 2.0, r.size.y - pad * 2.0)
-		LaneSkin.draw_button(self, br, lane, _button_state(lane))
+		FireSkin.draw_button(self, br, lane, _button_state(lane))
 
 
 func _button_state(lane: int) -> String:
