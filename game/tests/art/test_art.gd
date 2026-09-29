@@ -230,7 +230,8 @@ func test_procession_api() -> void:
 	while Time.get_ticks_msec() < t_end:
 		await tree.process_frame
 		top = minf(top, scene._player.root.position.y)
-	check(top < y0 - 1.0, "jolt lifts the player (%.1f -> %.1f)" % [y0, top])
+	# The row stands in the pixel world, so positions are in art pixels; the check is in screen pixels.
+	check((y0 - top) * scene._px > 1.0, "jolt lifts the player (%.1f -> %.1f art px)" % [y0, top])
 	for kind in ["step", "bell", "ring", "miss", "nonsense"]:
 		scene.jolt(kind)
 	await _frames(2)
@@ -306,7 +307,7 @@ func test_procession_staging_and_feedback() -> void:
 		max_rot = maxf(max_rot, absf(scene._player.root.rotation))
 		max_drop = maxf(max_drop, scene._player.root.position.y - y0)
 	check(max_rot > r0 + 0.1, "a miss pitches your Mamuthone over (%.2f rad)" % max_rot)
-	check(max_drop > 3.0, "and drops him (%.1f px)" % max_drop)
+	check(max_drop * scene._px > 3.0, "and drops him (%.1f art px)" % max_drop)
 	await tree.create_timer(1.5).timeout
 	check(absf(scene._player.root.rotation) < 0.05, "then he recovers")
 	# Bells ring: motion is shown per Mamuthone; at full unison every front Mamuthone rings at once.
@@ -540,7 +541,7 @@ func test_stop_cards_and_icons() -> void:
 		var tex := StopArt.card(n)
 		check(tex != null, "card %d exists" % n)
 		if tex:
-			check_eq(Vector2i(tex.get_size()), StopArt.SIZE, "card %d is 640x400" % n)
+			check_eq(Vector2i(tex.get_size()), StopArt.SIZE, "card %d is the pixel card size (StopCells.CARD)" % n)
 		check(StopArt.caption(n) != "", "card %d has a caption" % n)
 	check(StopArt.card(99) != null, "out-of-range card still returns a texture")
 	for key in AppIcon.FILES:

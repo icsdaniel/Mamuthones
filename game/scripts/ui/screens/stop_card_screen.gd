@@ -1,5 +1,5 @@
 extends Screen
-## The card before a story stop: the woodcut picture, the stop's name and day, two plain sentences
+## The card before a story stop: the stop's living pixel picture, the stop's name and day, two plain sentences
 ## about the moment, then the difficulty (with the best bells for each), the bell set and the remix.
 ## args: song_id.
 
@@ -22,12 +22,17 @@ func build() -> void:
 	var box := cols[0]
 	var foot := cols[1]
 	UIKit.header(box, tr("stop_n") % song.stop, on_back)
-	var pic := TextureRect.new()
-	pic.texture = StopArt.card(song.stop)
-	pic.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
-	pic.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
-	pic.custom_minimum_size = Vector2(0, 330)
+	# The stop's picture, alive, in its gold frame at the art scale (3 screen px to the art px).
+	var pic := StopPicture.new()
 	pic.name = "Picture"
+	pic.stop = song.stop
+	pic.px = int(PixelFrame.px_for(self))
+	pic.frame_style = "gold"
+	pic.bpm = song.bpm * 0.5
+	pic.animate = not UIKit.reduced_motion()
+	var card := Rect2(Vector2(StopBackdrops.data(song.stop).card), Vector2(StopCells.CARD))
+	pic.focus = card.get_center() + Vector2(0, 8)  # when cropped, keep the feet, lose a little sky
+	pic.custom_minimum_size = Vector2(0, (StopCells.CARD.y - 10 + PixelFrame.DEPTH * 2) * pic.px)
 	box.add_child(pic)
 	var facts := UIKit.card(box, true)
 	facts.add_child(UIKit.label(UIKit.song_title(song), UIKit.PAPER_HEADER))

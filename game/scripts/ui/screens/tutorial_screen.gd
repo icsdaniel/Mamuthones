@@ -30,10 +30,6 @@ func build() -> void:
 		return
 	chart = "tutorial" if song.charts.has("tutorial") else "easy"
 	lessons = song.lessons
-	var bg := ColorRect.new()
-	bg.color = Palette.BLACK
-	bg.set_anchors_preset(Control.PRESET_FULL_RECT)
-	add_child(bg)
 	Sound.set_key(song.key_root)
 	Sound.ambience(UIKit.ambience_for(song.stop))
 	_intro()
