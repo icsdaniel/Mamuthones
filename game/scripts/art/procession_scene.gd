@@ -48,6 +48,12 @@ var stop := 1
 var mask: Dictionary = MaskSpec.default()
 var fleece := "black"
 var straps := "natural"
+## Your bell set (BellSets id): the heavier sets hang more bells on your Mamuthone.
+var bell_set := "light":
+	set(v):
+		bell_set = v if v in BellSets.IDS else "light"
+		if _built:
+			_player.body.queue_redraw()
 var unison := 0
 var still := false
 var reduced_motion := false
@@ -663,7 +669,13 @@ func _paint_walker(ci: CanvasItem, w: _Walker) -> void:
 		variant = "dim"
 	if w.sc < 1.0 and not variant.begins_with("half"):
 		variant = "half"
+	# Your own Mamuthone wears your look: your straps, your bell set (LookArt).
+	var own := w.is_player and variant == ""
+	if own:
+		LookArt.draw_back(ci, "field", w.pose, Vector2.ZERO, w.flip < 0.0, bell_set)
 	StopBackdrops.draw_figure(ci, sprite, variant, Vector2.ZERO, w.flip < 0.0)
+	if own:
+		LookArt.draw_front(ci, "field", w.pose, Vector2.ZERO, w.flip < 0.0, mask, straps, bell_set)
 
 
 func _paint_ghost(ci: CanvasItem) -> void:

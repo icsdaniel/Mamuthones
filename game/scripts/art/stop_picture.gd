@@ -41,6 +41,17 @@ extends Control
 	set(v):
 		frame_style = v
 		_relayout()
+## false: the world without its figures (a backdrop for someone else's figure).
+@export var show_cast := true:
+	set(v):
+		show_cast = v
+		_redraw()
+## Sink the scenery half into the dark (a dither of K0 over it) so a figure drawn on top stands out;
+## the fire and its glow stay bright.
+@export var dim := false:
+	set(v):
+		dim = v
+		_redraw()
 @export var animate := true:
 	set(v):
 		animate = v
@@ -170,6 +181,8 @@ func _paint_back(ci: CanvasItem) -> void:
 	if veiled:
 		_paint_veil(ci)
 		return
+	if dim:
+		_paint_veil(ci)
 	var ph := fposmod(beat(), 1.0)
 	var t := _t if animate else 0.0
 	StopBackdrops.draw_fires(ci, stop, o, t, 1.0 if (animate and ph < 0.14 and int(floor(beat())) % 2 == 0) else 0.0)
@@ -192,6 +205,9 @@ func _paint_front(ci: CanvasItem) -> void:
 	if veiled:
 		return
 	var d := StopBackdrops.data(stop)
+	if not show_cast:
+		StopBackdrops.draw_layer(ci, stop, "front", o, crop)
+		return
 	var cast: Array = d.cast.duplicate()
 	# far figures first, then by depth
 	cast.sort_custom(func(a, b): return [not str(a[4]).begins_with("half"), int(a[2])] < [not str(b[4]).begins_with("half"), int(b[2])])

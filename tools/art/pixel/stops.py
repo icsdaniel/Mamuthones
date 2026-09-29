@@ -201,7 +201,7 @@ def stop2():
     wd.figure("mamuthone_black_stand", 88, G + 6)
     wd.figure("issohadore_throw", 212, G + 2, True)
     wd.figure("mamuthone_black_land", 246, G + 8, True)
-    wd.row = {"x": 0.44, "ground": G + 6, "front": 3, "back": 3, "isso": 2, "far": False}
+    wd.row = {"x": 0.44, "ground": G + 6, "front": 3, "back": 3, "isso": 2, "far": True}
     return wd
 
 
@@ -435,7 +435,7 @@ def stop4():
     wd.figure("mamuthone_dark_brown_air", 146, G - 2)
     wd.figure("mamuthone_black_crouch", 196, G + 3)
     wd.figure("issohadore_stand", 244, G + 6)
-    wd.row = {"x": 0.5, "ground": G + 4, "front": 3, "back": 3, "isso": 2, "far": False, "day": True}
+    wd.row = {"x": 0.5, "ground": G + 4, "front": 3, "back": 3, "isso": 2, "far": True, "day": True}
     return wd
 
 
@@ -566,7 +566,7 @@ def stop7():
     wd.figure("mamuthone_black_air", 156, G - 4, True, "dim")
     wd.figure("mamuthone_black_land", 196, G, True, "dim")
     wd.figure("issohadore_stand", 232, G + 2, True, "dim")
-    wd.row = {"x": 0.58, "ground": G + 2, "front": 3, "back": 2, "isso": 1, "far": False, "var": "dim", "flip": True}
+    wd.row = {"x": 0.58, "ground": G + 2, "front": 3, "back": 2, "isso": 1, "far": True, "var": "dim", "flip": True}
     return wd
 
 

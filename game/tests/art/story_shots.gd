@@ -2,7 +2,7 @@ extends SceneTree
 ## Renders the story art on its own, for judging it at size (not a test):
 ##   xvfb-run -a godot --path game --rendering-driver opengl3 -s res://tests/art/story_shots.gd -- <out dir> [what ...]
 ## what: pictures (every StopPicture card at 3x), scenes (ProcessionScene at every stop, a few sizes),
-## bands (the story map strips). Default: all.
+## bands (the story map strips), looks (the workshop portrait in a few looks). Default: all but looks.
 
 var out := "user://story_shots"
 
@@ -29,6 +29,25 @@ func _init() -> void:
 				s.set_stop(n)
 				s.set_unison(4)
 				await _shot(s, sz, "scene_%d_%dx%d" % [n, sz.x, sz.y], 1.7)
+	if "looks" in what:
+		var looks := [["black", "natural", "light"], ["black", "natural", "village"], ["black", "dark", "full"], ["dark_brown", "dark", "village"]]
+		for l in looks:
+			var p := MamuthonePortrait.new()
+			p.size = Vector2(640, 366)
+			var m := MaskSpec.default()
+			m.nose = "broad"
+			m.mouth = "grimace"
+			p.set_look(m, l[0], l[1], l[2])
+			await _shot(p, Vector2i(640, 366), "look_%s_%s_%s" % l, 0.4)
+	if "lessons" in what:
+		for topic in ["steps", "bells", "swipes", "stomps"]:
+			for t in [1.3, 1.45, 1.62]:
+				var lp := LessonPicture.new()
+				lp.topic = topic
+				lp.size = Vector2(640, 380)
+				lp.set("_t", t)
+				lp.set_process(false)
+				await _shot(lp, Vector2i(640, 380), "lesson_%s_%d" % [topic, int(t * 100)], 0.1)
 	if "bands" in what:
 		for n in range(1, 8):
 			var p := StopPicture.new()

@@ -538,7 +538,7 @@ func test_stop_cards_and_icons() -> void:
 		var tex := StopArt.card(n)
 		check(tex != null, "card %d exists" % n)
 		if tex:
-			check_eq(Vector2i(tex.get_size()), StopArt.SIZE, "card %d is 640x400" % n)
+			check_eq(Vector2i(tex.get_size()), StopArt.SIZE, "card %d is the pixel card size (StopCells.CARD)" % n)
 		check(StopArt.caption(n) != "", "card %d has a caption" % n)
 	check(StopArt.card(99) != null, "out-of-range card still returns a texture")
 	for key in AppIcon.FILES:
