@@ -36,7 +36,7 @@ func build() -> void:
 	else:
 		UIKit.header(box, tr("cal_title"), on_back)
 	box.add_child(UIKit.label(tr("cal_title"), UIKit.HEADER, true, HORIZONTAL_ALIGNMENT_CENTER))
-	_instruction = UIKit.label("", UIKit.SUB, true, HORIZONTAL_ALIGNMENT_CENTER)
+	_instruction = UIKit.label("", UIKit.LEAD, true, HORIZONTAL_ALIGNMENT_CENTER)
 	box.add_child(_instruction)
 	_phone = SetupArtView.new()
 	_phone.name = "Phone"

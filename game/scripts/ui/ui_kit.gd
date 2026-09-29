@@ -12,6 +12,7 @@ const TITLE := "TitleLabel"
 const HEADER := "HeaderLabel"
 const CAPTION := "CaptionLabel"
 const SUB := "SubheaderLabel"
+const LEAD := "LeadLabel"   ## an instruction sentence (serif, pale gold), not small caps
 const PAPER := "PaperLabel"
 const PAPER_HEADER := "PaperHeaderLabel"
 const HUD := "HudLabel"

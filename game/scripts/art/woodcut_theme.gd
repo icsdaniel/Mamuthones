@@ -16,6 +16,7 @@ extends RefCounted
 ##            "HeaderLabel"      Alegreya Bold 46, cream, K0 outline and shadow (screen headers)
 ##            "SubheaderLabel"   Alegreya SC Bold 32, old gold small caps (section labels)
 ##            "CaptionLabel"     Alegreya Sans 26, dimmed cream (secondary text)
+##            "LeadLabel"        Alegreya Bold 30, pale gold (an instruction sentence under a header)
 ##            "HudLabel"         Alegreya Sans ExtraBold 30 with a K0 outline (over the scene)
 ##            "BigNumberLabel"   Alegreya ExtraBold 64, gold, heavy K0 outline (score, countdown)
 ##            "PaperLabel"       Alegreya Sans 28, ink (inside a CardPanel)
@@ -67,6 +68,8 @@ static func build() -> Theme:
 	_label(t, "SubheaderLabel", caps, SIZE_SUB, Palette.GOLD, "Label")
 	_shadow(t, "SubheaderLabel", 0, Vector2i(0, 3))
 	_label(t, "CaptionLabel", text, SIZE_CAPTION, Palette.BONE_DIM, "Label")
+	_label(t, "LeadLabel", serif, 30, Palette.GOLD_HOT, "Label")
+	_shadow(t, "LeadLabel", 0, Vector2i(0, 3))
 	_label(t, "HudLabel", heavy, 30, Palette.BONE, "Label")
 	t.set_color("font_outline_color", "HudLabel", Palette.INK)
 	t.set_constant("outline_size", "HudLabel", 8)
@@ -132,16 +135,15 @@ static func build() -> Theme:
 
 	# the same frame without the lozenges, for grids of four or long option names
 	t.set_type_variation("CompactButton", "Button")
-	for st: String in ["normal", "hover", "pressed", "hover_pressed", "disabled", "focus"]:
-		var src: PixelBox = t.get_stylebox(st, "Button")
-		var c := src.duplicate() as PixelBox
-		c.ends = null
-		var down := st.contains("pressed")
-		c.content_margin_left = COMPACT_PAD.x
-		c.content_margin_right = COMPACT_PAD.z
-		c.content_margin_top = COMPACT_PAD.y + (3.0 if down else 0.0)
-		c.content_margin_bottom = COMPACT_PAD.w - (3.0 if down else 0.0)
-		t.set_stylebox(st, "CompactButton", c)
+	var up := Vector4i(5, 5, 5, 6)
+	var down := Vector4i(5, 6, 5, 5)
+	var down_pad := COMPACT_PAD + Vector4(0, 3, 0, -3)
+	t.set_stylebox("normal", "CompactButton", _box("button_normal", up, COMPACT_PAD))
+	t.set_stylebox("hover", "CompactButton", _box("button_hover", up, COMPACT_PAD))
+	t.set_stylebox("pressed", "CompactButton", _box("button_pressed", down, down_pad))
+	t.set_stylebox("hover_pressed", "CompactButton", _box("button_pressed", down, down_pad))
+	t.set_stylebox("disabled", "CompactButton", _box("button_disabled", up, COMPACT_PAD))
+	t.set_stylebox("focus", "CompactButton", _box("button_focus", up, COMPACT_PAD))
 
 	t.set_type_variation("QuietButton", "Button")
 	var quiet := _box("button_quiet", Vector4i(3, 3, 3, 4), Vector4(22, 12, 22, 15))

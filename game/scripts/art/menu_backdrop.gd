@@ -49,7 +49,7 @@ func _ready() -> void:
 
 func _torch_pos(i: int) -> Vector2:
 	var side: int = TORCHES[i][0]
-	var x := 3.0 * PX if side < 0 else size.x - 14.0 * PX
+	var x := 0.0 if side < 0 else size.x - 11.0 * PX   # hard against the edge, clear of the column
 	return Vector2(x, roundf(size.y * float(TORCHES[i][1]) / PX) * PX)
 
 
