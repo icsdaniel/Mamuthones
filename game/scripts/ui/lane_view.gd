@@ -550,9 +550,20 @@ class _Layer extends Control:
 		view.call(method, self)
 
 
-## Behind the road: nothing (the road shader draws the setts, the rails and their light).
-func _draw_surface(_ci: CanvasItem) -> void:
-	pass
+## Behind the road (over the square and the figures beside it): when the fire burns low, the night
+## closes in from the screen's sides in three stepped bands. The road itself is never covered.
+func _draw_surface(ci: CanvasItem) -> void:
+	if fire_dim <= 0.01:
+		return
+	var span := _screen_span()
+	var P := PxArt.PX
+	var col := Color(PixelPalette.NIGHT[0], 0.26 * clampf(fire_dim, 0.0, 1.0))
+	var top := 0.0
+	var h := size.y
+	for i in 3:
+		var w := PxArt.snap(float(i + 1) * 12.0 * P)
+		ci.draw_rect(Rect2(span.x, top, w, h), col)
+		ci.draw_rect(Rect2(span.y - w, top, w, h), col)
 
 
 ## Under the notes, over the road (additive): the hit line's stepped glow on the stones.
