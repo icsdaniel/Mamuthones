@@ -1,16 +1,21 @@
 class_name SideRows
 extends Control
 ## The two files of Mamuthones either side of the lanes on the play screen, jumping on the beat the
-## way the real rows do: airborne through the second half of each beat and landing on it, the bells
+## way the real rows do: a crouch, a slow rise, a fast fall and a heavy landing ON the beat, the bells
 ## swinging to the other side each landing. The files join the player as the unison grows (one
 ## Mamuthone per side at level 0, the whole file at the top), stumble on a miss, and stand stock
-## still through a stand-still.
+## still through a stand-still. Each file is led by a red Issohadore, who every few bars spins his
+## rope (the soha) over his head and casts it out to the crowd.
+##
+## Pixel art (docs/art-style.md): every figure is a sprite baked at 1x for its depth
+## (tools/art/pixel/row_figures.py: a near, a mid and a far drawing), drawn at a whole PxArt.PX
+## screen px per art px on the world's art grid (anchored on the road's far end, like the backdrop),
+## never scaled, rotated or faded. A Mamuthone not yet dancing is its baked "dim" twin. The two
+## files are not copies: each figure has its own variant (lean, how the carriga hangs), its own
+## take-off and jump height; they all land together, on the beat.
 ##
 ## It answers the same calls as ProcessionScene (set_unison, jolt, set_still, settle, set_look ...),
-## so the play screen talks to either. The play screen sets `beat` every frame and `lanes` once, and
-## the figures fill the space left and right of the lanes. They are the Fire Night sprites (FireSkin):
-## black fleece, bronze bells, a carved mask, lit warm from the fire's side and cool from the night's,
-## each file led by a red Issohadore. The player's fleece colour is kept; the mask is the carved one.
+## so the play screen talks to either. The play screen sets `beat` every frame and `lanes` once.
 
 const MAX_PER_SIDE := 3
 const ACTIVE := [1, 2, 2, 3, 3]     ## Mamuthones jumping per side at unison 0..4
@@ -18,16 +23,19 @@ const ACTIVE := [1, 2, 2, 3, 3]     ## Mamuthones jumping per side at unison 0..
 ## Issohadore off the hit rings, the Mamuthones receding toward the fire. From the Fire Night mockup.
 const LEADER_AT := 0.62
 const FILE_AT := [0.40, 0.22, 0.06]
-## Their size on a 720-wide road (scaled with the road): the Issohadore's whole sprite (soha and all)
-## at most this tall and wide, and each Mamuthone's height, nearest first, if its gap allows.
-const LEADER_BOX := Vector2(130.0, 230.0)
-const FILE_H := [190.0, 150.0, 120.0]
+const DEPTHS := ["near", "mid", "far"]   ## the baked drawing of each file place, nearest first
+const PX := PxArt.PX                ## screen px per art px
 const CLEAR := 14.0                 ## px kept between a figure's box and the road edge (tests ask 12)
 const JUMP := 0.15                  ## jump height, in figure heights
 const AIR := 0.46                   ## share of the beat spent in the air (ends on the beat)
 const CROUCH := 0.14                ## the crouch before take-off, as a share of the beat
 const LAND := 0.16                  ## the squashed landing after the beat, as a share of the beat
-const WAVE := 0.035                 ## beats of delay from one Mamuthone to the next down the file
+## Per file place (nearest first) of each side: the drawing's variant, how much earlier than the
+## others it leaves the ground (beats; the landing is the same for all), and its jump height.
+const VARIANT := [["a", "b", "a"], ["b", "a", "b"]]
+const EARLY := [[0.0, 0.03, 0.015], [0.02, 0.0, 0.035]]
+const HEIGHT := [[1.0, 0.85, 0.95], [0.9, 1.0, 0.8]]
+const THROW_EVERY := 8              ## beats between one Issohadore's throws (the other is 4 beats off)
 
 ## A Mamuthone joined the file (the unison went up): level is the new unison level.
 signal joined(level: int)
@@ -46,7 +54,7 @@ var _clock := 0.0
 var _jolt_kind := ""
 var _jolt_at := -9.0
 var _throw_at := -9.0
-var _joined_at: Array[float] = []   ## when each slot last joined, for a quick fade-in
+var _joined_at: Array[float] = []   ## when each slot last joined, for its puff of dust
 
 
 func _init() -> void:
@@ -55,18 +63,22 @@ func _init() -> void:
 		_joined_at.append(-9.0)
 
 
+func _ready() -> void:
+	PxArt.nearest(self)
+
+
 # ------------------------------------------------------------------ the ProcessionScene calls
 
 func set_look(p_mask: Dictionary, p_fleece := "black", p_straps := "natural") -> void:
 	mask = p_mask
 	fleece = p_fleece
 	straps = p_straps
-	_rebake()
+	queue_redraw()
 
 
 func set_bell_set(id: String) -> void:
 	bell_set = id
-	_rebake()
+	queue_redraw()
 
 
 func set_stop(_n: int) -> void:
@@ -122,11 +134,7 @@ func active_count() -> int:
 	return int(ACTIVE[clampi(unison, 0, ACTIVE.size() - 1)])
 
 
-# ------------------------------------------------------------------ drawing
-
-func _rebake() -> void:
-	queue_redraw()
-
+# ------------------------------------------------------------------ layout
 
 func _process(delta: float) -> void:
 	_clock += delta
@@ -148,17 +156,30 @@ func gutters() -> Array[Rect2]:
 	return out
 
 
-## Height of one figure for a gutter this wide (the bell load makes a Mamuthone ~0.8 as wide as tall).
-func figure_h(gutter_w: float) -> float:
-	return clampf(gutter_w * 1.35, 60.0, 280.0)
+func _road() -> bool:
+	return lanes != null and lanes.has_method("road_edges") and lanes.has_method("_road_on") and lanes.is_inside_tree() and is_inside_tree() and bool(lanes.call("_road_on"))
 
 
-## Where slot i of a file stands (feet), from the bottom (i = 0, nearest) up.
-func slot_feet(g: Rect2, i: int) -> Vector2:
-	var h := figure_h(g.size.x)
-	var bottom := g.end.y - 8.0
-	var step := (g.size.y - h * 1.1) / float(MAX_PER_SIDE - 1)
-	return Vector2(g.get_center().x, bottom - step * i)
+## The world's art grid origin in this control's coordinates: the road's far end, as the backdrop has it.
+func grid_origin() -> Vector2:
+	if _road() and lanes.has_method("far_end"):
+		var r: Rect2 = lanes.call("far_end")
+		var xf := get_global_transform().affine_inverse() * lanes.get_global_transform()
+		return xf * (r.position + Vector2(r.size.x * 0.5, 0.0))
+	return Vector2.ZERO
+
+
+## Snaps x (and y) to the art grid; dir < 0 rounds down, > 0 up, 0 to the nearest.
+func _snap_x(x: float, dir := 0) -> float:
+	var o := grid_origin().x
+	var t := (x - o) / PX
+	t = floorf(t) if dir < 0 else (ceilf(t) if dir > 0 else roundf(t))
+	return o + t * PX
+
+
+func _snap_y(y: float) -> float:
+	var o := grid_origin().y
+	return o + roundf((y - o) / PX) * PX
 
 
 ## Where slot i of side s stands: [feet, figure height], in this control's coordinates. Beside the
@@ -174,35 +195,40 @@ func leader(s: int) -> Array:
 	return _place(s, 0)
 
 
-## The sprite drawn at file place k of side s (0 the Issohadore), standing (not in a jump). The right
-## file uses the same sprites mirrored (they face the road, lit from the fire's side).
-func sprite_name(_s: int, k: int, pose := "stand") -> String:
+## The baked drawing ("near", "mid", "far") at file place k (1.. the Mamuthones) of side s: the one
+## its depth asks for, or a smaller one when the ground beside the road is too narrow for it.
+func depth(s: int, k: int) -> String:
+	return str(_place(s, k)[2])
+
+
+## The sprite drawn at file place k of side s (0 the Issohadore), standing unless pose says. The
+## right file uses the same sprites mirrored (they face the road, lit from the fire's side).
+func sprite_name(s: int, k: int, pose := "stand") -> String:
 	if k == 0:
-		return FigureSprites.issohadore("throw" if pose == "throw" else "stand")
-	return FigureSprites.mamuthone(fleece, pose)
+		return FigureSprites.row_issohadore(pose if pose in ["swing", "cast"] else "stand")
+	return _mam_name(s, k, str(_place(s, k)[2]), pose)
 
 
-## Screen pixels per art pixel for sprite `name` drawn h tall.
-func _px(name: String, h: float) -> float:
-	return h / FigureSprites.art_height(name)
+## The player's own Mamuthone is the nearest of the left file, in the fleece they chose; the rest of
+## the files wear black sheepskin.
+func _mam_name(s: int, k: int, d: String, pose: String) -> String:
+	var v: String = VARIANT[s][clampi(k - 1, 0, 2)]
+	return FigureSprites.row_mamuthone(d, fleece if s == 0 and k == 1 else "black", pose, v)
 
 
 ## The screen box of the figure at file place k of side s, standing, in this control's coordinates.
 func figure_box(s: int, k: int) -> Rect2:
 	var pl := _place(s, k)
-	return _box(sprite_name(s, k), pl[0], pl[1], s == 1)
+	var b := FigureSprites.bounds(sprite_name(s, k), PX, s == 1)
+	return Rect2((pl[0] as Vector2) + b.position, b.size)
 
 
-func _box(name: String, feet: Vector2, h: float, flip := false) -> Rect2:
-	var b := FigureSprites.bounds(name, _px(name, h), flip)
-	return Rect2(feet + b.position, b.size)
-
-
-## Place k of side s's file (0 the Issohadore, 1.. the Mamuthones): [feet, figure height]. Each figure
-## is as big as the mockup has it (scaled with the road), shrunk if needed so its box stays CLEAR px
-## outside the road edge at its feet (the road only narrows above them) and on the screen.
+## Place k of side s's file (0 the Issohadore, 1.. the Mamuthones): [feet, figure height, depth].
+## Each stands at its share of the road's length, CLEAR px outside the road edge at its feet (the
+## road only narrows above them), feet on the art grid, rounded away from the road.
 func _place(s: int, k: int) -> Array:
-	if lanes != null and lanes.has_method("road_edges") and lanes.is_inside_tree() and is_inside_tree() and lanes.call("_road_on"):
+	var want := "near" if k == 0 else str(DEPTHS[clampi(k - 1, 0, DEPTHS.size() - 1)])
+	if _road():
 		var f: Rect2 = lanes.call("field_rect")
 		var to_me := get_global_transform().affine_inverse() * lanes.get_global_transform()
 		var hit_y: float = (lanes.call("project", Vector2(0.0, LaneSkin.hit_line_y(f))) as Vector2).y
@@ -210,36 +236,49 @@ func _place(s: int, k: int) -> Array:
 		var ly := f.position.y + (hit_y - f.position.y) * at
 		var edges: Vector2 = lanes.call("road_edges", ly)
 		var e := (to_me * Vector2(edges.x if s == 0 else edges.y, ly))
-		var feet_y := e.y
-		var kw := f.size.x / 720.0
-		var name := sprite_name(s, k)
-		var b1 := FigureSprites.bounds(name, 1.0 / FigureSprites.art_height(name), s == 1)   # box of a figure 1 px tall
-		var h: float
-		if k == 0:
-			h = minf(LEADER_BOX.y / b1.size.y, LEADER_BOX.x / b1.size.x) * kw
-		else:
-			h = float(FILE_H[clampi(k - 1, 0, FILE_H.size() - 1)]) * kw
-		var room := (e.x - CLEAR - 2.0) if s == 0 else (size.x - 2.0 - e.x - CLEAR)
-		h = clampf(minf(h, room / maxf(b1.size.x, 0.01)), 8.0, 400.0)
-		var x := (e.x - CLEAR - b1.end.x * h) if s == 0 else (e.x + CLEAR - b1.position.x * h)
+		var room := (e.x - CLEAR - 2.0 - PX) if s == 0 else (size.x - 2.0 - PX - e.x - CLEAR)
+		var d := want
+		var name := _name_at(s, k, d)
+		var b := FigureSprites.bounds(name, PX, s == 1)
+		if k > 0:
+			var i := DEPTHS.find(d)
+			while b.size.x > room and i < DEPTHS.size() - 1:
+				i += 1
+				d = DEPTHS[i]
+				name = _name_at(s, k, d)
+				b = FigureSprites.bounds(name, PX, s == 1)
+		var x := (e.x - CLEAR - b.end.x) if s == 0 else (e.x + CLEAR - b.position.x)
 		if k == 0:
 			# The Issohadore stands about 40 px in from the screen edge (mockup), never nearer the road.
-			var want := 40.0 * kw if s == 0 else size.x - 40.0 * kw
-			x = minf(x, maxf(want, 2.0 - b1.position.x * h)) if s == 0 else maxf(x, minf(want, size.x - 2.0 - b1.end.x * h))
-		return [Vector2(x, feet_y), h]
+			var kw := f.size.x / 720.0
+			var edge := 40.0 * kw if s == 0 else size.x - 40.0 * kw
+			x = minf(x, maxf(edge, 2.0 - b.position.x)) if s == 0 else maxf(x, minf(edge, size.x - 2.0 - b.end.x))
+		x = _snap_x(x, -1 if s == 0 else 1)
+		return [Vector2(x, _snap_y(e.y)), b.size.y, d]
+	# No road (a bare test harness): the file stacked up the gutter, the Issohadore at the bottom.
 	var g: Rect2 = gutters()[s]
-	var i := maxi(k - 1, 0)
-	var h0 := figure_h(g.size.x) * (1.0 - 0.05 * i)
-	return [slot_feet(g, i), h0 if k > 0 else h0 * 1.05]
+	var nm := _name_at(s, k, want)
+	var h := FigureSprites.bounds(nm, PX).size.y
+	var step := (g.size.y - 8.0 - h) / float(MAX_PER_SIDE)
+	var feet := Vector2(g.get_center().x, g.end.y - 8.0 - step * k)
+	return [Vector2(_snap_x(feet.x), _snap_y(feet.y)), h, want]
 
+
+func _name_at(s: int, k: int, d: String) -> String:
+	if k == 0:
+		return FigureSprites.row_issohadore("stand")
+	return _mam_name(s, k, d, "stand")
+
+
+# ------------------------------------------------------------------ drawing
 
 func _draw() -> void:
+	PxArt.nearest(self)
 	var sides := gutters()
 	var glow := FireSkin.glow()
-	var road: bool = lanes != null and lanes.has_method("_road_on") and bool(lanes.call("_road_on"))
 	for s in 2:
 		var g: Rect2 = sides[s]
-		if not road and g.size.x < 24.0:
+		if not _road() and g.size.x < 24.0:
 			continue
 		# Firelight on the ground under the file, so the dark fleece reads against the night.
 		var near: Array = _place(s, 0)
@@ -250,61 +289,26 @@ func _draw() -> void:
 		var wd: float = float(near[1]) * 0.6
 		draw_texture_rect(glow, Rect2(cx - wd, top - 20.0, wd * 2.0, bottom - top + 60.0), false, Color(1.0, 0.45, 0.15, 0.16))
 		for i in range(MAX_PER_SIDE - 1, -1, -1):
-			var sl: Array = slot(s, i)
-			_draw_one(sl[0], float(sl[1]), i, s)
+			_draw_one(s, i)
 		_draw_leader(s)
-
-
-## The Issohadore at the head of the file: red jacket, rope raised; he bobs on the beat and hops when
-## he throws the rope.
-func _draw_leader(side: int) -> void:
-	var pl := leader(side)
-	var feet: Vector2 = pl[0]
-	var h: float = pl[1]
-	var amp := 0.35 if reduced_motion else 1.0
-	var y := 0.0
-	if not still and beat > -8.0:
-		var f := fposmod(beat, 1.0)
-		y = -sin(clampf(f / 0.5, 0.0, 1.0) * PI) * 0.03 * h * amp
-	var age := _clock - _throw_at
-	if age < 0.4:
-		y -= sin(age / 0.4 * PI) * 0.1 * h * amp
-	_shadow(feet, h * 0.8, clampf(-y / (0.1 * h), 0.0, 1.0))
-	_blit(sprite_name(side, 0, "throw" if age < 0.4 else "stand"), feet + Vector2(0.0, y), h, 0.0, 1.0, Color.WHITE, side == 1)
-
-
-## A soft ground shadow under the feet, thrown a little away from the fire (toward the screen edge).
-func _shadow(feet: Vector2, h: float, lift: float) -> void:
-	var r := h * 0.3 * (1.0 - 0.3 * lift)
-	var away := -1.0 if feet.x < size.x * 0.5 else 1.0
-	var c := feet + Vector2(away * r * 0.25, 1.0)
-	draw_texture_rect(FireSkin.glow(), Rect2(c - Vector2(r, r * 0.26), Vector2(r * 2.0, r * 0.52)), false, Color(0, 0, 0, 0.85 * (1.0 - 0.4 * lift)))
-	draw_set_transform(c, 0.0, Vector2(1.0, 0.22))
-	draw_circle(Vector2.ZERO, r * 0.55, Color(0, 0, 0, 0.35))
-	draw_set_transform(Vector2.ZERO)
-
-
-## A pixel figure with its feet at `feet`, h tall (the right file's are mirrored to face the road).
-func _blit(name: String, feet: Vector2, h: float, rot: float, sq: float, tint: Color, flip := false) -> void:
-	var px := _px(sprite_name(0, 0) if name.begins_with("issohadore") else name, h)
-	var pxs := roundf(px) if px >= 1.5 else px
-	FigureSprites.draw(self, name, Vector2(_snap(feet.x, pxs), _snap(feet.y, pxs)), pxs, flip, tint, rot, sq)
 
 
 ## The heavy jump through one beat (f = 0 on the beat): [pose, lift 0..1, squash]. The landing is ON
 ## the beat: a squashed "land" pose just after it, standing, a crouch to gather, then the jump - a
-## slow rise and a fast drop, like something heavy.
-static func jump_phase(f: float) -> Array:
+## slow rise and a fast drop, like something heavy. `early` (beats) leaves the ground that much
+## sooner and so hangs that much longer; the landing does not move.
+static func jump_phase(f: float, early := 0.0) -> Array:
 	if f < LAND:
 		var t := f / LAND
 		return ["land", 0.0, lerpf(0.9, 1.0, t * t)]
-	var take_off := 1.0 - AIR
+	var air := AIR + early
+	var take_off := 1.0 - air
 	if f < take_off - CROUCH:
 		return ["stand", 0.0, 1.0]
 	if f < take_off:
 		var t := (f - (take_off - CROUCH)) / CROUCH
 		return ["crouch", 0.0, 1.0 - 0.06 * sin(t * PI * 0.5)]
-	var a := (f - take_off) / AIR
+	var a := (f - take_off) / air
 	return ["air", sin(PI * pow(a, 1.45)), 1.02]
 
 
@@ -313,79 +317,175 @@ static func _snap(v: float, px: float) -> float:
 	return roundf(v / px) * px if px >= 1.5 else v
 
 
-func _draw_one(feet: Vector2, h: float, i: int, side: int) -> void:
+func _draw_one(side: int, i: int) -> void:
+	var k := i + 1
+	var pl := _place(side, k)
+	var feet: Vector2 = pl[0]
+	var d: String = pl[2]
+	var art_h := float(pl[1]) / PX
 	var active := i < active_count()
-	var y := 0.0
-	var rot := 0.0
-	var sq := 1.0
 	var amp := 0.35 if reduced_motion else 1.0
 	var pose := "stand"
-	var land := -1.0     # seconds-ish share of the beat since touching down, for the dust
+	var lift := 0.0                     # art px off the ground
+	var land := -1.0                    # share of the beat since touching down, for the dust
+	var b := beat
 	if active and not still and beat > -8.0:
-		var b := beat - WAVE * i
 		var f := fposmod(b, 1.0)
-		var ph := jump_phase(f)
+		var ph := jump_phase(f, float(EARLY[side][i]))
 		pose = ph[0]
-		y = -float(ph[1]) * JUMP * h * amp
-		sq = 1.0 - (1.0 - float(ph[2])) * amp
-		if f < 0.3:
-			land = f
-		# the bells swing to the other side each landing
-		var dir := 1.0 if posmod(floori(b), 2) == 0 else -1.0
-		rot = dir * 0.035 * amp * (1.0 - f)
+		lift = float(ph[1]) * JUMP * art_h * float(HEIGHT[side][i]) * amp
+		if pose == "land":
+			if f < 0.3:
+				land = f
+			# the bells swing one way on one landing, the other way on the next
+			if posmod(floori(b) + side + i, 2) == 1:
+				pose = "land2"
 	var age := _clock - _jolt_at
-	var x := 0.0
-	var tint := Color.WHITE
+	var shake := 0.0
 	if active and age < 0.4:
-		var k := 1.0 - age / 0.4
+		var kk := 1.0 - age / 0.4
 		match _jolt_kind:
 			"miss":
-				x = sin(age * 60.0) * h * 0.04 * k * amp
-				tint = Color(1.0, 0.55 + 0.45 * (1.0 - k), 0.5 + 0.5 * (1.0 - k))
+				# a stumble: knees give, the body jerks a pixel either way
+				shake = signf(sin(age * 60.0)) * (1.0 if kk > 0.3 else 0.0) * roundf(amp + 0.4)
+				if lift < 1.0:
+					pose = "crouch"
 			"bell", "ring":
-				rot += (0.1 if side == 0 else -0.1) * k * amp
+				if age < 0.18 and lift < 1.0:
+					pose = "land2" if side == 0 else "land"
 			"stomp":
-				# everyone slams down together: a deep squash and a big cloud of dust
+				# everyone slams down together: a deep landing and a big cloud of dust
 				pose = "land"
-				y = 0.0
-				sq = 1.0 - 0.18 * k * amp
+				lift = 0.0
 				land = age * 0.5
-			_:
-				y -= h * 0.02 * k * amp
-	var dim := Color(0.5, 0.45, 0.45, 0.85)
 	if not active:
-		tint = dim
-		pose = "stand"
-	else:
-		var fade := clampf((_clock - _joined_at[i]) / 0.25, 0.0, 1.0)
-		tint = tint.lerp(dim, 1.0 - fade)
-	var name := sprite_name(side, i + 1, pose)
-	var px := _px(sprite_name(side, i + 1), h)     # every pose at the standing figure's scale
-	var pxs := roundf(px) if px >= 1.5 else px
-	_shadow(feet, h, clampf(-y / (JUMP * h), 0.0, 1.0))
+		pose = "dim"
+	elif _clock - _joined_at[i] < 0.3:
+		land = (_clock - _joined_at[i]) * 0.5
+	var name := _mam_name(side, k, d, pose)
+	var up := roundf(lift) * PX
+	_shadow(feet, float(pl[1]), clampf(lift / maxf(JUMP * art_h, 1.0), 0.0, 1.0))
 	if land >= 0.0 and active:
-		_dust(feet, pxs, land, _jolt_kind == "stomp" and age < 0.4, side)
-	var at := Vector2(_snap(feet.x + x, pxs), _snap(feet.y + y, pxs))
-	FigureSprites.draw(self, name, at, pxs, side == 1, tint, rot, sq)
+		_dust(feet, land, _jolt_kind == "stomp" and age < 0.4, d)
+	var at := feet + Vector2(shake * PX, -up)
+	FigureSprites.draw(self, name, at, PX, side == 1)
 
 
-## Dust kicked up by a landing: a few pixel clods that fly out low either side of the feet and fade,
-## drawn on the art grid. t is the share of the beat since the landing.
-func _dust(feet: Vector2, px: float, t: float, big: bool, _side: int) -> void:
+## The Issohadore at the head of the file: red jacket, white trousers and mask. Every THROW_EVERY
+## beats he spins the rope over his head for a beat and a half, then casts it out to the crowd
+## beside the road and hauls it back; a stomp makes both throw at once.
+func _draw_leader(side: int) -> void:
+	var pl := leader(side)
+	var feet: Vector2 = pl[0]
+	var amp := 0.35 if reduced_motion else 1.0
+	var pose := "stand"
+	var t := -1.0                       # 0..1 through the throw
+	var q := -1.0
+	if not still and beat > -8.0:
+		q = fposmod(beat + (THROW_EVERY * 0.5 if side == 1 else 0.0) + 2.0, float(THROW_EVERY))
+		if q < 3.0:
+			t = q / 3.0
+	var age := _clock - _throw_at
+	if age < 0.9:
+		t = maxf(t, 0.35 + age / 0.9 * 0.65)
+	var bob := 0.0
+	if t >= 0.0:
+		if t < 0.5:
+			pose = "swing"
+		elif t < 0.85:
+			pose = "cast"
+	elif not still and beat > -8.0:
+		# he steps with the beat: down a pixel as the Mamuthones land
+		bob = 1.0 if fposmod(beat, 1.0) < LAND else 0.0
+	var name := FigureSprites.row_issohadore(pose)
+	_shadow(feet, float(pl[1]), 0.0)
+	var at := feet + Vector2(0.0, bob * PX)
+	FigureSprites.draw(self, name, at, PX, side == 1)
+	if t >= 0.0 and t < 0.97:
+		_draw_rope(side, at, name, t, amp)
+
+
+## The soha, a line of hemp-rope pixels on the art grid from his hand: spun as a loop over his head
+## (t < 0.5), cast out and up toward the crowd on his side, away from the road (0.5 .. 0.85), then
+## hauled back in.
+func _draw_rope(side: int, at: Vector2, name: String, t: float, amp: float) -> void:
+	var hand_art: Vector2 = FigureCells.HANDS.get(name, Vector2(-6, -60))
+	var out := -1.0 if side == 0 else 1.0        # toward the screen edge
+	var hand := Vector2(hand_art.x * (-1.0 if side == 1 else 1.0), hand_art.y)
+	var pts: Array[Vector2] = []
+	var centre: Vector2
+	var rx := 7.0
+	var ry := 3.0
+	var ap := 0.0                     # where on the loop the spoke meets it (ellipse angle)
+	if t < 0.5:
+		# spun over his head: the loop wheels round, the spoke from his hand turning with it
+		var ang := t / 0.5 * TAU * 2.0 * (0.5 + 0.5 * amp)
+		rx = 7.0 - 1.0 * absf(sin(ang))
+		ry = 2.5 + 1.5 * absf(sin(ang))
+		centre = hand + Vector2(-out * 3.0 + cos(ang) * 1.5, -7.0 + sin(ang) * 0.8)
+		ap = ang + PI
+	else:
+		# cast out and up to the crowd on his side of the road, then hauled back in
+		var k := clampf((t - 0.5) / 0.35, 0.0, 1.0)
+		var back := clampf((t - 0.85) / 0.12, 0.0, 1.0)
+		k = k * (1.0 - back)
+		centre = hand + Vector2(out * (2.0 + 14.0 * k) * (0.5 + 0.5 * amp), -7.0 - 9.0 * sin(k * PI * 0.6))
+		rx = 7.0 + 2.0 * k
+		ry = 3.0 + 1.0 * k
+		ap = PI * 0.8 if out < 0.0 else PI * 0.2
+	var attach := centre + Vector2(cos(ap) * rx, sin(ap) * ry)
+	# the spoke from the hand to the loop, sagging a little, then round the loop
+	var n := int(maxf(2.0, hand.distance_to(attach) * 2.0))
+	for j in n:
+		var p := hand.lerp(attach, float(j) / float(n))
+		p.y += sin(float(j) / float(n) * PI) * 1.0
+		pts.append(p)
+	var m := int(maxf(20.0, TAU * rx * 2.0))
+	for j in m + 1:
+		var a := ap + float(j) / float(m) * TAU
+		pts.append(centre + Vector2(cos(a) * rx, sin(a) * ry))
+	var cells: Array[Vector2i] = []
+	for p in pts:
+		var c := Vector2i(floori(p.x), floori(p.y))
+		if cells.is_empty() or cells[-1] != c:
+			cells.append(c)
+	for c in cells:
+		draw_rect(Rect2(at + Vector2(c.x, c.y + 1) * PX, Vector2(PX, PX)), PixelPalette.K[0])
+	for j in cells.size():
+		var col: Color = PixelPalette.ROPE[0] if j % 4 == 0 else PixelPalette.ROPE[2 if j % 4 == 1 else 1]
+		draw_rect(Rect2(at + Vector2(cells[j]) * PX, Vector2(PX, PX)), col)
+
+
+## A ground shadow under the feet on the art grid: two rows of dark pixels, thrown a little away
+## from the fire (toward the screen edge), shrinking as the figure leaves the ground.
+func _shadow(feet: Vector2, h: float, lift: float) -> void:
+	var half := int(roundf(h / PX * 0.3 * (1.0 - 0.35 * lift)))
+	var away := -1 if feet.x < size.x * 0.5 else 1
+	var c := PixelPalette.K[0]
+	for row in 2:
+		var w := half - row * 3
+		var x0 := -w + away * 2
+		draw_rect(Rect2(feet + Vector2(x0 * PX, (row - 1) * PX + PX), Vector2((w * 2) * PX, PX)), Color(c, 0.45 if row == 0 else 0.3))
+
+
+## Dust kicked up by a landing: clods of lit stone that fly out low either side of the feet, drawn
+## solid on the art grid, fewer and lower as they settle. t is the share of the beat since landing.
+func _dust(feet: Vector2, t: float, big: bool, d: String) -> void:
 	var life := 0.3
 	if t >= life:
 		return
 	var k := t / life
-	var reach := (16.0 if big else 10.0) * px
+	var scale := {"near": 1.0, "mid": 0.8, "far": 0.65}.get(d, 1.0) as float
+	var reach := (16.0 if big else 11.0) * scale
 	var n := 7 if big else 5
-	for j in n:
+	var left := int(ceilf(float(n) * (1.0 - k * 0.8)))
+	for j in left:
 		var dir := -1.0 if j % 2 == 0 else 1.0
 		var spread := (0.35 + 0.65 * float(j) / float(n)) * dir
-		var dx := spread * reach * (0.3 + 0.7 * k)
-		var dy := -sin(minf(k * 1.4, 1.0) * PI) * (2.0 + float(j % 3)) * px - px
-		var a := (1.0 - k) * (0.9 if big else 0.7)
-		var sz := px * (2.0 if j % 3 == 0 else 1.0)
-		var p := Vector2(_snap(feet.x + dx, px), _snap(feet.y + dy, px))
-		draw_rect(Rect2(p, Vector2(sz, sz)), Color(PixelPalette.STONE[4], a))
-		if j % 2 == 0:
-			draw_rect(Rect2(p + Vector2(0, sz), Vector2(sz, px)), Color(PixelPalette.STONE[2], a))
+		var dx := roundf(spread * reach * (0.3 + 0.7 * k))
+		var dy := -roundf(sin(minf(k * 1.4, 1.0) * PI) * (2.0 + float(j % 3))) - 1.0
+		var sz := 2.0 if j % 3 == 0 and k < 0.6 else 1.0
+		var p := feet + Vector2(dx, dy) * PX
+		draw_rect(Rect2(p, Vector2(sz, sz) * PX), PixelPalette.STONE[4])
+		if sz > 1.0:
+			draw_rect(Rect2(p + Vector2(0, PX), Vector2(sz * PX, PX)), PixelPalette.STONE[2])
