@@ -259,8 +259,8 @@ def _fleece(cv, mask, ramp, light, seed, step=3):
         cv._put(mask & (base == b), ramp[b])
     r = np.random.default_rng(seed)
     h, w = mask.shape
-    LOCK = [(1, 0, "H"), (0, 1, "H"), (1, 1, "M"), (1, 2, "M"), (2, 2, "M"), (1, 3, "D")]
-    for row, y in enumerate(range(-2, h, 4)):
+    LOCK = [(1, 0, "H"), (0, 1, "H"), (1, 1, "H"), (2, 1, "M"), (1, 2, "M"), (2, 2, "M"), (1, 3, "M"), (2, 3, "D"), (1, 4, "D")]
+    for row, y in enumerate(range(-3, h, 4)):
         off = (row % 2) * 2 + int(r.integers(0, 2))
         for x in range(off - 3, w, step + 1):
             jx = x + int(r.integers(0, 2))
@@ -355,7 +355,7 @@ def mamuthone(pose="stand", fleece="black", size="field", seed=3):
     halfw = (17 + wide) * k
     nx = np.clip((xx + 0.5 - cxp) / halfw, -1, 1)
     ny = np.clip((yy + 0.5 - Y(top)) / ((top - hem) * k), 0, 1)
-    light = np.clip(0.38 + 0.42 * nx - 0.18 * ny, 0, 0.999)
+    light = np.clip(0.47 + 0.45 * nx - 0.16 * ny, 0, 0.999)
     _fleece(cv, mbody, F, light, seed, step=3 if not big else 3)
     # a groove where each arm hangs inside the fleece
     for side in (-1, 1):
