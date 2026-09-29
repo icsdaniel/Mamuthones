@@ -6,13 +6,13 @@ extends Control
 ## (about 0.3 s) and one label per spot is reused, so a new word replaces the old one at once.
 
 const LIFE := 0.3
+## The word's ink: the big pixel face tinted (white = the cream-to-gold face for perfect and held).
 const COLORS := {
-	"perfect": Color("#e8d2a4"), "good": Color("#d8ccb4"), "early": UIKit.EARLY,
-	"late": UIKit.LATE, "miss": Color("#9a9088"), "held": Color("#f0c878"), "wrong": Color("#e2574a"),
+	"perfect": Color.WHITE, "good": Color("#ecdfbc"), "early": UIKit.EARLY,
+	"late": UIKit.LATE, "miss": Color("#8a7c6c"), "held": Color.WHITE, "wrong": Color("#e24a32"),
 }
-const HAIR := Color("#e8b250")      ## the gold hairline round the letters, and the flanking rules
+const HAIR := Color("#c08a2e")      ## the flanking gold rules (GOLD3)
 
-var _fills := {}   # quality -> ShaderMaterial (a light-to-colour gradient over the white fill)
 var _spots := {}   # int key -> [HBoxContainer, Label, Label, Tween]
 
 
@@ -28,12 +28,12 @@ func show_word(word: String, side: String, at: Vector2, quality: String, life :=
 	if spot.is_empty():
 		var box := HBoxContainer.new()
 		box.alignment = BoxContainer.ALIGNMENT_CENTER
-		box.add_theme_constant_override("separation", 6)
+		box.add_theme_constant_override("separation", 9)
 		box.mouse_filter = Control.MOUSE_FILTER_IGNORE
 		var w := UIKit.label("", UIKit.HUD, false, HORIZONTAL_ALIGNMENT_CENTER)
 		var h := UIKit.label("", UIKit.HUD, false, HORIZONTAL_ALIGNMENT_CENTER)
-		FireSkin.carve_label(w, 44, Color.WHITE, Color(HAIR, 0.95), 8, 0.35)
-		FireSkin.carve_label(h, 26, Color.WHITE, Color(0, 0, 0, 0), 6)
+		PxType.label(w, "big")
+		PxType.label(h, "caps")
 		h.size_flags_vertical = Control.SIZE_SHRINK_CENTER
 		box.draw.connect(_draw_rules.bind(box, w))
 		box.add_child(w)
@@ -47,26 +47,22 @@ func show_word(word: String, side: String, at: Vector2, quality: String, life :=
 	w.text = word
 	h.text = tr("judge_hint_" + side) if side != "" else ""
 	h.visible = side != ""
-	# Every word is carved the same way: serif small caps with a gold hairline, flanked by gold rules
-	# and diamonds; the fill runs from bone at the top into the judgement's own colour.
-	w.add_theme_color_override("font_color", Color.WHITE)
-	w.add_theme_font_size_override("font_size", 46 if quality == "perfect" else 42)
-	if not _fills.has(quality):
-		var c: Color = COLORS.get(quality, Palette.BONE)
-		_fills[quality] = FireSkin.text_gradient(Color("#fff4dc").lerp(c, 0.25), c.lerp(Color("#fff4dc"), 0.35), c)
-	var fill: ShaderMaterial = _fills[quality]
-	w.material = fill
+	# Every word is set the same way: big pixel small caps in a K0 outline with a drop shadow, flanked
+	# by gold rules and diamonds; perfect and held in the cream-to-gold face, the rest tinted.
+	var gold := quality == "perfect" or quality == "held"
+	w.add_theme_font_override("font", PxType.font("big_gold" if gold else "big"))
+	w.add_theme_color_override("font_color", COLORS.get(quality, Palette.BONE))
 	w.reset_size()
-	fill.set_shader_parameter("height", maxf(w.get_combined_minimum_size().y, 1.0))
 	box.queue_redraw()
 	if side != "":
 		h.add_theme_color_override("font_color", UIKit.side_color(side))
 	box.reset_size()
 	var sz := box.get_combined_minimum_size()
-	var y := at.y - sz.y * 0.5
+	var y := roundf((at.y - sz.y * 0.5) / PxArt.PX) * PxArt.PX
 	# Keep the word and its flanking rules (about 70 px each side) on screen where there is room.
 	var m := minf(70.0, maxf((size.x - sz.x) * 0.5, 0.0))
-	box.position = Vector2(clampf(at.x - sz.x * 0.5, m, maxf(size.x - sz.x - m, m)), y)
+	var x := roundf(clampf(at.x - sz.x * 0.5, m, maxf(size.x - sz.x - m, m)) / PxArt.PX) * PxArt.PX
+	box.position = Vector2(x, y)
 	box.modulate.a = 1.0
 	box.scale = Vector2.ONE
 	if spot[3] != null:
@@ -74,9 +70,10 @@ func show_word(word: String, side: String, at: Vector2, quality: String, life :=
 	var tw := box.create_tween()
 	spot[3] = tw
 	if not UIKit.reduced_motion():
-		box.pivot_offset = sz * 0.5
-		box.scale = Vector2(1.2, 1.2) if quality == "perfect" else Vector2(1.08, 1.08)
-		tw.tween_property(box, "scale", Vector2.ONE, 0.1).set_trans(Tween.TRANS_CUBIC).set_ease(Tween.EASE_OUT)
+		# the word lands: it drops in from two art pixels up (a perfect from three), in whole pixels
+		var lift := 3.0 if quality == "perfect" else 2.0
+		box.position.y = y - lift * PxArt.PX
+		tw.tween_method(_drop.bind(box, y), lift, 0.0, 0.09)
 	tw.tween_interval(maxf(life - 0.18, 0.05))
 	tw.tween_property(box, "modulate:a", 0.0, 0.12)
 
@@ -86,14 +83,20 @@ func show_word(word: String, side: String, at: Vector2, quality: String, life :=
 func _draw_rules(box: Control, w: Label) -> void:
 	if box.get_child_count() > 1 and (box.get_child(1) as Control).visible:
 		return
-	var y := w.position.y + w.size.y * 0.5 - 2.0
+	var P := PxArt.PX
+	var y := roundf((w.position.y + w.size.y * 0.5) / P) * P
 	for sd in [-1.0, 1.0]:
-		var x0: float = (-14.0 if sd < 0.0 else box.size.x + 14.0)
-		var x1: float = x0 + sd * 46.0
-		box.draw_line(Vector2(x0 + sd * 8.0, y), Vector2(x1, y), Color(HAIR, 0.8), 1.5, true)
-		box.draw_set_transform(Vector2(x0 + sd * 3.0, y), PI * 0.25)
-		box.draw_rect(Rect2(-3.5, -3.5, 7.0, 7.0), HAIR)
-		box.draw_set_transform(Vector2.ZERO)
+		var x0: float = (-5.0 * P if sd < 0.0 else box.size.x + 4.0 * P)
+		var x1: float = x0 + sd * 14.0 * P
+		var r := Rect2(minf(x0 + sd * 3.0 * P, x1), y, absf(x1 - x0 - sd * 3.0 * P), P)
+		box.draw_rect(r.grow(P), PixelPalette.K[0])
+		box.draw_rect(r, HAIR)
+		FireSkin.sprite(box, "diamond", Vector2(x0 + P * 0.5, y + P * 0.5))
+
+
+## The landing drop, stepped to whole art pixels.
+static func _drop(v: float, box: Control, y: float) -> void:
+	box.position.y = y - roundf(v) * PxArt.PX
 
 
 ## The texts shown right now (word/hint), for tests.
