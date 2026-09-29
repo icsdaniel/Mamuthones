@@ -43,7 +43,7 @@ var hud: Hud
 var scene                         ## SideRows (songs) or ProcessionScene (Piazza): the same calls
 var banner: Control               ## over the top of the lanes: count-in and stand-still moment
 var lanes: LaneView
-var backdrop: FireBackdrop        ## the night, the bonfire and the square behind the road (songs)
+var backdrop: PlayWorld          ## the low-poly street, the bonfire and the swaying figures (songs)
 var words: JudgementWords
 var cue: PiazzaCue
 var paused := false
@@ -109,8 +109,9 @@ func build() -> void:
 		bg = ColorRect.new()
 		(bg as ColorRect).color = Palette.BLACK
 	else:
-		backdrop = FireBackdrop.new()
+		backdrop = PlayWorld.new()
 		backdrop.name = "Backdrop"
+		backdrop.bell_set = str(args.get("bell_set", "village"))
 		bg = backdrop
 	bg.set_anchors_preset(Control.PRESET_FULL_RECT)
 	bg.mouse_filter = Control.MOUSE_FILTER_IGNORE
@@ -152,18 +153,13 @@ func build() -> void:
 		scene = procession
 		col.add_child(_field_box)
 	else:
-		# The stage: the files of Mamuthones behind, the lanes between them.
+		# The stage: the lanes over the street; the street itself (with its swaying figures) is the backdrop.
 		var stage := Control.new()
 		stage.name = "Stage"
 		stage.size_flags_vertical = Control.SIZE_EXPAND_FILL
 		stage.mouse_filter = Control.MOUSE_FILTER_IGNORE
 		col.add_child(stage)
-		var rows := SideRows.new()
-		rows.name = "SideRows"
-		rows.set_anchors_preset(Control.PRESET_FULL_RECT)
-		rows.bell_set = str(args.get("bell_set", "village"))
-		stage.add_child(rows)
-		scene = rows
+		scene = backdrop
 		var gut := MarginContainer.new()
 		gut.set_anchors_preset(Control.PRESET_FULL_RECT)
 		gut.mouse_filter = Control.MOUSE_FILTER_IGNORE
@@ -187,8 +183,8 @@ func build() -> void:
 	lanes.beat_zero = song.offset_for(session.remix)
 	lanes.hop = bool(Profile.get_setting("note_hop"))
 	if not session.piazza:
-		scene.lanes = lanes
 		backdrop.lanes = lanes
+		lanes.world = backdrop
 	_field_box.add_child(lanes)
 	words = JudgementWords.new()
 	words.set_anchors_preset(Control.PRESET_FULL_RECT)

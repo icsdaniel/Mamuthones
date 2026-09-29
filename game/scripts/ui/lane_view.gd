@@ -97,6 +97,8 @@ func flash(lane: int, good: bool) -> void:
 ## early, down and warm for late.
 func burst(pos: Vector2, quality: String, side := "") -> void:
 	_bursts.append([pos, quality, _clock, side])
+	if world != null and world.notes != null:
+		world.notes.burst(world.flat_to_world(pos), quality)
 	queue_redraw()
 	if _fx != null:
 		_fx.queue_redraw()
@@ -145,6 +147,9 @@ func mark_wrong(pressed_lane: int, note_lane := -1) -> void:
 func stomp_hit(lane: int, _judgement: String, both: bool) -> void:
 	_marks.append(["stomp" if both else "stomp1", clampi(lane, 0, 2), _clock])
 	_stomps.append([clampi(lane, 0, 2), both, _clock])
+	if world != null and world.notes != null:
+		var at := world.flat_to_world(Vector2(lane_center(clampi(lane, 0, 2)).x, LaneSkin.hit_line_y(field_rect())))
+		world.notes.burst(at, "stomp" if both else "ok", both)
 	queue_redraw()
 
 
@@ -274,6 +279,9 @@ func hop_lift(t: float, flat_y: float) -> float:
 ## Screen drawing on top of the road: the hit line and its receptors, then everything standing on the
 ## road (gems, rings, badges, the rope, labels), then the buttons.
 func _draw() -> void:
+	if world != null:
+		_draw_world_overlay()
+		return
 	if not _road_on():
 		_draw_field(self)
 	_draw_hit_line()
@@ -478,6 +486,10 @@ void fragment() {
 const ROAD_STOPS := [[0.0, Color("#2a1c22")], [0.25, Color("#1a1520")], [0.6, Color("#131018")], [1.0, Color("#0c0a12")]]
 
 var perspective := true          ## false: the flat lanes (the Piazza hides them anyway; tests may flatten)
+## The low-poly street (set before this enters the tree). With it, the road, the notes, the hit line
+## and the bursts are drawn in 3D by the world, project() goes through its camera, and this control
+## draws only what sits over it: the buttons, the early/late marks, the stand-still label.
+var world: PlayWorld
 var beat := -1000.0              ## the song's beat now (fractional), for the beads on the rails
 var spb := 0.0                   ## seconds per beat (0: no beads)
 var fire_dim := 0.0              ## 0..1 the fire burns low (health): the road's light dims with it
@@ -490,6 +502,8 @@ var _fx: Control                 ## additive, over the notes: hit bursts
 
 
 func _ready() -> void:
+	if world != null:
+		perspective = false
 	_surface = _Layer.new(self, "_draw_surface")
 	_surface.name = "Surface"
 	_surface.show_behind_parent = true
@@ -556,6 +570,9 @@ func _fit_road() -> void:
 ## Road width at flat depth y (0 at the far end, the field's height at the near end), as a share of
 ## the near width.
 func road_scale(flat_y: float) -> float:
+	if world != null:
+		var z := world.flat_to_world(Vector2(0.0, flat_y)).z
+		return world.px_per_unit(z) * _world_to_me_scale() * PlayWorld.ROAD_W / maxf(field_rect().size.x, 1.0)
 	if not _road_on():
 		return 1.0
 	var v := flat_y / maxf(field_rect().size.y, 1.0)
@@ -565,6 +582,8 @@ func road_scale(flat_y: float) -> float:
 ## Where a point of the flat field shows on screen (this control's coordinates).
 func project(p: Vector2) -> Vector2:
 	var f := field_rect()
+	if world != null:
+		return _from_world(world.to_local_2d(world.flat_to_world(p)))
 	if not _road_on():
 		return p
 	var w := road_scale(p.y)
@@ -575,6 +594,18 @@ func project(p: Vector2) -> Vector2:
 ## The road's left and right edge on screen at screen height y (this control's coordinates).
 func road_edges(y: float) -> Vector2:
 	var f := field_rect()
+	if world != null:
+		# the flat depth that shows at screen height y (the projection keeps rows level)
+		var lo := -f.size.y * 4.0
+		var hi := f.size.y * 1.5
+		for i in 40:
+			var mid := (lo + hi) * 0.5
+			if project(Vector2(0.0, mid)).y < y:
+				lo = mid
+			else:
+				hi = mid
+		var fy := (lo + hi) * 0.5
+		return Vector2(project(Vector2(0.0, fy)).x, project(Vector2(f.size.x, fy)).x)
 	var w := 1.0
 	if _road_on():
 		w = TOP_W + (1.0 - TOP_W) * clampf((y - f.position.y) / maxf(f.size.y, 1.0), 0.0, 1.0)
@@ -589,6 +620,10 @@ func upright_scale(flat_y: float) -> float:
 ## The far end of the road on screen (centre x, y) and its width, where it meets the fire.
 func far_end() -> Rect2:
 	var f := field_rect()
+	if world != null:
+		var a := project(Vector2(0.0, 0.0))
+		var b := project(Vector2(f.size.x, 0.0))
+		return Rect2(a.x, a.y, b.x - a.x, 0.0)
 	var e := road_edges(f.position.y)
 	return Rect2(e.x, f.position.y, e.y - e.x, 0.0)
 
@@ -625,7 +660,7 @@ class _Layer extends Control:
 ## Behind the road (over the square and the figures beside it): when the fire burns low, the night
 ## closes in from the screen's sides in three stepped bands. The road itself is never covered.
 func _draw_surface(ci: CanvasItem) -> void:
-	if fire_dim <= 0.01:
+	if fire_dim <= 0.01 or world != null:
 		return
 	var span := _screen_span()
 	var P := PxArt.PX
@@ -640,6 +675,8 @@ func _draw_surface(ci: CanvasItem) -> void:
 
 ## Under the notes, over the road (additive): the hit line's stepped glow on the stones.
 func _draw_under(ci: CanvasItem) -> void:
+	if world != null:
+		return
 	var span := _screen_span()
 	FireSkin.draw_hit_glow(ci, span.x, span.y, hit_line_screen_y(), beat_env())
 
@@ -647,6 +684,13 @@ func _draw_under(ci: CanvasItem) -> void:
 ## Additive, over the notes: the hit bursts, upright at their projected place, and sparks thrown up
 ## from a pressed plate.
 func _draw_fx(ci: CanvasItem) -> void:
+	if world != null:
+		# the world throws the bursts; only let go of the ones that are over
+		while not _bursts.is_empty() and _clock - float(_bursts[0][2]) > LaneSkin.BURST_TIME:
+			_bursts.pop_front()
+		while not _stomps.is_empty() and _clock - float(_stomps[0][2]) > 1.0:
+			_stomps.pop_front()
+		return
 	if show_buttons:
 		var r := buttons_rect()
 		var w := r.size.x / 3.0
@@ -708,6 +752,8 @@ func _draw_hit_line() -> void:
 ## The hit line's height on screen, on the art grid (anchored at the road's far end).
 func hit_line_screen_y() -> float:
 	var f := field_rect()
+	if world != null:
+		return project(Vector2(f.size.x * 0.5, LaneSkin.hit_line_y(f))).y
 	return PxArt.snap(project(Vector2(0.0, LaneSkin.hit_line_y(f))).y, f.position.y)
 
 
@@ -1078,3 +1124,227 @@ func _cued(lane: int) -> bool:
 		if n.lane == lane and not n.done and n.t >= song_time - 0.05:
 			return true
 	return false
+
+
+# ------------------------------------------------------------------ over the low-poly street
+
+## A point in the world control's coordinates, in this control's.
+func _from_world(v: Vector2) -> Vector2:
+	if not is_inside_tree() or not world.is_inside_tree():
+		return v
+	return (get_global_transform().affine_inverse() * world.get_global_transform()) * v
+
+
+func _world_to_me_scale() -> float:
+	if not is_inside_tree() or not world.is_inside_tree():
+		return 1.0
+	return (get_global_transform().affine_inverse() * world.get_global_transform()).get_scale().x
+
+
+const BTN_BG := Color("#15121c")
+const BTN_EDGE := Color("#9a6a2a")
+const BTN_BONE := Color("#eadfc8")
+const OUTLINE := Color("#07060a")
+static var _font: Font
+
+
+static func ui_font() -> Font:
+	if _font == null:
+		_font = load("res://fonts/AlegreyaSans-ExtraBold.ttf")
+	return _font
+
+
+## What sits over the street: the stand-still label, the early/late marks, the buttons.
+func _draw_world_overlay() -> void:
+	var field := field_rect()
+	if session != null:
+		var hl := LaneSkin.hit_line_y(field)
+		var taken: Array[float] = []
+		var rests := []
+		for e in _notes_shown(field):
+			var n: Note = e[0]
+			if n.kind == Note.Kind.REST:
+				if not n.finished:
+					rests.append([e[2], e[1]])
+			elif not n.done:
+				taken.append(float(e[1]))
+		for r in rests:
+			_rest_tag(field, r[0], r[1], taken, hl)
+		_draw_world_ticks(field, hl)
+	for b in _bursts:
+		var q: String = b[1]
+		var side: String = b[3] if q != "early" and q != "late" else q
+		if side != "":
+			_world_chevron(project(b[0]), side, _clock - float(b[2]))
+	if show_buttons:
+		_draw_world_buttons()
+
+
+## The stand-still label on its band, at the place farthest from any note crossing it.
+func _rest_tag(field: Rect2, y_a: float, y_b: float, taken: Array[float], hl: float) -> void:
+	var top := maxf(minf(y_a, y_b), field.position.y)
+	var bottom := minf(maxf(y_a, y_b), hl)
+	if bottom - top < 40.0:
+		return
+	var best_y := (top + bottom) * 0.5
+	var best_gap := -INF
+	var cy := top + 22.0
+	while cy <= bottom - 22.0:
+		var gap := INF
+		for ty in taken:
+			gap = minf(gap, absf(ty - cy))
+		if gap > best_gap + 0.5:
+			best_gap = gap
+			best_y = cy
+		cy += 6.0
+	var p := project(Vector2(field.get_center().x, best_y))
+	var sc := clampf(road_scale(best_y), 0.45, 1.0)
+	var fs := int(round(34.0 * sc))
+	var text := tr("lane_still").to_upper()
+	var f := ui_font()
+	var w := f.get_string_size(text, HORIZONTAL_ALIGNMENT_LEFT, -1, fs).x
+	var box := Rect2(p.x - w * 0.5 - 18.0 * sc, p.y - fs * 0.75, w + 36.0 * sc, fs * 1.5)
+	var sb := StyleBoxFlat.new()
+	sb.bg_color = Color("#101a33e6")
+	sb.border_color = Color("#6f9cf0")
+	sb.set_border_width_all(maxi(2, int(3.0 * sc)))
+	sb.set_corner_radius_all(int(10.0 * sc))
+	draw_style_box(sb, box)
+	draw_string(f, Vector2(box.position.x + 18.0 * sc, p.y + fs * 0.35), text, HORIZONTAL_ALIGNMENT_LEFT, -1, fs, Color("#e6eeff"))
+	_rest_label_y = best_y
+
+
+## The early/late ticks at the hit line: short bars at both edges of the lane, cool above for early,
+## warm below for late, projected onto the road.
+func _draw_world_ticks(field: Rect2, hl: float) -> void:
+	var rects := LaneSkin.lane_rects(field)
+	var i := 0
+	while i < _step_ticks.size():
+		var k: Array = _step_ticks[i]
+		var age := _clock - float(k[2])
+		if age > STEP_TICK_TIME:
+			_step_ticks.remove_at(i)
+			continue
+		i += 1
+		var side := str(k[1])
+		var d := -1.0 if side == "early" else 1.0
+		var r: Rect2 = rects[clampi(int(k[0]), 0, 2)]
+		var col := UIKit.side_color(side)
+		for cx: float in [r.position.x + r.size.x * 0.14, r.end.x - r.size.x * 0.14]:
+			_world_chevron(project(Vector2(cx, hl)) + Vector2(0.0, d * 26.0), side, age * LaneSkin.BURST_TIME / STEP_TICK_TIME, 0.8)
+	for o in _offsets:
+		var age := _clock - float(o[1])
+		if age > TICK_TIME:
+			continue
+		var off := float(o[0])
+		var side := UIKit.side_of(off)
+		var col := Palette.BONE if side == "" else UIKit.side_color(side)
+		col.a = clampf(1.0 - age / TICK_TIME, 0.0, 1.0)
+		var r: Rect2 = rects[clampi(int(o[2]), 0, 2)]
+		var y := hl + clampf(off / 0.12, -1.0, 1.0) * minf((field.end.y - hl) * 0.9, 64.0)
+		for x0: float in [r.position.x + 8.0, r.end.x - 8.0 - r.size.x * 0.12]:
+			var a := project(Vector2(x0, y))
+			var b := project(Vector2(x0 + r.size.x * 0.12, y))
+			draw_line(a, b, Color(OUTLINE, col.a), 10.0)
+			draw_line(a, b, col, 5.0)
+
+
+## An early/late chevron: up and cool above the hit for early, down and warm below it for late.
+func _world_chevron(pos: Vector2, side: String, age: float, size_k := 1.0) -> void:
+	var t := clampf(age / LaneSkin.BURST_TIME, 0.0, 1.0)
+	var a := minf(1.0, pow(1.0 - t, 1.2) * 1.3)
+	if a < 0.3:
+		return
+	var d := -1.0 if side == "early" else 1.0
+	var cp := pos + Vector2(0.0, d * (30.0 + 26.0 * (1.0 - pow(1.0 - t, 3.0))) * size_k)
+	var s := 16.0 * size_k
+	var pts := PackedVector2Array([cp + Vector2(-s, -d * s * 0.5), cp + Vector2(0, d * s * 0.5), cp + Vector2(s, -d * s * 0.5)])
+	var col := UIKit.side_color(side)
+	col.a = a
+	draw_polyline(pts, Color(OUTLINE, a), 13.0 * size_k)
+	draw_polyline(pts, col, 7.0 * size_k)
+
+
+## The three step buttons: dark slabs edged in bronze, a bone footprint on each (both feet on the
+## middle one), lit gold while pressed, hot on a hit, dull red on a miss, their edge glowing when a
+## note is about to reach their lane.
+func _draw_world_buttons() -> void:
+	var r := buttons_rect()
+	var span := _screen_span()
+	var panel := Rect2(span.x, r.position.y, span.y - span.x, r.size.y + 400.0)
+	draw_rect(panel, Color("#0b0a10"))
+	draw_rect(Rect2(panel.position, Vector2(panel.size.x, 3.0)), Color("#ffb04a") * Color(1, 1, 1, 0.6 + 0.4 * beat_env()))
+	var w := r.size.x / 3.0
+	var pad := 10.0
+	for lane in 3:
+		var br := Rect2(r.position.x + w * lane + pad, r.position.y + pad + 4.0, w - pad * 2.0, r.size.y - pad * 2.0 - 4.0)
+		var st := _button_state(lane)
+		var sb := StyleBoxFlat.new()
+		sb.set_corner_radius_all(18)
+		sb.set_border_width_all(3)
+		sb.bg_color = BTN_BG
+		sb.border_color = BTN_EDGE
+		var foot := BTN_BONE
+		match st:
+			"cued":
+				sb.border_color = Color("#ffc445")
+				sb.shadow_color = Color("#ff9a2a66")
+				sb.shadow_size = 10
+			"pressed":
+				sb.bg_color = Color("#4a3014")
+				sb.border_color = Color("#ffe08a")
+				sb.shadow_color = Color("#ffb04a88")
+				sb.shadow_size = 14
+			"hit":
+				sb.bg_color = Color("#c47a1c")
+				sb.border_color = Color("#fff2c0")
+				sb.shadow_color = Color("#ffc445aa")
+				sb.shadow_size = 18
+				foot = Color("#fffaf0")
+			"miss":
+				sb.bg_color = Color("#3a1212")
+				sb.border_color = Color("#a83030")
+				foot = BTN_BONE.darkened(0.4)
+		draw_style_box(sb, br)
+		var feet := [-1.0, 1.0] if lane == 1 else ([-1.0] if lane == 0 else [1.0])
+		var fs := minf(br.size.x, br.size.y) * 0.19
+		for i in feet.size():
+			var ox := 0.0 if feet.size() == 1 else (float(i) - 0.5) * fs * 1.5
+			_footprint(br.get_center() + Vector2(ox, 0.0), fs, feet[i], foot)
+	_draw_world_marks(r, w)
+
+
+## A bare footprint (left foot for -1, right for 1): the sole and five toes.
+func _footprint(c: Vector2, s: float, foot: float, col: Color) -> void:
+	var pts := PackedVector2Array()
+	for i in 16:
+		var a := TAU * float(i) / 16.0
+		var k := 1.0 if sin(a) < 0.0 else 0.8
+		pts.append(c + Vector2(cos(a) * s * 0.42 * k, sin(a) * s * 0.85 + s * 0.25))
+	draw_colored_polygon(pts, col)
+	for t in 5:
+		var tx := (float(t) - 2.0) * s * 0.2 * -foot
+		var big := 1.0 if t == 0 else 0.7 - 0.05 * t
+		draw_circle(c + Vector2(tx - foot * s * 0.05, -s * 0.78 + absf(float(t)) * s * 0.07), s * 0.13 * big + 1.0, col)
+
+
+func _draw_world_marks(r: Rect2, w: float) -> void:
+	var i := 0
+	while i < _marks.size():
+		var m: Array = _marks[i]
+		var age := _clock - float(m[2])
+		if age > MARK_TIME:
+			_marks.remove_at(i)
+			continue
+		i += 1
+		var lane := clampi(int(m[1]), 0, 2)
+		var c := Vector2(r.position.x + w * (lane + 0.5), r.get_center().y)
+		match str(m[0]):
+			"wrong":
+				var s := minf(w, r.size.y) * 0.24
+				for pass_ in 2:
+					for sd in [-1.0, 1.0]:
+						draw_line(c + Vector2(-s, -s * sd), c + Vector2(s, s * sd), OUTLINE if pass_ == 0 else Color("#ff3b30"), 20.0 if pass_ == 0 else 11.0)
+			"faint":
+				var p := project(lane_center(lane))
+				draw_arc(p, 46.0 * clampf(road_scale(LaneSkin.hit_line_y(field_rect())), 0.5, 1.5), 0.0, TAU, 24, Color(BTN_BONE, 0.7), 4.0)
