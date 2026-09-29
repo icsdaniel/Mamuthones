@@ -1,8 +1,11 @@
 class_name Brazier
 extends Control
-## An iron brazier on its three legs with pixel flames (the bonfire's flame shader, small): it
+## A wrought-iron brazier on its three legs with pixel flames (the bonfire's flame shader, small): it
 ## flickers on its own and leaps on the beat. Place it by `feet` (the foot of its legs, on the art
-## grid) and `px`; `beat` is the song's beat (or the title's own clock).
+## grid) and `px`; `beat` is the song's beat (or the title's own clock). `flip`: the bonfire is to
+## its left (the brazier's baked twin lit on that side is drawn; the sprite is never mirrored).
+
+const COALS := 3.0                ## the coals' row from the sprite's top (scenery.py BRAZIER_COALS)
 
 var feet := Vector2.ZERO
 var px := PxArt.PX
@@ -48,18 +51,18 @@ func flare() -> float:
 ## Where the light of its flame is now: [centre, radius in art px, strength 0..1].
 func light() -> Array:
 	var f := flare()
-	return [feet + Vector2(0, -12.0 * px), 16.0 + 6.0 * f, clampf(0.55 + 0.35 * f - 0.3 * low, 0.0, 1.0)]
+	return [feet + Vector2(0, -14.0 * px), 16.0 + 6.0 * f, clampf(0.55 + 0.35 * f - 0.3 * low, 0.0, 1.0)]
 
 
 func _process(delta: float) -> void:
 	_clock += delta
-	var t := PxArt.scenery("brazier")
-	var bowl_top := 16.0
+	var t := PxArt.scenery(sprite())
+	var tall := 25.0
 	if t != null:
-		bowl_top = float(t.get_height())
-	var fa := Vector2(16.0, 20.0)
-	# the flames' root sits in the bowl (5 art px under its rim)
-	var root := feet + Vector2(0.0, -(bowl_top - 5.0) * px)
+		tall = float(t.get_height())
+	var fa := Vector2(18.0, 24.0)
+	# the flames stand on the coals heaped in the basket
+	var root := feet + Vector2(0.0, -(tall - COALS) * px)
 	_flames.position = root + Vector2(-floorf(fa.x * 0.5) * px, -(fa.y - 2.0) * px)
 	_flames.size = fa * px
 	var m := _flames.material as ShaderMaterial
@@ -67,13 +70,18 @@ func _process(delta: float) -> void:
 	m.set_shader_parameter("t", floorf(_clock * Bonfire.FPS) / Bonfire.FPS)
 	m.set_shader_parameter("flare", flare())
 	m.set_shader_parameter("low", low)
-	m.set_shader_parameter("height", 12.0)
-	m.set_shader_parameter("width", 4.2)
+	m.set_shader_parameter("height", 14.0)
+	m.set_shader_parameter("width", 5.0)
 	_front.queue_redraw()
 
 
+## The baked sprite: lit on the side facing the bonfire.
+func sprite() -> String:
+	return "brazier_r" if flip else "brazier"
+
+
 func _draw_bowl() -> void:
-	var t := PxArt.scenery("brazier")
+	var t := PxArt.scenery(sprite())
 	if t == null:
 		return
-	PxArt.blit(_front, t, feet + Vector2(-floorf(t.get_width() * 0.5) * px, -t.get_height() * px), px, Color.WHITE, flip)
+	PxArt.blit(_front, t, feet + Vector2(-floorf(t.get_width() * 0.5) * px, -t.get_height() * px), px)

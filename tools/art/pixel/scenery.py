@@ -104,14 +104,16 @@ HAZE_MAP = [
 ]
 
 
-def sky(cv, horizon, seed=11, stars=True, moon=None, top=0, avoid=None, density=45):
+def sky(cv, horizon, seed=11, stars=True, moon=None, top=0, avoid=None, density=45, glow=False, curve=1.5):
     """Night sky over rows top..horizon: navy bands deepening upward, dithered at the seams, and
-    stars (thinner toward the horizon). avoid: (x, y, rx, ry) kept free of stars (the fire)."""
+    stars (thinner toward the horizon). avoid: (x, y, rx, ry) kept free of stars (the fire). glow: a
+    last, paler band low over the horizon, so the mountains stand dark against it."""
     xx, yy = cv.grid()
     region = (yy >= top) & (yy < horizon)
-    t = np.clip((yy - top) / max(1, horizon - top), 0, 1) ** 1.5
-    idx = band_index(t, len(SKY_BANDS), xx, yy, soft=0.5)
-    for i, c in enumerate(SKY_BANDS):
+    bands = SKY_BANDS + (["NIGHT4"] if glow else [])
+    t = np.clip((yy - top) / max(1, horizon - top), 0, 1) ** curve
+    idx = band_index(t, len(bands), xx, yy, soft=0.5)
+    for i, c in enumerate(bands):
         cv._put(region & (idx == i), c)
     if stars:
         r = np.random.default_rng(seed)
@@ -157,60 +159,123 @@ def haze(cv, fire, radii, strength=1.0):
         cv.a[m] = out.a[m]
 
 
-def mountains(cv, horizon, seed=5, far_base=None, far_amp=18, near_amp=8, near_base=None):
-    """Two ranges: a far one in HILL1 with slopes catching the sky's light in HILL2, and a nearer,
-    darker one in HILL0 with a fringe of trees."""
+def peak_ridge(w, seed, base, peaks, rough=1.5):
+    """A mountain ridge through explicit peaks [(x, height, half width)]: each a rounded cone (the
+    Barbagia's worn granite tops), the ridge the highest of them, roughened a little."""
+    x = np.arange(w, dtype=float)
+    top = np.zeros(w)
+    for (px_, ph, hw) in peaks:
+        d = np.clip(1 - np.abs(x - px_) / hw, 0, 1)
+        top = np.maximum(top, ph * (d ** 1.35) * (1.6 - 0.6 * d))
+    r = np.random.default_rng(seed)
+    n = np.zeros(w)
+    for f, a in ((0.09, 1.0), (0.23, 0.5)):
+        n += a * np.sin(x * f * math.tau + r.random() * math.tau)
+    return base - top - n * rough * np.clip(top / 4.0, 0, 1)
+
+
+def _range(cv, line, bottom, fill, lit, crest, face=3):
+    """Fills a mountain range under its ridge line: faces turned up-left (toward the moon) catch
+    `lit` in a stepped band under the crest, the crest itself `crest`."""
     xx, yy = cv.grid()
+    m = (yy >= np.round(line)[None, :]) & (yy < bottom)
+    cv._put(m, fill)
+    slope = np.gradient(line)
+    depth = face + 2 * (np.clip(slope, 0, 2))[None, :]
+    lit_m = m & (slope[None, :] > 0.15) & (yy < np.round(line)[None, :] + depth)
+    cv._put(lit_m, lit)
+    top = m & (yy == np.round(line)[None, :].astype(int))
+    cv._put(top, crest)
+    return m
+
+
+def mountains(cv, horizon, seed=5, far_base=None, far_amp=18, near_amp=8, near_base=None, peaks=None):
+    """Three ranges, farther ones paler: the far peaks (NIGHT1 with moonlit faces in NIGHT2 and a
+    NIGHT3 crest) stand dark against the sky's paler horizon band, a darker middle range, and a
+    near one almost black with a fringe of trees. peaks: explicit [(x, height, half width)] for the far
+    range (else a seeded ridge)."""
     far_base = horizon - 4 if far_base is None else far_base
     near_base = horizon - 1 if near_base is None else near_base
-    far = ridge(cv.w, seed, far_base, far_amp)
+    if peaks is not None:
+        far = peak_ridge(cv.w, seed, far_base, peaks)
+    else:
+        far = ridge(cv.w, seed, far_base, far_amp)
+    mid = ridge(cv.w, seed + 5, (far_base + near_base) / 2 + 2, max(4, (far_amp + near_amp) * 0.4),
+                octaves=((0.017, 1.0), (0.043, 0.35), (0.11, 0.12)))
     near = ridge(cv.w, seed + 7, near_base, near_amp, octaves=((0.02, 1.0), (0.05, 0.4), (0.12, 0.15)))
-    m_far = (yy >= np.round(far)[None, :]) & (yy < horizon)
-    slope = np.gradient(far)
-    # sky-lit slopes (rising to the right means facing up-left, toward the moon side)
-    lit = m_far & (slope[None, :] > 0.2) & (yy < far[None, :] + 3 + (xx % 3))
-    cv._put(m_far, "HILL1")
-    cv._put(lit, "HILL2")
-    crest = (yy == np.round(far[None, :]).astype(int)) & m_far
-    cv._put(crest, "HILL2")
-    m_near = (yy >= np.round(near)[None, :]) & (yy < horizon)
-    cv._put(m_near, "HILL0")
+    _range(cv, far, horizon, "NIGHT1", "NIGHT2", "NIGHT3")
+    _range(cv, np.maximum(mid, far + 3), horizon, "NIGHT0", "HILL0", "HILL1", face=2)
+    _range(cv, np.maximum(near, far + 5), horizon, "K1", "NIGHT0", "HILL0", face=1)
     r = np.random.default_rng(seed + 3)
+    nr = np.maximum(near, far + 5)
     for _ in range(cv.w // 5):
         x = int(r.integers(0, cv.w))
-        y = int(round(near[x]))
+        y = int(round(nr[x]))
         h = int(r.integers(1, 4))
-        cv.rect(x, y - h, 1 + int(r.integers(0, 2)), h + 1, "HILL0")
+        cv.rect(x, y - h, 1 + int(r.integers(0, 2)), h + 1, "K1")
     return far, near
 
 
 # ------------------------------------------------------------------------------------------ village
 
-# Walls by heat (0 = moonlight only .. 1 = beside the fire): the front faces the viewer (cool plaster
-# under the moon, warming near the fire), the side faces the fire (lit hardest).
-FRONT = ["NIGHT3", "HILL2", "NIGHT5", "BONE0", "STONE4", "BONE1", "STONE5"]
-SIDE = ["HILL2", "STONE3", "STONE4", "STONE5", "STONE5", "STONE6", "STONE6"]
-SHADE = ["NIGHT1", "NIGHT2", "NIGHT3", "HILL2", "STONE2", "STONE3", "STONE3"]
+# Walls by heat (0 = moonlight only .. 1 = beside the fire), per material: Mamoiada's houses are
+# granite, ochre plaster or whitewash. The front faces the viewer and stays in the night's cool
+# shade (dull cool greys, warming only near the fire); the side wall turned toward the fire takes
+# its light; SHADE is the eave's shadow and the far edge.
+MATERIALS = {
+    "granite": {
+        "front": ["SETT1", "SETT2", "SETT3", "SETT3", "SETT4", "BONE0", "STONE3"],
+        "side": ["SETT2", "SETT4", "STONE3", "STONE4", "BONE1", "STONE5", "STONE5"],
+        "shade": ["K1", "SETT0", "SETT1", "SETT1", "SETT2", "STONE1", "STONE2"],
+        "course": ["SETT0", "SETT1", "SETT2", "SETT2", "SETT3", "STONE1", "STONE2"],
+    },
+    "ochre": {
+        "front": ["SETT1", "SETT2", "STONE1", "STONE2", "STONE2", "STONE3", "STONE4"],
+        "side": ["SETT2", "STONE3", "STONE4", "STONE5", "STONE5", "STONE6", "STONE6"],
+        "shade": ["K1", "SETT0", "STONE0", "STONE0", "STONE1", "STONE1", "STONE2"],
+    },
+    "white": {
+        "front": ["SETT2", "SETT3", "SETT4", "SETT5", "BONE0", "BONE0", "BONE1"],
+        "side": ["SETT3", "SETT5", "BONE1", "STONE5", "BONE2", "BONE2", "BONE3"],
+        "shade": ["SETT0", "SETT1", "SETT2", "SETT2", "SETT3", "STONE2", "STONE2"],
+    },
+}
+FRONT = MATERIALS["granite"]["front"]
+SIDE = MATERIALS["granite"]["side"]
+SHADE = MATERIALS["granite"]["shade"]
 ROOF = ["K1", "RED0", "LEATHER0", "LEATHER1", "LEATHER1", "LEATHER2", "LEATHER2"]
 ROOF_LIT = ["RED0", "LEATHER0", "RED1", "LEATHER2", "RED2", "LEATHER3", "FIRE2"]
 WALL = SIDE   # (kept for the tower)
 
 
-def house(cv, x, base, w, h, fire_x, heat, seed=0, roof_h=None, side=None, windows=True, door=True):
-    """A plastered stone house facing the square: its front wall, the side wall turned toward the
-    fire (lit hardest), a terracotta roof with tile courses, warm windows. heat 0..1: how much
-    firelight reaches it."""
+def house(cv, x, base, w, h, fire_x, heat, seed=0, roof_h=None, side=None, windows=True, door=True, mat=None):
+    """A stone house facing the square: its front wall in the night's shade (granite courses, ochre
+    plaster or whitewash), the side wall turned toward the fire lit by it, a terracotta roof with
+    tile courses, warm windows. heat 0..1: how much firelight reaches it."""
     r = np.random.default_rng(seed)
     x, base, w, h = int(x), int(base), int(w), int(h)
     roof_h = roof_h if roof_h is not None else max(3, int(round(h * 0.28)))
     side = side if side is not None else max(2, int(round(w * 0.3)))
     toward = 1 if fire_x > x + w / 2 else -1
+    if mat is None:
+        mat = ["granite", "ochre", "white", "ochre", "granite"][int(r.integers(0, 5))]
+    M = MATERIALS[mat]
     k = heat * (len(FRONT) - 1)
-    front = _lv(FRONT, k)
-    lit = _lv(SIDE, k + 0.5)
-    shade = _lv(SHADE, k)
+    front = _lv(M["front"], k)
+    lit = _lv(M["side"], k + 0.5)
+    shade = _lv(M["shade"], k)
     top = base - h
     cv.rect(x, top, w, h, front)
+    if "course" in M:
+        # granite: rough courses of dressed stone, their joints a step darker
+        cc = _lv(M["course"], k)
+        for j, yy in enumerate(range(top + 3, base - 1, 3)):
+            cv.hline(x, x + w - 1, yy, cc)
+            for xx in range(x + 2 + (j % 2) * 3, x + w - 1, 6):
+                cv.vline(xx, yy - 2, yy - 1, cc)
+    # the front's edge nearest the fire catches a warm rim
+    if heat > 0.25:
+        cv.vline(x + w - 1 if toward > 0 else x, top + 1, base - 2, _lv(M["side"], k - 1))
     if toward > 0:
         sx0, sx1 = x + w, x + w + side
     else:
@@ -264,49 +329,68 @@ def house(cv, x, base, w, h, fire_x, heat, seed=0, roof_h=None, side=None, windo
     return (min(x, sx0) - 1, ry, max(x + w, sx1) + 1, base)
 
 
-def bell_tower(cv, x, base, w, h, fire_x, heat=0.6, bell_lit=True):
-    """Mamoiada's church tower: a tall stone shaft with string courses, a belfry with its bronze
-    bell in an arched opening, a pyramid cap and an iron cross."""
+def bell_tower(cv, x, base, w, h, fire_x, heat=0.6, bell_lit=True, cap_k=0.9):
+    """Mamoiada's church tower: a tall shaft of dressed granite with string courses, a belfry with
+    its bronze bells hanging in arched openings, a cornice, a terracotta pyramid cap and an iron
+    cross. The face toward the fire takes its light; the rest stays in the night's cool shade."""
     x, base, w, h = int(x), int(base), int(w), int(h)
     top = base - h
     toward = 1 if fire_x > x + w / 2 else -1
+    M = MATERIALS["granite"]
     k = heat * (len(FRONT) - 1)
-    front = _lv(FRONT, k)
-    lit = _lv(SIDE, k + 0.5)
-    shade = _lv(SHADE, k)
+    front = _lv(M["front"], k)
+    lit = _lv(M["side"], k + 1)
+    lit2 = _lv(M["side"], k + 2)
+    shade = _lv(M["shade"], k)
+    course = _lv(M["course"], k)
     cv.rect(x, top, w, h, front)
-    lx0 = x + w - 3 if toward > 0 else x
-    cv.rect(lx0, top, 3, h, lit)
+    sw = max(2, w // 3)
+    lx0 = x + w - sw if toward > 0 else x
+    cv.rect(lx0, top, sw, h, lit)
+    cv.vline(x + w - 1 if toward > 0 else x, top, base - 1, lit2)
     cv.vline(x if toward > 0 else x + w - 1, top, base - 1, shade)
-    for yy in (top + int(h * 0.38), top + int(h * 0.66)):
+    # ashlar courses on the shaft
+    for j, yy in enumerate(range(top + 13, base - 1, 3)):
+        cv.hline(x + 1, x + w - 2, yy, course)
+        for xx in range(x + 2 + (j % 2) * 2, x + w - 1, 4):
+            cv.pset(xx, yy - 1, course)
+    # string courses: a lit upper lip, a shadow under
+    for yy in (top + 11, top + int(h * 0.62)):
         cv.hline(x - 1, x + w, yy, lit)
         cv.hline(x - 1, x + w, yy + 1, shade)
-    bw = max(3, w - 4)
-    bx0 = x + (w - bw) // 2
-    by0 = top + 3
-    cv.rect(bx0, by0 + 1, bw, 7, "K0")
-    cv.hline(bx0 + 1, bx0 + bw - 2, by0, "K0")
-    bcx = bx0 + bw // 2
-    cv.rect(bcx - 1, by0 + 3, 3, 3, "GOLD3" if bell_lit else "GOLD1")
-    cv.pset(bcx, by0 + 2, "GOLD2")
-    cv.hline(bcx - 2, bcx + 2, by0 + 6, "GOLD2")
-    cv.pset(bcx + toward, by0 + 3, "GOLD5" if bell_lit else "GOLD2")
-    cv.rect(x + w // 2, top + int(h * 0.5), 1, 3, "FIRE5")
-    cap_h = max(5, int(w * 0.9))
+    # the belfry: two arched openings, a bronze bell in each (one catching the fire)
+    bw = max(2, (w - 3) // 2)
+    for i in range(2):
+        ox = x + 1 + i * (bw + 1)
+        oy = top + 3
+        cv.rect(ox, oy + 1, bw, 6, "K0")
+        cv.hline(ox + 1, ox + max(1, bw - 2), oy, "K0")
+        bcx = ox + bw // 2
+        near = (i == 1) == (toward > 0)
+        cv.rect(ox, oy + 3, bw, 2, "GOLD3" if (bell_lit and near) else "GOLD2")
+        cv.pset(bcx, oy + 2, "GOLD2")
+        cv.hline(ox, ox + bw - 1, oy + 5, "GOLD1")
+        if bell_lit and near:
+            cv.pset(ox + (bw - 1 if toward > 0 else 0), oy + 3, "GOLD5")
+    # the cornice under the cap
+    cv.hline(x - 1, x + w, top, lit)
+    cv.hline(x - 1, x + w, top + 1, shade)
+    # a lit slit window low on the shaft
+    cv.rect(x + w // 2, top + int(h * 0.75), 1, 2, "FIRE5")
+    cap_h = max(5, int(round(w * cap_k)))
     cv.poly([(x - 1, top), (x + w + 1, top), (x + w / 2 + 0.5, top - cap_h)], _lv(ROOF, 1 + k))
     if toward > 0:
         cv.poly([(x + w / 2 + 0.5, top - cap_h), (x + w + 1, top), (x + w / 2, top)], _lv(ROOF_LIT, 1 + k))
     else:
         cv.poly([(x + w / 2 + 0.5, top - cap_h), (x - 1, top), (x + w / 2, top)], _lv(ROOF_LIT, 1 + k))
-    cv.hline(x - 1, x + w, top, shade)
     cx = int(x + w / 2)
-    cv.vline(cx, top - cap_h - 4, top - cap_h, "K1")
-    cv.hline(cx - 1, cx + 1, top - cap_h - 3, "K1")
+    cv.vline(cx, top - cap_h - 4, top - cap_h, "K0")
+    cv.hline(cx - 1, cx + 1, top - cap_h - 3, "K0")
     return (x - 1, top - cap_h - 4, x + w + 1, base)
 
 
 def village(cv, ground_y, fire_x, seed=21, scale=1.0, tower_x=None, gap=(0, 0), heat_r=130.0,
-            rows=((0, 1.0), (7, 0.72), (13, 0.5)), tower_h=40):
+            rows=((0, 1.0), (7, 0.72), (13, 0.5)), tower_h=40, tower_w=8, tower_heat=None, tower_cap=0.9):
     """The village climbing the slope behind the square: rows of houses (farthest first), each row
     higher up and smaller, cooler with distance from the fire; the bell tower behind the near row.
     The middle (gap: x from, to) is left for the bonfire. rows: (rise in px, size)."""
@@ -321,16 +405,16 @@ def village(cv, ground_y, fire_x, seed=21, scale=1.0, tower_x=None, gap=(0, 0), 
             h = int(round(r.integers(10, 16) * size * scale))
             cx = x + w / 2
             heat = max(0.0, 1.0 - abs(fire_x - cx) / heat_r) * (1.0 - 0.3 * ri)
-            if tower_x is not None and ri == 0 and tower_x - w - 4 * scale < x < tower_x + 10 * scale:
-                x = int(tower_x + 10 * scale)
+            if tower_x is not None and ri == 0 and tower_x - w - 4 * scale < x < tower_x + (tower_w + 2) * scale:
+                x = int(tower_x + (tower_w + 2) * scale)
                 continue
             if not (gap[0] - w < x < gap[1]):
                 boxes.append(house(cv, x, y + int(r.integers(-1, 2)), w, h, fire_x, heat, seed=int(r.integers(0, 99999))))
             x += w + int(round(r.integers(4, 9) * size * scale))
         if ri == 1 and tower_x is not None:
-            tw = int(round(8 * scale))
-            heat = max(0.0, 1.0 - abs(fire_x - tower_x) / heat_r) * 0.9
-            bell_tower(cv, tower_x, ground_y - int(round(2 * scale)), tw, int(round(tower_h * scale)), fire_x, heat=heat)
+            tw = int(round(tower_w * scale))
+            heat = max(0.0, 1.0 - abs(fire_x - tower_x) / heat_r) * 0.9 if tower_heat is None else tower_heat
+            bell_tower(cv, tower_x, ground_y - int(round(2 * scale)), tw, int(round(tower_h * scale)), fire_x, heat=heat, cap_k=tower_cap)
     return boxes
 
 
@@ -425,13 +509,20 @@ def fire_light(cv, fire, radii, power=0.9):
     return np.clip(1.0 - d, 0, 1) ** power
 
 
-def square(cv, horizon, fire, depth, light_r=(150, 260), seed=41, moss=True, extra_light=None):
+def square(cv, horizon, fire, depth, light_r=(150, 260), seed=41, moss=True, extra_light=None,
+           light=None, levels=None, per_stone=False, bottom=None, stone_w=(3.0, 3.5), rounded=False):
     """The square's cobbles in perspective from the horizon row down: courses of rough stones that
     grow toward the viewer, warm near the fire, cool and mossy far from it. Returns the light
-    field it used (0..1)."""
+    field it used (0..1). light: a light field to use instead of the fire's ellipse; levels: the
+    (stone, mortar, top-edge) colour ramps it bands into; per_stone: each stone takes one band (the
+    light's value at the stone), so the light falls in steps stone by stone; bottom: last row + 1;
+    stone_w: (least, spread) of a stone's width in course units; rounded: knock the corners off
+    each stone (the joint's colour), so they read as worn setts rather than bricks."""
     xx, yy = cv.grid()
     fx, fy = fire
-    region = yy >= horizon
+    region = (yy >= horizon) & (yy < (cv.h if bottom is None else bottom))
+    S_LV, M_LV, H_LV = levels if levels is not None else (STONE_LEVELS, MORTAR_LEVELS, HI_LEVELS)
+    nl = len(S_LV)
     course = np.zeros(cv.h, int)
     edge = np.zeros(cv.h, bool)
     y = horizon
@@ -454,34 +545,49 @@ def square(cv, horizon, fire, depth, light_r=(150, 260), seed=41, moss=True, ext
         u = -cv.w + rr.random() * 6
         while u < cv.w * 2:
             bounds.append(u)
-            u += 3.0 + rr.random() * 3.5
+            u += stone_w[0] + rr.random() * stone_w[1]
         bounds = np.array(bounds)
         xs = (np.arange(cv.w) + 0.5 - fx) / scale
         ids = np.searchsorted(bounds, xs)
         stone_id[row] = ids + c * 10007
         joint[row, 1:] = ids[1:] != ids[:-1]
-    light = fire_light(cv, fire, light_r)
+    if light is None:
+        light = fire_light(cv, fire, light_r)
     if extra_light is not None:
         light = np.clip(light + extra_light, 0, 1)
     h = ((stone_id * 2654435761) % (2 ** 32)) / 2 ** 32
     offs = np.where(h < 0.25, -1, np.where(h > 0.8, 1, 0))
-    lv = band_index(light, len(STONE_LEVELS), xx, yy, soft=0.5)
-    si = np.clip(lv + offs, 0, len(STONE_LEVELS) - 1)
-    for i, col in enumerate(STONE_LEVELS):
+    if per_stone:
+        # one band per stone: the light at the stone, so its edge steps along the stones
+        ids, inv = np.unique(stone_id[region], return_inverse=True)
+        mean = np.bincount(inv, weights=light[region]) / np.maximum(np.bincount(inv), 1)
+        ls = np.zeros_like(light)
+        ls[region] = mean[inv]
+        lv = np.clip((np.clip(ls, 0, 0.9999) * nl).astype(int), 0, nl - 1)
+        offs = np.where(h < 0.15, -1, np.where(h > 0.9, 1, 0))
+    else:
+        lv = band_index(light, nl, xx, yy, soft=0.5)
+    si = np.clip(lv + offs, 0, nl - 1)
+    for i, col in enumerate(S_LV):
         cv._put(region & (si == i), col)
     top_row = np.zeros((cv.h, cv.w), bool)
     top_row[1:] = edge[:-1, None]
     # each stone's lit top edge (toward the fire) and a darker foot: a little bevel
     hi = region & top_row & ~joint & (lv >= 2)
-    for i, col in enumerate(HI_LEVELS):
+    for i, col in enumerate(H_LV):
         cv._put(hi & (si == i), col)
     foot = np.zeros((cv.h, cv.w), bool)
     foot[:-1] = edge[1:, None]
     lo = region & foot & ~joint
-    for i, col in enumerate(STONE_LEVELS):
-        cv._put(lo & (np.clip(si - 1, 0, 7) == i), col)
+    for i, col in enumerate(S_LV):
+        cv._put(lo & (np.clip(si - 1, 0, nl - 1) == i), col)
     mortar = region & (edge[:, None] | joint)
-    for i, col in enumerate(MORTAR_LEVELS):
+    if rounded:
+        side = np.zeros_like(joint)
+        side[:, 1:] |= joint[:, :-1]
+        side[:, :-1] |= joint[:, 1:]
+        mortar |= region & (top_row | foot) & side
+    for i, col in enumerate(M_LV):
         cv._put(mortar & (lv == i), col)
     if moss:
         noise = np.random.default_rng(seed + 9).random((cv.h, cv.w))
@@ -531,39 +637,79 @@ def log(cv, x0, y0, x1, y1, th, heat=1.0, end0=False, end1=True, char=0.0):
             cv.pset(ex, ey, "FIRE6")
 
 
-def pyre(w=76, h=26, seed=51, part="back"):
-    """The log pyre under the flames: split logs stacked crosswise in a low wide pile, dark wood
-    with firelit tops and glowing cut ends, coals at its foot. part 'back' (the logs behind the
-    flames) or 'front' (the logs and coals in front of their root)."""
+def ember_bed(cv, cx, cy, rx, ry, seed=0, heat=1.0):
+    """A bed of glowing coals on the ground, an ellipse (cx, cy, rx, ry): coal lumps (cells of a
+    seeded Voronoi) with dark cracks between them, white-hot at the heart, cooling outward through
+    the FIRE ramp to a rim of grey ash."""
+    r = np.random.default_rng(seed)
+    xx, yy = cv.grid()
+    d = np.sqrt(((xx + 0.5 - cx) / rx) ** 2 + ((yy + 0.5 - cy) / ry) ** 2)
+    m = d <= 1.0
+    n = int(rx * ry * 0.4) + 6
+    pts = np.stack([cx + (r.random(n) - 0.5) * 2 * rx, cy + (r.random(n) - 0.5) * 2 * ry], 1)
+    # nearest and second-nearest lump (cracks where they are nearly equal)
+    dx = (xx[..., None] + 0.5 - pts[:, 0]) * 1.0
+    dy = (yy[..., None] + 0.5 - pts[:, 1]) * 2.2
+    dd = dx * dx + dy * dy
+    part = np.partition(dd, 1, axis=2)
+    first, second = np.sqrt(part[..., 0]), np.sqrt(part[..., 1])
+    crack = (second - first) < 0.9
+    cell = np.argmin(dd, axis=2)
+    jitter = r.random(n)[cell] * 0.35
+    heat_f = np.clip((1.0 - d) * 1.25 * heat + jitter - 0.1, 0, 1)
+    cols = ["FIRE1", "FIRE2", "FIRE3", "FIRE4", "FIRE5", "FIRE6"]
+    idx = np.clip((heat_f * len(cols)).astype(int), 0, len(cols) - 1)
+    for i, c in enumerate(cols):
+        cv._put(m & ~crack & (idx == i), c)
+    cv._put(m & crack, "K1")
+    cv._put(m & crack & (heat_f > 0.45), "FIRE0")
+    cv._put(m & crack & (heat_f > 0.8), "FIRE2")
+    # grey ash at the rim, crumbling into the cobbles
+    rim = m & (d > 0.84)
+    cv._put(rim & ~crack, "STONE2")
+    cv._put(rim & ((xx + yy) % 3 == 0), "BONE0")
+    cv._put(rim & crack, "STONE1")
+
+
+def pyre(w=92, h=34, seed=51, part="back"):
+    """The bonfire's pyre, seated on the ground where the road ends: a tepee of split logs leaning
+    into the flames (part 'back', drawn behind them), and in front of their root two logs crossed in
+    an X, a log lying end-on with its glowing ring, and a wide bed of coals and ash spilling out on
+    the cobbles (part 'front'). The bottom row is the ground line (the road's far end)."""
     cv = Canvas(w, h)
     cx = w / 2
-    base = h - 2
+    base = h - 1
     r = np.random.default_rng(seed + (0 if part == "back" else 1))
     if part == "back":
-        # logs leaning in toward the middle, their tops hidden in the flames
+        # the tepee: logs leaning in to a point high in the flames
         for (x0, y0, x1, y1, th) in [
-            (cx - w * 0.44, base - 3, cx - 3, base - 20, 5),
-            (cx + w * 0.44, base - 3, cx + 3, base - 20, 5),
-            (cx - w * 0.28, base - 1, cx + 6, base - 22, 4),
-            (cx + w * 0.28, base - 1, cx - 6, base - 22, 4),
+            (cx - 30, base - 3, cx - 3, base - 31, 5),
+            (cx + 30, base - 3, cx + 3, base - 31, 5),
+            (cx - 18, base - 2, cx + 4, base - 32, 4),
+            (cx + 18, base - 2, cx - 4, base - 32, 4),
+            (cx - 38, base - 2, cx - 10, base - 22, 4),
+            (cx + 38, base - 2, cx + 10, base - 22, 4),
         ]:
-            log(cv, x0, y0, x1, y1, th, end0=True, end1=False)
+            log(cv, x0, y0, x1, y1, th, end0=True, end1=False, char=0.5)
     else:
-        for (x0, y0, x1, y1, th, e0, e1) in [
-            (cx - w * 0.48, base - 2, cx + w * 0.08, base - 10, 5, True, False),
-            (cx + w * 0.48, base - 2, cx - w * 0.08, base - 10, 5, True, False),
-            (cx - w * 0.40, base - 7, cx - w * 0.02, base - 1, 5, True, False),
-            (cx + w * 0.40, base - 7, cx + w * 0.02, base - 1, 5, True, False),
-            (cx - w * 0.30, base + 0, cx + w * 0.30, base + 0, 4, True, True),
-        ]:
-            log(cv, x0, y0, x1, y1, th, end0=e0, end1=e1)
-        # coals and embers heaped at the foot
-        for _ in range(70):
-            ex = cx + (r.random() - 0.5) * w * 0.7
-            ey = base + 1 - r.random() * 3
-            col = ["FIRE1", "FIRE2", "FIRE3", "FIRE4", "FIRE5"][int(r.integers(0, 5))]
+        # the coal bed heaped under the logs and spilling out over the cobbles
+        ember_bed(cv, cx, base + 3, 38, 10.0, seed=seed + 3, heat=0.9)
+        # logs laid crosswise at the root, glowing through their gaps
+        log(cv, cx - 22, base - 5, cx + 20, base - 9, 4, end0=True, end1=True, char=0.5)
+        log(cv, cx + 24, base - 4, cx - 18, base - 11, 4, end0=True, end1=False, char=0.5)
+        # two logs crossed in an X in front of the flames' root, ends burning
+        log(cv, cx - 30, base - 3, cx + 12, base - 17, 5, end0=True, end1=False, char=0.6)
+        log(cv, cx + 30, base - 3, cx - 12, base - 17, 5, end0=True, end1=False, char=0.6)
+        # half-burnt logs fallen out of the pile, lying on the ground and pointing in
+        log(cv, cx - 45, base - 1, cx - 24, base - 4, 4, end0=False, end1=False, char=0.4)
+        log(cv, cx + 45, base - 1, cx + 24, base - 4, 4, end0=False, end1=False, char=0.4)
+        log(cv, cx - 16, base, cx - 2, base - 3, 3, end0=True, end1=False, char=0.2)
+        # stray embers on the cobbles beyond the bed
+        for _ in range(14):
+            ex = cx + (r.random() - 0.5) * w * 0.9
+            ey = base - r.random() * 3
             if cv.get(int(ex), int(ey)) is None:
-                cv.pset(ex, ey, col)
+                cv.pset(ex, ey, ["FIRE2", "FIRE3", "FIRE4", "FIRE1"][int(r.integers(0, 4))])
     return cv
 
 
@@ -592,61 +738,126 @@ def flame(w, h, t, seed=0, power=1.0):
     return cv
 
 
-def brazier(w=15, h=16, fire_side=1):
-    """An iron brazier: a shallow bowl on three splayed legs, coals glowing in it, its rim catching
-    its own light. The flames are separate frames (flame())."""
+BRAZIER_COALS = 3     # the coals' row from the brazier sprite's top: where its flames stand
+
+
+def brazier(w=17, h=25, fire_side=1):
+    """A wrought-iron brazier: an open basket of iron bars heaped with glowing coals, on a collar
+    and three splayed legs braced by a ring. Black iron with its own fire glinting on the rim and
+    bars, and the bonfire's light on the side facing it (fire_side +1: the fire is to the right).
+    The flames are the game's (Brazier), standing on the coals."""
     cv = Canvas(w, h)
-    cx = w / 2
-    bowl_y = 5
-    cv.line(cx - 4, bowl_y + 3, cx - 6, h - 1, "K1")
-    cv.line(cx + 4, bowl_y + 3, cx + 6, h - 1, "K1")
-    cv.line(cx, bowl_y + 3, cx, h - 1, "K0")
-    cv.hline(int(cx - 5), int(cx + 5), bowl_y + 7, "K1")
-    cv.poly([(cx - 7, bowl_y), (cx + 7, bowl_y), (cx + 5, bowl_y + 4), (cx - 5, bowl_y + 4)], "HILL0")
-    cv.hline(int(cx - 5), int(cx + 4), bowl_y + 4, "K0")
-    cv.hline(int(cx - 7), int(cx + 6), bowl_y, "FIRE3")
-    cv.hline(int(cx - 6), int(cx + 5), bowl_y + 2, "HILL1")
-    cv.pset(cx + 5 * fire_side, bowl_y + 1, "FIRE4")
-    for i, col in enumerate(["FIRE2", "FIRE4", "FIRE3", "FIRE5", "FIRE2", "FIRE4", "FIRE6", "FIRE3", "FIRE4", "FIRE2", "FIRE5"]):
-        cv.pset(cx - 5 + i, bowl_y - 1 - (1 if 3 <= i <= 7 else 0), col)
+    cx = w // 2               # the middle column
+    top = BRAZIER_COALS
+    bowl_b = top + 6          # the basket's bottom row
+    # legs: two splayed in front, one straight behind, a brace ring, little feet
+    cv.line(cx - 2, bowl_b + 1, cx - 5, h - 2, "K1")
+    cv.line(cx + 2, bowl_b + 1, cx + 5, h - 2, "K1")
+    cv.vline(cx, bowl_b + 1, h - 2, "K0")
+    ring = bowl_b + 8
+    cv.hline(cx - 4, cx + 4, ring, "K1")
+    cv.pset(cx - 5, h - 2, "K1")
+    cv.pset(cx + 5, h - 2, "K1")
+    cv.pset(cx - 6, h - 2, "K1")
+    cv.pset(cx + 6, h - 2, "K1")
+    # the collar under the basket
+    cv.rect(cx - 2, bowl_b, 5, 2, "K1")
+    # the basket: a trapezoid of bars, coals glowing between them
+    for j in range(top, bowl_b):
+        t = (j - top) / max(1, bowl_b - top - 1)
+        half = int(round(7 - 3 * t))
+        glow = ["FIRE3", "FIRE2", "FIRE2", "FIRE1", "FIRE1", "FIRE0"][min(5, j - top)]
+        for xx in range(cx - half, cx + half + 1):
+            bar = (xx - cx) % 2 == 0 or j == top + 3
+            cv.pset(xx, j, "K1" if bar else glow)
+    # the rim: a lip of iron catching the coals' light from above, hotter on the fire's side
+    cv.hline(cx - 7, cx + 7, top, "LEATHER0")
+    for xx in range(cx - 6, cx + 7):
+        if (xx - cx) * fire_side > 1:
+            cv.pset(xx, top, "GOLD2")
+    cv.pset(cx + 7 * fire_side, top, "GOLD3")
+    # the bonfire's light down the bars and legs on its side
+    for j in range(top + 1, bowl_b):
+        t = (j - top) / max(1, bowl_b - top - 1)
+        half = int(round(7 - 3 * t))
+        cv.pset(cx + half * fire_side, j, "LEATHER1")
+    cv.line(cx + 2 * fire_side, bowl_b + 1, cx + 5 * fire_side, h - 2, "LEATHER0")
+    cv.pset(cx + 2 * fire_side, bowl_b, "LEATHER1")
+    # the heap of coals rising above the rim
+    heap = ["FIRE2", "FIRE4", "FIRE3", "FIRE5", "FIRE6", "FIRE5", "FIRE6", "FIRE4", "FIRE5", "FIRE3", "FIRE4", "FIRE2", "FIRE3"]
+    for i, col in enumerate(heap):
+        xx = cx - 6 + i
+        cv.pset(xx, top - 1, col)
+        if 3 <= i <= 9:
+            cv.pset(xx, top - 2, "FIRE5" if i % 2 else "FIRE4")
+    cv.pset(cx, top - 2, "FIRE6")
     cv.outline("K0")
+    # no outline over the coals: the flames stand straight on them
+    over = np.zeros((cv.h, cv.w), bool)
+    over[:top - 1, cx - 5:cx + 6] = True
+    cv._put(over & cv.is_color("K0"), None)
     return cv
 
 
 # ------------------------------------------------------------------------------------------ compositions
 
+PLAY_GROUND_LEVELS = (
+    ["SETT2", "STONE1", "STONE2", "STONE3", "STONE4", "STONE5", "STONE6"],
+    ["K1", "SETT0", "STONE0", "STONE1", "STONE2", "STONE3", "STONE4"],
+    ["SETT3", "STONE2", "STONE3", "STONE4", "STONE5", "STONE6", "STONE6"],
+)
+
+
+def spill_light(cv, fire, radii=(250, 560), power=0.75, lift=0.0):
+    """The bonfire's light falling down the square from the road's far end: bright round the fire
+    and stepping down the sides to the screen's foot (never quite dark: the square is lit)."""
+    return np.clip(fire_light(cv, fire, radii, power) + lift, 0, 1)
+
+
 def play_strip(W=400, H=84, far_y=68, seed=3):
-    """The play screen's back strip: sky, mountains, village, bell tower and crowd, W wide centred on
-    the fire, the road's far end on row far_y. Returns the canvas and the fire's centre."""
+    """The play screen's back strip: sky, mountains, village with Mamoiada's bell tower, crowd, and
+    the back of the square where the pyre stands, W wide centred on the fire, the road's far end on
+    row far_y. Returns the canvas and the fire's centre."""
     cv = Canvas(W, H)
     cx = W // 2
     fire = (cx, far_y - 16)
-    sky(cv, far_y, seed=seed + 1, avoid=(cx, far_y - 20, 40, 40))
-    mountains(cv, far_y, seed=seed + 2, far_base=far_y - 28, far_amp=16, near_base=far_y - 20, near_amp=7)
-    haze(cv, fire, (48, 36), strength=0.7)
-    village(cv, far_y - 6, cx, seed=seed + 3, tower_x=cx + 58, gap=(cx - 26, cx + 26), heat_r=210.0,
-            rows=((0, 1.0), (8, 0.8), (15, 0.6)), tower_h=38)
-    # the back of the square: a low stone wall along the foot of the houses
-    cv.rect(0, far_y - 5, W, 5, "STONE1")
-    cv.hline(0, W - 1, far_y - 5, "STONE2")
+    back = far_y - 8                 # the square's back edge, the houses' feet
+    sky(cv, back - 22, seed=seed + 1, avoid=(cx, far_y - 20, 40, 40), glow=True, curve=0.75)
+    cv.rect(0, back - 22, W, 22, "NIGHT4")
+    # the Barbagia's peaks, placed to show between the figures and the fire on a phone
+    peaks = [(cx - 172, 26, 34), (cx - 126, 34, 34), (cx - 86, 26, 24), (cx - 52, 33, 28),
+             (cx - 20, 20, 20), (cx + 24, 22, 22), (cx + 58, 34, 30), (cx + 98, 27, 26),
+             (cx + 134, 36, 34), (cx + 180, 26, 32)]
+    mountains(cv, back, seed=seed + 2, far_base=back - 12, far_amp=16, near_base=back - 12, near_amp=5, peaks=peaks)
+    haze(cv, fire, (40, 30), strength=0.55)
+    village(cv, back, cx, seed=seed + 3, tower_x=cx - 97, gap=(cx - 26, cx + 26), heat_r=210.0,
+            rows=((0, 1.0), (8, 0.8), (15, 0.6)), tower_h=27, tower_w=10, tower_heat=0.62, tower_cap=0.8)
+    # the back of the square round the pyre: cobbles in the fire's hottest light
     xx, yy = cv.grid()
-    heat = np.clip(1 - np.abs(xx + 0.5 - cx) / 120.0, 0, 1)
-    wall = (yy >= far_y - 5) & (yy < far_y)
-    cv._put(wall & (heat > 0.45) & (yy == far_y - 5), "STONE4")
-    cv._put(wall & (heat > 0.45) & (yy > far_y - 5), "STONE2")
-    cv._put(wall & (heat < 0.2) & (yy > far_y - 5), "HILL0")
+    light = fire_light(cv, (cx, far_y), (62, 15), 0.8)
+    square(cv, back, (cx, far_y), depth=40, seed=seed + 9, light=light, levels=PLAY_GROUND_LEVELS,
+           per_stone=True, bottom=far_y, moss=False, stone_w=(2.3, 1.7), rounded=True)
     crowd(cv, 0, cx - 40, far_y + 1, cx, seed=seed + 4, torches=2)
     crowd(cv, cx + 40, W, far_y + 1, cx, seed=seed + 5, torches=2)
+    # the crowd's shadow on the cobbles at their feet, thrown back from the fire
+    for x0, x1 in ((0, cx - 40), (cx + 40, W)):
+        cv.rect(x0, far_y + 1, x1 - x0, 1, "STONE1")
+        for x in range(x0, x1):
+            if (x // 2) % 3 != 0:
+                cv.pset(x, far_y + 2, "STONE2")
     return cv, fire
 
 
 def play_ground(W=360, H=480, seed=7):
     """The square either side of the road, from the road's far end (row 0) down: cobbles in
-    perspective, warm near the fire, cool and mossy toward the screen's lower corners. The road is
-    drawn over its middle by the game. Centred on the fire (column W/2)."""
+    perspective lit by the bonfire, its light falling in steps stone by stone down the sides of the
+    screen, mossy only in the darkest joints. The road is drawn over its middle by the game. Centred
+    on the fire (column W/2)."""
     cv = Canvas(W, H)
     fire = (W / 2, -6)
-    square(cv, 0, fire, depth=330, light_r=(230, 300), seed=seed)
+    light = spill_light(cv, fire)
+    square(cv, 0, fire, depth=330, seed=seed, light=light, levels=PLAY_GROUND_LEVELS, per_stone=True,
+           stone_w=(2.3, 1.7), rounded=True)
     return cv, fire
 
 
@@ -692,7 +903,8 @@ def title_scene(W=400, H=250, seed=13):
     cx = W // 2
     fire = (cx, 192)
     ground = 146
-    sky(cv, ground, seed=seed + 1, moon=(cx + 94, 60, 6), avoid=(cx, 120, 50, 110), density=120)
+    sky(cv, 112, seed=seed + 1, moon=(cx + 94, 60, 6), avoid=(cx, 120, 50, 110), density=100, glow=True, curve=1.2)
+    cv.rect(0, 112, W, ground - 112, "NIGHT4")
     mountains(cv, ground - 38, seed=seed + 2, far_base=88, far_amp=22, near_base=100, near_amp=9)
     cv.rect(0, ground - 38, W, 38, "HILL0")
     haze(cv, (cx, 150), (70, 95), strength=0.9)
@@ -746,9 +958,12 @@ def main(preview=None):
     ground, gfire = play_ground()
     glit, gdim = lit_twins(ground, gfire, radius=(9999, 9999))
     save_triplet("play_ground", ground, glit, gdim)
+    # the braziers' pools: two steps up, for the inner ring of their light
+    shifted(glit, np.ones((glit.h, glit.w), bool), STEP_UP).save(os.path.join(OUT, "play_ground_hot.png"))
     pyre(part="back").save(os.path.join(OUT, "pyre_back.png"))
     pyre(part="front").save(os.path.join(OUT, "pyre_front.png"))
-    brazier().save(os.path.join(OUT, "brazier.png"))
+    brazier(fire_side=1).save(os.path.join(OUT, "brazier.png"))
+    brazier(fire_side=-1).save(os.path.join(OUT, "brazier_r.png"))
     title, tfire = title_scene()
     tlit, tdim = lit_twins(title, tfire, radius=(80, 130))
     save_triplet("title_scene", title, tlit, tdim)
