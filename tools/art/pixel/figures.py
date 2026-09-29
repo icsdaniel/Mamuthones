@@ -426,7 +426,9 @@ def issohadore(pose="stand", size="field", seed=7):
         return fx + u * k
 
     def Y(v):
-        return fy - v * k
+        # shorter, sturdier legs than the design grid: everything below the belt is squeezed
+        v2 = v * 0.84 if v < 38 else v - 38 * 0.16
+        return fy - v2 * k
 
     throw = pose == "throw"
     # ---- legs: white trousers into dark leather gaiters and boots
@@ -434,7 +436,9 @@ def issohadore(pose="stand", size="field", seed=7):
         hip = (X(side * 3), Y(34))
         knee = (X(side * 4.5), Y(17))
         ankle = (X(side * 5.5 + (1 if side > 0 else 0)), Y(3))
-        tr = cv.m_poly([(hip[0] - 3.2 * k, hip[1]), (hip[0] + 3.2 * k, hip[1]), (knee[0] + 3.4 * k, knee[1]), (knee[0] - 3.4 * k, knee[1])])
+        mid = (X(side * 4.2), Y(25))
+        tr = cv.m_poly([(hip[0] - 3.8 * k, hip[1]), (hip[0] + 3.8 * k, hip[1]), (mid[0] + 4.4 * k, mid[1]), (knee[0] + 3.6 * k, knee[1]),
+                        (knee[0] - 3.6 * k, knee[1]), (mid[0] - 4.4 * k, mid[1])])
         cv._put(tr, "BONE3")
         cv._put(tr & ((xx + 0.5) > knee[0] + 1.2 * k), "BONE4")
         cv._put(tr & ((xx + 0.5) < knee[0] - 2.0 * k), "BONE2")
@@ -466,6 +470,10 @@ def issohadore(pose="stand", size="field", seed=7):
     cv._put(jm & ((xx + 0.5) < X(-4)), "RED2")
     cv._put(jm & ((xx + 0.5) < X(-6.5)), "RED1")
     cv._put(jm & ((xx + 0.5) > X(5.5)), "RED4")
+    # lapel shadows either side of the shirt, and a fold under each arm
+    cv.line(X(-2.6), Y(55), X(-2.2), Y(41), "RED1")
+    cv.line(X(3.0), Y(55), X(2.4), Y(41), "RED2")
+    cv.line(X(-5.5), Y(50), X(-5.2), Y(41), "RED1")
     # white shirt front and belt
     sm = cv.m_poly([(X(-2), Y(56)), (X(2.5), Y(56)), (X(1.5), Y(40)), (X(-1.5), Y(40))])
     cv._put(sm, "BONE4")
@@ -497,6 +505,10 @@ def issohadore(pose="stand", size="field", seed=7):
     cv.line(sx, sy, ex, ey, "RED3", w=max(2, int(round(3.2 * k))))
     cv.line(ex, ey, hx, hy, "RED3", w=max(2, int(round(3 * k))))
     cv.line(sx + 1, sy, ex + 1, ey, "RED4")
+    # the sleeve's inner edge, so the arm reads against the jacket
+    cv.line(sx - 1.5 * k, sy + 1, ex - 1.5 * k, ey, "RED1")
+    if not throw:
+        cv.line(ex - 1.5 * k, ey, hx - 1.5 * k, hy, "RED1")
     # white cuff and the white-gloved... bare hand
     cv.rect(hx - 1.5 * k, hy - 1.2 * k, 3 * k, 2.4 * k, "BONE4")
     cv.ellipse(hx, hy + (-2 if throw else 2) * k, 1.8 * k, 1.8 * k, "SKIN1")
@@ -517,7 +529,7 @@ def issohadore(pose="stand", size="field", seed=7):
     # kerchief under the chin
     cv.poly([(hx0 - 4 * k, hy0 + 3 * k), (hx0 + 4.5 * k, hy0 + 3 * k), (hx0 + 1.5 * k, hy0 + 7.5 * k)], "RED2")
     # the white mask, 3/4 to the right
-    face = cv.m_ellipse(hx0 + 0.8 * k, hy0, 4.2 * k, 5.4 * k)
+    face = cv.m_ellipse(hx0 + 0.8 * k, hy0, 4.6 * k, 5.6 * k)
     cv._put(face, "BONE3")
     cv._put(face & ((xx + 0.5) > hx0 + 1.2 * k), "BONE4")
     cv._put(face & ((xx + 0.5) < hx0 - 2.2 * k), "BONE2")

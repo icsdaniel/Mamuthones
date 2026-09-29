@@ -20,7 +20,7 @@ const LEADER_AT := 0.75
 const FILE_AT := [0.44, 0.24, 0.08]
 ## Their size on a 720-wide road (scaled with the road): the Issohadore's whole sprite (soha and all)
 ## at most this tall and wide, and each Mamuthone's height, nearest first, if its gap allows.
-const LEADER_BOX := Vector2(90.0, 210.0)
+const LEADER_BOX := Vector2(130.0, 230.0)
 const FILE_H := [190.0, 150.0, 120.0]
 const CLEAR := 14.0                 ## px kept between a figure's box and the road edge (tests ask 12)
 const JUMP := 0.15                  ## jump height, in figure heights
