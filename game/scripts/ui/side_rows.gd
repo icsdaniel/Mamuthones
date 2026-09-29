@@ -16,8 +16,8 @@ const MAX_PER_SIDE := 3
 const ACTIVE := [1, 2, 2, 3, 3]     ## Mamuthones jumping per side at unison 0..4
 ## Where the figures stand, as a share of the way from the road's far end (0) to the hit line (1): the
 ## Issohadore off the hit rings, the Mamuthones receding toward the fire. From the Fire Night mockup.
-const LEADER_AT := 0.75
-const FILE_AT := [0.44, 0.24, 0.08]
+const LEADER_AT := 0.62
+const FILE_AT := [0.40, 0.22, 0.06]
 ## Their size on a 720-wide road (scaled with the road): the Issohadore's whole sprite (soha and all)
 ## at most this tall and wide, and each Mamuthone's height, nearest first, if its gap allows.
 const LEADER_BOX := Vector2(130.0, 230.0)
@@ -297,7 +297,7 @@ func _blit(name: String, feet: Vector2, h: float, rot: float, sq: float, tint: C
 static func jump_phase(f: float) -> Array:
 	if f < LAND:
 		var t := f / LAND
-		return ["land", 0.0, lerpf(0.86, 1.0, t * t)]
+		return ["land", 0.0, lerpf(0.9, 1.0, t * t)]
 	var take_off := 1.0 - AIR
 	if f < take_off - CROUCH:
 		return ["stand", 0.0, 1.0]
