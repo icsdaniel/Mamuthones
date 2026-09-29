@@ -1,15 +1,18 @@
 class_name StreetSkin
 extends RefCounted
-## The notes, hit line and bursts over the street picture, drawn as faceted low-poly shapes to sit
-## with Daniele's art: each note a cut gem seen a little from above, its facets lit unevenly, on a
-## dark outline so it stands out from the painted road. Everything is placed with LaneView.project()
-## and sized by the lane's width there, so it follows the picture's perspective.
+## The notes, hit line and bursts over the street picture. After the clearest rhythm games (Project
+## Sekai, Arcaea, Guitar Hero): every note is a wide glowing slab lying flat on the road across its
+## lane, white-hot in the middle and coloured at the rim by its kind, with a dark outline and a soft
+## halo so it is the brightest thing on the street. At the hit line each lane has an empty slab of
+## the same shape, so a note visibly drops into its slot. A hit throws a pillar of light up from the
+## lane. Everything is placed with LaneView.project() and sized by the lane's width there, so it
+## follows the picture's perspective.
 ##
-##   step   a gold gem with a red diamond set in it
-##   call   a red gem with a gold diamond (the Issohadore's call; smaller when off the beat)
-##   heal   a bone-white gem with a flame-coloured diamond
-##   hold   a gold gem with the rope's loop on it, the rope lying down the lane, a knot at its end
-##   stomp  a wide, thick fire-red gem with two bone thumb prints
+##   step   gold rim, white core
+##   call   red rim (the Issohadore's call); off-beat steps are red too and a little narrower
+##   heal   cyan rim with a white cross
+##   hold   a gold slab head, a glowing gold ribbon down the lane, a small slab at its end
+##   stomp  a thick fire-red slab the full lane wide, two white chevrons pressing down
 ##   bell   a bar across the road, chevrons pointing the way to tilt (gold up, steel down), a medallion
 ##   rest   a dim blue band across the lanes
 
@@ -26,6 +29,14 @@ const STEEL := [Color("#3a5480"), Color("#a9c4ee"), Color("#e4efff")]
 const STILL_BLUE := Color("#5f8fe8")
 const FACETS := [1.0, 0.9, 0.8, 0.88, 1.04, 1.12]
 const NOTE_W := 0.66                 ## a gem's width, as a share of its lane's width
+const SLAB_W := 0.86                 ## a slab's width, as a share of its lane's width
+const SLAB_H := 0.25                 ## a slab's depth on screen, as a share of its lane's width
+## [rim, core] of each slab kind
+const K_STEP := [Color("#ffb21e"), Color("#fffbe8")]
+const K_CALL := [Color("#ff3a2a"), Color("#ffe4dc")]
+const K_HEAL := [Color("#3fe0ff"), Color("#f0feff")]
+const K_STOMP := [Color("#ff4a12"), Color("#ffd0a0")]
+const K_HOLD := [Color("#ffc21e"), Color("#fffbe8")]
 
 
 static func _a(c: Color, a: float) -> Color:
@@ -71,6 +82,62 @@ static func gem(ci: CanvasItem, at: Vector2, w: float, cols: Array, inlay: Color
 	ci.draw_colored_polygon(PackedVector2Array([at + Vector2(-d, 0), at + Vector2(0, -dh), at]), _a(inlay, alpha))
 
 
+## A glowing slab lying flat on the road across lane span [x0, x1] (flat field x) at flat depth y:
+## its top face follows the road's perspective, a thin front edge gives it thickness. k: [rim, core].
+## Returns the top face's corners (far left, far right, near right, near left) on screen.
+static func slab(lv: LaneView, field: Rect2, x0: float, x1: float, y: float, k: Array, alpha := 1.0, depth := SLAB_H, fill := 1.0) -> PackedVector2Array:
+	var cx := (x0 + x1) * 0.5
+	var lw := lv.road_scale(y) * field.size.x / 3.0
+	var h := lw * depth
+	var dsdy := maxf(0.05, (lv.project(Vector2(cx, y + 1.0)).y - lv.project(Vector2(cx, y - 1.0)).y) * 0.5)
+	var dy := h * 0.5 / dsdy
+	var a := lv.project(Vector2(x0, y - dy))
+	var b := lv.project(Vector2(x1, y - dy))
+	var c := lv.project(Vector2(x1, y + dy))
+	var d := lv.project(Vector2(x0, y + dy))
+	var top := PackedVector2Array([a, b, c, d])
+	if alpha <= 0.01 or lw < 2.0:
+		return top
+	var rim: Color = k[0]
+	var core: Color = k[1]
+	var e := Vector2(0.0, maxf(2.0, h * 0.35))
+	var o := maxf(2.0, lw * 0.025)
+	# a soft halo in the rim's colour, then the outline round the whole shape, the front edge, the top
+	var ctr := (a + b + c + d) * 0.25
+	for g in 3:
+		var grow := lw * (0.05 + 0.06 * g)
+		var halo := PackedVector2Array()
+		for p in [a, b, c + e, d + e]:
+			halo.append(p + (p - ctr).normalized() * grow)
+		ci_poly(lv, halo, _a(rim, 0.16 * alpha * fill))
+	ci_poly(lv, PackedVector2Array([a + Vector2(-o, -o), b + Vector2(o, -o), c + e + Vector2(o, o), d + e + Vector2(-o, o)]), _a(OUTLINE, 0.9 * alpha))
+	ci_poly(lv, PackedVector2Array([d, c, c + e, d + e]), _a(rim.darkened(0.35), alpha))
+	ci_poly(lv, top, _a(rim, alpha))
+	# lighter toward the middle, white-hot at the core
+	ci_poly(lv, PackedVector2Array([_bil(top, 0.04, 0.14), _bil(top, 0.96, 0.14), _bil(top, 0.96, 0.86), _bil(top, 0.04, 0.86)]), _a(rim.lerp(core, 0.45), alpha))
+	ci_poly(lv, PackedVector2Array([_bil(top, 0.1, 0.3), _bil(top, 0.9, 0.3), _bil(top, 0.9, 0.7), _bil(top, 0.1, 0.7)]), _a(core, alpha * fill))
+	# a glint along the far edge and a lit lip on the front
+	lv.draw_line(_bil(top, 0.05, 0.08), _bil(top, 0.95, 0.08), _a(Color.WHITE, 0.8 * alpha * fill), maxf(1.5, lw * 0.02))
+	lv.draw_line(d, c, _a(rim.lightened(0.3), alpha), maxf(1.0, lw * 0.012))
+	return top
+
+
+## A point inside a quad [far left, far right, near right, near left]: u across, v toward the player.
+static func _bil(q: PackedVector2Array, u: float, v: float) -> Vector2:
+	return q[0].lerp(q[1], u).lerp(q[3].lerp(q[2], u), v)
+
+
+static func ci_poly(ci: CanvasItem, pts: PackedVector2Array, col: Color) -> void:
+	if col.a > 0.004:
+		ci.draw_colored_polygon(pts, col)
+
+
+## The lane's span [x0, x1] in flat field x for a slab `share` of the lane wide.
+static func span(rect: Rect2, share: float) -> Vector2:
+	var m := rect.size.x * (1.0 - share) * 0.5
+	return Vector2(rect.position.x + m, rect.end.x - m)
+
+
 static func stomp(ci: CanvasItem, at: Vector2, w: float, alpha := 1.0) -> void:
 	var ww := w * 1.3
 	gem(ci, at, ww, STOMP, STOMP[1], alpha, 0.2)
@@ -92,12 +159,16 @@ static func knot(ci: CanvasItem, at: Vector2, w: float, alpha := 1.0) -> void:
 	_ellipse(ci, at + Vector2(0, -w * 0.02), Vector2(w * 0.1, w * 0.045), _a(ROPE.lightened(0.3), alpha))
 
 
-## The rope of a hold lying down its lane from a (far) to b (near), wa and wb px wide there.
+## A hold's ribbon of light down its lane from a (far) to b (near), wa and wb px wide there: a
+## translucent gold body with bright edges and a hot centre line, brighter while it is held.
 static func sash(ci: CanvasItem, a: Vector2, b: Vector2, wa: float, wb: float, lit: bool, alpha := 1.0) -> void:
-	var col := Color("#ffd070") if lit else ROPE
-	ci.draw_colored_polygon(PackedVector2Array([a + Vector2(-wa * 0.5 - 2, 0), a + Vector2(wa * 0.5 + 2, 0), b + Vector2(wb * 0.5 + 2, 0), b + Vector2(-wb * 0.5 - 2, 0)]), _a(OUTLINE, 0.8 * alpha))
-	ci.draw_colored_polygon(PackedVector2Array([a + Vector2(-wa * 0.5, 0), a + Vector2(wa * 0.5, 0), b + Vector2(wb * 0.5, 0), b + Vector2(-wb * 0.5, 0)]), _a(col, (0.95 if lit else 0.8) * alpha))
-	ci.draw_colored_polygon(PackedVector2Array([a + Vector2(-wa * 0.12, 0), a + Vector2(wa * 0.12, 0), b + Vector2(wb * 0.12, 0), b + Vector2(-wb * 0.12, 0)]), _a(col.lightened(0.35), alpha))
+	var col := K_HOLD[0] as Color
+	var body := 0.5 if lit else 0.32
+	ci.draw_colored_polygon(PackedVector2Array([a + Vector2(-wa * 0.5, 0), a + Vector2(wa * 0.5, 0), b + Vector2(wb * 0.5, 0), b + Vector2(-wb * 0.5, 0)]), _a(col, body * alpha))
+	for sx: float in [-1.0, 1.0]:
+		ci.draw_line(a + Vector2(sx * wa * 0.5, 0), b + Vector2(sx * wb * 0.5, 0), _a(OUTLINE, 0.6 * alpha), maxf(3.0, wb * 0.08))
+		ci.draw_line(a + Vector2(sx * wa * 0.5, 0), b + Vector2(sx * wb * 0.5, 0), _a(col.lightened(0.3), alpha), maxf(2.0, wb * 0.04))
+	ci.draw_colored_polygon(PackedVector2Array([a + Vector2(-wa * 0.08, 0), a + Vector2(wa * 0.08, 0), b + Vector2(wb * 0.08, 0), b + Vector2(-wb * 0.08, 0)]), _a(K_HOLD[1], (0.95 if lit else 0.7) * alpha))
 
 
 ## The bell bar across the road from x0 to x1 at y, `lw` the lane's width there.
@@ -150,6 +221,11 @@ static func burst(ci: CanvasItem, at: Vector2, quality: String, age: float, sc: 
 		"late": Color("#ff8a2a"), "heal": Color("#fff8ea"), "held": Color("#9cc0ff"), "stomp": Color("#ff6a2a"),
 	}.get(quality, Color("#ffc445"))
 	var e := 1.0 - pow(1.0 - tt, 3.0)
+	# a pillar of light rising from the lane, thinning as it fades
+	var pw := 70.0 * sc * (1.0 - 0.5 * tt)
+	var ph := (160.0 + 120.0 * e) * sc
+	ci.draw_polygon(PackedVector2Array([at + Vector2(-pw, 0), at + Vector2(pw, 0), at + Vector2(pw * 0.6, -ph), at + Vector2(-pw * 0.6, -ph)]),
+		PackedColorArray([Color(col, 0.55 * (1.0 - tt)), Color(col, 0.55 * (1.0 - tt)), Color(col, 0.0), Color(col, 0.0)]))
 	var r := (60.0 + 110.0 * e) * sc
 	var a := pow(1.0 - tt, 1.5)
 	_ring(ci, at, Vector2(r, r * 0.42), maxf(2.0, 7.0 * sc * (1.0 - tt)), Color(col, 0.9 * a))
@@ -205,8 +281,8 @@ static func draw_notes(lv: LaneView, field: Rect2) -> void:
 				var head := minf(y, hl) if n.holding else y
 				var tail := maxf(float(e[2]), 0.0)
 				if head - tail > 1.0:
-					var wa := lv.road_scale(tail) * field.size.x / 3.0 * 0.26
-					var wb := lv.road_scale(head) * field.size.x / 3.0 * 0.26
+					var wa := lv.road_scale(tail) * field.size.x / 3.0 * 0.6
+					var wb := lv.road_scale(head) * field.size.x / 3.0 * 0.6
 					sash(lv, lv.project(Vector2(cx, tail)), lv.project(Vector2(cx, head)), wa, wb, n.holding, lv._haze(tail, field))
 	_hit_line(lv, field, rects, hl)
 	for e in shown:
@@ -219,24 +295,25 @@ static func draw_notes(lv: LaneView, field: Rect2) -> void:
 			Note.Kind.STEP:
 				if n.done:
 					continue
-				var at := lv.project(Vector2(rects[n.lane].get_center().x, y))
+				var sp := span(rects[n.lane], SLAB_W)
 				if n.heal:
-					gem(lv, at, w, BONE, INLAY_FLAME, a)
+					var top := slab(lv, field, sp.x, sp.y, y, K_HEAL, a)
+					_cross(lv, top, a)
 				elif n.call or lv._off_beat(n):
-					gem(lv, at, w * (1.0 if n.call else 0.84), RED, INLAY_GOLD, a)
+					sp = span(rects[n.lane], SLAB_W * (1.0 if n.call else 0.8))
+					slab(lv, field, sp.x, sp.y, y, K_CALL, a)
 				else:
-					gem(lv, at, w, GOLD, INLAY_RED, a)
+					slab(lv, field, sp.x, sp.y, y, K_STEP, a)
 			Note.Kind.HOLD:
 				if n.finished or (n.done and not n.holding):
 					continue
-				var cx := rects[n.lane].get_center().x
 				var tail: float = e[2]
-				if tail > 0.0:
-					knot(lv, lv.project(Vector2(cx, tail)), lv.road_scale(tail) * field.size.x / 3.0 * NOTE_W, lv._haze(tail, field))
 				var head := minf(y, hl) if n.holding else y
-				var at := lv.project(Vector2(cx, head))
-				var hw := lv.road_scale(head) * field.size.x / 3.0 * NOTE_W
-				hold_head(lv, at, hw, a)
+				if tail > 0.0:
+					var ts := span(rects[n.lane], SLAB_W * 0.62)
+					slab(lv, field, ts.x, ts.y, tail, K_HOLD, lv._haze(tail, field), SLAB_H * 0.6)
+				var sp := span(rects[n.lane], SLAB_W)
+				slab(lv, field, sp.x, sp.y, head, K_HOLD, a, SLAB_H, 1.0 if not n.holding else 0.6 + 0.4 * lv.beat_env())
 			Note.Kind.BELL, Note.Kind.RING:
 				if n.done:
 					continue
@@ -247,12 +324,37 @@ static func draw_notes(lv: LaneView, field: Rect2) -> void:
 				if n.kind == Note.Kind.BELL or n.lane != 1:
 					badge(lv, p, w, n.up, a)
 				if n.kind == Note.Kind.RING:
-					gem(lv, lv.project(Vector2(rects[n.lane].get_center().x, y)) - Vector2(0, w * 0.12), w, GOLD, INLAY_RED, a)
+					var rs := span(rects[n.lane], SLAB_W * 0.8)
+					slab(lv, field, rs.x, rs.y, y, K_STEP, a)
 			Note.Kind.STOMP:
 				if n.done:
 					continue
-				var at := lv.project(Vector2(rects[n.lane].get_center().x, y))
-				stomp(lv, at, w, a * (0.6 if n.thumbs > 0 else 1.0))
+				var sp := span(rects[n.lane], 0.98)
+				var top := slab(lv, field, sp.x, sp.y, y, K_STOMP, a * (0.6 if n.thumbs > 0 else 1.0), SLAB_H * 1.5)
+				_chevrons(lv, top, a * (0.6 if n.thumbs > 0 else 1.0))
+
+
+## A white cross on a healing slab.
+static func _cross(ci: CanvasItem, top: PackedVector2Array, alpha: float) -> void:
+	var c := (top[0] + top[1] + top[2] + top[3]) * 0.25
+	var w := (top[1].x - top[0].x + top[2].x - top[3].x) * 0.5
+	var h := (top[3].y - top[0].y)
+	var t := maxf(2.0, w * 0.05)
+	ci.draw_rect(Rect2(c.x - w * 0.14, c.y - t * 0.5, w * 0.28, t), _a(Color("#0b8fb0"), alpha))
+	ci.draw_rect(Rect2(c.x - t * 0.5, c.y - h * 0.34, t, h * 0.68), _a(Color("#0b8fb0"), alpha))
+
+
+## Two chevrons pressing down on a stomp slab: both thumbs, hard.
+static func _chevrons(ci: CanvasItem, top: PackedVector2Array, alpha: float) -> void:
+	var c := (top[0] + top[1] + top[2] + top[3]) * 0.25
+	var w := (top[1].x - top[0].x + top[2].x - top[3].x) * 0.5
+	var h := (top[3].y - top[0].y)
+	for sx: float in [-1.0, 1.0]:
+		var m := c + Vector2(sx * w * 0.17, 0.0)
+		var a := w * 0.1
+		var pts := PackedVector2Array([m + Vector2(-a, -h * 0.3), m + Vector2(0, h * 0.12), m + Vector2(a, -h * 0.3)])
+		ci.draw_polyline(pts, _a(OUTLINE, alpha), maxf(4.0, w * 0.06), true)
+		ci.draw_polyline(pts, _a(Color.WHITE, alpha), maxf(2.0, w * 0.035), true)
 
 
 ## The hit line across the road, and a receptor ring in each lane: lit while its button is down,
@@ -270,6 +372,15 @@ static func _hit_line(lv: LaneView, field: Rect2, rects: Array[Rect2], hl: float
 		var g := lv._lane_glow(lane)
 		var cue := 0.4 if lv._cued(lane) else 0.0
 		var k := clampf(0.35 + 0.25 * env + cue + 0.8 * g, 0.0, 1.0)
-		var rr := Vector2(lw * NOTE_W * 0.5, lw * NOTE_W * 0.5 * 0.34)
-		_ring(lv, c, rr, 8.0, Color(OUTLINE, 0.7))
-		_ring(lv, c, rr, 4.0, Color(1.0, 0.85, 0.5, k))
+		# the lane's slot: an empty slab of a note's own shape, filling while its button is down
+		var sp := span(rects[lane], SLAB_W)
+		var dsdy := maxf(0.05, (lv.project(Vector2(c.x, hl + 1.0)).y - lv.project(Vector2(c.x, hl - 1.0)).y) * 0.5)
+		var dy := lw * SLAB_H * 0.5 / dsdy
+		var q := PackedVector2Array([lv.project(Vector2(sp.x, hl - dy)), lv.project(Vector2(sp.y, hl - dy)), lv.project(Vector2(sp.y, hl + dy)), lv.project(Vector2(sp.x, hl + dy))])
+		ci_poly(lv, q, Color(0.02, 0.01, 0.02, 0.55))
+		if g > 0.01:
+			ci_poly(lv, q, Color(1.0, 0.75, 0.3, 0.55 * g))
+		var ring := q.duplicate()
+		ring.append(q[0])
+		lv.draw_polyline(ring, Color(OUTLINE, 0.8), 8.0, true)
+		lv.draw_polyline(ring, Color(1.0, 0.86, 0.55, k), 3.5, true)

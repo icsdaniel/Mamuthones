@@ -5,7 +5,7 @@ extends Control
 ## the session and the song time each frame; hits add bursts and button flashes the same frame the
 ## input arrives (flash() / burst() are called from the input signal handlers, then queue_redraw()).
 
-const BUTTONS_H := 196.0        ## height of the button row
+const BUTTONS_H := 264.0        ## height of the button row
 const LOOKAHEAD := 1.5          ## seconds of notes visible at note speed 1.0
 const FLASH_TIME := 0.14
 const CUE_TIME := 0.22          ## a button is "cued" when its next note is this close
@@ -1206,7 +1206,7 @@ func _draw_street_buttons() -> void:
 	draw_rect(panel, Color("#0b0a10"))
 	draw_rect(Rect2(panel.position, Vector2(panel.size.x, 3.0)), Color("#ffb04a") * Color(1, 1, 1, 0.6 + 0.4 * beat_env()))
 	var w := r.size.x / 3.0
-	var pad := 10.0
+	var pad := 7.0
 	for lane in 3:
 		var br := Rect2(r.position.x + w * lane + pad, r.position.y + pad + 4.0, w - pad * 2.0, r.size.y - pad * 2.0 - 4.0)
 		var st := _button_state(lane)
@@ -1237,8 +1237,18 @@ func _draw_street_buttons() -> void:
 				sb.border_color = Color("#a83030")
 				foot = BTN_BONE.darkened(0.4)
 		draw_style_box(sb, br)
+		# a lit lip along the top, the lane's slot light carried down onto the button
+		var lip := Color("#ffb04a")
+		var la := 0.35 + 0.25 * beat_env()
+		match st:
+			"cued":
+				la = 0.9
+			"pressed", "hit":
+				lip = Color("#fff2c0")
+				la = 1.0
+		draw_rect(Rect2(br.position.x + 18.0, br.position.y + 5.0, br.size.x - 36.0, 6.0), Color(lip, la))
 		var feet := [-1.0, 1.0] if lane == 1 else ([-1.0] if lane == 0 else [1.0])
-		var fs := minf(br.size.x, br.size.y) * 0.19
+		var fs := minf(br.size.x, br.size.y) * 0.25
 		for i in feet.size():
 			var ox := 0.0 if feet.size() == 1 else (float(i) - 0.5) * fs * 1.5
 			_footprint(br.get_center() + Vector2(ox, 0.0), fs, feet[i], foot)
