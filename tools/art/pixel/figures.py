@@ -207,7 +207,7 @@ MASK_CMAP = {"0": "K0", "1": "WOOD0", "2": "WOOD1", "3": "WOOD3", "4": "WOOD4"}
 
 FLEECE_RAMPS = {
     "black": ["FLEECE0", "FLEECE1", "FLEECE2", "FLEECE3", "FLEECE4"],
-    "dark_brown": ["FLEECE1", "FLEECE2", "FLEECE3", "FLEECE4", "FLEECE5"],
+    "dark_brown": ["FLEECE2", "FLEECE3", "FLEECE4", "FLEECE5", "LEATHER3"],
 }
 
 
