@@ -691,22 +691,31 @@ def torch_frames(n=4):
     return frames
 
 
-def torch_glow(r=40):
-    """A banded warm glow (drawn additively behind each torch): three flat rings, darkest outside."""
-    n = r * 2 + 1
-    cv = Canvas(n, n)
-    for rr, col in ((r, "GOLD0"), (int(r * 0.66), "GOLD1"), (int(r * 0.33), "FIRE2")):
-        cv.ellipse(r + 0.5, r + 0.5, rr, rr, col)
-    # dithered edge between bands so they are stepped but not harsh
+def _banded_glow(w, h, bands, dither=0.14):
+    """An elliptical glow for additive drawing: flat gold bands, darkest outside, their edges broken
+    by an ordered (Bayer) dither so the steps read as pixel art and never as hard rings."""
+    cv = Canvas(w, h)
+    cx, cy = (w - 1) / 2.0, (h - 1) / 2.0
+    for y in range(h):
+        for x in range(w):
+            t = math.hypot((x - cx) / (w / 2.0), (y - cy) / (h / 2.0))
+            if t >= 1.0:
+                continue
+            v = (1.0 - t) + (BAYER4[y % 4, x % 4] - 0.5) * dither
+            i = int(v * len(bands))
+            if i >= 0:
+                cv.pset(x, y, bands[min(i, len(bands) - 1)])
     return cv
+
+
+def torch_glow(r=40):
+    """The warm light a wall torch throws (drawn additively behind it, flickering in steps)."""
+    return _banded_glow(r * 2 + 1, r * 2 + 1, ["GOLD0", "GOLD0", "GOLD1", "GOLD1", "GOLD2"], 0.2)
 
 
 def title_glow(w=60, h=20):
-    """A banded glow behind the main banner (drawn additively, pulsing on the beat)."""
-    cv = Canvas(w, h)
-    for f, col in ((1.0, "GOLD0"), (0.72, "FIRE1"), (0.45, "FIRE2")):
-        cv.ellipse(w / 2, h / 2, w / 2 * f, h / 2 * f, col)
-    return cv
+    """A banded glow behind the main banner and the results score (additive, pulsing on the beat)."""
+    return _banded_glow(w, h, ["GOLD0", "GOLD1", "GOLD1", "GOLD2", "GOLD3"], 0.22)
 
 
 # ------------------------------------------------------------------ output

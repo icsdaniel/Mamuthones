@@ -6,6 +6,14 @@ extends Screen
 
 const TIERS := [0.5, 0.7, 0.85, 0.95]
 
+## Juice hooks for sound (and anything else that wants the beats of this screen):
+## the score counting up (about 24 ticks, rising values), the count landing on the final score, each
+## earned bell popping in (0..2), and the best-score line appearing.
+signal count_tick(value: int)
+signal count_done(value: int)
+signal bell_popped(index: int)
+signal best_revealed(new_best: bool)
+
 var session: Session
 var record: Dictionary
 
@@ -30,25 +38,62 @@ func build() -> void:
 	words.name = "Grade"
 	box.add_child(words)
 	# Bells and score share one row, so the breakdown and timing fit above the fold.
+	# The showcase: a warm glow behind them flares as each bell pops in and as the score lands.
+	var stage := PanelContainer.new()
+	stage.theme_type_variation = "ClearPanel"
+	box.add_child(stage)
+	var holder := Control.new()
+	holder.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	stage.add_child(holder)
+	_glow = TextureRect.new()
+	_glow.name = "Glow"
+	_glow.texture = Palette.px("ui/banner_glow")
+	_glow.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+	_glow.stretch_mode = TextureRect.STRETCH_SCALE
+	_glow.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	var add := CanvasItemMaterial.new()
+	add.blend_mode = CanvasItemMaterial.BLEND_MODE_ADD
+	_glow.material = add
+	_glow.set_anchors_preset(Control.PRESET_FULL_RECT)
+	_glow.offset_left = -30
+	_glow.offset_right = 30
+	_glow.offset_top = -36
+	_glow.offset_bottom = 36
+	_glow.modulate.a = 0.0
+	holder.add_child(_glow)
 	var top := HBoxContainer.new()
 	top.alignment = BoxContainer.ALIGNMENT_CENTER
-	top.add_theme_constant_override("separation", 20)
-	box.add_child(top)
+	top.add_theme_constant_override("separation", 24)
+	stage.add_child(top)
 	var bells := BellMarks.new(session.bells(), 52.0)
 	bells.name = "Bells"
 	bells.size_flags_vertical = Control.SIZE_SHRINK_CENTER
 	top.add_child(bells)
+	bells.popped.connect(func(i: int) -> void:
+		bell_popped.emit(i)
+		_flare(0.75))
 	bells.animate(0.35)
 	var score := UIKit.label(UIKit.fmt_score(session.score), "BigNumberLabel", false, HORIZONTAL_ALIGNMENT_CENTER)
 	score.name = "Score"
+	score.add_theme_font_size_override("font_size", 72)
 	top.add_child(score)
 	_count_up(score, session.score)
 	var best_line := _best_line()
 	if best_line != "":
-		var bl := UIKit.label(best_line, UIKit.CAPTION, true, HORIZONTAL_ALIGNMENT_CENTER)
+		var bl := UIKit.label(best_line, UIKit.SUB, true, HORIZONTAL_ALIGNMENT_CENTER)
 		bl.name = "BestLine"
-		bl.add_theme_color_override("font_color", Palette.EMBER)
+		bl.add_theme_font_size_override("font_size", 28)
+		bl.add_theme_color_override("font_color", Palette.GOLD_HOT if bool(record.get("new_best", false)) else Palette.BONE_DIM)
 		box.add_child(bl)
+		var new_best := bool(record.get("new_best", false))
+		if UIKit.reduced_motion():
+			best_revealed.emit.call_deferred(new_best)
+		else:
+			bl.modulate.a = 0.0
+			var tw := bl.create_tween()
+			tw.tween_interval(1.15)
+			tw.tween_callback(func() -> void: best_revealed.emit(new_best))
+			tw.tween_property(bl, "modulate:a", 1.0, 0.2)
 
 	# The score's story first: the unison headline, where the points came from, and the timing.
 	_breakdown(box)
@@ -294,12 +339,46 @@ static func next_bell_set(current: String) -> String:
 	return ""
 
 
+var _glow: TextureRect
+var _ticks := 0
+
+
+## The score counts up in about 24 audible ticks, then lands with a flare of the glow.
 func _count_up(l: Label, target: int) -> void:
 	if UIKit.reduced_motion():
+		_glow_rest.call_deferred()
+		count_done.emit.call_deferred(target)
 		return
+	_ticks = 0
 	var tw := l.create_tween()
-	tw.tween_method(func(v: float) -> void: l.text = UIKit.fmt_score(roundi(v)), 0.0, float(target), 1.1) \
+	tw.tween_method(func(v: float) -> void:
+		l.text = UIKit.fmt_score(roundi(v))
+		var n := int(v / maxf(float(target), 1.0) * 24.0)
+		if n > _ticks:
+			_ticks = n
+			count_tick.emit(roundi(v)), 0.0, float(target), 1.1) \
 		.set_trans(Tween.TRANS_CUBIC).set_ease(Tween.EASE_OUT)
+	tw.tween_callback(func() -> void:
+		count_done.emit(target)
+		_flare(1.0))
+	# the number swells a step as it lands
+	l.pivot_offset = l.size * 0.5
+	tw.tween_property(l, "scale", Vector2(1.08, 1.08), 0.06)
+	tw.tween_property(l, "scale", Vector2.ONE, 0.12)
+
+
+## A quick bright step of the warm glow, then it settles to a low ember.
+func _flare(strength: float) -> void:
+	if _glow == null:
+		return
+	var tw := _glow.create_tween()
+	tw.tween_property(_glow, "modulate:a", 0.25 + 0.45 * strength * (0.4 if UIKit.reduced_motion() else 1.0), 0.05)
+	tw.tween_property(_glow, "modulate:a", 0.28, 0.5)
+
+
+func _glow_rest() -> void:
+	if _glow != null:
+		_glow.modulate.a = 0.28
 
 
 func _next_song() -> SongData:
