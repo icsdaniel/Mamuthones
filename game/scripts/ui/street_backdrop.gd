@@ -21,12 +21,12 @@ extends Control
 const STREET := "res://art/street/street.png"
 const IMG := Vector2(941.0, 1672.0)
 ## The painted lines, x = a + b * y in the picture's pixels: the road's edges and the lane dividers.
-const RAILS := [Vector2(706.35, -0.65983), Vector2(546.98, -0.21123), Vector2(428.27, 0.17173), Vector2(274.43, 0.61683)]
-const VANISH_Y := 325.0              ## where the lines meet (the horizon), picture px
-const FAR_Y := 472.0                 ## the road's far end, just in front of the fire, picture px
+const RAILS := [Vector2(609.17, -0.45827), Vector2(510.90, -0.14397), Vector2(445.17, 0.12678), Vector2(356.72, 0.43025)]
+const VANISH_Y := 265.0              ## where the lines meet (the horizon), picture px
+const FAR_Y := 468.0                 ## the road's far end, just in front of the fire, picture px
 const STRETCH_FROM := 460.0          ## the picture is only ever stretched below this row
 const FIRE := Vector2(480.0, 370.0)  ## the fire's heart, picture px
-const LANTERNS := [Vector2(106, 258), Vector2(856, 274), Vector2(322, 382)]
+const LANTERNS := [Vector2(104, 256), Vector2(855, 276), Vector2(320, 382)]
 const EDGE_CLEAR := 0.12             ## an outer note's centre stays this share of the width off the edge
 ## The portrait frames' corners (picture px, the left one; the right mirrors it), from the play-screen
 ## reference.

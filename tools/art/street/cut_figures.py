@@ -101,5 +101,5 @@ for name, (src, box, tol) in CUTS.items():
     img = cut(src, box, tol)
     img.save(os.path.join(OUT, name + ".png"))
     print(name, img.size)
-Image.open(os.path.join(SRC, "street_tall_v2.png")).convert("RGB").save(os.path.join(OUT, "street.png"))
+Image.open(os.path.join(SRC, "street_tall_v3.png")).convert("RGB").save(os.path.join(OUT, "street.png"))
 print("street copied")
