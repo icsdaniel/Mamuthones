@@ -356,7 +356,8 @@ func _dance_pose() -> void:
 			pose = SETTLE
 	if fig.texture != _dance[pose]:
 		fig.texture = _dance[pose]
-	fig.flip_h = false
+	# the sheet's stamp and follow-through lean the other way: mirrored, so every pose faces the road
+	fig.flip_h = pose == IMPACT or pose == FOLLOW
 
 
 ## How far down a figure is (1 = the full drop) t seconds after the beat: down at once, held for a
