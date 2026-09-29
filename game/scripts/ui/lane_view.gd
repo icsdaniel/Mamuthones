@@ -299,36 +299,27 @@ vec4 road(vec2 UVp) {
 	float v = (1.0 / top_w - 1.0 / w) / (1.0 / top_w - 1.0);
 	float fy = v * field.y;
 	float u = fx / field.x;
-	// rails: the road's edges and the lane dividers, 1 art px far, 2 near
+	// the kerbs (the road's edges: a gold inlay between two kerb stones, 1 art px far, 2 near) and
+	// the lane dividers (one pale stone line)
 	float core_r = px * 0.5 + px * 0.5 * smoothstep(0.62, 0.95, w);
-	float rail_d = 1e6;
+	float div_d = 1e6;
 	float outer_d = 1e6;
 	for (int i = 0; i < 4; i++) {
 		float rx = half_w + (field.x * float(i) / 3.0 - half_w) * w;
 		float d = abs(cc.x - rx);
-		rail_d = min(rail_d, d);
-		if (i == 0 || i == 3) { outer_d = min(outer_d, d); }
+		if (i == 0 || i == 3) { outer_d = min(outer_d, d); } else { div_d = min(div_d, d); }
 	}
 	bool inside = u >= 0.0 && u <= 1.0;
 	if (!inside && outer_d >= core_r + px * 1.0) {
 		return vec4(0.0);
 	}
 	float pulse = max(env, 0.0);
-	// beads: a bright run on the outer rails arriving at the hit line on every beat
-	float bead = 0.0;
-	if (beat_px > 0.0 && beat > -999.0 && fy <= hl + 2.0) {
-		float ph = beat + (hl - fy) / beat_px;
-		float db = abs(fract(ph + 0.5) - 0.5) * beat_px;
-		bead = clamp(1.0 - db / (9.0 + 8.0 * w), 0.0, 1.0);
-	}
 	vec2 flat_uv = vec2(clamp(u, 0.0, 1.0), clamp(fy / field.y, 0.0, 1.0));
-	if (rail_d < core_r) {
-		float rl = 0.3 + 0.35 * pulse + (outer_d < core_r ? 0.6 * bead : 0.0) + 0.15 * flash - 0.2 * dim;
-		return lut_at(4, rl, cell);
+	if (outer_d < core_r) {
+		return lut_at(4, 0.25 + 0.4 * pulse + 0.3 * flash - 0.2 * dim, cell);
 	}
-	if (rail_d < core_r + px) {
-		float rl = 0.35 + 0.35 * pulse + (outer_d < core_r + px ? 0.5 * bead : 0.0) - 0.2 * dim;
-		return lut_at(5, rl, cell);
+	if (outer_d < core_r + px) {
+		return lut_at(5, 0.3 + 0.3 * pulse - 0.2 * dim + 0.3 * clamp(1.0 - fy / (field.y * 0.3), 0.0, 1.0), cell);
 	}
 	if (!inside) {
 		return lut_at(6, 0.2 + 0.6 * clamp(1.0 - fy / (field.y * 0.35), 0.0, 1.0), cell);
@@ -352,11 +343,26 @@ vec4 road(vec2 UVp) {
 	float fd = length(vec2((fx - half_w) / (field.x * 0.62), fy / (field.y * (0.34 + 0.08 * pulse))));
 	float light = 0.19;
 	light += pow(clamp(1.0 - fd, 0.0, 1.0), 1.3) * (0.62 + 0.25 * pulse) * (1.0 - 0.55 * dim);
-	light += clamp(1.0 - (rail_d - core_r - px) / (px * (2.0 + 3.0 * w)), 0.0, 1.0) * (0.2 + 0.2 * pulse + 0.15 * flash);
-	light += clamp(1.0 - abs(fy - hl) / (field.y * 0.03), 0.0, 1.0) * (0.18 + 0.12 * pulse);
+	light += clamp(1.0 - (outer_d - core_r - px) / (px * (2.0 + 3.0 * w)), 0.0, 1.0) * (0.12 + 0.12 * pulse + 0.1 * flash);
+	light += clamp(1.0 - abs(fy - hl) / (field.y * 0.03), 0.0, 1.0) * (0.1 + 0.1 * pulse);
 	int lane = clamp(int(floor(u * 3.0)), 0, 2);
 	float lg = lane == 0 ? lane_glow.x : (lane == 1 ? lane_glow.y : lane_glow.z);
 	light += lg * clamp(1.0 - (hl - fy) / (field.y * 0.22), 0.0, 1.0) * step(fy, hl + field.y * 0.05) * 0.4;
+	if (div_d < px * 0.5 + px * 0.5 * step(0.8, w)) {
+		return lut_th(7, light, 0.5);
+	}
+	// the beats: a thin line across the lanes where a beat falls inside this pixel's rows, moving with
+	// the notes to the hit line (the first beat of each bar of 4 a little brighter)
+	if (beat_px > 0.0 && beat > -999.0 && fy <= hl + 0.5) {
+		float v0 = (1.0 / top_w - 1.0 / (top_w + (1.0 - top_w) * clamp(c0.y / field.y, 0.0, 1.0))) / (1.0 / top_w - 1.0);
+		float v1 = (1.0 / top_w - 1.0 / (top_w + (1.0 - top_w) * clamp((c0.y + px) / field.y, 0.0, 1.0))) / (1.0 / top_w - 1.0);
+		float ph0 = beat + (hl - v0 * field.y) / beat_px;
+		float ph1 = beat + (hl - v1 * field.y) / beat_px;
+		if (floor(ph0) != floor(ph1) && fy > field.y * 0.06) {
+			float bn = floor(max(ph0, ph1));
+			return lut_th(mod(bn, 4.0) < 0.5 ? 9 : 8, light, 0.5);
+		}
+	}
 	if (seam || joint) {
 		float mh = hash(cell * 0.73 + 5.1);
 		if (mh < 0.07 + 0.08 * abs(u - 0.5) * 2.0) {
@@ -720,7 +726,8 @@ func _draw_marks() -> void:
 			"faint":
 				var p := project(lane_center(lane))
 				if a > 0.4:
-					FireSkin.px_ring(self, p, 16.0, 7.0, 1.0, PixelPalette.BONE[1])
+					var frx := float(FireSkin.note_rx(upright_scale(LaneSkin.hit_line_y(field_rect()))))
+					FireSkin.px_plate(self, p, frx + 1.0, FireSkin.plate_ry(frx) + 1.0, 1.0, PixelPalette.BONE[1])
 			"stomp", "stomp1":
 				# the thumb prints left on the pressed button: two for a full stomp, one dull one otherwise
 				var both := str(m[0]) == "stomp"
@@ -803,17 +810,15 @@ func _draw_upright() -> void:
 			Note.Kind.BELL:
 				if not n.done:
 					_draw_bell_bar(field, y, n.up, a)
-					_bell_words(field, y, n.up, a)
-					FireSkin.draw_badge(self, project(Vector2(field.get_center().x, y)), upright_scale(y), a)
+					FireSkin.draw_badge(self, project(Vector2(field.get_center().x, y)), upright_scale(y), a, n.up)
 			Note.Kind.RING:
 				if not n.done:
 					var sc := upright_scale(y)
+					# a bell and a step at once: the bar, and the step's plate standing on it in its lane
 					_draw_bell_bar(field, y, n.up, a)
-					FireSkin.draw_badge(self, project(Vector2(field.get_center().x, y)), sc, a)
-					var p := project(Vector2(lanes[n.lane].get_center().x, y))
-					var rr := float(FireSkin.note_rx(sc)) + 4.0
-					FireSkin.px_ring(self, p + Vector2(0, PxArt.PX), rr, rr * 0.46 + 1.0, 2.0, Color(PixelPalette.RED[3], a))
-					FireSkin.draw_gem(self, p, sc, false, a)
+					if n.lane != 1:
+						FireSkin.draw_badge(self, project(Vector2(field.get_center().x, y)), sc, a, n.up)
+					FireSkin.draw_gem(self, project(Vector2(lanes[n.lane].get_center().x, y)), sc, false, a)
 			Note.Kind.STOMP:
 				if not n.done:
 					draw_stomp(project(Vector2(lanes[n.lane].get_center().x, y)), upright_scale(y), a * (0.6 if n.thumbs > 0 else 1.0))
@@ -835,21 +840,6 @@ func _draw_bell_bar(field: Rect2, y: float, up: bool, a: float) -> void:
 ## button, both thumbs - at pos (on screen), scaled like a gem.
 func draw_stomp(pos: Vector2, sc: float, alpha: float) -> void:
 	FireSkin.draw_stomp_note(self, pos, sc, alpha)
-
-
-## "Raise … Bells" (or "Lower … Bells") on the bell bar either side of its badge, upright, sized to
-## the bar's height on screen.
-func _bell_words(field: Rect2, y: float, up: bool, a: float) -> void:
-	var h := FireSkin.bar_h(upright_scale(y))
-	if h < 9:
-		return
-	var P := PxArt.PX
-	for sd in [-1.0, 1.0]:
-		var text := tr("lane_bells") if sd > 0.0 else tr("lane_raise" if up else "lane_lower")
-		var p := project(Vector2(field.get_center().x + sd * field.size.x * 0.21, y))
-		# dark brown pixel capitals set into the gold plank, on its middle row
-		var top := roundf(p.y - (h + 2) * 0.5 * P) + P * floorf((h - 8) * 0.5 + 1.0) - 2.0 * P
-		PxType.draw(self, "caps", Vector2(p.x, top), text, Color(PixelPalette.GOLD[1], a), 1, 0)
 
 
 ## Whether a note falls between the beats (drawn smaller, in a dashed ring).

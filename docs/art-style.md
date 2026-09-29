@@ -50,6 +50,24 @@ SETT, GOLD, RED, BONE, FLEECE, WOOD, LEATHER, ROPE, NAVY, MOSS, SKIN, and K for 
 * Screens stand on a dark stone backdrop (worn cobbles, a warm glow from below) so no screen is a
   flat colour.
 
+## The street (notes, bells, road), redrawn 2026-09-29 for readability
+Daniele asked for the notes, the bells and everything on the road to be redone from scratch, readable
+first. Drawn in tools/art/pixel/road.py; the road itself is the shader in LaneView with its light
+table in field.py.
+* **Notes are plates**: a rounded-rectangle face seen from low in front, its thickness below, a K0
+  outline, about three quarters of the lane wide. Kind is told by colour *and* shape:
+  step = gold plate with a red diamond; off-beat / call = a narrower red plate with a gold diamond
+  (the Issohadore's red); heal = a bone plate with a flame; stomp = a wider, twice-as-thick fire plate
+  with two bone thumb prints; hold = a gold plate trailing a hemp rope that ends in a small gold
+  knot plate, and the rope catches fire while held.
+* **Bell bars** span the road: a warm gold beam of dark chevrons pointing up (raise the bells) or a
+  cool steel beam of pale chevrons pointing down (lower them), a matching medallion in the middle.
+* **Hit line**: a thin gold rule; on each lane a slot that is the step plate's own outline, so a note
+  on time drops exactly into it. Hit effects are plate-shaped rings thrown out of the slot.
+* **Road**: dark, quiet setts. Only warm, bright things on the road are notes; the lane dividers are
+  pale cool stone lines, the edges a thin gold kerb inlay, and a faint line crosses the road on every
+  beat (brighter on the first beat of a bar) so off-beat notes read as between the lines.
+
 ## Motion ("juice") rules
 * Everything that moves on the beat lands **on** the beat: Mamuthones touch down on it, the fire
   flares on it, braziers and the hit line pulse on it. Anticipation happens before the beat.

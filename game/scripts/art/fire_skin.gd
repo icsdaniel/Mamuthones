@@ -17,6 +17,7 @@ extends RefCounted
 
 const PX := 3.0
 const REF_LANE := 240.0
+const PLATE_P := 3.2    ## squareness of a note plate (tools/art/pixel/road.py PLATE_P)
 const BUTTON_STATES := ["idle", "cued", "pressed", "hit", "miss"]
 
 ## Named colours (all from the palette) that other scripts use.
@@ -72,15 +73,16 @@ static func bounds(name: String, _sc := 1.0, flip := false) -> Rect2:
 	return r
 
 
-## A note's half-width in art px for lane scale sc (the baked sizes run NOTE_MIN..NOTE_MAX).
+## A step plate's half-width in art px for lane scale sc (the baked sizes run NOTE_MIN..NOTE_MAX):
+## about three quarters of the lane, so a note fills its lane and reads at a glance.
 static func note_rx(sc: float) -> int:
-	return clampi(roundi(24.0 * sc), FireCells.NOTE_MIN, FireCells.NOTE_MAX)
+	return clampi(roundi(29.0 * sc), FireCells.NOTE_MIN, FireCells.NOTE_MAX)
 
 
-## The hit line's target half-width in art px for a ring of rx screen px.
+## The hit line's slot half-width in art px, for a lane whose slot is rx_screen screen px wide (half):
+## the step plate's own size there, so a note on time fills its slot exactly.
 static func target_rx(rx_screen: float) -> int:
-	var r := roundi(rx_screen / PX / 2.0) * 2
-	return clampi(r, FireCells.TARGET_MIN, FireCells.TARGET_MAX)
+	return clampi(note_rx(rx_screen / (0.33 * REF_LANE)), FireCells.TARGET_MIN, FireCells.TARGET_MAX)
 
 
 # ------------------------------------------------------------------ pixel primitives
@@ -115,6 +117,38 @@ static func px_disc(ci: CanvasItem, c: Vector2, rx: float, ry: float, col: Color
 	px_ring(ci, c, rx, ry, rx + 1.0, col)
 
 
+## A ring the shape of a note plate (a rounded rectangle, PLATE_P) round c: half-widths rx, ry and
+## thickness th in art px. Hit effects use it, so they grow out of the plate and its slot.
+static func px_plate(ci: CanvasItem, c: Vector2, rx: float, ry: float, th: float, col: Color) -> void:
+	if rx < 0.5 or ry < 0.5:
+		return
+	var o := c.round()
+	var R := ceili(ry)
+	var rxi := rx - th
+	var ryi := ry - th * 0.7
+	for j in range(-R, R):
+		var v := float(j) + 0.5
+		if absf(v) >= ry:
+			continue
+		var xo := roundi(rx * pow(1.0 - pow(absf(v) / ry, PLATE_P), 1.0 / PLATE_P))
+		var xi := 0
+		if rxi > 0.0 and ryi > 0.0 and absf(v) < ryi:
+			xi = roundi(rxi * pow(1.0 - pow(absf(v) / ryi, PLATE_P), 1.0 / PLATE_P))
+		if xo <= xi:
+			continue
+		var y := o.y + float(j) * PX
+		if xi == 0:
+			ci.draw_rect(Rect2(o.x - xo * PX, y, xo * 2 * PX, PX), col)
+		else:
+			ci.draw_rect(Rect2(o.x - xo * PX, y, (xo - xi) * PX, PX), col)
+			ci.draw_rect(Rect2(o.x + xi * PX, y, (xo - xi) * PX, PX), col)
+
+
+## A plate's face half-height for half-width rx (tools/art/pixel/road.py face_ry).
+static func plate_ry(rx: float) -> float:
+	return maxf(2.0, roundf(rx * 0.36))
+
+
 ## A colour of `ramp` stepped down by life k (0 fresh .. 1 gone): palette steps, no alpha.
 static func _step(ramp: Array, k: float) -> Color:
 	var i := clampi(int(floor(clampf(k, 0.0, 0.999) * ramp.size())), 0, ramp.size() - 1)
@@ -141,49 +175,56 @@ static func px_chevron(ci: CanvasItem, c: Vector2, half: int, d: float, col: Col
 
 # ------------------------------------------------------------------ upright notes
 
-## A step: an ember disc with a dark outline. A call (off-beat) step sits in a dashed gold ring.
+## A step: a cast gold plate with a red diamond inlaid. A call or off-beat step: a narrower red plate
+## with a gold diamond.
 static func draw_gem(ci: CanvasItem, at: Vector2, sc: float, call := false, alpha := 1.0, off := false) -> void:
 	sprite(ci, "note_%s_%d" % ["call" if (call or off) else "step", note_rx(sc)], at, alpha)
 
 
-## A healing step: the gold disc with its flame, and a thin gold halo breathing with `clock` (s).
+## A healing step: a bone-white plate with a flame inlaid, and a thin gold halo breathing with
+## `clock` (s).
 static func draw_heal_gem(ci: CanvasItem, at: Vector2, sc: float, alpha := 1.0, clock := 0.0) -> void:
 	var rx := note_rx(sc)
 	var p := fposmod(clock * 1.5, 1.0)
 	if alpha > 0.5 and p < 0.6:
 		var k := p / 0.6
 		var r := float(rx) + 2.0 + 4.0 * k
-		px_ring(ci, at + Vector2(0, PX), r, r * 0.46 + 1.0, 1.0, _step([PixelPalette.GOLD[5], PixelPalette.GOLD[4], PixelPalette.GOLD[3], PixelPalette.GOLD[2]], k))
+		px_plate(ci, at + Vector2(0, PX), r, plate_ry(r) + 1.0, 1.0, _step([PixelPalette.GOLD[5], PixelPalette.GOLD[4], PixelPalette.GOLD[3], PixelPalette.GOLD[2]], k))
 	sprite(ci, "note_heal_%d" % rx, at, alpha)
 
 
-## The end of a hold: a hollow gold ring.
+## The end of a hold: the knot of its rope, a small gold plate.
 static func draw_hold_ring(ci: CanvasItem, at: Vector2, sc: float, alpha := 1.0) -> void:
-	sprite(ci, "hold_ring_%d" % note_rx(sc), at, alpha)
+	sprite(ci, "hold_end_%d" % note_rx(sc), at, alpha)
 
 
-## The two-thumb stomp: a heavy gold-rimmed drum-head, wider and thicker than a step, with two thumb
-## prints leaning in on its ember face (press with both thumbs at once).
+## The two-thumb stomp: a fire-hot plate, wider and twice as thick as a step, with two bone thumb
+## prints on its face (press with both thumbs at once).
 static func draw_stomp_note(ci: CanvasItem, at: Vector2, sc: float, alpha := 1.0) -> void:
 	sprite(ci, "note_stomp_%d" % note_rx(sc), at, alpha)
 
 
-## The bell bar's medallion (a red disc, gold rim, bone bell), upright at the bar's middle.
-static func draw_badge(ci: CanvasItem, at: Vector2, sc: float, alpha := 1.0) -> void:
-	sprite(ci, "badge_%d" % clampi(roundi(11.0 * sc), 4, 13), at, alpha)
+## The bell bar's medallion, upright at the bar's middle: a bone bell on red in a gold rim to raise
+## the bells, on navy in a steel rim to lower them.
+static func draw_badge(ci: CanvasItem, at: Vector2, sc: float, alpha := 1.0, up := true) -> void:
+	var r := clampi(roundi(12.0 * sc), FireCells.BADGE_MIN, FireCells.BADGE_MAX)
+	sprite(ci, "badge_%s_%d" % ["up" if up else "down", r], at, alpha)
 
 
 ## The bell bar's height in art px (without its outline) at lane scale sc.
 static func bar_h(sc: float) -> int:
-	return clampi(roundi(3.0 + 10.0 * sc), 6, 14)
+	return clampi(roundi(3.0 + 11.0 * sc), FireCells.BAR_MIN, FireCells.BAR_MAX)
 
 
-## The bell bar, upright across the road from x0 to x1 at y (screen), a gold plank with a chevron
-## cap at each end (pointing up to raise the bells, down to lower them).
+## The bell bar, upright across the road from x0 to x1 at y (screen): a beam patterned with
+## chevrons pointing the way to tilt - warm gold ones pointing up to raise the bells, cool steel ones
+## pointing down to lower them - between two square end caps. The chevrons are laid out from the
+## middle so the pattern stays symmetric round the badge.
 static func draw_bar(ci: CanvasItem, x0: float, x1: float, y: float, sc: float, up: bool, alpha := 1.0) -> void:
 	var h := bar_h(sc)
-	var mid := "bar_%d" % h
-	var cap := "bar_end_%s_%d" % ["up" if up else "down", h]
+	var way := "up" if up else "down"
+	var mid := "bar_%s_%d" % [way, h]
+	var cap := "bar_end_%s_%d" % [way, h]
 	var tm := tex(mid)
 	var tc := tex(cap)
 	if tm == null or tc == null:
@@ -191,12 +232,19 @@ static func draw_bar(ci: CanvasItem, x0: float, x1: float, y: float, sc: float, 
 	var top := roundf(y - (h + 2) * 0.5 * PX)
 	var cw := float(tc.get_width()) * PX
 	var a := Color(1, 1, 1, alpha)
-	var x := roundf(x0) + cw
+	var start := roundf(x0) + cw
 	var end := roundf(x1) - cw
+	var tw := float(tm.get_width()) * PX
+	var th := float(tm.get_height()) * PX
+	var cx := roundf((start + end) * 0.5 / PX) * PX
+	# whole tiles out from the middle, then part tiles against the caps (cut at their outer side)
+	var x := cx - tw * ceilf((cx - start) / tw)
 	while x < end:
-		var w := minf(float(tm.get_width()) * PX, end - x)
-		ci.draw_texture_rect_region(tm, Rect2(x, top, w, float(tm.get_height()) * PX), Rect2(0, 0, w / PX, tm.get_height()), a)
-		x += w
+		var l := maxf(x, start)
+		var r := minf(x + tw, end)
+		if r > l:
+			ci.draw_texture_rect_region(tm, Rect2(l, top, r - l, th), Rect2((l - x) / PX, 0, (r - l) / PX, tm.get_height()), a)
+		x += tw
 	ci.draw_texture_rect(tc, Rect2(roundf(x0), top, cw, float(tc.get_height()) * PX), false, a)
 	ci.draw_set_transform(Vector2(end + cw, top), 0.0, Vector2(-1.0, 1.0))
 	ci.draw_texture_rect(tc, Rect2(0.0, 0.0, cw, float(tc.get_height()) * PX), false, a)
@@ -222,18 +270,17 @@ static func draw_rope(ci: CanvasItem, at: Vector2, road_w: float, dir: int, alph
 
 # ------------------------------------------------------------------ the hit line
 
-## The hit line: a hot bar of pixel rows across the whole width at y (on the art grid), a heavy gold
-## oval target on each lane (centres xs, ring half-width rx screen px). lit[i] 0..1 lights a target
+## The hit line: a thin gold rule across the whole width at y (on the art grid), and on each lane the
+## slot a step plate lands in (centres xs, slot half-width rx screen px): the plate's own outline. lit[i] 0..1 lights a target
 ## (pressed, holding); pulse 0..1 is the beat (the bar and the targets brighten on it); miss[i] true
 ## dulls a target for an instant.
 static func draw_hit_line(ci: CanvasItem, x0: float, x1: float, y: float, xs: Array, rx: float, lit: Array, pulse := 0.0, miss: Array = []) -> void:
-	var F := PixelPalette.FIRE
+	var G := PixelPalette.GOLD
 	var on := pulse > 0.5
-	var rows := [F[3], F[5], F[7], F[6], F[3]] if on else [F[2], F[4], F[7], F[5], F[2]]
+	var rows := [PixelPalette.K[0], G[3], G[5], G[2], PixelPalette.K[0]] if on else [PixelPalette.K[0], G[2], G[4], G[1], PixelPalette.K[0]]
 	var yy := roundf(y)
 	for i in rows.size():
 		ci.draw_rect(Rect2(x0, yy + float(i - 2) * PX, x1 - x0, PX), rows[i])
-	ci.draw_rect(Rect2(x0, yy + 3.0 * PX, x1 - x0, PX), PixelPalette.K[0])
 	var trx := target_rx(rx)
 	for i in xs.size():
 		var l: float = lit[i] if i < lit.size() else 0.0
@@ -260,8 +307,9 @@ static func draw_hit_glow(ci: CanvasItem, x0: float, x1: float, y: float, pulse 
 
 # ------------------------------------------------------------------ flat (on the road)
 
-## A hold's sash lying on the road in `lane` (flat), from y_head back to y_tail: a crimson band with gold
-## edges and gold lozenges that travel with the head; it burns when held. Opaque palette colours only.
+## A hold's rope lying on the road in `lane` (flat), from y_head back to y_tail: a thick hemp rope,
+## two strands twisted round each other, in a K0 outline; the twists are anchored to the head so they
+## travel with it. It catches fire while held. Opaque palette colours only.
 static func draw_sash(ci: CanvasItem, lane: Rect2, y_head: float, y_tail: float, lit := false, clip := Rect2()) -> void:
 	var top := minf(y_head, y_tail)
 	var bottom := maxf(y_head, y_tail)
@@ -270,29 +318,65 @@ static func draw_sash(ci: CanvasItem, lane: Rect2, y_head: float, y_tail: float,
 		bottom = minf(bottom, clip.end.y)
 	if bottom - top < 1.0:
 		return
-	var R := PixelPalette.RED
+	var R := PixelPalette.ROPE
 	var F := PixelPalette.FIRE
-	var G := PixelPalette.GOLD
+	var base: Color = F[5] if lit else R[1]
+	var hi: Color = F[6] if lit else R[2]
+	var lo: Color = F[3] if lit else R[0]
 	var cx := lane.get_center().x
 	var k := lane.size.x / REF_LANE
-	var bw := 84.0 * k
+	var bw := 66.0 * k
 	var r := Rect2(cx - bw * 0.5, top, bw, bottom - top)
-	ci.draw_rect(r.grow_individual(6.0 * k, 0, 6.0 * k, 0), PixelPalette.K[0])
-	ci.draw_rect(r, F[2] if lit else R[2])
-	ci.draw_rect(r.grow_individual(-bw * 0.22, 0, -bw * 0.22, 0), F[3] if lit else R[3])
-	ci.draw_rect(Rect2(r.position.x, top, 9.0 * k, r.size.y), F[6] if lit else G[4])
-	ci.draw_rect(Rect2(r.end.x - 9.0 * k, top, 9.0 * k, r.size.y), F[5] if lit else G[3])
-	# lozenges every `step`, anchored to the head so they travel with it
-	var step := 72.0 * k
+	ci.draw_rect(r.grow_individual(7.0 * k, 0, 7.0 * k, 0), PixelPalette.K[0])
+	ci.draw_rect(r, base)
+	# the twists: slanted bands, a lit ridge and a shadowed groove on each, one every `step`
+	var step := 40.0 * k
+	var slant := 22.0 * k
 	var dy := fposmod(y_head - bottom, step)
-	var y := bottom + dy - step
-	var hw := bw * 0.2
-	var hh := 24.0 * k
-	while y > top - hh:
-		if y < bottom + hh:
-			var pts := PackedVector2Array([Vector2(cx, maxf(y - hh, top)), Vector2(cx + hw, y), Vector2(cx, minf(y + hh, bottom)), Vector2(cx - hw, y)])
-			ci.draw_colored_polygon(pts, F[6] if lit else G[4])
+	var y := bottom + dy + slant
+	var x0 := r.position.x
+	var x1 := r.end.x
+	while y > top - slant - step:
+		var ridge := PackedVector2Array([Vector2(x0, y), Vector2(x1, y - slant), Vector2(x1, y - slant - step * 0.4), Vector2(x0, y - step * 0.4)])
+		var groove := PackedVector2Array([Vector2(x0, y), Vector2(x1, y - slant), Vector2(x1, y - slant + step * 0.14), Vector2(x0, y + step * 0.14)])
+		for part in [[ridge, hi], [groove, lo]]:
+			var cut := _clip_y(part[0], top, bottom)
+			if cut.size() >= 3 and _area(cut) > 1.0:
+				ci.draw_colored_polygon(cut, part[1])
 		y -= step
+	# the rope's shaded right side and lit left edge
+	ci.draw_rect(Rect2(r.end.x - 9.0 * k, top, 9.0 * k, r.size.y), lo)
+	ci.draw_rect(Rect2(r.position.x, top, 6.0 * k, r.size.y), hi)
+
+
+static func _area(pts: PackedVector2Array) -> float:
+	var a := 0.0
+	for i in pts.size():
+		a += pts[i].cross(pts[(i + 1) % pts.size()])
+	return absf(a) * 0.5
+
+
+## A polygon cut to the band top..bottom (horizontal clip; the rope's twists never draw past its ends).
+static func _clip_y(pts: PackedVector2Array, top: float, bottom: float) -> PackedVector2Array:
+	var out := pts
+	for edge in [[top, 1.0], [bottom, -1.0]]:
+		var lim: float = edge[0]
+		var sgn: float = edge[1]
+		var res := PackedVector2Array()
+		for i in out.size():
+			var p := out[i]
+			var q := out[(i + 1) % out.size()]
+			var pin := (p.y - lim) * sgn >= 0.0
+			var qin := (q.y - lim) * sgn >= 0.0
+			if pin:
+				res.append(p)
+			if pin != qin:
+				var t := (lim - p.y) / (q.y - p.y)
+				res.append(p.lerp(q, t))
+		out = res
+		if out.size() < 3:
+			return PackedVector2Array()
+	return out
 
 
 ## The stand-still band: navy, hatched, closed by two pale rules (flat, opaque palette colours).
@@ -380,7 +464,7 @@ static func draw_burst(ci: CanvasItem, at: Vector2, quality: String, age: float,
 		return false
 	var t := age / life
 	var grow := 1.0 - pow(1.0 - t, 2.5)
-	var rx := float(target_rx(0.33 * REF_LANE * sc * 1.0))
+	var rx := float(note_rx(sc))
 	var G: Array = PixelPalette.GOLD
 	var F: Array = PixelPalette.FIRE
 	var gold := [G[5], G[5], G[4], G[4], G[3]]
@@ -391,36 +475,39 @@ static func draw_burst(ci: CanvasItem, at: Vector2, quality: String, age: float,
 				var sc_col: Color = Palette.EARLY if quality == "early" else Palette.LATE
 				ring = [sc_col.lightened(0.3), sc_col, sc_col, sc_col.darkened(0.3), sc_col.darkened(0.5)]
 			var big := 1.0 if quality == "perfect" else 0.75
-			if t < 0.18:
-				px_ring(ci, at, rx - 4.0, (rx - 4.0) * 0.4, 2.0, F[7])
-			var r1 := lerpf(rx + 1.0, rx * (1.0 + 0.6 * big), grow)
+			# the plate flashes white-hot in its slot, then its outline is thrown out
+			if t < 0.12:
+				px_plate(ci, at, rx, plate_ry(rx), rx, F[7])
+			elif t < 0.22:
+				px_plate(ci, at, rx + 1.0, plate_ry(rx) + 1.0, 2.0, F[6])
+			var r1 := lerpf(rx + 2.0, rx * (1.0 + 0.35 * big), grow)
 			if t < 0.75:
-				px_ring(ci, at, r1, r1 * 0.42, 2.0, _step(ring, t / 0.75))
+				px_plate(ci, at, r1, plate_ry(r1) + 3.0 * grow, 2.0, _step(ring, t / 0.75))
 			if quality == "perfect" and t < 0.6:
-				var r2 := lerpf(rx + 1.0, rx * 1.9, pow(t / 0.6, 0.8))
-				px_ring(ci, at, r2, r2 * 0.42, 1.0, _step([G[5], G[4], G[3]], t / 0.6))
+				var r2 := lerpf(rx + 2.0, rx * 1.6, pow(t / 0.6, 0.8))
+				px_plate(ci, at, r2, plate_ry(r2) + 6.0 * t, 1.0, _step([G[5], G[4], G[3]], t / 0.6))
 			_sparks(ci, at, rx, t, 14 if quality == "perfect" else 8, [F[7], F[6], F[5], F[4], F[3]], 1.0)
 		"heal":
 			var h := lerpf(6.0, 34.0, grow)
-			var w := maxf(1.0, rx * 0.35 * (1.0 - t))
+			var w := maxf(1.0, rx * 0.25 * (1.0 - t))
 			var col := _step([PixelPalette.BONE[4], G[5], G[4], G[3]], t)
 			ci.draw_rect(Rect2(roundf(at.x - w * PX), roundf(at.y - h * PX), roundf(w * 2.0) * PX, h * PX), col)
-			var r := lerpf(rx, rx * 2.2, grow)
-			px_ring(ci, at, r, r * 0.42, 2.0 if t < 0.4 else 1.0, _step([PixelPalette.BONE[4], PixelPalette.BONE[3], G[4], G[3]], t))
+			var r := lerpf(rx, rx * 1.6, grow)
+			px_plate(ci, at, r, plate_ry(r), 2.0 if t < 0.4 else 1.0, _step([PixelPalette.BONE[4], PixelPalette.BONE[3], G[4], G[3]], t))
 			_sparks(ci, at, rx, t, 16, [PixelPalette.BONE[4], G[5], G[4], G[3]], 1.3)
 		"held":
 			var h := lerpf(4.0, 24.0, grow)
-			var w := maxf(1.0, rx * 0.25 * (1.0 - t))
+			var w := maxf(1.0, rx * 0.2 * (1.0 - t))
 			ci.draw_rect(Rect2(roundf(at.x - w * PX), roundf(at.y - h * PX), roundf(w * 2.0) * PX, h * PX), _step([F[7], F[6], F[5], F[4]], t))
-			var r := lerpf(rx, rx * 1.4, grow)
+			var r := lerpf(rx, rx * 1.25, grow)
 			if t < 0.7:
-				px_ring(ci, at, r, r * 0.42, 2.0, _step([F[6], F[5], F[4]], t / 0.7))
+				px_plate(ci, at, r, plate_ry(r), 2.0, _step([F[6], F[5], F[4]], t / 0.7))
 			_sparks(ci, at, rx, t, 8, [F[6], F[5], F[4], F[3]], 0.9)
 		_:
-			# a miss: a dark ring closing on the target, ash dropping
+			# a miss: the slot's outline closes in dark red, ash dropping
 			if t < 0.6:
-				var r := lerpf(rx * 1.5, rx + 1.0, t / 0.6)
-				px_ring(ci, at, r, r * 0.42, 2.0, _step([PixelPalette.K[1], PixelPalette.NAVY[1], PixelPalette.SETT[2]], t / 0.6))
+				var r := lerpf(rx * 1.3, rx + 1.0, t / 0.6)
+				px_plate(ci, at, r, plate_ry(r), 2.0, _step([PixelPalette.RED[2], PixelPalette.RED[1], PixelPalette.RED[0]], t / 0.6))
 			for i in 6:
 				var x := (_hash(i, 11) - 0.5) * rx * 1.6
 				var y := -2.0 + t * (6.0 + 8.0 * _hash(i, 13))
@@ -464,27 +551,28 @@ static func draw_stomp_hit(ci: CanvasItem, at: Vector2, sc: float, t: float, bot
 	var F: Array = PixelPalette.FIRE
 	var B: Array = PixelPalette.BONE
 	var S: Array = PixelPalette.STONE
-	var rx := float(note_rx(sc)) * 1.7
+	var rx := roundf(float(note_rx(sc)) * 1.22)
 	var o := at.round()
 	if both:
 		if t < 0.07:
-			px_disc(ci, o, rx - 1.0, (rx - 1.0) * 0.36, F[7])
+			px_plate(ci, o, rx, plate_ry(rx), rx, F[7])
 		elif t < 0.14:
-			px_ring(ci, o, rx + 1.0, (rx + 1.0) * 0.4, 2.0, F[6])
+			px_plate(ci, o, rx + 1.0, plate_ry(rx) + 1.0, 2.0, F[6])
 		var g1 := 1.0 - pow(1.0 - k, 3.0)
-		var r1 := lerpf(rx + 2.0, rx * 2.7, g1)
+		var r1 := lerpf(rx + 2.0, rx * 2.2, g1)
 		if k < 0.8:
-			px_ring(ci, o, r1, r1 * 0.36, 3.0 if k < 0.4 else 2.0, _step([F[7], G[5], G[4], G[3]], k / 0.8))
+			px_plate(ci, o, r1, plate_ry(rx) + 8.0 * g1, 3.0 if k < 0.4 else 2.0, _step([F[7], G[5], G[4], G[3]], k / 0.8))
 		var k2 := (t - 0.09) / (life - 0.09)
 		if k2 > 0.0 and k2 < 0.7:
-			var r2 := lerpf(rx + 1.0, rx * 1.9, 1.0 - pow(1.0 - k2, 2.5))
-			px_ring(ci, o, r2, r2 * 0.36, 2.0, _step([G[5], G[4], G[3]], k2 / 0.7))
+			var g2 := 1.0 - pow(1.0 - k2, 2.5)
+			var r2 := lerpf(rx + 1.0, rx * 1.6, g2)
+			px_plate(ci, o, r2, plate_ry(rx) + 5.0 * g2, 2.0, _step([G[5], G[4], G[3]], k2 / 0.7))
 		_dust(ci, o, rx, k, 30, 0.8, [B[3], B[2], S[5], S[4], S[3]])
 		_sparks(ci, o, rx * 0.8, clampf(t / 0.55, 0.0, 1.0), 20, [F[7], F[6], F[5], F[4], F[3]], 1.8)
 	else:
-		var r := lerpf(rx, rx * 1.5, 1.0 - pow(1.0 - k, 2.0))
+		var r := lerpf(rx, rx * 1.3, 1.0 - pow(1.0 - k, 2.0))
 		if k < 0.75:
-			px_ring(ci, o, r, r * 0.36, 2.0, _step([G[3], G[2], G[1]], k / 0.75))
+			px_plate(ci, o, r, plate_ry(rx) + 2.0, 2.0, _step([G[3], G[2], G[1]], k / 0.75))
 		_dust(ci, o, rx, k, 10, 0.45, [B[1], S[4], S[3], S[2]])
 	return true
 

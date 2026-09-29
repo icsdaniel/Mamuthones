@@ -1,6 +1,6 @@
-"""The play field in pixel art: the road's light table, the notes (at every size they are drawn),
-the hit line's targets, the bell bar, the badge, hold rings, the stomp note, the step buttons and
-their footprints, and the small HUD pieces:
+"""The play field in pixel art: the road's light table, the notes (drawn in road.py, at every size
+they take), the hit line's slots, the bell bar and its badge, the step buttons and their footprints,
+and the small HUD pieces:
 
     python3 tools/art/pixel/field.py        # bakes game/art/px/field/*.png + scripts/art/fire_cells.gd
 
@@ -8,7 +8,6 @@ Notes grow as they come down the road. Instead of scaling one picture (which wou
 1-px outline), each note is drawn at every size it takes, one art pixel apart, and the game picks
 the size for the note's depth: the note slides smoothly while its pixels stay whole.
 """
-import math
 import os
 import sys
 
@@ -17,6 +16,7 @@ import numpy as np
 sys.path.insert(0, os.path.dirname(__file__))
 from palette import P  # noqa: E402
 from px import Canvas  # noqa: E402
+import road  # noqa: E402
 
 ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), "../../../game"))
 OUT = os.path.join(ROOT, "art/px/field")
@@ -34,20 +34,26 @@ def save(cv, name, anchor):
 # Rows: materials of the road; columns: light levels, cool (0) to hottest (7). The road shader picks
 # a column by the light at each art pixel (fire, rails, the hit line, a pressed lane, the beat).
 ROAD_LUT = [
-    # mortar between the setts
-    ["K1", "SETT0", "SETT0", "STONE0", "STONE1", "STONE1", "STONE2", "FIRE1"],
-    # sett, the common tone
-    ["SETT1", "SETT2", "SETT2", "STONE1", "STONE2", "STONE3", "STONE4", "FIRE2"],
-    # sett, the lighter tone (one step up)
-    ["SETT2", "SETT3", "SETT3", "STONE2", "STONE3", "STONE4", "STONE5", "FIRE3"],
-    # moss in the joints
-    ["MOSS0", "MOSS0", "MOSS1", "MOSS1", "MOSS1", "MOSS2", "MOSS2", "MOSS2"],
-    # the rail's core (by pulse: rest .. on the beat)
-    ["FIRE4", "FIRE5", "FIRE5", "FIRE6", "FIRE6", "FIRE6", "FIRE7", "FIRE7"],
-    # the rail's edge pixels
-    ["FIRE2", "FIRE3", "FIRE3", "FIRE4", "FIRE4", "FIRE5", "FIRE5", "FIRE6"],
-    # the curb outside the outer rails
+    # 0 mortar between the setts
+    ["K1", "SETT0", "SETT0", "STONE0", "STONE1", "STONE1", "STONE2", "STONE3"],
+    # 1 sett, the common tone
+    ["SETT1", "SETT1", "SETT2", "STONE1", "STONE2", "STONE2", "STONE3", "STONE4"],
+    # 2 sett, the lighter tone (one step up)
+    ["SETT1", "SETT2", "SETT2", "STONE2", "STONE2", "STONE3", "STONE3", "STONE4"],
+    # 3 a worn sett (a few, near the kerbs)
+    ["SETT0", "SETT1", "SETT1", "STONE1", "STONE1", "STONE2", "STONE2", "STONE3"],
+    # 4 the kerb's gold inlay along the road's edges (by light: rest .. on the beat, a hit)
+    ["GOLD2", "GOLD2", "GOLD3", "GOLD3", "GOLD4", "GOLD4", "GOLD5", "GOLD5"],
+    # 5 the kerb stone either side of the inlay
+    ["K0", "K1", "SETT0", "STONE0", "STONE1", "STONE1", "STONE2", "STONE2"],
+    # 6 the curb outside the road
     ["K0", "K0", "K1", "K1", "STONE0", "STONE0", "STONE1", "STONE1"],
+    # 7 a lane divider: a pale stone line, cool and quiet
+    ["SETT3", "SETT4", "SETT4", "SETT5", "STONE3", "STONE4", "STONE4", "STONE5"],
+    # 8 a beat line across the lanes
+    ["SETT3", "SETT4", "SETT4", "SETT5", "STONE4", "STONE4", "STONE5", "STONE5"],
+    # 9 the first beat of a bar
+    ["SETT5", "BONE0", "BONE0", "BONE1", "BONE1", "BONE2", "BONE2", "BONE3"],
 ]
 
 
@@ -61,244 +67,11 @@ def road_lut():
 
 # ------------------------------------------------------------------------------------------ notes
 
-NOTE_SIZES = range(5, 23)        # half-widths (art px) of the notes, far to near
-TARGET_SIZES = range(16, 33, 2)  # half-widths of the hit line's targets
-
-
-def ry_of(rx):
-    return max(2, int(round(rx * 0.46)))
-
-
-def disc(cv, cx, cy, rx, ry, depth, side, rim, face):
-    """A coin lying on the road seen from above and in front: its side (depth px) under a face.
-    side: colour of the edge; rim, face: lists of colours from the rim inward (bands)."""
-    cv.ellipse(cx, cy + depth, rx, ry, side[0])
-    cv.rect(cx - rx + 0.5, cy, 2 * rx - 1, depth, side[0])
-    # the edge's lit upper band
-    for k in range(depth):
-        m = cv.m_ellipse(cx, cy + k, rx, ry) & ~cv.m_ellipse(cx, cy + k - 1, rx, ry)
-        cv._put(m, side[1] if k < depth - 1 or depth == 1 else side[0])
-    bands = rim + face
-    n = len(bands)
-    for i, col in enumerate(bands):
-        k = 1.0 - i / n
-        cv.ellipse(cx, cy - (1 - k) * ry * 0.18, rx * k, ry * k, col)
-
-
-def note(rx, kind="step"):
-    """A note at half-width rx: a glowing ember disc (step), in a dashed gold ring (call / off-beat),
-    a gold disc with a flame (heal), or the stomp: a wider, heavier disc in a double gold rim with
-    two thumb prints on its face."""
-    ry = ry_of(rx)
-    depth = max(1, int(round(rx * 0.16)))
-    if kind == "stomp":
-        return stomp(rx)
-    pad = 4 if kind == "call" else 2
-    ex = rx + (3 if kind == "call" else 0)
-    W = 2 * ex + 2 * pad + 1
-    H = 2 * ry + depth + 2 * pad + 6
-    cv = Canvas(W, H)
-    cx = W / 2
-    cy = pad + ry + 2 + (1 if kind == "call" else 0)
-    if kind == "heal":
-        disc(cv, cx, cy, rx, ry, depth, ["GOLD1", "GOLD2"], ["GOLD3"], ["GOLD4", "BONE3", "BONE4"])
-        # the flame on its face
-        fh = max(2, int(round(ry * 1.2)))
-        fw = max(1, rx * 0.22)
-        cv.poly([(cx - fw, cy + ry * 0.35), (cx + fw, cy + ry * 0.35), (cx + fw * 0.4, cy - fh * 0.5), (cx, cy - fh)], "FIRE4")
-        cv.poly([(cx - fw * 0.5, cy + ry * 0.35), (cx + fw * 0.5, cy + ry * 0.35), (cx, cy - fh * 0.3)], "FIRE6")
-    else:
-        disc(cv, cx, cy, rx, ry, depth, ["RED0", "RED1"], ["RED2", "RED3"], ["FIRE3", "FIRE4", "FIRE5", "FIRE6", "FIRE7"])
-        # a hot glint on the rim toward the fire (upper edge)
-        if rx >= 8:
-            cv.hline(int(cx - rx * 0.4), int(cx + rx * 0.2), int(cy - ry + 1), "FIRE4")
-    cv.outline("K0")
-    if kind == "call":
-        # the dashed gold ring of an off-beat step, clear of the disc by a pixel
-        rr, rry = ex, ry + 3
-        m = cv.m_ellipse(cx, cy + depth * 0.5, rr + 0.5, rry + 0.5) & ~cv.m_ellipse(cx, cy + depth * 0.5, rr - 0.5, rry - 0.5)
-        xx, yy = cv.grid()
-        ang = np.arctan2((yy + 0.5 - cy) / max(rry, 1), (xx + 0.5 - cx) / max(rr, 1))
-        dash = (np.floor((ang + math.pi) / (math.tau / max(10, int(rx * 1.4)))) % 2) == 0
-        free = ~cv.solid()
-        cv._put(m & dash & free, "GOLD5")
-    return cv, (int(cx), int(cy))
-
-
-def _thumb(cv, tx, ty, tw, th, lean):
-    """A thumb print: a bone oval leaning `lean` (x per y, tops toward the middle), a K0 edge and
-    the whorl of its ridges."""
-    xx, yy = cv.grid()
-    X = xx + 0.5 - tx
-    Y = yy + 0.5 - ty
-    Xs = X - lean * Y
-    m = (Xs / tw) ** 2 + (Y / th) ** 2 <= 1.0
-    edge = (Xs / (tw + 1.0)) ** 2 + (Y / (th + 1.0)) ** 2 <= 1.0
-    cv._put(edge & ~m, "K0")
-    cv._put(m, "BONE3")
-    cv._put(m & (Y < -th * 0.35) & (Xs * lean < 0), "BONE4")
-    if tw >= 2.6:
-        r = (Xs / tw) ** 2 + (Y / th) ** 2
-        cv._put(m & (np.abs(r - 0.42) < 0.13) & (Y > -th * 0.55), "BONE2")
-    if tw >= 4.0:
-        cv._put(m & (r < 0.07), "BONE2")
-
-
-def stomp(rx):
-    """The two-thumb stomp: a heavy drum-head as wide as 1.7 notes and twice as thick, in a gold rim,
-    with two thumb prints leaning in on its ember face - press with both thumbs at once."""
-    ex = int(round(rx * 1.7))
-    ry = ry_of(rx) + 1
-    depth = max(2, int(round(rx * 0.3)))
-    pad = 2
-    W = 2 * ex + 2 * pad + 1
-    H = 2 * ry + depth + 2 * pad + 4
-    cv = Canvas(W, H)
-    cx = W / 2
-    cy = pad + ry + 2
-    # the heavy edge, then a gold rim (two px across, one down), a K0 groove, the ember face
-    cv.ellipse(cx, cy + depth, ex, ry, "GOLD1")
-    cv.rect(cx - ex + 0.5, cy, 2 * ex - 1, depth, "GOLD1")
-    for k in range(depth):
-        m = cv.m_ellipse(cx, cy + k, ex, ry) & ~cv.m_ellipse(cx, cy + k - 1, ex, ry)
-        cv._put(m, "GOLD2" if k < depth - 1 else "GOLD1")
-    cv.ellipse(cx, cy, ex, ry, "GOLD3")
-    top = cv.m_ellipse(cx, cy, ex, ry) & ~cv.m_ellipse(cx, cy + 1, ex, ry)
-    cv._put(top, "GOLD5")
-    xx, yy = cv.grid()
-    cv._put(cv.m_ellipse(cx, cy, ex, ry) & ((yy + 0.5) < cy) & ~top, "GOLD4")
-    fx, fy = ex - 2.2, ry - 1.2
-    cv.ellipse(cx, cy + 0.3, fx + 1, fy + 0.8, "K0")
-    cv.ellipse(cx, cy + 0.3, fx, fy, "RED2")
-    cv.ellipse(cx, cy + 0.6, fx - 0.6, fy - 0.8, "RED3")
-    cv.ellipse(cx, cy + 0.6, fx * 0.55, fy * 0.6, "FIRE3")
-    cv.ellipse(cx, cy + 0.6, fx * 0.3, fy * 0.35, "FIRE4")
-    # studs on the rim, like the buttons'
-    for sx in (-1, 1):
-        cv.pset(cx + sx * (ex - 1.0) - 0.5, cy - 0.5, "GOLD5")
-    tw = max(1.6, rx * 0.34)
-    th = max(2.2, ry * 0.78)
-    for sx in (-1, 1):
-        _thumb(cv, cx + sx * ex * 0.48, cy + 0.1, tw, th, -sx * 0.3)
-    cv.outline("K0")
-    return cv, (int(cx), int(cy))
-
-
-def hold_ring(rx):
-    """The end of a hold: a hollow gold ring lying on the road."""
-    ry = ry_of(rx)
-    W, H = 2 * rx + 5, 2 * ry + 6
-    cv = Canvas(W, H)
-    cx, cy = W / 2, H / 2 - 0.5
-    cv.ellipse(cx, cy + 1, rx, ry, "GOLD2")
-    cv.ellipse(cx, cy, rx, ry, "GOLD4")
-    cv.ellipse(cx, cy - 0.5, rx - 1, ry - 1, "GOLD5")
-    inner = cv.m_ellipse(cx, cy + 0.5, max(1, rx - 2.2), max(1, ry - 2))
-    cv._put(inner, None)
-    cv.outline("K0")
-    cv._put(inner & ~cv.solid(), None)
-    return cv, (int(cx), int(cy))
-
-
-def target(rx, state="idle"):
-    """A hit-line target: a heavy gold oval ring, hollow (the road shows through). States: idle,
-    beat (brighter on the beat), lit (a lane pressed: the ring glows and its middle burns), miss
-    (dulled for an instant)."""
-    ry = max(4, int(round(rx * 0.4)))
-    W, H = 2 * rx + 5, 2 * ry + 7
-    cv = Canvas(W, H)
-    cx, cy = W / 2, H / 2 - 0.5
-    ramp = {"idle": ["GOLD1", "GOLD2", "GOLD3", "GOLD4", "GOLD5"],
-            "beat": ["GOLD2", "GOLD3", "GOLD4", "GOLD5", "FIRE7"],
-            "lit": ["FIRE2", "FIRE4", "FIRE5", "FIRE6", "FIRE7"],
-            "miss": ["K1", "GOLD0", "GOLD1", "GOLD2", "GOLD2"]}[state]
-    t = 3
-    cv.ellipse(cx, cy + 1, rx, ry, ramp[0])            # underside shadow
-    cv.ellipse(cx, cy, rx, ry, ramp[2])
-    top = cv.m_ellipse(cx, cy, rx, ry) & ~cv.m_ellipse(cx, cy + 1, rx, ry)
-    cv._put(top, ramp[4])
-    xx, yy = cv.grid()
-    upper = cv.m_ellipse(cx, cy, rx, ry) & ((yy + 0.5) < cy - ry * 0.35)
-    cv._put(upper & ~cv.m_ellipse(cx, cy - 1, rx - 1, ry - 1), ramp[3])
-    lower = cv.m_ellipse(cx, cy, rx, ry) & ((yy + 0.5) > cy + ry * 0.4)
-    cv._put(lower & ~top, ramp[1])
-    inner = cv.m_ellipse(cx, cy, rx - t, ry - t + 1)
-    cv._put(inner, None)
-    # the inner lip: a dark line inside the ring
-    lip = cv.m_ellipse(cx, cy, rx - t + 1, ry - t + 2) & ~inner
-    cv._put(lip & ((yy + 0.5) > cy), ramp[0])
-    if state == "lit":
-        cv.ellipse(cx, cy + 0.5, rx - t - 1, ry - t, "FIRE3")
-        cv.ellipse(cx, cy + 0.5, (rx - t - 1) * 0.7, (ry - t) * 0.65, "FIRE5")
-        cv.ellipse(cx, cy + 0.5, (rx - t - 1) * 0.35, (ry - t) * 0.35, "FIRE7")
-    cv.outline("K0")
-    if state != "lit":
-        cv._put(inner & ~cv.m_ellipse(cx, cy, rx - t - 1, ry - t), "K0")
-        hole = cv.m_ellipse(cx, cy, rx - t - 1, ry - t)
-        cv._put(hole, None)
-    return cv, (int(cx), int(cy))
-
-
-def badge(r):
-    """The bell bar's medallion: a red disc in a gold rim with a bone bell."""
-    W = H = 2 * r + 5
-    cv = Canvas(W, H)
-    c = W / 2
-    cv.ellipse(c, c, r, r, "GOLD4")
-    cv.ellipse(c, c + 0.5, r - 0.6, r - 0.6, "GOLD3")
-    cv.ellipse(c, c, r - 1.5, r - 1.5, "RED2")
-    cv.ellipse(c, c - 0.5, r - 2, r - 2, "RED3")
-    # the bell
-    bw = max(2, r * 0.55)
-    bh = max(3, r * 0.9)
-    top = c - bh * 0.55
-    cv.poly([(c - bw * 0.45, top + bh * 0.25), (c + bw * 0.45, top + bh * 0.25), (c + bw * 0.62, top + bh), (c - bw * 0.62, top + bh)], "BONE4")
-    cv.ellipse(c, top + bh * 0.28, bw * 0.45, bh * 0.3, "BONE4")
-    cv.hline(int(c - bw * 0.62), int(c + bw * 0.62), int(top + bh), "BONE3")
-    cv.pset(c, top + bh + 1, "BONE3")
-    cv.outline("K0")
-    return cv, (int(c), int(c))
-
-
-# ------------------------------------------------------------------------------------------ bar, buttons
-
-def bar_src(h):
-    """A slice of the bell bar, h px tall, 8 px wide (the game tiles it across the road): a gold
-    plank, lit on top, K0 outline top and bottom."""
-    cv = Canvas(8, h + 2)
-    cv.rect(0, 1, 8, h, "GOLD3")
-    cv.hline(0, 7, 1, "GOLD5")
-    if h >= 5:
-        cv.hline(0, 7, 2, "GOLD4")
-    cv.hline(0, 7, h - 1, "GOLD2")
-    if h >= 8:
-        cv.hline(0, 7, h - 2, "GOLD2")
-        for x in range(8):
-            if x % 4 == 1:
-                cv.pset(x, h // 2 + 1, "GOLD2")
-    cv.hline(0, 7, 0, "K0")
-    cv.hline(0, 7, h + 1, "K0")
-    return cv
-
-
-def bar_end(h, up):
-    """The bar's end cap with its chevron (pointing up to raise the bells, down to lower them)."""
-    W = max(6, h + 2)
-    cv = Canvas(W, h + 2)
-    cv.rect(0, 1, W - 1, h, "GOLD3")
-    cv.hline(0, W - 2, 1, "GOLD5")
-    cv.hline(0, W - 2, h - 1, "GOLD2")
-    cv.vline(0, 0, h + 1, "K0")
-    cv.hline(0, W - 1, 0, "K0")
-    cv.hline(0, W - 1, h + 1, "K0")
-    # chevron
-    cx = W / 2
-    cy = (h + 2) / 2
-    s = max(1.5, h * 0.28)
-    d = -1 if up else 1
-    pts = [(cx - s * 1.4, cy - d * s * 0.6), (cx, cy + d * s * 0.7), (cx + s * 1.4, cy - d * s * 0.6)]
-    cv.polyline([(round(x), round(y)) for x, y in pts], "K0", w=1 if h < 9 else 2)
-    return cv
+# The notes, the hit line's slots and the bell bar are drawn in road.py.
+NOTE_SIZES = range(5, 31)        # half-widths (art px) of the step plate, far to near
+TARGET_SIZES = range(14, 31)     # half-widths of the hit line's slots (the step plate's near sizes)
+BAR_HEIGHTS = range(5, 17)
+BADGE_SIZES = range(4, 14)
 
 
 BUTTON_STATES = ("idle", "cued", "pressed", "hit", "miss")
@@ -430,27 +203,28 @@ def pause_button(down=False):
     return cv
 
 
-def main(preview=None):
+def main():
     os.makedirs(OUT, exist_ok=True)
     CELLS.clear()
     road_lut()
     for rx in NOTE_SIZES:
         for kind in ("step", "call", "heal", "stomp"):
-            cv, a = note(rx, kind)
+            cv, a = road.plate(rx, kind)
             save(cv, f"note_{kind}_{rx}", a)
-        cv, a = hold_ring(rx)
-        save(cv, f"hold_ring_{rx}", a)
+        cv, a = road.plate(rx, "end")
+        save(cv, f"hold_end_{rx}", a)
     for rx in TARGET_SIZES:
         for st in ("idle", "beat", "lit", "miss"):
-            cv, a = target(rx, st)
+            cv, a = road.target(rx, st)
             save(cv, f"target_{st}_{rx}", a)
-    for r in range(4, 14):
-        cv, a = badge(r)
-        save(cv, f"badge_{r}", a)
-    for h in range(5, 15):
-        save(bar_src(h), f"bar_{h}", (0, 0))
-        save(bar_end(h, True), f"bar_end_up_{h}", (0, 0))
-        save(bar_end(h, False), f"bar_end_down_{h}", (0, 0))
+    for up in (True, False):
+        way = "up" if up else "down"
+        for r in BADGE_SIZES:
+            cv, a = road.badge(r, up)
+            save(cv, f"badge_{way}_{r}", a)
+        for h in BAR_HEIGHTS:
+            save(road.bar_tile(h, up), f"bar_{way}_{h}", (0, 0))
+            save(road.bar_end(h, up), f"bar_end_{way}_{h}", (0, 0))
     for st in BUTTON_STATES:
         save(button_src(st), f"button_{st}", (BUTTON_M, BUTTON_M))
     save(diamond("GOLD4", "GOLD3"), "diamond", (1, 1))
@@ -469,37 +243,6 @@ def main(preview=None):
     save(pause_button(False), "pause", (8, 8))
     save(pause_button(True), "pause_down", (8, 8))
     write_cells()
-    if preview:
-        sheet = Canvas(260, 150, "NAVY0")
-        x = 2
-        for rx in (6, 10, 14, 20):
-            for k, kind in enumerate(("step", "call", "heal", "stomp")):
-                cv, _ = note(rx, kind)
-                sheet.blit(cv, x, 2 + k * 22)
-            x += 2 * rx + 12
-        cv, _ = target(24, "idle")
-        sheet.blit(cv, 2, 92)
-        cv, _ = target(24, "lit")
-        sheet.blit(cv, 56, 92)
-        cv, _ = badge(9)
-        sheet.blit(cv, 110, 92)
-        sheet.blit(foot("idle"), 140, 92)
-        sheet.blit(foot("idle", True), 156, 92)
-        sheet.blit(button_src("idle"), 175, 92)
-        sheet.blit(button_src("hit"), 202, 92)
-        cv, _ = hold_ring(14)
-        sheet.blit(cv, 2, 120)
-        x = 40
-        for st in ("lit", "hot", "dark"):
-            sheet.blit(hud_bell(st), x, 120)
-            x += 13
-        for f in range(3):
-            for tone in ("lit", "red"):
-                sheet.blit(pip_flame(f, tone), x, 120)
-                x += 10
-        sheet.blit(pip_flame(0, "out"), x, 120)
-        sheet.blit(pause_button(), x + 12, 120)
-        sheet.save(os.path.join(preview, "field_sheet.png"), scale=4)
     print("baked field to", OUT, len(CELLS), "sprites")
 
 
@@ -515,15 +258,18 @@ const NOTE_MIN := %d
 const NOTE_MAX := %d
 const TARGET_MIN := %d
 const TARGET_MAX := %d
-const TARGET_STEP := 2
+const BAR_MIN := %d
+const BAR_MAX := %d
+const BADGE_MIN := %d
+const BADGE_MAX := %d
 const BUTTON_MARGIN := %d
 const CELLS := {
 %s
 }
-""" % (min(NOTE_SIZES), max(NOTE_SIZES), min(TARGET_SIZES), max(TARGET_SIZES), BUTTON_M, "\n".join(lines))
+""" % (min(NOTE_SIZES), max(NOTE_SIZES), min(TARGET_SIZES), max(TARGET_SIZES), min(BAR_HEIGHTS), max(BAR_HEIGHTS), min(BADGE_SIZES), max(BADGE_SIZES), BUTTON_M, "\n".join(lines))
     with open(os.path.join(ROOT, "scripts/art/fire_cells.gd"), "w") as f:
         f.write(gd)
 
 
 if __name__ == "__main__":
-    main(sys.argv[1] if len(sys.argv) > 1 else None)
+    main()
