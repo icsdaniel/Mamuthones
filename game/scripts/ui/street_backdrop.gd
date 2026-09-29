@@ -32,7 +32,7 @@ const EDGE_CLEAR := 0.12             ## an outer note's centre stays this share 
 ## reference.
 const FRAME := [Vector2(-12, 232), Vector2(226, 296), Vector2(272, 612), Vector2(-12, 748)]
 ## The Mamuthone's dance, from Daniele's pose sheet: four moments of one stamp onto his left leg,
-## mirrored on every other beat so he stamps left, right, left... The stamp lands on the beat.
+## always facing the road (Daniele: no switching sides). The stamp lands on the beat.
 const DANCE_POSES := [0, 1, 2, 3]
 const ANTICIPATE := 0
 const IMPACT := 1
@@ -335,13 +335,12 @@ func _bob_figures() -> void:
 
 
 ## The Mamuthone's pose for this moment of the beat: the impact on the beat, the follow-through,
-## standing, and gathering just before the next beat (which stamps the other way).
+## standing, and gathering just before the next beat.
 func _dance_pose() -> void:
 	if _dance.is_empty() or _figures.size() < 2:
 		return
 	var fig := _figures[1]
 	var pose := SETTLE
-	var flip := fig.flip_h
 	var spb := lanes.spb if lanes != null and lanes.spb > 0.0 else 0.5
 	if beat > -999.0 and not still:
 		var k := floorf(beat)
@@ -349,17 +348,15 @@ func _dance_pose() -> void:
 		var to_next := spb - t
 		if to_next < minf(ANTICIPATE_TIME, spb * 0.3):
 			pose = ANTICIPATE
-			k += 1.0
 		elif t < IMPACT_TIME:
 			pose = IMPACT
 		elif t < FOLLOW_TIME:
 			pose = FOLLOW
-		flip = posmod(int(k), 2) == 1
 		if reduced_motion and pose != IMPACT:
 			pose = SETTLE
 	if fig.texture != _dance[pose]:
 		fig.texture = _dance[pose]
-	fig.flip_h = flip
+	fig.flip_h = false
 
 
 ## How far down a figure is (1 = the full drop) t seconds after the beat: down at once, held for a
