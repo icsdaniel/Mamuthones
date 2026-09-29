@@ -43,7 +43,7 @@ var hud: Hud
 var scene                         ## SideRows (songs) or ProcessionScene (Piazza): the same calls
 var banner: Control               ## over the top of the lanes: count-in and stand-still moment
 var lanes: LaneView
-var backdrop: PlayWorld          ## the low-poly street, the bonfire and the swaying figures (songs)
+var backdrop: StreetBackdrop     ## the street picture, the fire and the swaying portraits (songs)
 var words: JudgementWords
 var cue: PiazzaCue
 var paused := false
@@ -109,7 +109,7 @@ func build() -> void:
 		bg = ColorRect.new()
 		(bg as ColorRect).color = Palette.BLACK
 	else:
-		backdrop = PlayWorld.new()
+		backdrop = StreetBackdrop.new()
 		backdrop.name = "Backdrop"
 		backdrop.bell_set = str(args.get("bell_set", "village"))
 		bg = backdrop
@@ -184,7 +184,7 @@ func build() -> void:
 	lanes.hop = bool(Profile.get_setting("note_hop"))
 	if not session.piazza:
 		backdrop.lanes = lanes
-		lanes.world = backdrop
+		lanes.street = backdrop
 	_field_box.add_child(lanes)
 	words = JudgementWords.new()
 	words.set_anchors_preset(Control.PRESET_FULL_RECT)
