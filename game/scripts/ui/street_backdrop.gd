@@ -21,16 +21,16 @@ extends Control
 const STREET := "res://art/street/street.png"
 const IMG := Vector2(941.0, 1672.0)
 ## The painted lines, x = a + b * y in the picture's pixels: the road's edges and the lane dividers.
-const RAILS := [Vector2(725.15, -0.69070), Vector2(557.82, -0.22402), Vector2(429.58, 0.17685), Vector2(259.22, 0.65887)]
-const VANISH_Y := 333.0              ## where the lines meet (the horizon), picture px
-const FAR_Y := 505.0                 ## the road's far end, just in front of the fire, picture px
-const STRETCH_FROM := 480.0          ## the picture is only ever stretched below this row
-const FIRE := Vector2(483.0, 360.0)  ## the fire's heart, picture px
-const LANTERNS := [Vector2(105, 257), Vector2(855, 273), Vector2(321, 380)]
+const RAILS := [Vector2(841.79, -0.68736), Vector2(594.94, -0.22449), Vector2(360.31, 0.21206), Vector2(131.30, 0.65777)]
+const VANISH_Y := 530.0              ## where the lines meet (the horizon), picture px
+const FAR_Y := 672.0                 ## the road's far end, just in front of the fire, picture px
+const STRETCH_FROM := 650.0          ## the picture is only ever stretched below this row
+const FIRE := Vector2(470.0, 545.0)  ## the fire's heart, picture px
+const LANTERNS := [Vector2(77, 417), Vector2(881, 436), Vector2(280, 560), Vector2(313, 580), Vector2(641, 582), Vector2(673, 562)]
 const EDGE_CLEAR := 0.12             ## an outer note's centre stays this share of the width off the edge
 ## The portrait frames' corners (picture px, the left one; the right mirrors it), from the play-screen
 ## reference.
-const FRAME := [Vector2(-12, 232), Vector2(226, 296), Vector2(272, 612), Vector2(-12, 748)]
+const FRAME := [Vector2(-12, 430), Vector2(226, 494), Vector2(262, 800), Vector2(-12, 930)]
 const SWAY := 3.2                    ## degrees a figure leans at each beat
 const SWAY_MOVE := 0.55              ## share of each beat spent moving over (it arrives on the beat)
 
@@ -493,9 +493,9 @@ uniform vec2 pic = vec2(941.0, 1672.0);
 uniform vec2 rect = vec2(720.0, 1440.0);
 uniform float sc = 1.0;
 uniform float off = 0.0;
-uniform float y0 = 480.0;
+uniform float y0 = 650.0;
 uniform float stretch = 1.0;
-uniform vec2 fire = vec2(483.0, 360.0);
+uniform vec2 fire = vec2(470.0, 545.0);
 uniform float t = 0.0;
 uniform float flare = 0.0;
 uniform float dim = 0.0;
@@ -508,9 +508,9 @@ void fragment() {
 		p.y = y0 + (p.y - y0) / stretch;
 	}
 	// the flames: an ellipse over the fire, strongest in its upper part
-	vec2 d = (p - fire) / vec2(120.0, 150.0);
+	vec2 d = (p - fire) / vec2(95.0, 120.0);
 	float m = clamp(1.0 - dot(d, d), 0.0, 1.0);
-	m *= smoothstep(470.0, 400.0, p.y);
+	m *= smoothstep(fire.y + 75.0, fire.y + 25.0, p.y);
 	float wave = sin(p.y * 0.07 + t * 8.0) * 0.6 + sin(p.y * 0.13 - t * 11.0 + p.x * 0.05) * 0.4;
 	p.x += wave * 3.5 * m * motion;
 	p.y += (sin(t * 6.0 + p.x * 0.08) * 2.0) * m * motion;
