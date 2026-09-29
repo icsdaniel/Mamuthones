@@ -31,6 +31,16 @@ const EDGE_CLEAR := 0.12             ## an outer note's centre stays this share 
 ## The portrait frames' corners (picture px, the left one; the right mirrors it), from the play-screen
 ## reference.
 const FRAME := [Vector2(-12, 232), Vector2(226, 296), Vector2(272, 612), Vector2(-12, 748)]
+## The Mamuthone's dance, from Daniele's pose sheet: four moments of one stamp onto his left leg,
+## mirrored on every other beat so he stamps left, right, left... The stamp lands on the beat.
+const DANCE_POSES := [0, 1, 2, 3]
+const ANTICIPATE := 0
+const IMPACT := 1
+const FOLLOW := 2
+const SETTLE := 3
+const IMPACT_TIME := 0.09            ## seconds after the beat the impact pose shows
+const FOLLOW_TIME := 0.24            ## ... then the follow-through until this long after the beat
+const ANTICIPATE_TIME := 0.14        ## seconds before the next beat he gathers for it
 const BOB := 0.1                     ## how far a figure drops on the beat, share of its portrait's height
 const BOB_SQUASH := 0.03             ## how much it squashes at the bottom of the drop
 const BOB_HOLD := 0.03               ## seconds it stays down after the beat
@@ -55,6 +65,7 @@ var _glow: Control                   ## additive: lines pulsing, lanterns, hit f
 var _sparks: CPUParticles2D
 var _frames: Array[Node2D] = []
 var _figures: Array[Sprite2D] = []
+var _dance: Array[Texture2D] = []    ## the Mamuthone's poses (DANCE_POSES), all the same size, feet at the bottom centre
 var _glow_tex: Texture2D
 var _flashes: Array = []             ## [local pos, t0, strength]
 var _clock := 0.0
@@ -305,8 +316,15 @@ func _bob_figures() -> void:
 			shake = sin(age * 28.0) * exp(-age * 7.0)
 		"stomp":
 			down = maxf(down, _bob(age) * 1.4)
+	_dance_pose()
 	for i in _figures.size():
 		var s := _figures[i]
+		if i == 1 and not _dance.is_empty():
+			# the Mamuthone's poses carry the drop themselves: only the miss shake moves him
+			var h1: float = s.get_meta("frame_h", 0.0)
+			s.position = (s.get_meta("base_pos", s.position) as Vector2) + Vector2(shake * 0.02 * h1 * m, 0.0)
+			s.scale = s.get_meta("base_scale", Vector2.ONE)
+			continue
 		var base: Vector2 = s.get_meta("base_scale", Vector2.ONE)
 		var at: Vector2 = s.get_meta("base_pos", s.position)
 		var h: float = s.get_meta("frame_h", 0.0)
@@ -314,6 +332,34 @@ func _bob_figures() -> void:
 		s.rotation = 0.0
 		var q := BOB_SQUASH * down * m
 		s.scale = base * Vector2(1.0 + q * 0.6, 1.0 - q)
+
+
+## The Mamuthone's pose for this moment of the beat: the impact on the beat, the follow-through,
+## standing, and gathering just before the next beat (which stamps the other way).
+func _dance_pose() -> void:
+	if _dance.is_empty() or _figures.size() < 2:
+		return
+	var fig := _figures[1]
+	var pose := SETTLE
+	var flip := fig.flip_h
+	var spb := lanes.spb if lanes != null and lanes.spb > 0.0 else 0.5
+	if beat > -999.0 and not still:
+		var k := floorf(beat)
+		var t := (beat - k) * spb
+		var to_next := spb - t
+		if to_next < minf(ANTICIPATE_TIME, spb * 0.3):
+			pose = ANTICIPATE
+			k += 1.0
+		elif t < IMPACT_TIME:
+			pose = IMPACT
+		elif t < FOLLOW_TIME:
+			pose = FOLLOW
+		flip = posmod(int(k), 2) == 1
+		if reduced_motion and pose != IMPACT:
+			pose = SETTLE
+	if fig.texture != _dance[pose]:
+		fig.texture = _dance[pose]
+	fig.flip_h = flip
 
 
 ## How far down a figure is (1 = the full drop) t seconds after the beat: down at once, held for a
@@ -340,7 +386,12 @@ func _make_frame(i: int) -> Node2D:
 	root.add_child(panel)
 	var fig := Sprite2D.new()
 	fig.name = "Figure"
-	fig.texture = load("res://art/street/%s.png" % ("issohadore" if i == 0 else "mamuthone"))
+	if i == 0:
+		fig.texture = load("res://art/street/issohadore.png")
+	else:
+		for k in DANCE_POSES:
+			_dance.append(load("res://art/street/mamuthone_dance_%d.png" % k))
+		fig.texture = _dance[SETTLE]
 	fig.centered = false
 	fig.texture_filter = CanvasItem.TEXTURE_FILTER_LINEAR
 	var ts := fig.texture.get_size()
@@ -386,16 +437,17 @@ func _place_frames() -> void:
 		# the figure's feet a little below the frame's lower edge, its head near the top
 		var top := (pts[0].y + pts[1].y) * 0.5
 		var bottom := (pts[2].y + pts[3].y) * 0.5
-		var h := (bottom - top) * (1.12 if i == 0 else 1.05)
+		var h := (bottom - top) * (1.12 if i == 0 else 0.95)
 		var sc := h / ts.y
 		var cx := lerpf(pts[0].x, pts[1].x, 0.5) if i == 0 else lerpf(pts[0].x, pts[1].x, 0.5)
-		cx = (pts[0].x + pts[1].x + pts[2].x + pts[3].x) * 0.25 + (8.0 if i == 0 else -8.0) * pic_scale
+		cx = (pts[0].x + pts[1].x + pts[2].x + pts[3].x) * 0.25 + (8.0 if i == 0 else -22.0) * pic_scale
 		fig.position = Vector2(cx, bottom + h * 0.1)
 		fig.set_meta("base_pos", fig.position)
 		fig.set_meta("frame_h", bottom - top)
 		fig.set_meta("base_scale", Vector2(sc, sc))
 		fig.scale = Vector2(sc, sc)
-		fig.flip_h = false
+		if i == 0:
+			fig.flip_h = false
 
 
 # ------------------------------------------------------------------ the glow layer

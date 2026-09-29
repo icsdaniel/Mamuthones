@@ -23,8 +23,10 @@ CUTS = {
 
 
 def cut(src, box, tol):
-    im = Image.open(os.path.join(SRC, src)).convert("RGB").crop(box)
-    a = np.asarray(im).astype(float)
+    return cut_array(np.asarray(Image.open(os.path.join(SRC, src)).convert("RGB").crop(box)).astype(float), tol)
+
+
+def cut_array(a, tol):
     # the backdrop's colour, smoothly varying: a heavy blur of the border rows and columns
     border = np.concatenate([a[:4].reshape(-1, 3), a[-4:].reshape(-1, 3), a[:, :4].reshape(-1, 3), a[:, -4:].reshape(-1, 3)])
     bg = np.median(border, axis=0)
@@ -64,7 +66,37 @@ def cut(src, box, tol):
     return Image.fromarray(rgba, "RGBA")
 
 
+# The Mamuthone's dance: four moments of one stamp onto his left leg, side by side on one sheet
+# (anticipation, impact, follow-through, settle). Split at the gaps between the figures, cut each
+# out, and put all four on one canvas with the feet at the same place (bottom centre), so the
+# game can swap between them without the figure sliding.
+DANCE = ("mamuthone_dance_sheet_v2.png", [0, 408, 826, 1258, None], 18)
+
+
+def feet_x(img):
+    al = np.asarray(img)[..., 3] > 128
+    ys, xs = np.where(al)
+    low = ys > ys.max() - (ys.max() - ys.min()) * 0.08
+    return float(np.mean(xs[low]))
+
+
+def dance():
+    src, cuts, tol = DANCE
+    sheet = np.asarray(Image.open(os.path.join(SRC, src)).convert("RGB")).astype(float)
+    cuts = [c if c is not None else sheet.shape[1] for c in cuts]
+    poses = [cut_array(sheet[:, cuts[i]:cuts[i + 1]], tol) for i in range(4)]
+    fx = [feet_x(p) for p in poses]
+    half = int(max(max(f, p.size[0] - f) for f, p in zip(fx, poses))) + 2
+    h = max(p.size[1] for p in poses)
+    for i, p in enumerate(poses):
+        canvas = Image.new("RGBA", (half * 2, h), (0, 0, 0, 0))
+        canvas.paste(p, (int(round(half - fx[i])), h - p.size[1]))
+        canvas.save(os.path.join(OUT, "mamuthone_dance_%d.png" % i))
+        print("dance", i, canvas.size)
+
+
 os.makedirs(OUT, exist_ok=True)
+dance()
 for name, (src, box, tol) in CUTS.items():
     img = cut(src, box, tol)
     img.save(os.path.join(OUT, name + ".png"))
