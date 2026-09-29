@@ -31,7 +31,7 @@ func build() -> void:
 	chart = "tutorial" if song.charts.has("tutorial") else "easy"
 	lessons = song.lessons
 	var bg := ColorRect.new()
-	bg.color = Palette.BLACK
+	bg.color = PixelPalette.NAVY[0]
 	bg.set_anchors_preset(Control.PRESET_FULL_RECT)
 	add_child(bg)
 	Sound.set_key(song.key_root)

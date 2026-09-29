@@ -1,7 +1,7 @@
 @tool
 class_name SetupArtView
 extends Control
-## A Control that shows one SetupArt picture fitted to its size. Set the properties and it redraws.
+## A Control that shows one SetupArt pixel picture fitted to its size. Set the properties and it redraws.
 ##   kind           "headphones" | "phone" | "drum"
 ##   tilt           phone: radians, > 0 = top edge toward the player
 ##   left_pressed   phone: left thumb down on the glass
