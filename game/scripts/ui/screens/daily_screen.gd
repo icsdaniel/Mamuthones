@@ -76,13 +76,17 @@ func build() -> void:
 	if song_hidden:
 		pic = Veiled.new()
 	else:
-		var tex := TextureRect.new()
-		tex.texture = StopArt.card(_song.stop)
-		tex.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
-		tex.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
-		pic = tex
+		# the stop's living pixel picture, at the art scale in its gold frame (as on the stop card)
+		var sp := StopPicture.new()
+		sp.stop = _song.stop
+		sp.px = int(PixelFrame.px_for(self))
+		sp.frame_style = "gold"
+		sp.bpm = _song.bpm * 0.5
+		sp.animate = not UIKit.reduced_motion()
+		sp.focus = Rect2(Vector2(StopBackdrops.data(_song.stop).card), Vector2(StopCells.CARD)).get_center() + Vector2(0, 8)
+		pic = sp
 	pic.name = "Picture"
-	pic.custom_minimum_size = Vector2(0, 300)
+	pic.custom_minimum_size = Vector2(0, 300 if song_hidden else (StopCells.CARD.y - 10 + PixelFrame.DEPTH * 2) * int(PixelFrame.px_for(self)))
 	c.add_child(pic)
 	var title := UIKit.label(tr("daily_hidden") if song_hidden else UIKit.song_title(_song), UIKit.PAPER_HEADER)
 	title.name = "SongTitle"
