@@ -4,7 +4,7 @@ name: Android test APK
 # "android-test" pre-release so it can be downloaded straight to a phone.
 on:
   push:
-    branches: [game-v1]
+    branches: [game-v1, claude/lowpoly-3d-rebuild-vce64v]
   workflow_dispatch:
 
 permissions:
@@ -68,4 +68,4 @@ jobs:
           gh release delete android-test --yes --cleanup-tag || true
           gh release create android-test build/android/mamuthones.apk --prerelease \
             --target "$GITHUB_SHA" --title "Android test build" \
-            --notes "Debug build of branch game-v1 at ${GITHUB_SHA::7}, for testing. Open this page on your Android phone, download mamuthones.apk and install it (allow installs from your browser when asked)."
+            --notes "Debug build of branch ${GITHUB_REF_NAME} at ${GITHUB_SHA::7}, for testing. Open this page on your Android phone, download mamuthones.apk and install it (allow installs from your browser when asked)."
