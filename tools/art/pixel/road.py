@@ -31,6 +31,7 @@ KINDS = {
     "call": (["RED1", "RED2", "RED3", "RED4"], ["RED0", "RED1"], ["GOLD2", "GOLD4", "GOLD5"]),
     "heal": (["BONE1", "BONE2", "BONE3", "BONE4"], ["BONE0", "BONE1"], ["FIRE3", "FIRE5", "FIRE6"]),
     "stomp": (["FIRE2", "FIRE3", "FIRE4", "FIRE5"], ["RED1", "RED2"], ["BONE2", "BONE3", "BONE4"]),
+    "hold": (["GOLD2", "GOLD3", "GOLD4", "GOLD5"], ["GOLD1", "GOLD2"], ["ROPE0", "ROPE1", "ROPE2"]),
     "end": (["GOLD2", "GOLD3", "GOLD4", "GOLD5"], ["GOLD1", "GOLD2"], None),
 }
 
@@ -108,6 +109,8 @@ def plate(rx, kind="step"):
         _thumbs(cv, cx, cy, rx, ry)
     elif kind == "heal":
         _flame(cv, cx, cy, rx, ry)
+    elif kind == "hold":
+        _loop(cv, cx, cy, rx, ry, inlay)
     elif inlay is not None:
         _inlay(cv, cx, cy, rx, ry, inlay)
     cv.outline("K0")
@@ -131,6 +134,28 @@ def _inlay(cv, cx, cy, rx, ry, cols):
     cv._put(gem & (yy + 0.5 < cyd - hh * 0.2) & (xx + 0.5 < cx + 0.5), cols[2])
 
 
+def _loop(cv, cx, cy, rx, ry, cols):
+    """The rope's loop set into a hold's head: a hemp ring, cut round with K0, the face inside."""
+    if rx < 7:
+        cv.rect(int(cx) - 1, int(cy) - 1 + (ry > 2), 2 if rx >= 5 else 1, 1, cols[1])
+        return
+    hw = max(2.0, rx * 0.3)
+    hh = max(1.6, ry * 0.62)
+    cyl = cy + 0.25
+    t = 1.6 if rx >= 16 else 1.1
+    outer = cv.m_ellipse(cx, cyl, hw, hh)
+    inner = cv.m_ellipse(cx, cyl, hw - t, max(0.6, hh - t * 0.8))
+    cut_o = cv.m_ellipse(cx, cyl, hw + 1.1, hh + 1.1)
+    cut_i = cv.m_ellipse(cx, cyl, max(0.5, hw - t - 1.0), max(0.4, hh - t * 0.8 - 1.0))
+    xx, yy = cv.grid()
+    cv._put(cut_o & ~outer, "K0")
+    ring = outer & ~inner
+    cv._put(ring, cols[1])
+    cv._put(ring & (yy + 0.5 < cyl - hh * 0.3), cols[2])
+    cv._put(ring & (yy + 0.5 > cyl + hh * 0.35), cols[0])
+    cv._put(inner & ~cut_i, "K0")
+
+
 def _flame(cv, cx, cy, rx, ry):
     """A small flame set into a heal plate."""
     fw = max(1.5, rx * 0.22)
@@ -146,25 +171,36 @@ def _flame(cv, cx, cy, rx, ry):
 
 
 def _thumbs(cv, cx, cy, rx, ry):
-    """Two thumb prints leaning in, one each side of the middle: press with both thumbs."""
-    tw = max(1.4, rx * 0.15)
-    th = max(1.8, ry * 0.72)
+    """Two thumbs pressed side by side, seen from above: upright pads, each with its nail at the top,
+    so the plate says "both thumbs"."""
+    tw = max(1.5, rx * 0.12)
+    th = max(2.0, ry * 0.74)
     xx, yy = cv.grid()
     for sx in (-1, 1):
-        tx = cx + sx * rx * 0.36
-        ty = cy + 0.3
-        lean = -sx * 0.32
-        X = xx + 0.5 - tx
+        tx = cx + sx * max(tw + 1.5, rx * 0.2)
+        ty = cy + 0.4
+        X = np.abs(xx + 0.5 - tx)
         Y = yy + 0.5 - ty
-        Xs = X - lean * Y
-        m = (Xs / tw) ** 2 + (Y / th) ** 2 <= 1.0
-        edge = (Xs / (tw + 1.1)) ** 2 + (Y / (th + 1.0)) ** 2 <= 1.0
+        m = (X / tw) ** 2.4 + (np.abs(Y) / th) ** 2.4 <= 1.0
+        edge = (X / (tw + 1.1)) ** 2.4 + (np.abs(Y) / (th + 1.1)) ** 2.4 <= 1.0
         cv._put(edge & ~m, "K0")
         cv._put(m, "BONE3")
-        cv._put(m & (Y < -th * 0.3), "BONE4")
-        if tw >= 3.0:
-            r = (Xs / tw) ** 2 + (Y / th) ** 2
-            cv._put(m & (np.abs(r - 0.45) < 0.12) & (Y > -th * 0.5), "BONE2")
+        cv._put(m & (Y > th * 0.45), "BONE2")
+        if th >= 4:
+            # the nail over the top half, rimmed dark, and a crease across the pad below it
+            ny = ty - th * 0.4
+            nh = max(1.4, th * 0.46)
+            nw = max(1.0, tw * 0.7)
+            Yn = np.abs(yy + 0.5 - ny)
+            nail = (X / nw) ** 2.4 + (Yn / nh) ** 2.4 <= 1.0
+            rim = (X / (nw + 1.0)) ** 2.4 + (Yn / (nh + 1.0)) ** 2.4 <= 1.0
+            cv._put(m & rim & ~nail, "BONE0")
+            cv._put(m & nail, "BONE4")
+            cv._put(m & nail & (X > nw * 0.35) & (xx + 0.5 > tx), "BONE3")
+            crease = m & (np.abs(Y - th * 0.38) < 0.5) & (X < tw * 0.7)
+            cv._put(crease, "BONE1")
+        else:
+            cv._put(m & (Y < -th * 0.3), "BONE4")
 
 
 # --------------------------------------------------------------------------------- the hit line
@@ -213,7 +249,7 @@ def badge(r, up=True):
     W = H = 2 * r + 5
     cv = Canvas(W, H)
     c = W / 2
-    rim = ("GOLD3", "GOLD5") if up else ("NIGHT4", "STAR0")
+    rim = ("GOLD3", "GOLD5") if up else ("NIGHT3", "STAR0")
     disc = ("RED2", "RED3") if up else ("NAVY2", "NAVY3")
     cv.ellipse(c, c, r, r, rim[0])
     top = cv.m_ellipse(c, c, r, r) & ~cv.m_ellipse(c, c + 1, r, r)
@@ -241,7 +277,7 @@ def bar_tile(h, up):
     if up:
         base, hi, lo, chev = "GOLD4", "GOLD5", "GOLD3", "GOLD1"
     else:
-        base, hi, lo, chev = "NIGHT4", "NIGHT5", "NIGHT3", "STAR1"
+        base, hi, lo, chev = "NAVY3", "NIGHT4", "NAVY2", "STAR1"
     cv.rect(0, 1, W, h, base)
     cv.hline(0, W - 1, 1, hi)
     cv.hline(0, W - 1, h, lo)
@@ -250,7 +286,7 @@ def bar_tile(h, up):
     cv.hline(0, W - 1, 0, "K0")
     cv.hline(0, W - 1, h + 1, "K0")
     # the chevron, centred in the tile: a V (or an inverted V) two rows thick when there is room
-    th = 2 if h >= 10 else 1
+    th = 2 if h >= 7 else 1
     s = max(1, min((W - 3) // 2, (h - 2 - th) // 1 - 1))
     s = max(1, min(s, (h - 1 - th)))
     span = s + th                     # rows the chevron covers
@@ -267,7 +303,7 @@ def bar_end(h, up):
     """The bar's end: a square cap with a stud (it sits on the road's kerb)."""
     W = max(4, h // 2 + 2)
     cv = Canvas(W, h + 2)
-    base, hi, lo = ("GOLD3", "GOLD5", "GOLD2") if up else ("NIGHT3", "STAR0", "NIGHT2")
+    base, hi, lo = ("GOLD3", "GOLD5", "GOLD2") if up else ("NAVY3", "STAR0", "NAVY2")
     cv.rect(0, 1, W - 1, h, base)
     cv.hline(0, W - 2, 1, hi)
     cv.hline(0, W - 2, h, lo)

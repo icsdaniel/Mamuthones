@@ -2,16 +2,16 @@
 
 importer="texture"
 type="CompressedTexture2D"
-uid="uid://56iyxtphyhyy"
-path="res://.godot/imported/badge_up_4.png-f5fa54bd8a728ec2c86cbc314ecacb36.ctex"
+uid="uid://bytm8jt66htdd"
+path="res://.godot/imported/note_hold_15.png-1ca020767cca488c687bfc93ab5d090a.ctex"
 metadata={
 "vram_texture": false
 }
 
 [deps]
 
-source_file="res://art/px/field/badge_up_4.png"
-dest_files=["res://.godot/imported/badge_up_4.png-f5fa54bd8a728ec2c86cbc314ecacb36.ctex"]
+source_file="res://art/px/field/note_hold_15.png"
+dest_files=["res://.godot/imported/note_hold_15.png-1ca020767cca488c687bfc93ab5d090a.ctex"]
 
 [params]
 

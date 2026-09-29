@@ -193,6 +193,11 @@ static func draw_heal_gem(ci: CanvasItem, at: Vector2, sc: float, alpha := 1.0, 
 	sprite(ci, "note_heal_%d" % rx, at, alpha)
 
 
+## The head of a hold: a gold plate with the rope's loop set in it (not a diamond: this one is held).
+static func draw_hold_head(ci: CanvasItem, at: Vector2, sc: float, alpha := 1.0) -> void:
+	sprite(ci, "note_hold_%d" % note_rx(sc), at, alpha)
+
+
 ## The end of a hold: the knot of its rope, a small gold plate.
 static func draw_hold_ring(ci: CanvasItem, at: Vector2, sc: float, alpha := 1.0) -> void:
 	sprite(ci, "hold_end_%d" % note_rx(sc), at, alpha)
@@ -207,7 +212,7 @@ static func draw_stomp_note(ci: CanvasItem, at: Vector2, sc: float, alpha := 1.0
 ## The bell bar's medallion, upright at the bar's middle: a bone bell on red in a gold rim to raise
 ## the bells, on navy in a steel rim to lower them.
 static func draw_badge(ci: CanvasItem, at: Vector2, sc: float, alpha := 1.0, up := true) -> void:
-	var r := clampi(roundi(12.0 * sc), FireCells.BADGE_MIN, FireCells.BADGE_MAX)
+	var r := clampi(roundi(15.0 * sc), FireCells.BADGE_MIN, FireCells.BADGE_MAX)
 	sprite(ci, "badge_%s_%d" % ["up" if up else "down", r], at, alpha)
 
 
@@ -274,10 +279,11 @@ static func draw_rope(ci: CanvasItem, at: Vector2, road_w: float, dir: int, alph
 ## slot a step plate lands in (centres xs, slot half-width rx screen px): the plate's own outline. lit[i] 0..1 lights a target
 ## (pressed, holding); pulse 0..1 is the beat (the bar and the targets brighten on it); miss[i] true
 ## dulls a target for an instant.
-static func draw_hit_line(ci: CanvasItem, x0: float, x1: float, y: float, xs: Array, rx: float, lit: Array, pulse := 0.0, miss: Array = []) -> void:
+static func draw_hit_line(ci: CanvasItem, x0: float, x1: float, y: float, xs: Array, rx: float, lit: Array, pulse := 0.0, miss: Array = [], near: Array = []) -> void:
 	var G := PixelPalette.GOLD
 	var on := pulse > 0.5
-	var rows := [PixelPalette.K[0], G[3], G[5], G[2], PixelPalette.K[0]] if on else [PixelPalette.K[0], G[2], G[4], G[1], PixelPalette.K[0]]
+	var F := PixelPalette.FIRE
+	var rows := [PixelPalette.K[0], G[4], F[7], G[5], G[3], PixelPalette.K[0]] if on else [PixelPalette.K[0], G[3], G[5], G[4], G[2], PixelPalette.K[0]]
 	var yy := roundf(y)
 	var trx := target_rx(rx)
 	# the rule runs between the slots, not through them: each slot's hole shows the road
@@ -290,7 +296,7 @@ static func draw_hit_line(ci: CanvasItem, x0: float, x1: float, y: float, xs: Ar
 		var b: float = cuts[j] if j < cuts.size() else x1
 		if b > a:
 			for i in rows.size():
-				ci.draw_rect(Rect2(a, yy + float(i - 2) * PX, b - a, PX), rows[i])
+				ci.draw_rect(Rect2(a, yy + float(i - 3) * PX, b - a, PX), rows[i])
 		if j + 1 < cuts.size():
 			a = cuts[j + 1]
 	for i in xs.size():
@@ -301,26 +307,31 @@ static func draw_hit_line(ci: CanvasItem, x0: float, x1: float, y: float, xs: Ar
 			st = "lit"
 		elif m:
 			st = "miss"
-		elif on:
+		elif on or (i < near.size() and near[i]):
 			st = "beat"
 		sprite(ci, "target_%s_%d" % [st, trx], Vector2(roundf(float(xs[i])), yy))
 
 
-## The hit line's light on the road (draw on an additive canvas item): stepped bands, taller on the beat.
+## The hit line's light on the road (draw on an additive canvas item): two stepped bands above and
+## below the beam, brighter and taller on the beat.
 static func draw_hit_glow(ci: CanvasItem, x0: float, x1: float, y: float, pulse := 0.0) -> void:
-	if pulse < 0.5:
-		return
 	var yy := roundf(y)
-	var c := Color(PixelPalette.FIRE[3], 0.22)
-	ci.draw_rect(Rect2(x0, yy - 4.0 * PX, x1 - x0, 2.0 * PX), c)
-	ci.draw_rect(Rect2(x0, yy + 4.0 * PX, x1 - x0, 2.0 * PX), c)
+	var k := clampf(pulse, 0.0, 1.0)
+	var near := Color(PixelPalette.FIRE[3], 0.16 + 0.14 * k)
+	var far := Color(PixelPalette.FIRE[2], 0.08 + 0.08 * k)
+	var n := 2.0 + (1.0 if k > 0.5 else 0.0)
+	ci.draw_rect(Rect2(x0, yy - (3.0 + n) * PX, x1 - x0, n * PX), near)
+	ci.draw_rect(Rect2(x0, yy + 3.0 * PX, x1 - x0, n * PX), near)
+	ci.draw_rect(Rect2(x0, yy - (3.0 + 2.0 * n) * PX, x1 - x0, n * PX), far)
+	ci.draw_rect(Rect2(x0, yy + (3.0 + n) * PX, x1 - x0, n * PX), far)
 
 
 # ------------------------------------------------------------------ flat (on the road)
 
 ## A hold's rope lying on the road in `lane` (flat), from y_head back to y_tail: a thick hemp rope,
 ## two strands twisted round each other, in a K0 outline; the twists are anchored to the head so they
-## travel with it. It catches fire while held. Opaque palette colours only.
+## travel with it. While held, fire takes the rope from the head: a burning stretch by the hit line,
+## a glowing char line above it, plain hemp beyond. Opaque palette colours only.
 static func draw_sash(ci: CanvasItem, lane: Rect2, y_head: float, y_tail: float, lit := false, clip := Rect2()) -> void:
 	var top := minf(y_head, y_tail)
 	var bottom := maxf(y_head, y_tail)
@@ -331,20 +342,34 @@ static func draw_sash(ci: CanvasItem, lane: Rect2, y_head: float, y_tail: float,
 		return
 	var R := PixelPalette.ROPE
 	var F := PixelPalette.FIRE
-	var base: Color = F[5] if lit else R[1]
-	var hi: Color = F[6] if lit else R[2]
-	var lo: Color = F[3] if lit else R[0]
 	var cx := lane.get_center().x
 	var k := lane.size.x / REF_LANE
-	var bw := 66.0 * k
+	var bw := 60.0 * k
 	var r := Rect2(cx - bw * 0.5, top, bw, bottom - top)
 	ci.draw_rect(r.grow_individual(7.0 * k, 0, 7.0 * k, 0), PixelPalette.K[0])
-	ci.draw_rect(r, base)
+	_rope(ci, r, top, bottom, y_head, [R[1], R[2], R[0]], k)
+	if lit:
+		var burn := 150.0 * k
+		var f_top := maxf(top, bottom - burn)
+		_rope(ci, r, f_top, bottom, y_head, [F[4], F[6], F[2]], k)
+		var c_top := maxf(top, f_top - 12.0 * k)
+		if f_top - c_top > 1.0:
+			ci.draw_rect(Rect2(r.position.x, c_top, r.size.x, f_top - c_top), PixelPalette.RED[2])
+
+
+## One stretch (top..bottom) of the rope r in colours [base, ridge, groove].
+static func _rope(ci: CanvasItem, r: Rect2, top: float, bottom: float, y_head: float, cols: Array, k: float) -> void:
+	var base: Color = cols[0]
+	var hi: Color = cols[1]
+	var lo: Color = cols[2]
+	ci.draw_rect(Rect2(r.position.x, top, r.size.x, bottom - top), base)
 	# the twists: slanted bands, a lit ridge and a shadowed groove on each, one every `step`
 	var step := 40.0 * k
 	var slant := 22.0 * k
-	var dy := fposmod(y_head - bottom, step)
-	var y := bottom + dy + slant
+	var y := y_head + slant
+	while y > top + step:
+		y -= step
+	y += step * ceilf((bottom + slant + step - y) / step)
 	var x0 := r.position.x
 	var x1 := r.end.x
 	while y > top - slant - step:
@@ -356,8 +381,8 @@ static func draw_sash(ci: CanvasItem, lane: Rect2, y_head: float, y_tail: float,
 				ci.draw_colored_polygon(cut, part[1])
 		y -= step
 	# the rope's shaded right side and lit left edge
-	ci.draw_rect(Rect2(r.end.x - 9.0 * k, top, 9.0 * k, r.size.y), lo)
-	ci.draw_rect(Rect2(r.position.x, top, 6.0 * k, r.size.y), hi)
+	ci.draw_rect(Rect2(r.end.x - 9.0 * k, top, 9.0 * k, bottom - top), lo)
+	ci.draw_rect(Rect2(r.position.x, top, 6.0 * k, bottom - top), hi)
 
 
 static func _area(pts: PackedVector2Array) -> float:
@@ -390,21 +415,20 @@ static func _clip_y(pts: PackedVector2Array, top: float, bottom: float) -> Packe
 	return out
 
 
-## The stand-still band: navy, hatched, closed by two pale rules (flat, opaque palette colours).
+## The stand-still band: the road dims to still navy between two pale rules, with quiet navy courses
+## across it (flat, opaque palette colours).
 static func draw_band(ci: CanvasItem, field: Rect2, y_top: float, y_bottom: float) -> void:
 	var top := minf(y_top, y_bottom)
 	var bottom := maxf(maxf(y_top, y_bottom), top + 28.0)
 	var r := Rect2(field.position.x, top, field.size.x, bottom - top)
 	var N := PixelPalette.NAVY
 	ci.draw_rect(r, N[1])
-	var gap := 44.0
-	var x := r.position.x - r.size.y
-	while x < r.end.x:
-		var p0 := Vector2(x, r.end.y)
-		var p1 := Vector2(x + r.size.y, r.position.y)
-		ci.draw_line(p0, p1, N[3], 10.0)
-		x += gap
+	var y := bottom - 36.0
+	while y > top + 12.0:
+		ci.draw_rect(Rect2(r.position.x, y, r.size.x, 6.0), N[2])
+		y -= 36.0
 	for yy in [top, bottom]:
+		ci.draw_rect(Rect2(r.position.x, yy - 9.0, r.size.x, 18.0), PixelPalette.K[0])
 		ci.draw_rect(Rect2(r.position.x, yy - 5.0, r.size.x, 10.0), STILL_BLUE)
 
 

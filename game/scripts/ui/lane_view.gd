@@ -340,7 +340,7 @@ vec4 road(vec2 UVp) {
 	bool joint = floor((fxl - off) / bw) != floor((fxr - off) / bw);
 	vec2 id = vec2(floor((fx - off) / bw), n);
 	// light: the fire's glow over the far part of the road, the rails' glow, the hit line's, a pressed lane
-	float fd = length(vec2((fx - half_w) / (field.x * 0.62), fy / (field.y * (0.34 + 0.08 * pulse))));
+	float fd = length(vec2((fx - half_w) / (field.x * 0.7), fy / (field.y * (0.46 + 0.08 * pulse))));
 	float light = 0.19;
 	light += pow(clamp(1.0 - fd, 0.0, 1.0), 1.3) * (0.62 + 0.25 * pulse) * (1.0 - 0.55 * dim);
 	light += clamp(1.0 - (outer_d - core_r - px) / (px * (2.0 + 3.0 * w)), 0.0, 1.0) * (0.12 + 0.12 * pulse + 0.1 * flash);
@@ -603,10 +603,13 @@ func _draw_hit_line() -> void:
 	var miss := []
 	for lane in 3:
 		miss.append(_flash_kind[lane] == "miss" and _clock - _flash[lane] < FLASH_TIME * 1.5)
+	var near := []
+	for lane in 3:
+		near.append(session != null and _cued(lane))
 	var hl := LaneSkin.hit_line_y(field_rect())
 	var y := hit_line_screen_y()
 	var span := _screen_span()
-	FireSkin.draw_hit_line(self, span.x, span.y, y, xs, 0.33 * FireSkin.REF_LANE * upright_scale(hl), lit, beat_env(), miss)
+	FireSkin.draw_hit_line(self, span.x, span.y, y, xs, 0.33 * FireSkin.REF_LANE * upright_scale(hl), lit, beat_env(), miss, near)
 
 
 ## The hit line's height on screen, on the art grid (anchored at the road's far end).
@@ -742,12 +745,17 @@ func _draw_marks() -> void:
 					var frx := float(FireSkin.note_rx(upright_scale(LaneSkin.hit_line_y(field_rect()))))
 					FireSkin.px_plate(self, p, frx + 1.0, FireSkin.plate_ry(frx) + 1.0, 1.0, PixelPalette.BONE[1])
 			"stomp", "stomp1":
-				# the thumb prints left on the pressed button: two for a full stomp, one dull one otherwise
+				# the thumb prints left on the pressed button: two for a full stomp, one dull one otherwise,
+				# solid pads that fade out in palette steps
 				var both := str(m[0]) == "stomp"
-				var rr := minf(w, r.size.y) * (0.12 + 0.08 * (1.0 - a))
+				if a < 0.3:
+					continue
+				var col: Color = (PixelPalette.GOLD[5] if a > 0.65 else PixelPalette.GOLD[3]) if both else PixelPalette.BONE[1]
+				var ty := PxArt.snap(r.position.y + r.size.y * 0.62, r.position.y)
 				for dx in ([-1.0, 1.0] if both else [0.0]):
-					var q := c + Vector2(dx * w * 0.18, 0.0)
-					FireSkin.px_ring(self, q, rr, rr, 2.0, Color(PixelPalette.GOLD[4] if both else PixelPalette.BONE[1], a))
+					var q := Vector2(PxArt.snap(c.x + dx * 6.0 * PxArt.PX, c.x), ty)
+					FireSkin.px_disc(self, q, 3.0, 4.0, PixelPalette.K[0])
+					FireSkin.px_disc(self, q, 2.0, 3.0, col)
 
 
 ## The notes on screen now, far to near: [note, y, y_end] in flat field coordinates.
@@ -819,7 +827,7 @@ func _draw_upright() -> void:
 				if tail > -20.0:
 					FireSkin.draw_hold_ring(self, project(Vector2(cx, tail)), upright_scale(tail), _haze(tail, field))
 				var head := minf(y, hl) if n.holding else y
-				FireSkin.draw_gem(self, project(Vector2(cx, head)), upright_scale(head), false, a)
+				FireSkin.draw_hold_head(self, project(Vector2(cx, head)), upright_scale(head), a)
 			Note.Kind.BELL:
 				if not n.done:
 					_draw_bell_bar(field, y, n.up, a)
@@ -892,11 +900,24 @@ func _rest_words(field: Rect2, y_a: float, y_b: float, taken: Array[float] = [])
 	var text := tr("lane_still")
 	var w := PxType.width("caps", text)
 	var p := project(Vector2(field.get_center().x, best_y)).round()
-	var back := Rect2(roundf((p.x - w * 0.5) / P) * P - 5.0 * P, roundf(p.y / P) * P - 6.0 * P, roundf(w / P) * P + 10.0 * P, 13.0 * P)
+	var back := Rect2(roundf((p.x - w * 0.5) / P) * P - 6.0 * P, roundf(p.y / P) * P - 7.0 * P, roundf(w / P) * P + 12.0 * P, 15.0 * P)
+	# a UI-kit tag: K0 outline, gold frame, navy board, gold studs, a red diamond either side
 	draw_rect(back.grow(P), PixelPalette.K[0])
-	draw_rect(back, FireSkin.STILL_BLUE)
-	draw_rect(back.grow(-P), PixelPalette.NAVY[1])
-	PxType.draw(self, "caps", Vector2(p.x, back.position.y + 2.0 * P), text, PixelPalette.STAR[1], 1, 0)
+	draw_rect(back, PixelPalette.GOLD[3])
+	draw_rect(Rect2(back.position, Vector2(back.size.x, P)), PixelPalette.GOLD[5])
+	draw_rect(back.grow(-P), PixelPalette.K[0])
+	draw_rect(back.grow(-2.0 * P), PixelPalette.NAVY[1])
+	for sx in [back.position.x + 3.0 * P, back.end.x - 4.0 * P]:
+		for sy in [back.position.y + 3.0 * P, back.end.y - 4.0 * P]:
+			draw_rect(Rect2(sx, sy, P, P), PixelPalette.GOLD[4])
+	for sd in [-1.0, 1.0]:
+		var dx := back.position.x - 3.0 * P if sd < 0.0 else back.end.x + 2.0 * P
+		var dy := back.get_center().y - P * 0.5
+		for d in [[0.0, -1.0], [-1.0, 0.0], [0.0, 0.0], [1.0, 0.0], [0.0, 1.0]]:
+			draw_rect(Rect2(dx + d[0] * P - P, dy + d[1] * P - P, 3.0 * P, 3.0 * P), PixelPalette.K[0])
+		for d in [[0.0, -1.0], [-1.0, 0.0], [0.0, 0.0], [1.0, 0.0], [0.0, 1.0]]:
+			draw_rect(Rect2(dx + d[0] * P, dy + d[1] * P, P, P), PixelPalette.RED[3] if d != [0.0, -1.0] else PixelPalette.RED[4])
+	PxType.draw(self, "caps", Vector2(p.x, back.position.y + 3.0 * P), text, PixelPalette.BONE[4], 1, 0)
 	_rest_label_y = best_y
 
 

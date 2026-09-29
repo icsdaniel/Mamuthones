@@ -73,7 +73,7 @@ def road_lut():
 NOTE_SIZES = range(5, 31)        # half-widths (art px) of the step plate, far to near
 TARGET_SIZES = range(14, 31)     # half-widths of the hit line's slots (the step plate's near sizes)
 BAR_HEIGHTS = range(5, 17)
-BADGE_SIZES = range(4, 14)
+BADGE_SIZES = range(5, 19)
 
 
 BUTTON_STATES = ("idle", "cued", "pressed", "hit", "miss")
@@ -210,7 +210,7 @@ def main():
     CELLS.clear()
     road_lut()
     for rx in NOTE_SIZES:
-        for kind in ("step", "call", "heal", "stomp"):
+        for kind in ("step", "call", "heal", "stomp", "hold"):
             cv, a = road.plate(rx, kind)
             save(cv, f"note_{kind}_{rx}", a)
         cv, a = road.plate(rx, "end")
