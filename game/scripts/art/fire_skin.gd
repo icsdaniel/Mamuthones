@@ -469,13 +469,13 @@ static func draw_button(ci: CanvasItem, rect: Rect2, lane: int, state: String) -
 	ci.draw_set_transform(p, 0.0, Vector2(PX, PX))
 	ci.draw_style_box(_box(state), Rect2(Vector2.ZERO, n))
 	ci.draw_set_transform(Vector2.ZERO, 0.0, Vector2.ONE)
-	var dia: String = {"idle": "diamond", "cued": "diamond_bright", "pressed": "diamond_bright", "hit": "diamond_hot", "miss": "diamond_dim"}[state]
+	var dia: String = {"idle": "stud", "cued": "stud_bright", "pressed": "stud_bright", "hit": "stud_hot", "miss": "stud_dim"}[state]
 	var tone: String = {"idle": "idle", "cued": "bright", "pressed": "bright", "hit": "hot", "miss": "dim"}[state]
-	# the diamonds: one every 5 art px across the top, centred
-	var count := int((n.x - 12.0) / 5.0) + 1
-	var x0 := p.x + roundf((n.x - float(count - 1) * 5.0) * 0.5) * PX
+	# the studded diamonds: one every 9 art px across the top band, centred
+	var count := int((n.x - 16.0) / 9.0) + 1
+	var x0 := p.x + roundf((n.x - float(count - 1) * 9.0) * 0.5) * PX
 	for i in count:
-		sprite(ci, dia, Vector2(x0 + float(i) * 5.0 * PX, p.y + 6.0 * PX))
+		sprite(ci, dia, Vector2(x0 + float(i) * 9.0 * PX, p.y + 7.0 * PX))
 	var c := p + Vector2(floorf(n.x * 0.5), floorf(n.y * 0.5) + 3.0) * PX
 	if state == "pressed" or state == "hit":
 		c.y += PX

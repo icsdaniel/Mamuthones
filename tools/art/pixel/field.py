@@ -121,6 +121,19 @@ def diamond(col_hi, col):
     return cv
 
 
+def stud(col_hi, col, core="RED3"):
+    """A small studded diamond for the button's top band: gold, lit on its upper left, a red core,
+    in a K0 outline (7 x 7 with the outline)."""
+    cv = Canvas(7, 7)
+    for y in range(1, 6):
+        for x in range(1, 6):
+            if abs(x - 3) + abs(y - 3) <= 2:
+                cv.pset(x, y, col_hi if (x - 3) + (y - 3) < 0 else col)
+    cv.pset(3, 3, core)
+    cv.outline("K0")
+    return cv
+
+
 def foot(tone="idle", right=False):
     """A cream footprint (a sole with its tread), toes up: the left foot unless right."""
     W, H = 13, 24
@@ -233,6 +246,10 @@ def main():
     save(diamond("GOLD5", "GOLD4"), "diamond_bright", (1, 1))
     save(diamond("FIRE7", "FIRE6"), "diamond_hot", (1, 1))
     save(diamond("GOLD2", "GOLD1"), "diamond_dim", (1, 1))
+    save(stud("GOLD4", "GOLD3"), "stud", (3, 3))
+    save(stud("GOLD5", "GOLD4", "RED4"), "stud_bright", (3, 3))
+    save(stud("FIRE7", "FIRE6", "FIRE4"), "stud_hot", (3, 3))
+    save(stud("GOLD2", "GOLD1", "RED1"), "stud_dim", (3, 3))
     for tone in ("idle", "bright", "hot", "dim"):
         save(foot(tone), f"foot_l_{tone}", (6, 12))
         save(foot(tone, True), f"foot_r_{tone}", (6, 12))

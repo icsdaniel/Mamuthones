@@ -745,17 +745,9 @@ func _draw_marks() -> void:
 					var frx := float(FireSkin.note_rx(upright_scale(LaneSkin.hit_line_y(field_rect()))))
 					FireSkin.px_plate(self, p, frx + 1.0, FireSkin.plate_ry(frx) + 1.0, 1.0, PixelPalette.BONE[1])
 			"stomp", "stomp1":
-				# the thumb prints left on the pressed button: two for a full stomp, one dull one otherwise,
-				# solid pads that fade out in palette steps
-				var both := str(m[0]) == "stomp"
-				if a < 0.3:
-					continue
-				var col: Color = (PixelPalette.GOLD[5] if a > 0.65 else PixelPalette.GOLD[3]) if both else PixelPalette.BONE[1]
-				var ty := PxArt.snap(r.position.y + r.size.y * 0.62, r.position.y)
-				for dx in ([-1.0, 1.0] if both else [0.0]):
-					var q := Vector2(PxArt.snap(c.x + dx * 6.0 * PxArt.PX, c.x), ty)
-					FireSkin.px_disc(self, q, 3.0, 4.0, PixelPalette.K[0])
-					FireSkin.px_disc(self, q, 2.0, 3.0, col)
+				# nothing extra on the button: it burns red with both prints hot (its hit state), and the
+				# stomp's own burst is thrown out of the slot on the road
+				pass
 
 
 ## The notes on screen now, far to near: [note, y, y_end] in flat field coordinates.
