@@ -129,7 +129,7 @@ def fleece_mass(cv, m, seed=1, warm=1.0):
     y0, y1 = ys.min(), ys.max()
     cxm = xs.mean()
     rel_y = np.clip((yy - y0) / max(1, y1 - y0), 0, 1)
-    rim = np.clip(1.0 - (dist - 1) / 3.0, 0, 1) * (0.3 + 0.7 * rel_y) * warm
+    rim = np.clip(1.0 - (dist - 1) / 4.0, 0, 1) * (0.45 + 0.55 * rel_y) * warm
     ground = np.clip(0.12 + 0.18 * rel_y + rim * 0.35, 0, 0.999)
     cv.ramp_fill(m, ["FLEECE0", "FLEECE1", "FLEECE2", "FLEECE3"], ground)
     ramp = ["FLEECE1", "FLEECE2", "FLEECE3", "FLEECE4", "FLEECE5", "LEATHER3"]
@@ -165,8 +165,8 @@ def fleece_mass(cv, m, seed=1, warm=1.0):
     ys, xs = np.nonzero(edge)
     for y, x in zip(ys, xs):
         r = h01(x, y, seed + 11)
-        if r < 0.45:
-            ln = 2 + int(h01(y, x, seed + 1) * 4)
+        if r < 0.6:
+            ln = 2 + int(h01(y, x, seed + 1) * 5)
             ox = -1.0 if x < cxm else 1.0
             ny = 1.0 if rel_y[y, x] > 0.15 else 0.4
             for i in range(1, ln + 1):
@@ -174,8 +174,9 @@ def fleece_mass(cv, m, seed=1, warm=1.0):
                 py_ = round(y + ny * i * 0.8)
                 if not (0 <= px_ < w and 0 <= py_ < h) or m[py_, px_]:
                     continue
-                tip = i >= ln - 1 and rel_y[y, x] > 0.3 and warm > 0
-                cv.pset(px_, py_, ("LEATHER3" if r < 0.18 else "FLEECE5") if tip else ("FLEECE3" if i > 1 else "FLEECE2"))
+                tip = i >= ln - 1 and rel_y[y, x] > 0.2 and warm > 0
+                hot = "FIRE3" if r < 0.08 * warm else "LEATHER3" if r < 0.3 else "FLEECE5"
+                cv.pset(px_, py_, hot if tip else ("FLEECE4" if i > 1 and warm > 1.2 else "FLEECE3" if i > 1 else "FLEECE2"))
 
 
 # ------------------------------------------------------------------ bells, straps, rope
@@ -301,9 +302,9 @@ def bonfire_lozenge(cv, top, x0, x1, bottom):
     xx, yy = L.grid()
     # sky of the scene: dark, glowing red-orange around the fire
     fy = top + (bottom - top) * 0.4
-    d = np.sqrt(((xx + 0.5 - cx) / 46.0) ** 2 + ((yy + 0.5 - fy) / 24.0) ** 2)
-    val = np.clip(1.0 - d, 0, 1) ** 1.3
-    L.ramp_fill(tm, ["K0", "K1", "FIRE0", "FIRE1", "FIRE2"], val * 0.999)
+    d = np.sqrt(((xx + 0.5 - cx) / 58.0) ** 2 + ((yy + 0.5 - fy) / 30.0) ** 2)
+    val = np.clip(1.0 - d, 0, 1) ** 1.1
+    L.ramp_fill(tm, ["K0", "K1", "FIRE0", "FIRE1", "FIRE2", "FIRE3"], val * 0.999)
     # standing stones (menhirs) in silhouette, rim-lit toward the fire
     for (sxp, sw, shh) in ((x0 + 22, 9, 17), (x0 + 36, 7, 13), (x1 - 36, 7, 14), (x1 - 22, 9, 18)):
         base = top + 34
@@ -336,7 +337,7 @@ def bonfire_lozenge(cv, top, x0, x1, bottom):
             oy = base_y + ry + (h01(k, 5) - 0.5) * 2
             rr = r * (0.8 + 0.4 * h01(k, 7))
             m = L.m_ellipse(cx + ox, oy, rr, rr * 0.78)
-            near = max(0.0, 1.0 - (abs(ox) + (oy - base_y) * 1.5) / 40.0)
+            near = max(0.0, 1.0 - (abs(ox) + (oy - base_y) * 1.2) / 52.0)
             cols = ["K1", "STONE0", "STONE1", "FIRE2" if near > 0.55 else "STONE2"]
             if near > 0.8:
                 cols = ["STONE0", "FIRE1", "FIRE3", "FIRE5"]
@@ -391,7 +392,7 @@ def embers(cv, pts):
 
 # ------------------------------------------------------------------ compositions
 
-def hooded(cv, cx, top, scale=1.0, bells=True, seed=4):
+def hooded(cv, cx, top, scale=1.0, bells=True, seed=4, warm=1.0):
     """The hooded Mamuthone bust: fleece hood and body, the kerchief, the mask, straps and bells."""
     s = scale
     F = Canvas(cv.w, cv.h)
@@ -401,7 +402,7 @@ def hooded(cv, cx, top, scale=1.0, bells=True, seed=4):
     shoulders = F.m_ellipse(cx, top + 104 * s, 76 * s, 36 * s)
     m = (hood | body | shoulders)
     m[int(top + 126 * s):, :] = False
-    fleece_mass(F, m, seed)
+    fleece_mass(F, m, seed, warm=warm)
     F.outline()
     cv.blit(F, 0, 0)
     # the black kerchief round the face
@@ -417,11 +418,12 @@ def hooded(cv, cx, top, scale=1.0, bells=True, seed=4):
     sw = max(3, round(4 * s))
     strap(cv, [(cx - 46 * s, top + 64 * s), (cx - 22 * s, top + 84 * s), (cx - 4 * s, top + 94 * s)], sw)
     strap(cv, [(cx + 46 * s, top + 64 * s), (cx + 22 * s, top + 84 * s), (cx + 4 * s, top + 94 * s)], sw)
-    bells_at = ((-58, 66, 19, 21), (56, 62, 21, 24), (-44, 98, 12, 13), (-30, 78, 29, 33), (42, 96, 14, 15),
-                (26, 80, 25, 28), (-12, 102, 12, 14), (2, 94, 21, 24))
+    # a tight cluster under the chin, as the bells hang in the procession: the big ones in front
+    bells_at = ((-48, 66, 19, 22), (47, 64, 19, 22), (-27, 74, 28, 32), (25, 75, 27, 31),
+                (-44, 90, 13, 15), (43, 90, 13, 15), (0, 86, 24, 28), (-15, 100, 13, 15), (16, 100, 13, 15))
     for (ox, oy, bw, bh) in bells_at:
         ring(cv, cx + ox * s, top + (oy - 2) * s, max(1.8, 2.4 * s))
-    for (ox, oy, bw, bh) in bells_at:
+    for (ox, oy, bw, bh) in sorted(bells_at, key=lambda b: b[1]):
         bell(cv, cx + ox * s, top + oy * s, bw * s, bh * s)
 
 
@@ -431,7 +433,7 @@ def full_logo():
     cx = W // 2
     # the rope's far run, behind the fleece: over the right shoulder into the big loop
     rope(cv, [(138, 58), (152, 36), (174, 30), (190, 46), (188, 76), (176, 102)], 7, bindings=(0.14, 0.66), seed=2)
-    hooded(cv, cx, 4, 1.0)
+    hooded(cv, cx, 4, 1.0, warm=1.5)
     # the rope's near runs: up the left side behind the bells, and down the right side to the noose
     rope(cv, [(46, 222), (26, 202), (14, 166), (14, 128), (24, 100), (42, 84)], 7, bindings=(0.16, 0.52, 0.88), seed=1)
     bonfire_lozenge(cv, 158, 32, 168, 230)

@@ -33,6 +33,8 @@ extends Control
 const BANNER := Rect2(50, 151, 100, 12)
 const SUB_SIZE := 34
 const SUB_MIN := 26
+## The mask the old painted logo wore (setup_art.gd and others still paint it by these parts).
+const MASK := {"brow": "heavy", "eyes": "round", "nose": "hooked", "cheeks": "full", "mouth": "closed", "finish": "soot_black", "patina": "worn"}
 
 
 func _init() -> void:

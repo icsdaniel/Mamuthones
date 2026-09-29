@@ -10,7 +10,7 @@ func build() -> void:
 	logo.name = "Logo"
 	logo.show_title = true
 	logo.subtitle = tr("app_title")
-	logo.custom_minimum_size = Vector2(0, 600)
+	logo.custom_minimum_size = Vector2(0, 700)   # x3 on the base screen
 	box.add_child(logo)
 	UIKit.spacer(box, 24)
 	var phone := I18n.system_locale()

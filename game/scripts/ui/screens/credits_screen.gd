@@ -7,7 +7,9 @@ func build() -> void:
 	var box := UIKit.column(self, true, 16)
 	UIKit.header(box, tr("cred_title"), on_back)
 	var logo := Logo.new()
-	logo.custom_minimum_size = Vector2(0, 260)
+	logo.mode = "full"
+	logo.subtitle = tr("app_title")
+	logo.custom_minimum_size = Vector2(0, 470)
 	box.add_child(logo)
 	var respect := UIKit.card(box, true)
 	respect.name = "Respect"

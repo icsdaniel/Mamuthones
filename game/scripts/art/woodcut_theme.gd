@@ -22,6 +22,7 @@ extends RefCounted
 ##            "PaperHeaderLabel" Alegreya SC Bold 40, kilim red (inside a CardPanel)
 ##   Buttons: "AccentButton"     the red kilim banner, the one main action on a screen
 ##            "QuietButton"      a thin gold rule, no ornaments (Back, secondary actions)
+##            "CompactButton"    the framed button without its lozenges, for dense grids of choices
 ##   Panels:  "BoardPanel"       navy board with a double gold rule (the default panel too)
 ##            "CardPanel"        parchment in a dark wood frame; use Paper* labels inside
 ##            "ClearPanel"       nothing drawn (layout only)
@@ -37,6 +38,7 @@ const SIZE_ACCENT := 36
 ## Content margins (screen px) of the framed buttons: room for the lozenges at both ends.
 const BUTTON_PAD := Vector4(44, 14, 44, 17)
 const ACCENT_PAD := Vector4(78, 16, 78, 19)
+const COMPACT_PAD := Vector4(18, 14, 18, 17)
 
 static var _theme: Theme
 
@@ -127,6 +129,19 @@ static func build() -> Theme:
 	_button_colors(t, "AccentButton", Palette.CREAM, Palette.CREAM)
 	t.set_color("font_outline_color", "AccentButton", Palette.INK)
 	t.set_constant("outline_size", "AccentButton", 8)
+
+	# the same frame without the lozenges, for grids of four or long option names
+	t.set_type_variation("CompactButton", "Button")
+	for st: String in ["normal", "hover", "pressed", "hover_pressed", "disabled", "focus"]:
+		var src: PixelBox = t.get_stylebox(st, "Button")
+		var c := src.duplicate() as PixelBox
+		c.ends = null
+		var down := st.contains("pressed")
+		c.content_margin_left = COMPACT_PAD.x
+		c.content_margin_right = COMPACT_PAD.z
+		c.content_margin_top = COMPACT_PAD.y + (3.0 if down else 0.0)
+		c.content_margin_bottom = COMPACT_PAD.w - (3.0 if down else 0.0)
+		t.set_stylebox(st, "CompactButton", c)
 
 	t.set_type_variation("QuietButton", "Button")
 	var quiet := _box("button_quiet", Vector4i(3, 3, 3, 4), Vector4(22, 12, 22, 15))

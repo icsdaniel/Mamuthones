@@ -85,8 +85,8 @@ func build() -> void:
 	add.blend_mode = CanvasItemMaterial.BLEND_MODE_ADD
 	_glow.material = add
 	_glow.set_anchors_preset(Control.PRESET_FULL_RECT)
-	_glow.offset_left = -60
-	_glow.offset_right = 60
+	_glow.offset_left = -24   # stays inside the side gutters
+	_glow.offset_right = 24
 	_glow.offset_top = -48
 	_glow.offset_bottom = 48
 	_glow.modulate.a = 0.4
