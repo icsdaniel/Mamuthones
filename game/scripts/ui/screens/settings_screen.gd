@@ -30,7 +30,6 @@ func build() -> void:
 	preview.note_speed = speed.value
 	box.add_child(preview)
 	speed.value_changed.connect(func(v: float) -> void: preview.note_speed = v)
-	_toggle(box, "note_hop", tr("set_note_hop"), tr("set_note_hop_note"))
 	_toggle(box, "bell_cue", tr("set_bell_cue"), tr("set_bell_cue_note"))
 	_toggle(box, "vibration", tr("set_vibration"))
 	_toggle(box, "slam", tr("set_slam"), tr("set_slam_note"))

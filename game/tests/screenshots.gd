@@ -107,7 +107,6 @@ func _shots() -> Array:
 		{"file": "tutorial", "screen": "tutorial", "args": {"song_id": tut_id, "first_run": true}, "wait": 1.2},
 		{"file": "play_fires", "screen": "play", "args": {"song_id": fires_id, "difficulty": "hard", "bell_set": "light", "autoplay": true, "human": true}, "setup": "advance:0.42"},
 		{"file": "play_showcase", "screen": "play", "args": {"song_id": fires_id, "difficulty": "hard", "bell_set": "light", "autoplay": true}, "setup": "moment:showcase", "wait": 0.1},
-		{"file": "play_showcase_hop", "screen": "play", "args": {"song_id": fires_id, "difficulty": "hard", "bell_set": "light", "autoplay": true}, "setup": "moment:showcase_hop", "wait": 0.1},
 		{"file": "play_dense", "screen": "play", "args": {"song_id": fires_id, "difficulty": "hard", "bell_set": "light", "autoplay": true}, "setup": "moment:dense", "wait": 0.1},
 		{"file": "play_hold", "screen": "play", "args": {"song_id": "bonfires", "difficulty": "medium", "bell_set": "light", "autoplay": true}, "setup": "moment:hold", "wait": 0.1},
 		{"file": "play_bell", "screen": "play", "args": {"song_id": fires_id, "difficulty": "hard", "bell_set": "light", "autoplay": true}, "setup": "moment:bell", "wait": 0.1},
@@ -346,15 +345,8 @@ func _moment(screen: Node, what: String) -> void:
 		var lanes: Control = screen.get("lanes")
 		if lanes != null:
 			lanes.set_process(false)
-	if what == "showcase" or what == "showcase_hop":
+	if what == "showcase":
 		_showcase(screen, s, c.song_time())
-	if what == "showcase_hop":
-		# into the hop before the next beat: every note in the air
-		var spb := 60.0 / float(s.song.bpm)
-		var lanes: Control = screen.get("lanes")
-		var b := float(lanes.get("beat"))
-		c.advance((ceilf(b) - 0.15 - b) * spb)
-		await process_frame
 	if what == "wrong":
 		# The player's thumb lands on the left button while the right lane's note is due.
 		s.tap(0, c.song_time(), 7)
@@ -369,10 +361,7 @@ func _showcase(screen: Node, s: Session, now: float) -> void:
 	var spb := 60.0 / float(s.song.bpm)
 	# a slower note speed than the default, so about six beats of road show
 	var ahead: float = lanes.get_script().get_script_constant_map()["LOOKAHEAD"]
-	if bool(lanes.get("hop")):
-		lanes.set("note_speed", lanes.get_script().get_script_constant_map()["VISIBLE_BEATS"] / 6.3)
-	else:
-		lanes.set("note_speed", ahead / (6.3 * spb))
+	lanes.set("note_speed", ahead / (6.3 * spb))
 	var b0 := ceilf(float(lanes.get("beat")) + 0.3)
 	var at := func(b: float) -> float: return now + (b0 + b - float(lanes.get("beat"))) * spb
 	var kept: Array[Note] = []

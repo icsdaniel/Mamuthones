@@ -209,23 +209,17 @@ static func draw_notes(lv: LaneView, field: Rect2) -> void:
 					var wb := lv.road_scale(head) * field.size.x / 3.0 * 0.26
 					sash(lv, lv.project(Vector2(cx, tail)), lv.project(Vector2(cx, head)), wa, wb, n.holding, lv._haze(tail, field))
 	_hit_line(lv, field, rects, hl)
-	var now_b := lv._now_beat() if lv.spb > 0.0 else 0.0
 	for e in shown:
 		var n: Note = e[0]
 		var y: float = e[1]
 		var a := lv._haze(y, field)
 		var lw := lv.road_scale(y) * field.size.x / 3.0
 		var w := lw * NOTE_W
-		var lift := 0.0
-		if lv.hopping() and not n.done and not UIKit.reduced_motion():
-			lift = LaneView.hop_arc(now_b, LaneView.hop_grid((n.t - lv.beat_zero) / lv.spb)) * w * 0.28
 		match n.kind:
 			Note.Kind.STEP:
 				if n.done:
 					continue
 				var at := lv.project(Vector2(rects[n.lane].get_center().x, y))
-				_shadow(lv, at, w, lift, a)
-				at.y -= lift
 				if n.heal:
 					gem(lv, at, w, BONE, INLAY_FLAME, a)
 				elif n.call or lv._off_beat(n):
@@ -242,9 +236,6 @@ static func draw_notes(lv: LaneView, field: Rect2) -> void:
 				var head := minf(y, hl) if n.holding else y
 				var at := lv.project(Vector2(cx, head))
 				var hw := lv.road_scale(head) * field.size.x / 3.0 * NOTE_W
-				if not n.holding:
-					_shadow(lv, at, hw, lift, a)
-					at.y -= lift
 				hold_head(lv, at, hw, a)
 			Note.Kind.BELL, Note.Kind.RING:
 				if n.done:
@@ -261,16 +252,7 @@ static func draw_notes(lv: LaneView, field: Rect2) -> void:
 				if n.done:
 					continue
 				var at := lv.project(Vector2(rects[n.lane].get_center().x, y))
-				_shadow(lv, at, w * 1.3, lift, a)
-				at.y -= lift
 				stomp(lv, at, w, a * (0.6 if n.thumbs > 0 else 1.0))
-
-
-static func _shadow(ci: CanvasItem, at: Vector2, w: float, lift: float, alpha: float) -> void:
-	if lift <= 0.5:
-		return
-	var k := clampf(lift / (w * 0.28), 0.0, 1.0)
-	_ellipse(ci, at + Vector2(0, w * 0.1), Vector2(w * 0.45 * (1.0 - 0.2 * k), w * 0.14), Color(0, 0, 0, (0.5 - 0.2 * k) * alpha))
 
 
 ## The hit line across the road, and a receptor ring in each lane: lit while its button is down,

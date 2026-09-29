@@ -278,39 +278,22 @@ func test_words_of_two_lanes_never_print_over_each_other() -> void:
 	w.queue_free()
 
 
-## Notes hop one step per beat: they stand still most of the beat, hop in its last part (rising and
-## falling back onto the road), and land on the beat itself, so a note reaches the hit line exactly
-## when it must be stepped. With hopping off they slide.
-func test_notes_hop_and_land_on_the_beat() -> void:
-	check_eq(LaneView.hop_grid(7.0), 1.0, "on the beat: whole-beat hops")
-	check_eq(LaneView.hop_grid(7.5), 0.5, "off the beat: half-beat hops")
-	check_near(LaneView.hop_grid(7.0 + 1.0 / 3.0), 1.0 / 3.0, 1e-6, "triplets hop on thirds")
-	check_near(LaneView.hopped(3.0, 1.0), 3.0, 1e-6, "on the beat the grid has just landed")
-	check_near(LaneView.hopped(3.5, 1.0), 3.0, 1e-6, "mid-beat it stands still")
-	check_near(LaneView.hopped(3.999, 1.0), 4.0, 0.01, "and lands as the next beat arrives")
-	check_near(LaneView.hop_arc(3.5, 1.0), 0.0, 1e-6, "standing notes are on the road")
-	check(LaneView.hop_arc(3.85, 1.0) > 0.9, "mid-hop a note is at the top of its arc")
-	var prev := LaneView.hopped(3.0, 1.0)
-	for i in range(1, 101):
-		var h := LaneView.hopped(3.0 + i * 0.01, 1.0)
-		check(h >= prev - 1e-9, "never hops backwards")
-		prev = h
+## Notes slide smoothly down the road (Daniele: stepping on the beat felt bad): a note on this moment
+## is on the hit line, and every note keeps moving closer as time runs.
+func test_notes_slide_smoothly() -> void:
 	var lv := LaneView.new()
 	lv.perspective = false
 	lv.size = Vector2(540, 1100)
-	lv.hop = true
 	lv.spb = 0.5
-	lv.beat_zero = 1.0
-	lv.song_time = 1.0 + 8.0 * 0.5          # beat 8
+	lv.song_time = 5.0
 	var f := lv.field_rect()
 	var hl := LaneSkin.hit_line_y(f)
 	var pps := lv._px_per_s()
-	check_near(lv.event_y(f, lv.song_time, pps), hl, 0.5, "a note on this beat is on the hit line")
-	var y2 := lv.event_y(f, 1.0 + 10.0 * 0.5, pps)
-	lv.song_time += 0.5 * 0.4                # 40% into the beat: nothing has moved yet
-	check_near(lv.event_y(f, 1.0 + 10.0 * 0.5, pps), y2, 0.5, "between hops the note stands still")
-	lv.hop = false
-	var s1 := lv.event_y(f, 1.0 + 10.0 * 0.5, lv._px_per_s())
-	lv.song_time += 0.05
-	check(lv.event_y(f, 1.0 + 10.0 * 0.5, lv._px_per_s()) > s1, "with hopping off the note slides")
+	check_near(lv.event_y(f, lv.song_time, pps), hl, 0.5, "a note due now is on the hit line")
+	var prev := lv.event_y(f, 7.0, pps)
+	for i in 20:
+		lv.song_time += 0.02
+		var y := lv.event_y(f, 7.0, pps)
+		check(y > prev, "the note keeps sliding closer at every moment")
+		prev = y
 	lv.free()

@@ -12,9 +12,6 @@ const CUE_TIME := 0.22          ## a button is "cued" when its next note is this
 const MARK_TIME := 0.4          ## wrong-lane and stomp marks
 const TICK_TIME := 1.6          ## timing ticks fade over this long
 const STEP_TICK_TIME := 0.3     ## the early/late tick on a step hit fades over this long
-const VISIBLE_BEATS := 5.0      ## beats of road ahead at note speed 1.0 when notes hop
-const HOP := 0.3                ## share of each step spent hopping; the rest of it the note stands still
-const HOP_LIFT := 5.0           ## art px a note rises at the top of its hop (at lane scale 1)
 
 var session: Session
 var song_time := 0.0
@@ -22,10 +19,6 @@ var note_speed := 1.0
 var router: InputRouter          ## for pressed state; null in autoplay
 var show_buttons := true
 var beat_pulse := 0.0
-## Notes hop down the road one step per beat (landing on the beat) instead of sliding. Needs spb and
-## beat_zero. Off by default here; the play screen turns it on from the "note_hop" setting.
-var hop := false
-var beat_zero := 0.0             ## song time of beat 0 (hopping)
 
 var _bursts: Array = []          ## [pos: Vector2, quality: String, t0: float]
 var _stomps: Array = []          ## stomp hits in flight: [lane, both, t0]
@@ -189,7 +182,7 @@ func _update_road() -> void:
 	m.set_shader_parameter("env", beat_env())
 	m.set_shader_parameter("dim", fire_dim)
 	m.set_shader_parameter("lane_glow", Vector3(_lane_glow(0), _lane_glow(1), _lane_glow(2)))
-	m.set_shader_parameter("beat", hopped(_now_beat(), 1.0) if hopping() else beat)
+	m.set_shader_parameter("beat", beat)
 	m.set_shader_parameter("beat_px", spb * _px_per_s() if spb > 0.0 else 0.0)
 	m.set_shader_parameter("flash", _hit_flash())
 
@@ -212,72 +205,12 @@ func _hit_flash() -> float:
 
 func _px_per_s() -> float:
 	var f := field_rect()
-	if hopping():
-		return (LaneSkin.hit_line_y(f) - f.position.y) / (VISIBLE_BEATS * spb / maxf(note_speed, 0.1))
 	return (LaneSkin.hit_line_y(f) - f.position.y) / (LOOKAHEAD / maxf(note_speed, 0.1))
 
 
-# ------------------------------------------------------------------ hopping (notes step on the beat)
-
-func hopping() -> bool:
-	return hop and spb > 0.0
-
-
-## The beat grid a note hops on: whole beats, else halves, thirds or quarters; 0 = none (it slides).
-static func hop_grid(b: float) -> float:
-	for g: float in [1.0, 0.5, 1.0 / 3.0, 0.25]:
-		var k := b / g
-		if absf(k - roundf(k)) < 0.02:
-			return g
-	return 0.0
-
-
-## How far a grid of step g has moved at beat b: whole steps plus the hop in progress. The hop fills
-## the last HOP of each step and ends exactly on the step, so a note lands on its beat.
-static func hopped(b: float, g: float) -> float:
-	if g <= 0.0:
-		return b
-	var k := floorf(b / g)
-	var f := b / g - k
-	var h := 0.0
-	if f > 1.0 - HOP:
-		var x := (f - (1.0 - HOP)) / HOP
-		h = x * x * (3.0 - 2.0 * x)
-	return (k + h) * g
-
-
-## 0..1..0 over a hop of a grid of step g at beat b (0 while standing): the note's lift.
-static func hop_arc(b: float, g: float) -> float:
-	if g <= 0.0:
-		return 0.0
-	var f := fposmod(b / g, 1.0)
-	if f <= 1.0 - HOP:
-		return 0.0
-	return sin(PI * (f - (1.0 - HOP)) / HOP)
-
-
-func _now_beat() -> float:
-	return (song_time - beat_zero) / spb
-
-
-## Flat y of an event at song time t: hopped on the grid of `grid_t` (the note's own time) when
-## hopping, else sliding.
-func event_y(field: Rect2, t: float, pps: float, grid_t := NAN) -> float:
-	if not hopping():
-		return LaneSkin.note_y(field, t - song_time, pps)
-	var gb := ((grid_t if not is_nan(grid_t) else t) - beat_zero) / spb
-	var g := hop_grid(gb)
-	var b := (t - beat_zero) / spb
-	return LaneSkin.hit_line_y(field) - (b - hopped(_now_beat(), g)) * spb * pps
-
-
-## Screen px a note at flat y (time t) is lifted by its hop right now.
-func hop_lift(t: float, flat_y: float) -> float:
-	if not hopping():
-		return 0.0
-	var g := hop_grid((t - beat_zero) / spb)
-	var lift := hop_arc(_now_beat(), g) * HOP_LIFT * PxArt.PX * upright_scale(flat_y)
-	return 0.0 if UIKit.reduced_motion() else lift
+## Flat y of an event at song time t: the notes slide smoothly down the road.
+func event_y(field: Rect2, t: float, pps: float) -> float:
+	return LaneSkin.note_y(field, t - song_time, pps)
 
 
 ## Screen drawing on top of the road: the hit line and its receptors, then everything standing on the
@@ -897,7 +830,7 @@ func _notes_shown(field: Rect2) -> Array:
 	var out := []
 	var t := song_time
 	var pps := _px_per_s()
-	var horizon := t + (field.size.y / pps) + (spb if hopping() else 0.0)
+	var horizon := t + (field.size.y / pps)
 	var notes := session.notes
 	for i in range(_first, notes.size()):
 		var n := notes[i]
@@ -906,7 +839,7 @@ func _notes_shown(field: Rect2) -> Array:
 		if _gone(n, t):
 			continue
 		var y := event_y(field, n.t, pps)
-		var y_end := event_y(field, n.end_t, pps, n.t) if n.kind == Note.Kind.HOLD or n.kind == Note.Kind.REST else y
+		var y_end := event_y(field, n.end_t, pps) if n.kind == Note.Kind.HOLD or n.kind == Note.Kind.REST else y
 		out.append([n, y, y_end])
 	return out
 
@@ -946,16 +879,14 @@ func _draw_upright() -> void:
 		var n: Note = e[0]
 		var y: float = e[1]
 		var a := _haze(y, field)
-		var lift := Vector2(0.0, -hop_lift(n.t, y)) if not n.done else Vector2.ZERO
 		match n.kind:
 			Note.Kind.STEP:
 				if not n.done:
 					var at := project(Vector2(lanes[n.lane].get_center().x, y))
-					_hop_shadow(at, y, lift, 1.0)
 					if n.heal:
-						FireSkin.draw_heal_gem(self, at + lift, upright_scale(y), a, _clock)
+						FireSkin.draw_heal_gem(self, at, upright_scale(y), a, _clock)
 					else:
-						FireSkin.draw_gem(self, at + lift, upright_scale(y), n.call, a, _off_beat(n))
+						FireSkin.draw_gem(self, at, upright_scale(y), n.call, a, _off_beat(n))
 			Note.Kind.HOLD:
 				if n.finished or (n.done and not n.holding):
 					continue
@@ -965,8 +896,7 @@ func _draw_upright() -> void:
 					FireSkin.draw_hold_ring(self, project(Vector2(cx, tail)), upright_scale(tail), _haze(tail, field))
 				var head := minf(y, hl) if n.holding else y
 				var hat := project(Vector2(cx, head))
-				_hop_shadow(hat, head, lift, 1.0)
-				FireSkin.draw_hold_head(self, hat + lift, upright_scale(head), a)
+				FireSkin.draw_hold_head(self, hat, upright_scale(head), a)
 			Note.Kind.BELL:
 				if not n.done:
 					_draw_bell_bar(field, y, n.up, a)
@@ -978,27 +908,16 @@ func _draw_upright() -> void:
 					_draw_bell_bar(field, y, n.up, a)
 					if n.lane != 1:
 						FireSkin.draw_badge(self, project(Vector2(field.get_center().x, y)), sc, a, n.up)
-					FireSkin.draw_gem(self, project(Vector2(lanes[n.lane].get_center().x, y)) + lift, sc, false, a)
+					FireSkin.draw_gem(self, project(Vector2(lanes[n.lane].get_center().x, y)), sc, false, a)
 			Note.Kind.STOMP:
 				if not n.done:
 					var sat := project(Vector2(lanes[n.lane].get_center().x, y))
-					_hop_shadow(sat, y, lift, 1.22)
-					draw_stomp(sat + lift, upright_scale(y), a * (0.6 if n.thumbs > 0 else 1.0))
+					draw_stomp(sat, upright_scale(y), a * (0.6 if n.thumbs > 0 else 1.0))
 			Note.Kind.REST:
 				if not n.finished:
 					rests.append([e[2], y])
 	for r in rests:
 		_rest_words(field, r[0], r[1], taken)
-
-
-## The shadow a hopping plate leaves on the road under it (a dark plate that shrinks as it rises).
-func _hop_shadow(at: Vector2, flat_y: float, lift: Vector2, wide: float) -> void:
-	if lift.y > -0.5:
-		return
-	var rx := float(FireSkin.note_rx(upright_scale(flat_y))) * wide
-	var k := clampf(-lift.y / (HOP_LIFT * PxArt.PX * upright_scale(flat_y)), 0.0, 1.0)
-	var r := roundf(rx * (1.0 - 0.15 * k))
-	FireSkin.px_plate(self, at + Vector2(0.0, PxArt.PX * 2.0), r, FireSkin.plate_ry(r), r, Color(PixelPalette.K[0], 0.55))
 
 
 ## The bell bar, upright across the road between its outer rails at flat depth y.

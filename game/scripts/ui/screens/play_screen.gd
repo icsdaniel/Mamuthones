@@ -181,8 +181,6 @@ func build() -> void:
 	lanes.show_buttons = not session.piazza
 	lanes.visible = not session.piazza
 	lanes.spb = _spb
-	lanes.beat_zero = song.offset_for(session.remix)
-	lanes.hop = bool(Profile.get_setting("note_hop"))
 	if not session.piazza:
 		backdrop.lanes = lanes
 		lanes.street = backdrop

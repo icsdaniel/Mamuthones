@@ -181,8 +181,6 @@ set_vibration,Vibration,Vibrazione
 set_slam,Slam mode: Left + Right rings the bells,Modalità colpo: Sinistra + Destra suonano i campanacci
 set_slam_note,For when tilting is hard. Runs are marked and stay off the global ladder.,Per quando inclinare il telefono è difficile. Le partite vengono segnate e restano fuori dalla classifica mondiale.
 set_reduced_motion,Reduced motion,Meno movimento
-set_note_hop,Notes step on the beat,Note a tempo
-set_note_hop_note,"Off: the notes slide smoothly down the road.","Spento: le note scivolano lungo la strada."
 set_sound,Sound,Suono
 set_music,Music,Musica
 set_sfx,Bells and effects,Campanacci ed effetti
