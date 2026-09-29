@@ -30,12 +30,14 @@ and `docs/rubric.md` says how every part is judged.
   down, up, down, so the direction is shown but only the timing is judged. Read by the gyroscope when it
   tells directions apart better than the accelerometer; calibrated per phone.
 - **Hold:** keep a step button pressed until the hold's end (drones and long chords).
-- **Rope swipe:** drag a finger across the button row, left or right, when the Issohadore throws the rope.
+- **Two-thumb stomp (Medium and up):** two gems side by side on one button: press that button with both
+  thumbs at once, on the crack of the Issohadore's rope. Medium and Hard stomp on the middle button,
+  Expert follows the rope to the outer button on its side. (Replaced the rope swipe, 2026-09-28.)
 - **Full ring (Hard and Expert):** a step and a bell on the same beat.
 - **Stand still:** grey bars across the lanes. Ringing the bell during them costs points.
 - **Accessibility "slam":** an option that replaces the tilt with pressing Left and Right together.
   Runs with slam on are marked, and don't go on the global ladder.
-- On a computer (development and trailers): A S D steps, Space bell, Q/E swipes, Esc pause.
+- On a computer (development and trailers): A S D steps, J K L the same buttons with the second thumb (S + K = a middle stomp), Space bell, Esc pause.
 
 ## 3. Timing and scoring
 
@@ -48,7 +50,9 @@ Timing windows (normal bell set):
 | Early / Late | ±140 ms | 50 |
 | Miss | beyond | 0 |
 
-Swipes get ±170 ms. Bells from the tilt get an extra 15 ms on every window, because sensors are looser
+A stomp is timed from its first thumb; the second must land within 80 ms of it. Both thumbs score like
+a full ring (450/225/75); one thumb only is judged one band lower (Perfect to Good, Good to Early/Late)
+on step points, never a miss. Bells from the tilt get an extra 15 ms on every window, because sensors are looser
 than touch.
 
 **Unison** is the multiplier: ×1, ×1.5, ×2, ×2.5, ×3, ×4. It goes up one level every 12 hits in a row
@@ -75,7 +79,7 @@ Other rules:
 - Score = sum over notes of points × unison × weight, minus stand-still penalties, never below 0.
 - Smaller rules chosen while building: a Good full ring gives 225 and an Early/Late one 75. Early/Late
   keeps the unison level but restarts the run of 12. Letting go of a hold early breaks the streak and
-  lowers unison one level. A wrong-way swipe uses up the note. A tap only counts as a wrong step when
+  lowers unison one level. A tap only counts as a wrong step when
   another lane's note is in its window and the pressed lane has no note of its own within twice the
   Early/Late window; stray taps are free. A wrong step drops unison one level (a miss drops two).
   In slam mode, Left + Right within 80 ms is the bell.
@@ -86,7 +90,7 @@ Other rules:
   clanks, a miss is a dull knock. High unison adds the whole row's bells behind yours.
 
 **Health** (as in Rift of the NecroDancer): a song starts with 10. Every missed note of any kind costs
-1 (a wrong-way swipe uses its note up, so it counts too); wrong-lane steps and rings in a stand-still
+1 (a one-thumb stomp is a weaker hit, not a miss); wrong-lane steps and rings in a stand-still
 cost none, they have their own penalties. About one step every 20 s on Easy, 25 on Medium, 30 on Hard
 and 40 on Expert (none in the first 8 s) is a healing step, a bone-and-gold gem with a small flame,
 picked from on-beat plain steps right after the busiest stretch; hitting it at Ok or better gives back
@@ -101,8 +105,8 @@ Every song has four charts, all written to the music:
 | Level | Steps | Bells | Extras |
 | --- | --- | --- | --- |
 | Easy | the walking beat, one lane at a time | one per phrase, on strong beats | stand-stills |
-| Medium | beat and some half-beats | alternating with the steps (step, step, step, bell) | holds |
-| Hard | steady patterns across lanes | on beats different from the steps | swipes, off-beat calls, full rings |
+| Medium | beat and some half-beats | alternating with the steps (step, step, step, bell) | holds, two-thumb stomps |
+| Hard | steady patterns across lanes | on beats different from the steps | off-beat calls, full rings |
 | Expert | dense patterns, triplets in the finale | independent of the steps | everything, triple rings |
 
 Charts follow simple readability rules: no more than one input per hand per eighth at Hard (per
@@ -119,7 +123,7 @@ Seven stops that follow the real calendar, one song each. Finishing a stop with 
 | 2 | Sant'Antonio's Fires (16 January) | first appearance, bonfire, slow and heavy |
 | 3 | Around the Bonfires (17 January) | circling, a dance feel |
 | 4 | Carnival Sunday | full procession, launeddas and tenore |
-| 5 | The Rope (the Issohadores work the crowd) | playful, calls and swipes |
+| 5 | The Rope (the Issohadores work the crowd) | playful, calls and two-thumb stomps |
 | 6 | The Piazza | big, loud, fast |
 | 7 | Shrove Tuesday (the last procession) | the finale, everything |
 

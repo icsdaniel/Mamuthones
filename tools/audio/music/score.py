@@ -46,7 +46,7 @@ class Ev:
 @dataclass
 class Cand:
     b: float
-    role: str          # pulse, perc, mel, fast, chorus, hold, bell, rest, swipe, call
+    role: str          # pulse, perc, mel, fast, chorus, hold, bell, rest, stomp, call
     rank: int          # 1 strongest (downbeat) .. 5 weakest
     stem: str | None   # instrument whose onset sits exactly at b (None for rests)
     pitch: float | None = None
@@ -310,9 +310,10 @@ class Song:
             self.ev("bells", b + at, 0.5, None, 0.22, count=3, spread=0.02, width=0.4, tempt=True)
 
     def rope(self, b, direction):
-        """The Issohadore throws the rope: a whoosh that ends in a crack exactly on b."""
+        """The Issohadore throws the rope: a whoosh that ends in a crack exactly on b, where the
+        player stomps with both thumbs (direction picks the button at Expert)."""
         self.ev("rope", b, 0.5, None, 1.0, dir=direction)
-        self.cand(b, "swipe", "rope", rank=2, dir=direction)
+        self.cand(b, "stomp", "rope", rank=2, dir=direction)
 
     def offcall(self, b, vel=1.0):
         """Off-beat accent: a frame drum slap with a short shout from the row."""

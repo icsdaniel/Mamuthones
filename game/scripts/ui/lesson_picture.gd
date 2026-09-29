@@ -5,9 +5,8 @@ extends Control
 ## (or the phone tilts, or the thumbs press) as they arrive. It sits on a navy board in the gold
 ## pixel frame; the thumbs and the phone are pixel art on the same grid (3 screen px to the art px).
 ##
-## Topics: steps, lanes, bells, holds, still, full, swipes (the rope swipe, until it is replaced) and
-## stomps: both thumbs come down together on the same step button on the music's strongest accent,
-## and a heavy gold shock runs out under it.
+## Topics: steps, lanes, bells, holds, still, full and stomps: both thumbs come down together on the
+## same step button on the music's strongest accent, and a heavy gold shock runs out under it.
 
 const LOOP := 2.4
 
@@ -69,14 +68,11 @@ func _draw() -> void:
 			pressed[1] = lit
 		"still":
 			LaneSkin.draw_rest(self, field, LaneSkin.note_y(field, dt + 0.6, pps), y)
-		"swipes":
-			if dt > -0.05:
-				LaneSkin.draw_swipe(self, field, y, 1)
 		"stomps":
-			# the accented step: a call note, doubled so it reads heavier than a step
 			if dt > -0.05:
-				LaneSkin.draw_step(self, lanes[1], y, true)
-				LaneSkin.draw_step(self, lanes[1], y - 7.0 * px, true, 0.55)
+				# the stomp note itself, as the play screen draws it
+				var r: Rect2 = lanes[1]
+				FireSkin.draw_stomp_note(self, Vector2(r.get_center().x, y), r.size.x / FireSkin.REF_LANE)
 			pressed[1] = dt < 0.1 and dt > -0.35
 		"full":
 			if dt > -0.05:
@@ -94,10 +90,6 @@ func _draw() -> void:
 		_draw_stomp(buttons[1], dt, px)
 	if lit and topic in ["bells", "full"] and not slam:
 		_draw_tilt(Vector2(area.end.x - 26.0 * px, field.position.y + 30.0 * px), px, clampf(1.0 - absf(dt) / 0.18, 0.0, 1.0))
-	if topic == "swipes" and absf(dt) < 0.35:
-		var k := clampf((0.35 - dt) / 0.7, 0.0, 1.0)
-		var fx := lerpf(br.position.x + 40.0, br.end.x - 40.0, k)
-		_thumb(Vector2(fx, br.get_center().y), px, true, false)
 	PixelFrame.draw(self, frame, px, "gold")
 
 

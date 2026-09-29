@@ -52,7 +52,8 @@ var done := false
 var _bell_set := "light"
 var _first_t := 0.0
 var _spb := 0.5
-var _sched := 0                  ## next note to check for calls and rope throws
+var _stomp_sounded := false       ## a stomp sounded on this touch: no plain step knock
+var _sched := 0                  ## next note to check for calls
 var _bell_sched := 0             ## next note to check for the bell cue
 var _bell_cue := false           ## a soft tick half a beat before each bell (Easy and Medium)
 var _pause_panel: Control
@@ -210,7 +211,6 @@ func build() -> void:
 		autoplay = Autoplay.new(session, bool(args.get("human", false)))
 		autoplay.stepped.connect(_on_stepped)
 		autoplay.rang.connect(_on_rang)
-		autoplay.swiped.connect(_on_swiped)
 	router = InputRouter.new()
 	router.name = "InputRouter"
 	router.session = session
@@ -219,7 +219,6 @@ func build() -> void:
 	add_child(router)
 	router.stepped.connect(_on_stepped)
 	router.rang.connect(_on_rang)
-	router.swiped.connect(_on_swiped)
 	router.pause_requested.connect(pause)
 	if auto:
 		router.enabled = false
@@ -231,6 +230,7 @@ func build() -> void:
 	session.hold_started.connect(func(lane: int) -> void: Sound.hold_start(lane))
 	session.hold_ended.connect(func(lane: int, _kept: bool) -> void: Sound.hold_stop(lane))
 	session.wrong_step.connect(_on_wrong_step)
+	session.stomp_landed.connect(_on_stomp)
 	session.still_kept.connect(_on_still_kept)
 	session.failed.connect(_on_failed)
 
@@ -368,19 +368,17 @@ func _set_beat(beat: float) -> void:
 
 
 ## Things that happen on the music, not on the player: the Issohadore's call with off-beat steps (a
-## touch early so it is heard on time), the rope thrown a beat before a swipe, standing still.
+## touch early so it is heard on time), standing still.
 func _schedule(t: float) -> void:
 	var lead := AudioServer.get_output_latency()
 	var notes := session.notes
 	while _sched < notes.size():
 		var n := notes[_sched]
-		var at := n.t - (_spb if n.kind == Note.Kind.SWIPE else lead)
+		var at := n.t - lead
 		if at > t:
 			break
 		if n.call:
 			Sound.call_out()
-		if n.kind == Note.Kind.SWIPE:
-			scene.throw_rope()
 		_sched += 1
 	# The bell cue: on Easy and Medium the music's rim clicks come before many beats with no bell, so
 	# a soft tick of its own comes half a beat before each bell or full ring (heard on time, like the
@@ -425,14 +423,11 @@ func _count_in(t: float) -> void:
 
 
 func _on_stepped(lane: int) -> void:
-	# A finger landing while a rope is due is the start of a swipe: grab the rope at once, and hold
-	# the step sound back unless the touch itself hit a note in its lane.
-	if not _tap_hit and _swipe_open(conductor.song_time()):
-		lanes.rope_grab(lane)
-		Sound.rope_grab()
-	else:
+	# A stomp's second thumb already sounded the stomp (_on_stomp); every other touch knocks its step.
+	if not _stomp_sounded:
 		play_step(lane, _tap_quality if _tap_hit else "")
-		lanes.press(lane)
+	lanes.press(lane)
+	_stomp_sounded = false
 	_tap_hit = false
 	_tap_quality = ""
 
@@ -456,16 +451,6 @@ static func step_quality(judgement: String) -> String:
 	return ""
 
 
-func _swipe_open(t: float) -> bool:
-	var reach := session.window("swipe").z
-	for n in session.notes:
-		if n.t > t + reach:
-			return false
-		if n.kind == Note.Kind.SWIPE and not n.done and absf(n.t - t) <= reach:
-			return true
-	return false
-
-
 func _on_rang(result: Dictionary) -> void:
 	# Quality is perfect, good, early, late, miss, silence or free: an early or late clank is pitched
 	# up or down by Sound, so the ear learns which way it was off.
@@ -478,10 +463,6 @@ func _on_rang(result: Dictionary) -> void:
 	scene.jolt("bell")
 	if q == "free" or q == "silence":
 		UIKit.vibrate(12)
-
-
-func _on_swiped(_dir: int) -> void:
-	Sound.rope()
 
 
 func _on_judged(note: Note, judgement: String, offset: float) -> void:
@@ -533,6 +514,26 @@ func _on_judged(note: Note, judgement: String, offset: float) -> void:
 		UIKit.vibrate(30 if note != null and note.is_bell() else 14)
 	elif judgement in ["miss", "silence"]:
 		scene.jolt("miss")
+
+
+## A stomp judged (both thumbs, or one when the second never came): its sound and the prints on the
+## button (placeholders the art and sound passes replace, see handoff/stomp.md). judged has already
+## drawn the burst and word.
+func _on_stomp(note: Note, judgement: String, _offset: float, both: bool) -> void:
+	if both:
+		Sound.stomp(note.lane, step_quality(judgement))
+		_stomp_sounded = true
+		if scene.has_method("stomp"):
+			scene.stomp()
+		else:
+			scene.jolt("ring")
+		UIKit.vibrate(40)
+	else:
+		Sound.stomp_half(note.lane)
+		words.show_word(tr("judge_one_thumb"), "", lanes.word_spot(note.lane), "early")
+	lanes.stomp_hit(note.lane, judgement, both)
+	if backdrop != null:
+		backdrop.kick(1.0 if both else 0.4)
 
 
 ## The side shown for a judgement: none on Perfect, the offset's side on Good, the band's own side on

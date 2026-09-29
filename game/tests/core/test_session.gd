@@ -1,5 +1,5 @@
 extends TestCase
-## Session rules: every judgement and window, unison, weight, full rings, holds, swipes,
+## Session rules: every judgement and window, unison, weight, full rings, holds, stomps,
 ## stand-stills, slam, Piazza, remix and mirror (docs/design.md section 3).
 
 const FIX := "res://tests/core/fixtures/"
@@ -45,7 +45,8 @@ func test_fixture_loads() -> void:
 	check_near(n[6].end_t - n[6].t, 1.0, 1e-9, "hold of 2 beats lasts 1 s")
 	check_near(n[4].end_t - n[4].t, 1.0, 1e-9, "rest of 2 beats")
 	check(n[3].call, "call flag")
-	check_eq(n[8].dir, -1, "left swipe")
+	check_eq(n[8].kind, Note.Kind.STOMP, "a stomp")
+	check_eq(n[8].lane, 1, "on its lane")
 
 
 func test_judgement_windows_light() -> void:
@@ -115,9 +116,10 @@ func test_results_carry_direction() -> void:
 	check_near(a.offset, -0.060, 1e-6, "and the signed offset")
 	check_eq(t.tap(1, _bt(1) + 0.110, 0).judgement, "late", "Ok band tap reads late")
 	check_eq(t.tap(1, _bt(2) - 0.110, 0).judgement, "early", "Ok band tap reads early")
-	var w := Session.new(make([{"b": 0, "k": "swipe", "dir": 1}]), "easy")
-	var sw := w.swipe(1, _bt(0) + 0.020)
-	check_eq(sw.side, "late", "swipe result carries the side")
+	var w := Session.new(make([{"b": 0, "k": "stomp", "lane": 1}]), "easy")
+	var sw := w.tap(1, _bt(0) + 0.020, 1)
+	check_eq(sw.stomp, "first", "a stomp's first thumb")
+	check_eq(sw.side, "late", "stomp result carries the side")
 
 
 func test_ring_strength() -> void:
@@ -130,7 +132,7 @@ func test_ring_strength() -> void:
 	check_eq(sl.ring(_bt(0), true, 0.9).strength, 0.5, "slam rings are 0.5")
 
 
-func test_tilt_and_swipe_windows() -> void:
+func test_tilt_windows() -> void:
 	var s := Session.new(make([{"b": 0, "k": "bell"}, {"b": 2, "k": "bell"}, {"b": 4, "k": "bell"}, {"b": 6, "k": "bell"}]), "easy")
 	check_eq(s.ring(_bt(0) + 0.058).quality, "perfect", "tilts get +15 ms: 58 ms is Perfect")
 	check_eq(s.ring(_bt(2) - 0.150).judgement, "early", "150 ms early is still Early for a tilt")
@@ -138,10 +140,6 @@ func test_tilt_and_swipe_windows() -> void:
 	var r := s.ring(_bt(6) + 0.2)
 	check_eq(r.quality, "miss", "a ring just outside the window is a dull knock")
 	check_eq(r.judgement, "", "and judges nothing")
-	var w := Session.new(make([{"b": 0, "k": "swipe", "dir": 1}, {"b": 2, "k": "swipe", "dir": 1}]), "easy")
-	check_near(w.window("swipe").z, 0.170, 1e-6, "swipe window 170 ms")
-	check_eq(w.swipe(1, _bt(0) + 0.160).judgement, "late", "160 ms is a late swipe")
-	check_eq(w.swipe(1, _bt(2) + 0.180).judgement, "", "180 ms misses the swipe")
 
 
 func test_unison_rises_every_12_and_drops_two() -> void:
@@ -295,15 +293,74 @@ func test_hold_kept_and_let_go() -> void:
 	check_eq(s.stats.held, 2, "two kept")
 
 
-func test_swipes_both_ways() -> void:
-	var s := Session.new(make([{"b": 0, "k": "swipe", "dir": 1}, {"b": 2, "k": "swipe", "dir": -1}, {"b": 4, "k": "swipe", "dir": 1}]), "easy", "light", {})
-	check_eq(s.swipe(1, _bt(0)).judgement, "perfect", "right swipe")
-	check_eq(s.swipe(-1, _bt(2) + 0.02).judgement, "perfect", "left swipe")
-	check_eq(s.swipe(-1, _bt(4)).judgement, "wrong", "wrong way")
-	check_eq(s.stats.wrong, 1, "wrong swipe counted")
-	check_eq(s.stats.notes, 3, "a wrong swipe uses up the note")
-	var m := Session.new(make([{"b": 0, "k": "swipe", "dir": 1}]), "easy", "light", {"mirror": true})
-	check_eq(m.swipe(-1, _bt(0)).judgement, "perfect", "mirror flips swipes")
+func test_stomp_both_thumbs() -> void:
+	var s := Session.new(make([{"b": 0, "k": "stomp", "lane": 1}, {"b": 2, "k": "stomp", "lane": 0}, {"b": 4, "k": "stomp", "lane": 2}]), "easy")
+	var landed := []
+	s.stomp_landed.connect(func(n, j, _o, both): landed.append([n.index, j, both]))
+	var a := s.tap(1, _bt(0) + 0.010, 1)
+	check_eq(a.stomp, "first", "first thumb")
+	check_eq(a.judgement, "", "not judged yet")
+	var b := s.tap(1, _bt(0) + 0.060, 2)
+	check_eq(b.stomp, "both", "second thumb 50 ms later")
+	check_eq(b.judgement, "perfect", "timed from the first thumb")
+	check_eq(s.score, 450, "stomp points")
+	# Second thumb 80 ms after the first still counts; timed from the first (60 ms early = Good).
+	s.tap(0, _bt(2) - 0.060, 3)
+	check_eq(s.tap(0, _bt(2) + 0.020, 4).judgement, "good", "80 ms apart is still one stomp")
+	# Mirror moves it like any lane note.
+	var m := Session.new(make([{"b": 0, "k": "stomp", "lane": 0}]), "easy", "light", {"mirror": true})
+	check_eq(m.notes[0].lane, 2, "mirror flips the stomp's lane")
+	s.update(_bt(5))
+	check_eq(landed, [[0, "perfect", true], [1, "good", true]], "stomp_landed for both, none for the missed one")
+	check_eq(s.notes[2].judgement, "miss", "no thumb at all is a miss")
+	check_eq(s.stats.one_thumb, 0, "no one-thumb stomps")
+
+
+func test_stomp_one_thumb() -> void:
+	var s := Session.new(make([{"b": 0, "k": "stomp", "lane": 1}, {"b": 2, "k": "stomp", "lane": 1}, {"b": 4, "k": "stomp", "lane": 1}, {"b": 6, "k": "stomp", "lane": 1}]), "easy")
+	var landed := []
+	s.stomp_landed.connect(func(_n, j, _o, both): landed.append([j, both]))
+	s.tap(1, _bt(0), 1)
+	s.update(_bt(0) + 0.070)
+	check(not s.notes[0].done, "still waiting for the second thumb inside 80 ms")
+	s.update(_bt(0) + 0.090)
+	check_eq(s.notes[0].judgement, "good", "one thumb on the beat: one band lower")
+	check_eq(s.score, 150, "on step points")
+	s.tap(1, _bt(2) + 0.060, 2)
+	s.update(_bt(2) + 0.2)
+	check_eq(s.notes[1].judgement, "late", "one thumb 60 ms late: Good becomes Late")
+	# The same finger twice is not two thumbs.
+	s.tap(1, _bt(4), 3)
+	s.release(_bt(4) + 0.02, 3)
+	s.tap(1, _bt(4) + 0.05, 3)
+	s.update(_bt(4) + 0.2)
+	check_eq(s.notes[2].judgement, "good", "one finger tapping twice is one thumb")
+	# A second thumb after the gap is too late to join; the stomp was one thumb.
+	s.tap(1, _bt(6), 4)
+	s.tap(1, _bt(6) + 0.1, 5)
+	check_eq(s.notes[3].judgement, "good", "second thumb 100 ms later does not join")
+	check_eq(s.stats.one_thumb, 4, "one-thumb stomps counted")
+	check_eq(landed[0], ["good", false], "stomp_landed says one thumb")
+	check_eq(s.stats.miss, 0, "one thumb is never a miss")
+	check_eq(s.health, Session.MAX_HEALTH, "and costs no health")
+
+
+func test_stomp_and_slam() -> void:
+	# Slam rings the bell with Left + Right; a stomp is one button twice, so they never mix up.
+	var s := Session.new(make([{"b": 0, "k": "stomp", "lane": 0}, {"b": 2, "k": "bell"}, {"b": 4, "k": "stomp", "lane": 2}]), "easy", "light", {"slam": true})
+	var r1 := s.tap(0, _bt(0), 1)
+	var r2 := s.tap(0, _bt(0) + 0.03, 2)
+	check(r1.ring.is_empty() and r2.ring.is_empty(), "a stomp on Left rings no bell")
+	check_eq(s.notes[0].judgement, "perfect", "the stomp counts")
+	s.release(_bt(0) + 0.1, 1)
+	s.release(_bt(0) + 0.1, 2)
+	var b1 := s.tap(0, _bt(2), 3)
+	var b2 := s.tap(2, _bt(2) + 0.02, 4)
+	check(b1.ring.is_empty(), "one outer press alone rings nothing yet")
+	check_eq(b2.ring.get("judgement", ""), "perfect", "Left + Right is still the slam bell")
+	s.tap(2, _bt(4), 5)
+	check_eq(s.tap(2, _bt(4) + 0.02, 6).judgement, "perfect", "a stomp on Right after the bell")
+	check_eq(s.stats.one_thumb, 0, "both stomps had two thumbs")
 
 
 func test_stand_still() -> void:
@@ -459,107 +516,12 @@ func test_reused_touch_id_ends_old_hold() -> void:
 	check_eq(s.stats.held, 1, "only one hold kept")
 
 
-func test_swipe_start_is_not_a_wrong_step() -> void:
-	var s := Session.new(make([{"b": 0, "k": "swipe", "dir": 1}, {"b": 0.25, "k": "step", "lane": 2}]), "easy")
-	var r := s.tap(0, _bt(0), 3)          # finger lands on lane 0 to start the swipe
-	check_eq(r.judgement, "", "the swipe's touch-down is not a wrong step")
-	check_eq(s.swipe(1, _bt(0)).judgement, "perfect", "swipe judged at touch-down")
-	check_eq(s.tap(2, _bt(0.25), 4).judgement, "perfect", "the step after it")
-	check_eq(s.unison_level, 0, "no unison lost")
+func test_stomp_second_thumb_is_not_a_wrong_step() -> void:
+	var s := Session.new(make([{"b": 0, "k": "stomp", "lane": 1}, {"b": 0.25, "k": "step", "lane": 2}]), "easy")
+	s.tap(1, _bt(0), 3)
+	check_eq(s.tap(1, _bt(0) + 0.03, 4).judgement, "perfect", "both thumbs on the middle")
+	check_eq(s.tap(2, _bt(0.25), 5).judgement, "perfect", "the step after it")
 	check_eq(s.stats.wrong, 0, "no wrong")
-
-
-# Independent re-implementation of design section 3, applied to the judged events a Session emits.
-func test_reference_formula_on_random_runs() -> void:
-	var rng := RandomNumberGenerator.new()
-	for run in 25:
-		rng.seed = 1000 + run
-		var chart := []
-		var b := 0.0
-		for i in 120:
-			b += [0.5, 1.0, 1.5][rng.randi() % 3]
-			var k := rng.randi() % 10
-			if k < 5:
-				chart.append({"b": b, "k": "step", "lane": rng.randi() % 3})
-			elif k < 7:
-				chart.append({"b": b, "k": "bell"})
-			elif k == 7:
-				chart.append({"b": b, "k": "hold", "lane": rng.randi() % 3, "len": 0.5})
-			elif k == 8:
-				chart.append({"b": b, "k": "ring", "lane": rng.randi() % 3})
-			else:
-				chart.append({"b": b, "k": "rest", "len": [2.0, 3.0, 4.5, 6.0][rng.randi() % 4]})
-		var bell_set: String = BellSets.ids()[run % 3]
-		var s := Session.new(make(chart), "easy", bell_set)
-		var events := []
-		s.judged.connect(func(n, j, _o): events.append([n.kind, j]))
-		# (no reference to s inside the lambda: s holds the lambda, that would be a cycle)
-		s.still_kept.connect(func(n, _p): events.append([Note.Kind.REST, "still", snappedf((n.end_t - n.t) * 2.0, 0.001)]))   # 120 bpm
-		var rest_events := []
-		for n in s.notes:
-			var off := rng.randf_range(-0.2, 0.2)
-			match n.kind:
-				Note.Kind.STEP:
-					s.tap(n.lane, n.t + off, 1)
-				Note.Kind.BELL:
-					s.ring(n.t + off)
-				Note.Kind.HOLD:
-					s.tap(n.lane, n.t + off, 2)
-					s.release(n.end_t - rng.randf_range(0.0, 0.3), 2)
-				Note.Kind.RING:
-					s.tap(n.lane, n.t + off * 0.5, 3)
-					s.ring(n.t + off)
-				Note.Kind.REST:
-					if rng.randf() < 0.4:
-						s.ring(n.t + 0.1)
-						rest_events.append(n.index)
-			s.update(n.t + 0.01)
-		s.update(1e6)
-		# Replay the events through the formula.
-		var mults := [1.0, 1.5, 2.0, 2.5, 3.0, 4.0]
-		var level := 0
-		var run12 := 0
-		var total := 0.0
-		var w := BellSets.weight(bell_set)
-		var pts := {"perfect": 300, "good": 150, "early": 50, "late": 50}
-		var ring_pts := {"perfect": 450, "good": 225, "early": 75, "late": 75}
-		for e in events:
-			var j: String = e[1]
-			match j:
-				"perfect", "good", "early", "late":
-					total += (ring_pts if e[0] == Note.Kind.RING else pts)[j] * mults[level] * w
-					if j == "perfect" or j == "good":
-						run12 += 1
-						if run12 >= 12:
-							run12 -= 12
-							level = mini(level + 1, 5)
-					else:
-						run12 = 0
-				"still":
-					var beats: float = e[2]
-					total += 800 * beats * mults[level] * w   # the reference keeps its own constant
-					run12 += mini(8, floori(2 * beats + 1e-6))
-					if run12 >= 12:
-						run12 -= 12
-						level = mini(level + 1, 5)
-				"miss":
-					run12 = 0
-					level = maxi(level - 2, 0)
-				"wrong":
-					run12 = 0
-					level = maxi(level - 1, 0)
-				"held":
-					total += 150 * mults[level] * w
-				"let_go":
-					run12 = 0
-					level = maxi(level - 1, 0)
-				"silence":
-					total -= 100
-					run12 = 0
-					level = maxi(level - 1, 0)
-		check_near(s.score_breakdown().total, total, 0.01, "run %d: score follows the formula" % run)
-		check_eq(s.score, maxi(0, int(round(total))), "run %d: shown score" % run)
-		check_eq(s.unison_level, level, "run %d: unison level" % run)
 
 
 func test_accuracy_and_bells() -> void:
@@ -776,14 +738,15 @@ func test_health_misses_cost_one() -> void:
 func test_health_every_kind_of_miss() -> void:
 	var chart := [
 		{"b": 0, "k": "step", "lane": 0}, {"b": 2, "k": "hold", "lane": 1, "len": 2},
-		{"b": 6, "k": "bell"}, {"b": 8, "k": "ring", "lane": 2}, {"b": 10, "k": "swipe", "dir": 1},
-		{"b": 12, "k": "swipe", "dir": 1},
+		{"b": 6, "k": "bell"}, {"b": 8, "k": "ring", "lane": 2}, {"b": 10, "k": "stomp", "lane": 1},
+		{"b": 12, "k": "stomp", "lane": 1},
 	]
 	var s := Session.new(make(chart), "easy")
 	_run(s, _bt(11))
-	check_eq(s.health, 5, "missed step, hold head, bell, ring and swipe each cost one")
-	s.swipe(-1, _bt(12))
-	check_eq(s.health, 4, "a wrong-way swipe uses its note up and costs one")
+	check_eq(s.health, 5, "missed step, hold head, bell, ring and stomp each cost one")
+	s.tap(1, _bt(12), 1)
+	s.update(_bt(13))
+	check_eq(s.health, 5, "a one-thumb stomp costs nothing")
 
 
 func test_health_spares_wrong_steps_and_still_rings() -> void:

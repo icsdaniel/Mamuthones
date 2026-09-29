@@ -8,20 +8,25 @@ extends RefCounted
 ##
 ## Options: slam (the bell from the buttons: see _slam_bell; full rings judged on their step alone;
 ## no tilt allowance), piazza (bells only, ±200 ms),
-## remix (remix offset), mirror (lanes 0<->2 and swipes flipped), from_beat/to_beat (only notes in
+## remix (remix offset), mirror (lanes 0<->2), from_beat/to_beat (only notes in
 ## [from, to), for tutorial lessons and practice), daily ("YYYY-MM-DD", recorded on the daily ladder).
 ##
-## Additions beyond the architecture doc: tap()/swipe() return a result Dictionary; ring() takes an
+## Additions beyond the architecture doc: tap() returns a result Dictionary; ring() takes an
 ## optional `tilt` flag and `strength` (0-1) and returns extra keys (judgement, offset, side,
 ## strength, note); running_accuracy(),
 ## mean_offset(), median_offset(), hit_offsets, score_breakdown(), end_time(), progress(t),
 ## song_key(), ladder_ok(), passed(), upcoming_bell(t), window(kind), stats keys listed in _init,
 ## Note.side ("early"/"late"/"" for every judged hit, so a Perfect can still say which side it was).
 ## Signals wrong_step(lane, note, offset) (the pressed lane of a wrong step) and still_kept(note,
-## points); stats unison_peak (the highest multiplier reached) and time_at_top (seconds at ×4).
+## points) and stomp_landed(note, judgement, offset, both); stats unison_peak (the highest multiplier
+## reached), time_at_top (seconds at ×4) and one_thumb (stomps played with one thumb).
+##
+## Stomps: a note on one lane played with BOTH thumbs on that button, the two touches at most
+## STOMP_GAP apart. It is timed from the first touch and scores STOMP_POINTS. With one thumb only it
+## is judged when STOMP_GAP runs out, one band lower (Perfect -> Good -> Early/Late), on POINTS.
 ##
 ## Health (Rift of the NecroDancer style): `health` starts at MAX_HEALTH; every missed note costs 1
-## (a wrong-way swipe uses its note up, so it counts as a miss too); wrong-lane steps and rings in a
+## (a stomp played with one thumb is a weaker hit, not a miss); wrong-lane steps and rings in a
 ## stand-still cost none. Healing steps (Note.heal, picked at the start from on-beat steps, about one
 ## every HEAL_EVERY[difficulty] seconds) restore HEAL when hit at Ok or better. At 0 `failed` fires
 ## once; the rules keep judging, the play screen ends the run. Off (health_on false) in the Piazza,
@@ -39,6 +44,9 @@ signal hold_ended(lane: int, kept: bool)
 signal wrong_step(lane: int, note: Note, offset: float)
 ## A stand-still was kept to its end (at note.end_t); `points` is what it added.
 signal still_kept(note: Note, points: float)
+## A stomp was judged: both = true when two thumbs landed within STOMP_GAP, false for one thumb.
+## judged fires for it too.
+signal stomp_landed(note: Note, judgement: String, offset: float, both: bool)
 ## Health went up or down by delta (health is the new value).
 signal health_changed(health: int, delta: int)
 ## Health ran out (fires once).
@@ -48,11 +56,14 @@ signal failed()
 const PERFECT := 0.045
 const GOOD := 0.090
 const OK := 0.140
-const SWIPE_OK := 0.170      ## swipes: all three windows stretched so the outer one is ±170 ms
 const TILT_EXTRA := 0.015    ## tilts: +15 ms on every window (sensors are looser than touch)
 const PIAZZA_OK := 0.200     ## Piazza: all windows stretched so the outer one is ±200 ms
 const POINTS := {"perfect": 300, "good": 150, "early": 50, "late": 50}
 const RING_POINTS := {"perfect": 450, "good": 225, "early": 75, "late": 75}
+const STOMP_POINTS := {"perfect": 450, "good": 225, "early": 75, "late": 75}
+## Two touches on a stomp's button this close together are one two-thumb stomp. Real thumbs landing
+## "together" spread over 20-60 ms; 80 ms keeps a deliberate double tap (about 150 ms) apart.
+const STOMP_GAP := 0.080
 const HOLD_BONUS := 150
 const HOLD_GRACE := 0.120    ## a hold released up to 120 ms before its end still counts as kept
 const STILL_PENALTY := 100
@@ -66,7 +77,7 @@ const SIDE_DEAD_ZONE := 0.010    ## hits this close to the beat are neither earl
 const UNISON_MULTS: Array[float] = [1.0, 1.5, 2.0, 2.5, 3.0, 4.0]
 const UNISON_STEP := 12      ## Good-or-better hits in a row per unison level
 const MISS_DROP := 2
-const WRONG_DROP := 1        ## a wrong step (a wrong-way swipe uses its note up: MISS_DROP)
+const WRONG_DROP := 1        ## a wrong step
 const WRONG_REACH := 2.0     ## the pressed lane's own note within 2 × Early/Late keeps a tap stray
 const SILENCE_DROP := 1
 const LET_GO_DROP := 1
@@ -99,16 +110,15 @@ var unison_streak := 0
 var combo := 0
 var max_combo := 0
 var stats: Dictionary = {}
-## Every input as [t, "tap", lane, touch_id] / [t, "release", touch_id] / [t, "swipe", dir] / [t, "ring", tilt].
+## Every input as [t, "tap", lane, touch_id] / [t, "release", touch_id] / [t, "ring", tilt].
 var input_log: Array = []
 ## (time, shown score) after every change of score.
 var score_timeline: Array[Vector2] = []
 ## Signed offsets (s, negative = early) of every judged hit, for the early/late tendency.
 var hit_offsets := PackedFloat32Array()
 
-var win_touch := Vector3.ZERO   ## (perfect, good, ok) for steps, holds and slam/key bells
+var win_touch := Vector3.ZERO   ## (perfect, good, ok) for steps, holds, stomps and slam/key bells
 var win_tilt := Vector3.ZERO    ## same for tilted bells
-var win_swipe := Vector3.ZERO
 
 var _raw := 0.0
 var _breakdown := {"base": 0.0, "unison": 0.0, "weight": 0.0, "holds": 0.0, "stills": 0.0, "penalties": 0.0}
@@ -144,19 +154,17 @@ func _init(p_song: SongData, p_difficulty: String, p_bell_set: String = "light",
 		# Loose timing whatever the bell set: the whole body is moving.
 		win_touch = base * (PIAZZA_OK / OK)
 		win_tilt = win_touch
-		win_swipe = win_touch
 	else:
 		var scale := BellSets.window_scale(bell_set)
 		win_touch = base * scale
 		# Slam bells are touches, so they get no sensor allowance.
 		win_tilt = win_touch if slam else win_touch + Vector3.ONE * TILT_EXTRA
-		win_swipe = base * (SWIPE_OK / OK) * scale
-	_max_window = maxf(win_touch.z, maxf(win_tilt.z, win_swipe.z))
+	_max_window = maxf(win_touch.z, win_tilt.z)
 
 	var all := song.notes(difficulty, remix, mirror, from_beat, to_beat)
 	for n in all:
 		if piazza:
-			# Only tilts count: rings become plain bells, taps and swipes are dropped.
+			# Only tilts count: rings become plain bells, taps and stomps are dropped.
 			if n.kind == Note.Kind.RING:
 				n.kind = Note.Kind.BELL
 				n.lane = -1
@@ -168,7 +176,7 @@ func _init(p_song: SongData, p_difficulty: String, p_bell_set: String = "light",
 	stats = {
 		"perfect": 0, "good": 0, "early": 0, "late": 0, "miss": 0, "wrong": 0,
 		"held": 0, "let_go": 0, "silence": 0, "still_kept": 0, "early_hits": 0, "late_hits": 0,
-		"rests": 0, "holds": 0, "notes": 0, "total": 0, "max_unison": 0,
+		"rests": 0, "holds": 0, "notes": 0, "total": 0, "max_unison": 0, "one_thumb": 0,
 		"unison_peak": 1.0, "time_at_top": 0.0,
 	}
 	var last_end := 0.0
@@ -366,13 +374,10 @@ func ladder_ok() -> bool:
 	return not slam and not piazza and not options.has("from_beat") and not options.has("to_beat")
 
 
-## Half-widths (perfect, good, ok) for "touch", "tilt" or "swipe".
+## Half-widths (perfect, good, ok) for "touch" or "tilt".
 func window(kind: String) -> Vector3:
-	match kind:
-		"tilt":
-			return win_tilt
-		"swipe":
-			return win_swipe
+	if kind == "tilt":
+		return win_tilt
 	return win_touch
 
 
@@ -389,21 +394,23 @@ func upcoming_bell(t: float) -> Note:
 # ---------------------------------------------------------------- input
 
 
-## A step button went down. Returns {judgement, note, ring, offset, side}; judgement is "" when the
-## tap hit nothing (a stray tap), "wrong" when it hit the wrong lane, and "" with a note for the
-## first half of a full ring. The Ok band is reported as its direction, "early" or "late". offset
-## (s, signed) and side ("early"/"late", "" within 10 ms) describe any timed tap. ring is non-empty
-## when a slam rang the bell.
+## A step button went down. Returns {judgement, note, ring, offset, side, stomp}; judgement is ""
+## when the tap hit nothing (a stray tap), "wrong" when it hit the wrong lane, and "" with a note for
+## the first half of a full ring or the first thumb of a stomp. The Ok band is reported as its
+## direction, "early" or "late". offset (s, signed) and side ("early"/"late", "" within 10 ms)
+## describe any timed tap. ring is non-empty when a slam rang the bell. stomp is "first" for a
+## stomp's first thumb, "both" when this touch was its second thumb, else "".
 func tap(lane: int, t: float, touch_id: int = 0) -> Dictionary:
 	input_log.append([t, "tap", lane, touch_id])
-	var res := {"judgement": "", "note": null, "ring": {}, "offset": 0.0, "side": ""}
+	var res := {"judgement": "", "note": null, "ring": {}, "offset": 0.0, "side": "", "stomp": ""}
+	_settle_stomps(t)
 	# A touch id still holding a note means its release was lost: that hold was let go.
 	if _holds.has(touch_id):
 		var old: Note = _holds[touch_id]
 		_holds.erase(touch_id)
 		if old.holding:
 			_end_hold(old, t, t >= old.end_t - HOLD_GRACE)
-	var n: Note = null if piazza else _find_lane_note(lane, t)
+	var n: Note = null if piazza else _find_lane_note(lane, t, touch_id)
 	if n != null and slam and lane != 1 and _bell_nearer(n, t):
 		n = null   # in slam an outer press nearer a due bell is a bell press
 	if n != null:
@@ -428,9 +435,20 @@ func tap(lane: int, t: float, touch_id: int = 0) -> Dictionary:
 					n.step_at = t
 					if not is_nan(n.bell_at):
 						_finish_ring(n)
+			Note.Kind.STOMP:
+				if n.thumbs == 0:
+					n.thumbs = 1
+					n.step_at = t
+					n.touch_id = touch_id
+					res.stomp = "first"
+				else:
+					n.thumbs = 2
+					_judge_stomp(n)
+					res.stomp = "both"
+				res.offset = n.step_at - n.t
+				res.side = _side(res.offset)
 		res.judgement = n.judgement
-	elif not piazza and not (slam and lane != 1) and _find_open(Note.Kind.SWIPE, t, win_swipe.z) == null:
-		# The touch that starts a rope swipe is not a wrong step.
+	elif not piazza and not (slam and lane != 1):
 		# A wrong step only when another lane's note is due AND the pressed lane has no note of its
 		# own coming soon: otherwise the tap is stray and free, and the player's note still counts.
 		var other := _find_other_lane_note(lane, t)
@@ -456,33 +474,6 @@ func release(t: float, touch_id: int = 0) -> void:
 	_holds.erase(touch_id)
 	if n.holding:
 		_end_hold(n, t, t >= n.end_t - HOLD_GRACE)
-
-
-## A rope swipe across the buttons, dir 1 = to the right, t = when the finger went down.
-## Returns {judgement, note, offset, side} (as tap).
-func swipe(dir: int, t: float) -> Dictionary:
-	input_log.append([t, "swipe", dir])
-	var res := {"judgement": "", "note": null, "offset": 0.0, "side": ""}
-	if piazza:
-		return res
-	var n := _find_open(Note.Kind.SWIPE, t, win_swipe.z)
-	if n == null:
-		return res
-	res.note = n
-	var off := t - n.t
-	res.offset = off
-	res.side = _side(off)
-	if (1 if dir >= 0 else -1) != n.dir:
-		n.done = true
-		n.finished = true
-		n.hit_at = t
-		stats.notes += 1
-		_wrong(n, t, off, MISS_DROP)   # a wrong-way swipe uses its note up
-		_hurt()                        # ...so it costs health like a miss
-	else:
-		_hit(n, t, _grade(off, win_swipe), off, POINTS)
-	res.judgement = n.judgement
-	return res
 
 
 ## The bell rang (a tilt, or with tilt = false a slam or the keyboard). Returns
@@ -538,6 +529,7 @@ func ring(t: float, tilt: bool = true, strength: float = 0.5) -> Dictionary:
 ## Call every frame with the current song time.
 func update(t: float) -> void:
 	_track_top(t)
+	_settle_stomps(t)
 	for i in range(_first_open, notes.size()):
 		var n := notes[i]
 		if n.t > t:
@@ -564,6 +556,9 @@ func update(t: float) -> void:
 						_holds.erase(n.touch_id)
 						_end_hold(n, n.end_t, true)
 				elif not n.done and t > n.t + win_touch.z:
+					_miss(n, t)
+			Note.Kind.STOMP:
+				if not n.done and n.thumbs == 0 and t > n.t + win_touch.z:
 					_miss(n, t)
 			_:
 				if not n.done and t > n.t + _timeout(n):
@@ -610,8 +605,6 @@ func _timeout(n: Note) -> float:
 			return win_tilt.z
 		Note.Kind.RING:
 			return win_touch.z if slam else maxf(win_touch.z, win_tilt.z)
-		Note.Kind.SWIPE:
-			return win_swipe.z
 	return win_touch.z
 
 
@@ -627,8 +620,9 @@ func _own_note_near(lane: int, t: float) -> Note:
 	return null
 
 
-# Note-lock: the earliest open note on the lane whose window contains t.
-func _find_lane_note(lane: int, t: float) -> Note:
+# Note-lock: the earliest open note on the lane whose window contains t. A stomp waiting for its
+# second thumb takes only another touch (touch_id) within STOMP_GAP of the first.
+func _find_lane_note(lane: int, t: float, touch_id: int = -1) -> Note:
 	for i in range(_first_open, notes.size()):
 		var n := notes[i]
 		if n.t - win_touch.z > t:
@@ -636,6 +630,8 @@ func _find_lane_note(lane: int, t: float) -> Note:
 		if n.done or n.lane != lane or not n.uses_lane() or absf(t - n.t) > win_touch.z:
 			continue
 		if n.kind == Note.Kind.RING and not is_nan(n.step_at):
+			continue
+		if n.kind == Note.Kind.STOMP and n.thumbs > 0 and (touch_id == n.touch_id or t - n.step_at > STOMP_GAP + 1e-6):
 			continue
 		return n
 	return null
@@ -653,16 +649,6 @@ func _find_bell(t: float, reach: float) -> Note:
 		if n.kind == Note.Kind.RING and (slam or not is_nan(n.bell_at)):
 			continue
 		return n
-	return null
-
-
-func _find_open(kind: Note.Kind, t: float, reach: float) -> Note:
-	for i in range(_first_open, notes.size()):
-		var n := notes[i]
-		if n.t - reach > t:
-			break
-		if n.kind == kind and not n.done and absf(t - n.t) <= reach:
-			return n
 	return null
 
 
@@ -725,6 +711,32 @@ func _finish_ring(n: Note) -> void:
 	var w: Vector3 = _ring_windows.get(n.index, win_tilt) if later_is_bell else win_touch
 	var off := later - n.t
 	_hit(n, later, _grade(off, w), off, RING_POINTS)
+
+
+# A stomp is timed from its first thumb: STOMP_POINTS with both thumbs, else one band lower on POINTS.
+func _judge_stomp(n: Note) -> void:
+	var off := n.step_at - n.t
+	var g := _grade(off, win_touch)
+	if n.thumbs >= 2:
+		_hit(n, n.step_at, g, off, STOMP_POINTS)
+	else:
+		stats.one_thumb += 1
+		if g == "perfect":
+			g = "good"
+		elif g == "good":
+			g = "early" if off < 0.0 else "late"
+		_hit(n, n.step_at, g, off, POINTS)
+	stomp_landed.emit(n, g, off, n.thumbs >= 2)
+
+
+# Stomps whose second thumb did not come within STOMP_GAP of the first, by time t: one-thumb hits.
+func _settle_stomps(t: float) -> void:
+	for i in range(_first_open, notes.size()):
+		var n := notes[i]
+		if n.t - win_touch.z > t:
+			break
+		if n.kind == Note.Kind.STOMP and not n.done and n.thumbs == 1 and t - n.step_at > STOMP_GAP + 1e-6:
+			_judge_stomp(n)
 
 
 func _miss(n: Note, t: float) -> void:

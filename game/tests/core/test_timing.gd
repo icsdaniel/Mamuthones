@@ -341,30 +341,29 @@ func test_router_touches_and_holds() -> void:
 	r.queue_free()
 
 
-func test_router_drag_swipes() -> void:
-	var s := Session.new(_song([{"b": 0, "k": "swipe", "dir": 1}, {"b": 2, "k": "swipe", "dir": -1}]), "easy")
+func test_router_two_thumb_stomp() -> void:
+	var s := Session.new(_song([{"b": 0, "k": "stomp", "lane": 1}, {"b": 2, "k": "stomp", "lane": 0}]), "easy")
 	var r := _router(s)
-	var dirs := []
-	r.swiped.connect(func(d): dirs.append(d))
-	_now = 0.95
-	_touch(r, 100, true)
+	var landed := []
+	s.stomp_landed.connect(func(_n, j, _o, both): landed.append([j, both]))
 	_now = 1.0
-	_drag(r, 200)
-	check(dirs.is_empty(), "a short drag is not a swipe")
-	_drag(r, 400)
-	_drag(r, 600)
-	_touch(r, 600, false)
+	_touch(r, 300, true, 1)        # both thumbs on the middle button, 30 ms apart
+	_now = 1.03
+	_touch(r, 420, true, 2)
+	check(r.is_pressed(1), "middle held")
+	_touch(r, 300, false, 1)
+	_touch(r, 420, false, 2)
 	_now = 2.0
-	_touch(r, 650, true, 4)
-	_drag(r, 300, 4)
-	_touch(r, 300, false, 4)
-	check_eq(dirs, [1, -1], "one swipe per drag, both ways")
-	check_eq(s.stats.perfect, 2, "both swipes judged")
+	_touch(r, 60, true, 3)         # one thumb only on Left
+	_touch(r, 60, false, 3)
+	_now = 2.2
+	s.update(_now)
+	check_eq(landed, [["perfect", true], ["good", false]], "two thumbs stomp, one thumb is a weaker hit")
 	r.queue_free()
 
 
 func test_router_keys() -> void:
-	var s := Session.new(_song([{"b": 0, "k": "step", "lane": 0}, {"b": 1, "k": "step", "lane": 1}, {"b": 2, "k": "step", "lane": 2}, {"b": 3, "k": "bell"}, {"b": 4, "k": "swipe", "dir": -1}, {"b": 5, "k": "swipe", "dir": 1}]), "easy")
+	var s := Session.new(_song([{"b": 0, "k": "step", "lane": 0}, {"b": 1, "k": "step", "lane": 1}, {"b": 2, "k": "step", "lane": 2}, {"b": 3, "k": "bell"}, {"b": 4, "k": "stomp", "lane": 1}, {"b": 5, "k": "stomp", "lane": 2}]), "easy")
 	var r := _router(s)
 	var rang := []
 	var paused := []
@@ -378,11 +377,16 @@ func test_router_keys() -> void:
 	_now = 2.5
 	_key(r, KEY_SPACE)
 	_now = 3.0
-	_key(r, KEY_Q)
+	_key(r, KEY_S)
+	_key(r, KEY_K)
+	_key(r, KEY_S, false)
+	_key(r, KEY_K, false)
 	_now = 3.5
-	_key(r, KEY_E)
+	_key(r, KEY_D)
+	_key(r, KEY_L)
 	_key(r, KEY_ESCAPE)
-	check_eq(s.stats.perfect, 6, "A S D, Space, Q, E all reach the session")
+	check_eq(s.stats.perfect, 6, "A S D, Space, S+K and D+L stomps all reach the session")
+	check_eq(s.stats.one_thumb, 0, "the J K L keys are the second thumb")
 	check_eq(rang.size(), 1, "Space rang")
 	check_eq(rang[0].quality, "perfect", "with the ring result")
 	check_eq(rang[0].strength, 0.5, "a keyboard ring has middle strength")
@@ -439,17 +443,17 @@ func test_router_real_event_path() -> void:
 	r.queue_free()
 
 
-func test_router_swipe_timed_at_touch_down_and_focus_loss() -> void:
+func test_router_drag_and_focus_loss() -> void:
 	await tree.process_frame
-	var s := Session.new(_song([{"b": 0, "k": "swipe", "dir": 1}, {"b": 2, "k": "hold", "lane": 1, "len": 4}]), "easy")
+	var s := Session.new(_song([{"b": 0, "k": "step", "lane": 0}, {"b": 2, "k": "hold", "lane": 1, "len": 4}]), "easy")
 	var r := _router(s)
 	_now = 1.0
 	_touch(r, 100, true)
-	_now = 1.15                    # the drag crosses the row 150 ms later
+	_now = 1.15                    # a finger sliding across the row is not a new press
 	_drag(r, 500)
 	_touch(r, 500, false)
-	check_eq(s.notes[0].judgement, "perfect", "swipe judged when the finger went down")
-	check_eq(s.stats.wrong, 0, "its touch-down was no wrong step")
+	check_eq(s.notes[0].judgement, "perfect", "the step is judged when the finger went down")
+	check_eq(s.stats.wrong, 0, "sliding across the row is no wrong step")
 	_now = 2.0
 	_touch(r, 360, true, 3)
 	check(r.is_pressed(1), "holding lane 1")
@@ -465,7 +469,7 @@ func test_router_swipe_timed_at_touch_down_and_focus_loss() -> void:
 
 
 # Plays a chart in slam mode through the InputRouter with two thumbs, the way a player would:
-# steps and full rings with one thumb, bells with both outer buttons, or with the free outer button
+# steps and full rings with one thumb, stomps with both thumbs on their button, bells with both outer buttons, or with the free outer button
 # while the other thumb keeps a hold. Returns [session, most buttons down at once].
 func _slam_bot(song: SongData, diff: String) -> Array:
 	var s := Session.new(song, diff, "light", {"slam": true})
@@ -499,8 +503,11 @@ func _slam_bot(song: SongData, diff: String) -> Array:
 					var lane := 2 if held == 0 else 0
 					events.append([n.t, 1, "down", lane, id])
 					events.append([n.t + 0.03, 0, "up", lane, id])
-			Note.Kind.SWIPE:
-				events.append([n.t, 1, "swipe", n.dir, id])
+			Note.Kind.STOMP:
+				events.append([n.t, 1, "down", n.lane, id])
+				events.append([n.t + 0.025, 1, "down", n.lane, id + 20000])
+				events.append([n.t + 0.05, 0, "up", n.lane, id])
+				events.append([n.t + 0.05, 0, "up", n.lane, id + 20000])
 	events.sort_custom(func(a, b): return a[0] < b[0] or (a[0] == b[0] and a[1] < b[1]))
 	var down := {}
 	var most := 0
@@ -515,15 +522,6 @@ func _slam_bot(song: SongData, diff: String) -> Array:
 				most = maxi(most, down.size())
 			"up":
 				_touch(r, xs[e[3]], false, e[4])
-				down.erase(e[4])
-			"swipe":
-				var x0: float = 360.0 - 200.0 * e[3]
-				_touch(r, x0, true, e[4])
-				down[e[4]] = true
-				most = maxi(most, down.size())
-				_now = e[0] + 0.04
-				_drag(r, x0 + 400.0 * e[3], e[4])
-				_touch(r, x0 + 400.0 * e[3], false, e[4])
 				down.erase(e[4])
 	s.update(s.end_time())
 	r.queue_free()

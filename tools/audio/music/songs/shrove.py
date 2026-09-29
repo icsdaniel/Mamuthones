@@ -27,7 +27,7 @@ def build():
     s = Song("shrove", "Shrove Tuesday", "Martedì grasso", 7, "story", 126, 4, 62, "mixolydian")
     s.reverb = {"t60": 1.8, "wet": 0.2, "predelay": 0.025, "bright": 6500,
                 "early": ((0.047, 0.25), (0.079, 0.2), (0.11, 0.12))}
-    s.mechanics = {"step", "bell", "rest", "hold", "ring", "swipe", "call", "triple"}
+    s.mechanics = {"step", "bell", "rest", "hold", "ring", "stomp", "call", "triple"}
     s.signature = {"medium": [0, 1, 2, 2, 1], "hard": [0, 1, 2, 2, 1], "expert": [0, 1, 2, 2, 1]}
     s.countin()
     tumbu = s.key_root - 24

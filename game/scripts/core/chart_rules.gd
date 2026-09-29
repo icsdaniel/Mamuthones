@@ -6,8 +6,8 @@ extends RefCounted
 ## The spacing rules mirror tools/audio/validate_charts.py (keep the two in step):
 ## - Feel: each song section is straight or triplet. A section is triplet when any of the chart's
 ##   notes in it sits on a third or sixth of a beat; notes outside every section share one feel.
-## - Thumbs: lane 0 is the left thumb, lane 2 the right, lane 1 and swipes whichever thumb is free
-##   (the one used longest ago). A thumb makes one input per eighth: HAND_GAP beats straight,
+## - Thumbs: lane 0 is the left thumb, lane 2 the right, lane 1 whichever thumb is free (the one used
+##   longest ago). A stomp takes both thumbs on its button, so both must be free and rested. A thumb makes one input per eighth: HAND_GAP beats straight,
 ##   HAND_GAP_THIRD in a triplet section (where an eighth is a third of a beat). A hold keeps its
 ##   thumb busy.
 ## - Any two inputs on different beats are at least OVERALL_GAP (OVERALL_GAP_THIRD) apart; Easy
@@ -28,7 +28,7 @@ const MIN_STILL_BEATS := 2
 const THIRDS: Array[float] = [1.0 / 3.0, 2.0 / 3.0, 1.0 / 6.0, 5.0 / 6.0]
 const LEVEL_EXTRAS := {
 	"easy": ["step", "bell", "rest"],
-	"medium": ["step", "bell", "rest", "hold"],
+	"medium": ["step", "bell", "rest", "hold", "stomp"],
 }
 
 
@@ -81,11 +81,9 @@ static func check(song: SongData, difficulty: String) -> Array[String]:
 		if song.kind == "story" and LEVEL_EXTRAS.has(difficulty) and bool(item.get("call", false)):
 			out.append("%s: off-beat calls start at hard" % at)
 		var lane := int(item.get("lane", -1))
-		if k in ["step", "hold", "ring"] and (lane < 0 or lane > 2):
+		if k in ["step", "hold", "ring", "stomp"] and (lane < 0 or lane > 2):
 			out.append("%s: %s needs lane 0, 1 or 2" % [at, k])
 			continue
-		if k == "swipe" and not int(item.get("dir", 0)) in [1, -1]:
-			out.append("%s: swipe dir must be 1 or -1" % at)
 		var length := float(item.get("len", 1.0))
 		if (k == "hold" or k == "rest") and length <= 0.0:
 			out.append("%s: %s len must be positive" % [at, k])
@@ -100,7 +98,7 @@ static func check(song: SongData, difficulty: String) -> Array[String]:
 					out.append("%s: bell inside a stand-still" % at)
 		notes.append({"b": b, "k": k, "lane": lane, "len": length})
 		for h in holds:
-			if lane == h[0] and b > h[1] + TOL and b < h[2] - TOL and k in ["step", "hold", "ring"]:
+			if lane == h[0] and b > h[1] + TOL and b < h[2] - TOL and k in ["step", "hold", "ring", "stomp"]:
 				out.append("%s: note hidden under a hold in lane %d" % [at, lane])
 		match k:
 			"hold":
@@ -216,8 +214,24 @@ static func _check_spacing(song: SongData, difficulty: String, notes: Array, whe
 			out.append("%s b=%s: input too close after the bell at b=%s (both thumbs tilt the phone)" % [where, b, last_bell])
 		var key := snappedf(b, 0.001)
 		var taken: Array = used_at.get(key, [])
+		var gap: float = (HAND_GAP_THIRD if feel[i] else HAND_GAP)[difficulty]
+		if k == "stomp":
+			# Both thumbs on one button: each must be free and rested, and nothing else on its beat.
+			if not taken.is_empty():
+				out.append("%s b=%s: more inputs than free thumbs" % [where, b])
+				continue
+			for c in 2:
+				var tn := "left" if c == 0 else "right"
+				if busy[c] > b + TOL:
+					out.append("%s b=%s: the %s thumb is holding a note (a stomp needs both)" % [where, b, tn])
+				elif b - last[c] < gap - TOL:
+					out.append("%s b=%s: %s thumb too fast for the stomp (%.3f beats < %.3f)" % [where, b, tn, b - last[c], gap])
+				last[c] = b
+				has_last[c] = true
+			used_at[key] = [0, 1]
+			continue
 		var h := -1
-		if k == "swipe" or n.lane == 1:
+		if n.lane == 1:
 			for c in [0, 1]:
 				if c in taken:
 					continue
@@ -231,7 +245,6 @@ static func _check_spacing(song: SongData, difficulty: String, notes: Array, whe
 		if h in taken:
 			out.append("%s b=%s: more inputs than free thumbs" % [where, b])
 			continue
-		var gap: float = (HAND_GAP_THIRD if feel[i] else HAND_GAP)[difficulty]
 		if busy[h] > b + TOL:
 			out.append("%s b=%s: the %s thumb is holding a note" % [where, b, thumb])
 		elif b - last[h] < gap - TOL:
@@ -249,7 +262,7 @@ static func _overall(difficulty: String, third: bool, easy_min: float) -> float:
 	return maxf(float((OVERALL_GAP_THIRD if third else OVERALL_GAP)[difficulty]), easy_min)
 
 
-# Lane 1 and swipes go to the thumb that is not holding, then to the one used longest ago.
+# Lane 1 goes to the thumb that is not holding, then to the one used longest ago.
 static func _pick_key(busy_until: float, last_b: float, b: float) -> float:
 	return (1e6 if busy_until > b + TOL else 0.0) + last_b
 

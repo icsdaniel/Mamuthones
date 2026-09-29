@@ -251,6 +251,17 @@ func rope_grab() -> void:
 	_play(_sfx_pool, 4, _pick(_grabs, 302), randf_range(-1.0, 0.0))
 
 
+## A two-thumb stomp landed on `lane` (quality perfect | good | ok). Placeholder until the sound
+## pass gives it its own heavy stamp (see handoff/stomp.md): the step at full weight.
+func stomp(lane: int, quality := "perfect") -> void:
+	step(lane, quality)
+
+
+## A stomp played with one thumb only: a dull step (placeholder, see handoff/stomp.md).
+func stomp_half(lane: int) -> void:
+	step(lane, "ok")
+
+
 ## Fades in the lane's drone (a launeddas-style reed at the lane's pitch), looping.
 func hold_start(lane: int) -> void:
 	lane = clampi(lane, 0, LANES - 1)

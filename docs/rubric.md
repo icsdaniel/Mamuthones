@@ -50,7 +50,7 @@ design rule caps the aspect at 5.
 - 6: One consistent palette and font family on every screen; nothing uses default Godot styling.
 - 7: Woodcut look throughout: textures (grain, ink edges, paper), carved shapes, no flat vector blobs.
 - 8: The logo, the mask and the Mamuthone figure are distinctive and read at small sizes (the icon at
-  64 px); every stop has its own scene; notes, bells, holds, swipes and stand-stills are distinguishable
+  64 px); every stop has its own scene; notes, bells, holds, stomps and stand-stills are distinguishable
   in greyscale.
 - 9: The procession scene is alive (fire flicker, fog, jolting row, Issohadores, crowd) at 60 fps.
 - 10: A screenshot of any screen is good enough for the store page.
@@ -59,7 +59,7 @@ design rule caps the aspect at 5.
 - 6: Every screen is reachable and has a way back; nothing overflows at 720×1280 to 720×1600 and at
   tablet aspect 3:4; all text is in both English and Italian.
 - 7: First launch to first played note takes under 60 seconds; touch targets are ≥ 88 px; text ≥ 24 px.
-- 8: The tutorial teaches steps, bells, holds, stand-stills and swipes one at a time, with pauses and
+- 8: The tutorial teaches steps, bells, holds, stand-stills and two-thumb stomps one at a time, with pauses and
   retries, before the first real song; results explain what to improve; pause menu with resume,
   restart, quit.
 - 9: Transitions and small animations make it feel finished; unlocks are celebrated.
