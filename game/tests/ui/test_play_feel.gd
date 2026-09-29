@@ -252,3 +252,27 @@ func test_bell_cue_is_on_for_easy_and_medium_by_default() -> void:
 	check(not script.bell_cue_on("easy"), "Settings can turn it off")
 	UIHarness.restore_profile()
 
+
+
+func test_words_of_two_lanes_never_print_over_each_other() -> void:
+	var w := JudgementWords.new()
+	w.size = Vector2(720, 1440)
+	tree.root.add_child(w)
+	await tree.process_frame
+	w.show_word("Perfect", "", Vector2(120, 1100), "perfect")
+	w.show_word("Perfect", "", Vector2(360, 1100), "perfect")
+	await tree.process_frame
+	check_eq(w.shown().size(), 1, "a chord of the same word is written once (%s)" % str(w.shown()))
+	var r: Array[Rect2] = w.shown_rects()
+	check(r.size() == 1 and absf(r[0].get_center().x - 240.0) <= 6.0, "between its two lanes (%s)" % str(r))
+	w.show_word("Good", "", Vector2(600, 1100), "good")
+	w.show_word("Perfect", "", Vector2(360, 1100), "perfect")
+	await tree.process_frame
+	r = w.shown_rects()
+	var apart := true
+	for i in r.size():
+		for j in range(i + 1, r.size()):
+			if r[i].intersects(r[j]):
+				apart = false
+	check(r.size() >= 2 and apart, "different words side by side do not overlap (%s)" % str(r))
+	w.queue_free()

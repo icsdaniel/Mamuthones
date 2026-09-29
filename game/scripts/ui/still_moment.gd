@@ -11,19 +11,12 @@ const OUT := 0.35
 var text := ""
 var points := ""
 var _t := -1.0            ## seconds since play(), -1 when idle
-var _font: Font
-var _small: Font
 
 
 func _init() -> void:
 	mouse_filter = Control.MOUSE_FILTER_IGNORE
 	set_anchors_preset(Control.PRESET_FULL_RECT)
 	set_process(false)
-
-
-func _ready() -> void:
-	_font = get_theme_font("font", UIKit.HEADER)
-	_small = get_theme_font("font", UIKit.HUD)
 
 
 func play(p_text: String, p_points: String) -> void:
@@ -57,28 +50,30 @@ func _process(delta: float) -> void:
 func _draw() -> void:
 	if _t < 0.0 or text == "":
 		return
+	var P := PxArt.PX
 	var a := 1.0
-	if _t < IN:
-		a = _t / IN
-	elif _t > IN + HOLD:
+	if _t > IN + HOLD:
 		a = clampf(1.0 - (_t - IN - HOLD) / OUT, 0.0, 1.0)
 	var grow := 1.0 if UIKit.reduced_motion() else 1.0 - pow(1.0 - clampf(_t / (IN * 2.0), 0.0, 1.0), 3.0)
-	var fs := 46
-	var fs2 := 30
-	var cy := maxf(size.y * 0.3, 70.0)   # above the row's heads
-	var band_h := 124.0
-	var band_w := size.x * grow
-	draw_rect(Rect2((size.x - band_w) * 0.5, cy - band_h * 0.5, band_w, band_h), Color(Palette.INK, 0.72 * a))
-	# hairlines above and below, in the gold of a kept stand-still
-	var gold := Color("#f3cf85")
-	for dy in [-band_h * 0.5 + 6.0, band_h * 0.5 - 6.0]:
-		draw_line(Vector2((size.x - band_w) * 0.5 + 24.0, cy + dy), Vector2((size.x + band_w) * 0.5 - 24.0, cy + dy), Color(gold, 0.7 * a), 2.0)
-	if _font == null:
+	var cy := roundf(maxf(size.y * 0.3, 70.0) / P) * P   # above the row's heads
+	var band_h := 36.0 * P
+	var band_w := floorf(size.x * grow / (2.0 * P)) * 2.0 * P
+	var x0 := roundf((size.x - band_w) * 0.5 / P) * P
+	# a navy band closed by gold rules, drawn across from the middle, then fading out in steps
+	if a < 1.0 and PxArt.bayer(int(_t * 30.0), 1) > a:
 		return
-	var w := size.x - 48.0
-	while fs > 26 and _font.get_string_size(text, HORIZONTAL_ALIGNMENT_LEFT, -1, fs).x > w:
-		fs -= 2
-	var base := cy - 4.0
-	draw_string(_font, Vector2(24.0, base), text, HORIZONTAL_ALIGNMENT_CENTER, w, fs, Color(Palette.BONE, a))
-	if points != "" and _small != null:
-		draw_string(_small, Vector2(24.0, base + 44.0), points, HORIZONTAL_ALIGNMENT_CENTER, w, fs2, Color(gold, a))
+	var top := cy - band_h * 0.5
+	draw_rect(Rect2(x0, top, band_w, band_h), PixelPalette.NAVY[0])
+	for y in [top, top + band_h - 3.0 * P]:
+		draw_rect(Rect2(x0, y, band_w, P), PixelPalette.K[0])
+		draw_rect(Rect2(x0, y + P, band_w, P), PixelPalette.GOLD[3])
+		draw_rect(Rect2(x0, y + 2.0 * P, band_w, P), PixelPalette.K[0])
+	if grow < 0.95:
+		return
+	var face := "big_gold"
+	if PxType.width(face, text) > size.x - 16.0 * P:
+		face = "caps_gold"
+	var lh := PxType.line_height(face)
+	PxType.draw(self, face, Vector2(size.x * 0.5, cy - lh + 2.0 * P), text, Color.WHITE, 1, 0)
+	if points != "":
+		PxType.draw(self, "score", Vector2(size.x * 0.5, cy + 4.0 * P), points, Color.WHITE, 1, 0)

@@ -582,6 +582,7 @@ func _tick_health(delta: float) -> void:
 	var want := 1.0 if session.health <= HealthPips.LOW else 0.0
 	_dim = move_toward(_dim, want, delta * 1.5)
 	backdrop.dim = _dim
+	lanes.fire_dim = _dim
 
 
 ## Where a lane note's burst goes (its lane at the hit line).
@@ -605,6 +606,7 @@ func _on_failed() -> void:
 	scene.set_still(true)
 	if backdrop != null:
 		backdrop.dim = 1.0
+		lanes.fire_dim = 1.0
 	var fade := create_tween()
 	fade.tween_property(conductor.player, "volume_db", -40.0, 0.6)
 	fade.tween_callback(conductor.player.stop)   # the clock runs on silently; nothing reads it now

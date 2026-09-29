@@ -386,8 +386,8 @@ func test_early_late_colours_match_ui() -> void:
 	var ll := Palette.LATE.get_luminance()
 	check(absf(le - ll) > 0.1, "early and late differ in greyscale (%.2f vs %.2f)" % [le, ll])
 	check(_contrast(Palette.EARLY, Palette.INK) >= 3.0 and _contrast(Palette.LATE, Palette.INK) >= 3.0, "both read against their ink outline")
-	var src := FileAccess.get_file_as_string("res://scripts/art/lane_skin.gd")
-	check("Palette.EARLY if up else Palette.LATE" in src, "LaneSkin bursts use the shared pair")
+	var src := FileAccess.get_file_as_string("res://scripts/art/fire_skin.gd")
+	check("Palette.EARLY if quality == \"early\" else Palette.LATE" in src, "the hit bursts (FireSkin, LaneSkin) use the shared pair")
 
 
 func test_rope_is_natural_fibre() -> void:
@@ -553,11 +553,18 @@ func test_stop_cards_and_icons() -> void:
 
 
 func test_note_sprites_baked() -> void:
-	# Every sprite LaneSkin asks for was baked by tools/art/bake.sh (else it silently draws vectors).
-	for job in LaneSkin.sprite_jobs():
-		var name: String = job[0]
-		check(FileAccess.file_exists(LaneSkin.NOTES_DIR + name + ".png"), "note sprite %s baked" % name)
-		check(LaneSkin.sprite(name) != null, "note sprite %s loads" % name)
+	# Every play-field sprite FireSkin draws was baked by tools/art/pixel/field.py, at the size its
+	# cell says (else a note, target or button would silently not draw).
+	for name in FireCells.CELLS:
+		var t := PxArt.field(name)
+		check(t != null, "field sprite %s loads" % name)
+		if t != null:
+			check_eq(Vector2(t.get_size()), (FireCells.CELLS[name] as Array)[0] as Vector2, "field sprite %s is its cell's size" % name)
+	for sz in range(FireCells.NOTE_MIN, FireCells.NOTE_MAX + 1):
+		for kind in ["step", "call", "heal", "stomp"]:
+			check(FireCells.CELLS.has("note_%s_%d" % [kind, sz]), "a %s note at half-width %d" % [kind, sz])
+	for face in PxType.SIZES:
+		check(PxType.font(face) is FontFile, "pixel face %s loads" % face)
 
 
 func test_fonts_cover_both_languages() -> void:

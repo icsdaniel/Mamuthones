@@ -25,7 +25,7 @@ import numpy as np
 
 sys.path.insert(0, os.path.dirname(__file__))
 import figures  # noqa: E402
-import scenery as S  # noqa: E402
+import stop_scenery as S  # noqa: E402
 from px import Canvas  # noqa: E402
 
 ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), "../../../game"))

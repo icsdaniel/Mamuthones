@@ -151,10 +151,43 @@ func _process(delta: float) -> void:
 	if session != null:
 		while _first < session.notes.size() and _gone(session.notes[_first], song_time):
 			_first += 1
+	_update_road()
 	queue_redraw()
 	for c in [_surface, _under, _fx]:
 		if c != null:
 			c.queue_redraw()
+
+
+## The road shader's light: the beat's envelope, a pressed lane, the beads' spacing, a low fire.
+func _update_road() -> void:
+	if _road == null:
+		return
+	var m := _road.material as ShaderMaterial
+	var f := field_rect()
+	m.set_shader_parameter("field", f.size)
+	m.set_shader_parameter("hl", LaneSkin.hit_line_y(Rect2(Vector2.ZERO, f.size)))
+	m.set_shader_parameter("env", beat_env())
+	m.set_shader_parameter("dim", fire_dim)
+	m.set_shader_parameter("lane_glow", Vector3(_lane_glow(0), _lane_glow(1), _lane_glow(2)))
+	m.set_shader_parameter("beat", beat)
+	m.set_shader_parameter("beat_px", spb * _px_per_s() if spb > 0.0 else 0.0)
+	m.set_shader_parameter("flash", _hit_flash())
+
+
+## The beat's light envelope for the road and the hit line (a third of it with reduced motion).
+func beat_env() -> float:
+	if beat <= -999.0:
+		return 0.0
+	return PxArt.beat_env(beat, 0.4, 0.65, 0.0) * (0.35 if UIKit.reduced_motion() else 1.0)
+
+
+## 0..1 right after a good hit: the rails flare with it.
+func _hit_flash() -> float:
+	var best := 0.0
+	for lane in 3:
+		if _flash_kind[lane] == "hit":
+			best = maxf(best, clampf(1.0 - (_clock - _flash[lane]) / 0.18, 0.0, 1.0))
+	return best
 
 
 func _px_per_s() -> float:
@@ -181,7 +214,8 @@ func _draw() -> void:
 func _draw_field(ci: CanvasItem) -> void:
 	var field := field_rect()
 	field.position = Vector2.ZERO
-	FireSkin.draw_setts(ci, field)
+	if not _road_on():
+		FireSkin.draw_setts(ci, field)
 	if session != null:
 		_draw_flat_notes(ci, field)
 	_draw_timing_ticks(ci, field)
@@ -202,20 +236,137 @@ func _lane_glow(lane: int) -> float:
 ## What lies on the road foreshortens with it; what stands on it (gems, badges, the rope) is drawn
 ## upright on screen at its projected place, scaled with the road.
 const TOP_W := 0.42
+## The road in pixel art. Each art pixel (PxArt.PX screen px, on the grid anchored at the far end)
+## finds its place on the flat road, and draws: the setts in courses that shrink toward the fire
+## (mortar rows and joints found by whether a seam falls inside the pixel, so no seam is ever lost
+## or doubled), the four gold rails (the road's edges and the two lane dividers) with beads riding
+## the outer rails down to the hit line on every beat, and whatever lies flat on the road (the
+## flat field viewport: sashes, bands, ticks). Light (the fire at the far end, the rails, the hit
+## line, a pressed lane, the beat) picks each pixel's colour from the palette table road_lut.png,
+## with an ordered dither between levels: no blending, no off-palette colour.
 const ROAD_SHADER := """
 shader_type canvas_item;
+uniform sampler2D lut : filter_nearest;
+uniform sampler2D flat_tex : filter_nearest;
 uniform float top_w = 0.42;
-uniform vec4 fog : source_color = vec4(0.23, 0.11, 0.12, 1.0);
-void fragment() {
-	float w = top_w + (1.0 - top_w) * UV.y;
-	float u = 0.5 + (UV.x - 0.5) / w;
+uniform vec2 field = vec2(720.0, 1060.0);
+uniform float px = 3.0;
+uniform float hl = 954.0;
+uniform float env = 0.0;
+uniform float dim = 0.0;
+uniform vec3 lane_glow = vec3(0.0);
+uniform float beat = -1000.0;
+uniform float beat_px = 0.0;
+uniform float flash = 0.0;
+
+float bayer4(vec2 p) {
+	int x = int(mod(p.x, 4.0));
+	int y = int(mod(p.y, 4.0));
+	float b[16] = float[](0.0, 8.0, 2.0, 10.0, 12.0, 4.0, 14.0, 6.0, 3.0, 11.0, 1.0, 9.0, 15.0, 7.0, 13.0, 5.0);
+	return (b[y * 4 + x] + 0.5) / 16.0;
+}
+float hash(vec2 p) { return fract(sin(dot(p, vec2(12.9898, 78.233))) * 43758.5453); }
+vec4 lut_th(int row, float light, float th) {
+	float lv = clamp(light, 0.0, 1.0) * 7.99 + (th - 0.5) * 0.8;
+	int i = clamp(int(floor(lv)), 0, 7);
+	return texelFetch(lut, ivec2(i, row), 0);
+}
+vec4 lut_at(int row, float light, vec2 cell) {
+	return lut_th(row, light, bayer4(cell));
+}
+// course number at screen height y: courses 4 art px tall at the far end, 11 at the near end
+float course(float y) {
+	float hf = 4.0 * px;
+	float hn = 11.0 * px;
+	float h = hf + (hn - hf) * clamp(y / field.y, 0.0, 1.2);
+	return field.y / (hn - hf) * log(h / hf);
+}
+vec4 road(vec2 UVp) {
+	vec2 local = UVp * field;
+	vec2 o = vec2(field.x * 0.5, 0.0);
+	vec2 cell = floor((local - o) / px);
+	vec2 c0 = cell * px + o;
+	vec2 cc = c0 + px * 0.5;
+	float w = top_w + (1.0 - top_w) * clamp(cc.y / field.y, 0.0, 1.0);
+	float half_w = field.x * 0.5;
+	float fx = half_w + (cc.x - half_w) / w;
+	float fxl = half_w + (c0.x - half_w) / w;
+	float fxr = half_w + (c0.x + px - half_w) / w;
 	float v = (1.0 / top_w - 1.0 / w) / (1.0 / top_w - 1.0);
-	vec4 c = texture(TEXTURE, vec2(clamp(u, 0.0, 1.0), clamp(v, 0.0, 1.0)));
-	float far = 1.0 - (w - top_w) / (1.0 - top_w);
-	c.rgb = mix(c.rgb, fog.rgb, far * far * 0.5);
-	float edge = min(u, 1.0 - u);
-	c.a *= smoothstep(0.0, fwidth(u) * 1.5, edge) * smoothstep(0.0, 0.06, v);
-	COLOR = c;
+	float fy = v * field.y;
+	float u = fx / field.x;
+	// rails: the road's edges and the lane dividers, 1 art px far, 2 near
+	float core_r = px * 0.5 + px * 0.5 * smoothstep(0.62, 0.95, w);
+	float rail_d = 1e6;
+	float outer_d = 1e6;
+	for (int i = 0; i < 4; i++) {
+		float rx = half_w + (field.x * float(i) / 3.0 - half_w) * w;
+		float d = abs(cc.x - rx);
+		rail_d = min(rail_d, d);
+		if (i == 0 || i == 3) { outer_d = min(outer_d, d); }
+	}
+	bool inside = u >= 0.0 && u <= 1.0;
+	if (!inside && outer_d >= core_r + px * 1.0) {
+		return vec4(0.0);
+	}
+	float pulse = max(env, 0.0);
+	// beads: a bright run on the outer rails arriving at the hit line on every beat
+	float bead = 0.0;
+	if (beat_px > 0.0 && beat > -999.0 && fy <= hl + 2.0) {
+		float ph = beat + (hl - fy) / beat_px;
+		float db = abs(fract(ph + 0.5) - 0.5) * beat_px;
+		bead = clamp(1.0 - db / (9.0 + 8.0 * w), 0.0, 1.0);
+	}
+	vec2 flat_uv = vec2(clamp(u, 0.0, 1.0), clamp(fy / field.y, 0.0, 1.0));
+	if (rail_d < core_r) {
+		float rl = 0.3 + 0.35 * pulse + (outer_d < core_r ? 0.6 * bead : 0.0) + 0.15 * flash - 0.2 * dim;
+		return lut_at(4, rl, cell);
+	}
+	if (rail_d < core_r + px) {
+		float rl = 0.35 + 0.35 * pulse + (outer_d < core_r + px ? 0.5 * bead : 0.0) - 0.2 * dim;
+		return lut_at(5, rl, cell);
+	}
+	if (!inside) {
+		return lut_at(6, 0.2 + 0.6 * clamp(1.0 - fy / (field.y * 0.35), 0.0, 1.0), cell);
+	}
+	// what lies flat on the road (drawn in the flat viewport), whole pixels only
+	vec4 flat_c = texture(flat_tex, flat_uv);
+	if (flat_c.a > 0.5) {
+		return vec4(flat_c.rgb, 1.0);
+	}
+	// setts: a mortar row where a course seam falls inside this pixel's rows; a joint where a sett's
+	// end falls inside its columns (running bond: every other course shifted half a sett)
+	float n0 = course(c0.y);
+	float n1 = course(c0.y + px);
+	bool seam = floor(n0) != floor(n1) || cell.y <= 0.0;
+	float n = floor(course(cc.y));
+	float bw = field.x / 12.0;
+	float off = mod(n, 2.0) * bw * 0.5;
+	bool joint = floor((fxl - off) / bw) != floor((fxr - off) / bw);
+	vec2 id = vec2(floor((fx - off) / bw), n);
+	// light: the fire's glow over the far part of the road, the rails' glow, the hit line's, a pressed lane
+	float fd = length(vec2((fx - half_w) / (field.x * 0.62), fy / (field.y * (0.34 + 0.08 * pulse))));
+	float light = 0.19;
+	light += pow(clamp(1.0 - fd, 0.0, 1.0), 1.3) * (0.62 + 0.25 * pulse) * (1.0 - 0.55 * dim);
+	light += clamp(1.0 - (rail_d - core_r - px) / (px * (2.0 + 3.0 * w)), 0.0, 1.0) * (0.2 + 0.2 * pulse + 0.15 * flash);
+	light += clamp(1.0 - abs(fy - hl) / (field.y * 0.03), 0.0, 1.0) * (0.18 + 0.12 * pulse);
+	int lane = clamp(int(floor(u * 3.0)), 0, 2);
+	float lg = lane == 0 ? lane_glow.x : (lane == 1 ? lane_glow.y : lane_glow.z);
+	light += lg * clamp(1.0 - (hl - fy) / (field.y * 0.22), 0.0, 1.0) * step(fy, hl + field.y * 0.05) * 0.4;
+	if (seam || joint) {
+		float mh = hash(cell * 0.73 + 5.1);
+		if (mh < 0.07 + 0.08 * abs(u - 0.5) * 2.0) {
+			return lut_th(3, light, 0.5);
+		} else {
+			return lut_th(0, light, 0.5);
+		}
+	}
+	// one colour per sett where the light is even: the sett's own threshold, not a checker
+	float tone = hash(id + 0.37);
+	return lut_th(tone < 0.3 ? 2 : 1, light, 0.15 + 0.7 * hash(id + 1.7));
+}
+void fragment() {
+	COLOR = road(UV);
 }
 """
 ## Road surface colours from the far end (by the fire) to the buttons.
@@ -224,6 +375,7 @@ const ROAD_STOPS := [[0.0, Color("#2a1c22")], [0.25, Color("#1a1520")], [0.6, Co
 var perspective := true          ## false: the flat lanes (the Piazza hides them anyway; tests may flatten)
 var beat := -1000.0              ## the song's beat now (fractional), for the beads on the rails
 var spb := 0.0                   ## seconds per beat (0: no beads)
+var fire_dim := 0.0              ## 0..1 the fire burns low (health): the road's light dims with it
 var _vp: SubViewport
 var _flat: Control
 var _road: TextureRect
@@ -260,7 +412,11 @@ func _ready() -> void:
 		var mat := ShaderMaterial.new()
 		mat.shader = sh
 		mat.set_shader_parameter("top_w", TOP_W)
+		mat.set_shader_parameter("lut", PxArt.field("road_lut"))
+		mat.set_shader_parameter("flat_tex", _vp.get_texture())
+		mat.set_shader_parameter("px", PxArt.PX)
 		_road.material = mat
+		_road.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
 		add_child(_road)
 		move_child(_road, 1)
 		resized.connect(_fit_road)
@@ -275,7 +431,7 @@ func _ready() -> void:
 	move_child(_under, 2 if perspective else 1)
 	_fx = _Layer.new(self, "_draw_fx")
 	_fx.name = "Bursts"
-	_fx.material = add
+	_fx.show_behind_parent = true
 	add_child(_fx)
 	move_child(_fx, _under.get_index() + 1)
 
@@ -361,111 +517,15 @@ class _Layer extends Control:
 		view.call(method, self)
 
 
-## The road's stone: dark and calm, warm where the fire falls on its far end, with faint cobble
-## courses and two thin lane dividers. Nothing busy where the notes travel.
-func _draw_surface(ci: CanvasItem) -> void:
-	var f := field_rect()
-	var pts := PackedVector2Array()
-	var cols := PackedColorArray()
-	for s in ROAD_STOPS:
-		var y: float = f.position.y + f.size.y * float(s[0])
-		var e := road_edges(y)
-		pts.append(Vector2(e.x, y))
-		pts.append(Vector2(e.y, y))
-		cols.append(s[1])
-		cols.append(s[1])
-	for i in ROAD_STOPS.size() - 1:
-		var k := i * 2
-		ci.draw_polygon(PackedVector2Array([pts[k], pts[k + 1], pts[k + 3], pts[k + 2]]), PackedColorArray([cols[k], cols[k + 1], cols[k + 3], cols[k + 2]]))
-	# Lane dividers: warm, 2 px, 35% up to the hit line and half that below it.
-	var ff := Rect2(Vector2.ZERO, f.size)
-	var hl := LaneSkin.hit_line_y(ff)
-	for u in [1.0 / 3.0, 2.0 / 3.0]:
-		var a := project(Vector2(ff.size.x * u, 0.0))
-		var m := project(Vector2(ff.size.x * u, hl))
-		var b := project(Vector2(ff.size.x * u, ff.size.y))
-		ci.draw_line(a, m, Color(1.0, 0.75, 0.47, 0.35), 2.0, true)
-		ci.draw_line(m, b, Color(1.0, 0.75, 0.47, 0.18), 2.0, true)
+## Behind the road: nothing (the road shader draws the setts, the rails and their light).
+func _draw_surface(_ci: CanvasItem) -> void:
+	pass
 
 
-## A soft glow (centre c, radii rx, ry on screen) laid on the road only: the glow texture mapped onto
-## the road's outline, so nothing spills onto the square or the figures.
-func _road_glow(ci: CanvasItem, c: Vector2, rx: float, ry: float, col: Color) -> void:
-	var f := field_rect()
-	var top := road_edges(f.position.y)
-	var bottom := road_edges(f.end.y)
-	var quad := PackedVector2Array([Vector2(top.x, f.position.y), Vector2(top.y, f.position.y), Vector2(bottom.y, f.end.y), Vector2(bottom.x, f.end.y)])
-	var uvs := PackedVector2Array()
-	for p in quad:
-		uvs.append(Vector2((p.x - c.x) / (rx * 2.0), (p.y - c.y) / (ry * 2.0)) + Vector2(0.5, 0.5))
-	RenderingServer.canvas_item_set_default_texture_repeat(ci.get_canvas_item(), RenderingServer.CANVAS_ITEM_TEXTURE_REPEAT_DISABLED)
-	ci.draw_polygon(quad, PackedColorArray([col]), uvs, FireSkin.glow())
-
-
-## Additive, under the notes: the ember rails on the road's edges with beads riding them down to the
-## hit line on every beat, pulses on the dividers, the fire's haze at the far end, the hit line's
-## glow and the light of a pressed lane.
+## Under the notes, over the road (additive): the hit line's stepped glow on the stones.
 func _draw_under(ci: CanvasItem) -> void:
-	var f := field_rect()
-	var ff := Rect2(Vector2.ZERO, f.size)
-	var k := f.size.x / 720.0
-	var pulse := clampf(beat_pulse, 0.0, 1.0)
-	var soft := FireSkin.soft()
-	for side in 2:
-		var xa := 0.0 if side == 0 else ff.size.x
-		var a := project(Vector2(xa, 0.0))
-		var b := project(Vector2(xa, ff.size.y))
-		var wa := 10.0 * k
-		var wb := 22.0 * k
-		ci.draw_polygon(PackedVector2Array([a - Vector2(wa, 0), a + Vector2(wa, 0), b + Vector2(wb, 0), b - Vector2(wb, 0)]),
-			PackedColorArray([Color(1.0, 0.75, 0.4, 0.8), Color(1.0, 0.75, 0.4, 0.8), Color(1.0, 0.35, 0.1, 0.7), Color(1.0, 0.35, 0.1, 0.7)]),
-			PackedVector2Array([Vector2(0, 0), Vector2(1, 0), Vector2(1, 1), Vector2(0, 1)]), soft)
-		ci.draw_line(a, b, Color(1.0, 0.55, 0.2, 0.9), 4.0 * k)
-		ci.draw_line(a, b, Color(1.0, 0.95, 0.85, 0.9), 1.5)
-	# Beads: one per beat on each rail, arriving at the hit line on the beat.
-	if spb > 0.0 and beat > -999.0:
-		var pps := _px_per_s()
-		var hl := LaneSkin.hit_line_y(ff)
-		var b0 := floori(beat)
-		var g := FireSkin.glow()
-		for n in range(b0, b0 + int(LOOKAHEAD / maxf(note_speed, 0.1) / spb) + 3):
-			var y := hl - (float(n) - beat) * spb * pps
-			if y < 0.0 or y > ff.size.y:
-				continue
-			var w := road_scale(y)
-			var fade := clampf(y / (ff.size.y * 0.08), 0.0, 1.0)
-			var r := (10.0 * w + 3.0) * k * 4.0
-			for xa in [0.0, ff.size.x]:
-				var p := project(Vector2(xa, y))
-				ci.draw_texture_rect(g, Rect2(p - Vector2(r, r), Vector2(r, r) * 2.0), false, Color(1.0, 0.75, 0.4, 0.95 * fade))
-			for u in [1.0 / 3.0, 2.0 / 3.0]:
-				var p := project(Vector2(ff.size.x * u, y))
-				ci.draw_texture_rect(g, Rect2(p - Vector2(r * 0.25, r * 0.9), Vector2(r * 0.5, r * 1.8)), false, Color(1.0, 0.7, 0.4, 0.3 * fade))
-	# The fire's light across the far third of the road and its long reflection down the middle,
-	# breathing with the beat; the hit line pours a little warm light on the stone nearest the player.
-	var fe := far_end()
-	var fc := fe.get_center()
-	var flick := 0.94 + 0.06 * sin(_clock * 9.0) * sin(_clock * 5.3)
-	_road_glow(ci, fc, 470.0 * k, 470.0 * k, Color(1.0, 0.55, 0.2, (0.42 + 0.1 * pulse) * flick))
-	_road_glow(ci, fc, 196.0 * k, 700.0 * k, Color(1.0, 0.67, 0.31, (0.34 + 0.08 * pulse) * flick))
-	var hp := project(Vector2(ff.size.x * 0.5, LaneSkin.hit_line_y(ff)))
-	_road_glow(ci, hp, 420.0 * k, 420.0 * k, Color(1.0, 0.47, 0.16, 0.14))
-	# Divider glow, soft and faint.
-	for u in [1.0 / 3.0, 2.0 / 3.0]:
-		ci.draw_line(project(Vector2(ff.size.x * u, 0.0)), project(Vector2(ff.size.x * u, LaneSkin.hit_line_y(ff))), Color(1.0, 0.6, 0.3, 0.1), 7.0 * k, true)
-	# Ember specks drifting along the road's outer margins, outside the gem paths.
-	for i in 46:
-		var v := fposmod(WoodcutDraw.hash01(i, 61) + _clock * 0.02 * (0.5 + WoodcutDraw.hash01(i, 67)), 1.0)
-		var y := ff.size.y * v * 0.95
-		var side := -1.0 if i % 2 == 0 else 1.0
-		var u := 0.5 + side * (0.45 + 0.04 * WoodcutDraw.hash01(i, 71))
-		var p := project(Vector2(ff.size.x * u, y))
-		var sz := (1.0 + 2.0 * WoodcutDraw.hash01(i, 73)) * road_scale(y) * k
-		var tw := 0.5 + 0.5 * sin(_clock * (2.0 + 3.0 * WoodcutDraw.hash01(i, 79)) + float(i))
-		ci.draw_rect(Rect2(p, Vector2(sz, sz)), Color(1.0, 0.55 + 0.35 * WoodcutDraw.hash01(i, 83), 0.24, (0.35 + 0.5 * WoodcutDraw.hash01(i, 89)) * tw))
-	var hy := project(Vector2(0.0, LaneSkin.hit_line_y(ff))).y
 	var span := _screen_span()
-	FireSkin.draw_hit_glow(ci, span.x, span.y, hy, pulse)
+	FireSkin.draw_hit_glow(ci, span.x, span.y, hit_line_screen_y(), beat_env())
 
 
 ## Additive, over the notes: the hit bursts, upright at their projected place, and sparks thrown up
@@ -482,13 +542,19 @@ func _draw_fx(ci: CanvasItem) -> void:
 				var ph := fposmod(WoodcutDraw.hash01(j, 91 + lane) + _clock * (1.2 + WoodcutDraw.hash01(j, 97)), 1.0)
 				var x := r.position.x + w * (lane + 0.5) + (WoodcutDraw.hash01(j, 101) - 0.5) * w * 0.8
 				var y := r.position.y + 8.0 - ph * 46.0
-				ci.draw_rect(Rect2(x, y, 2.0, 2.0 + 3.0 * WoodcutDraw.hash01(j, 103)), Color(1.0, 0.6 + 0.35 * WoodcutDraw.hash01(j, 107), 0.27, (0.9 - 0.8 * ph)))
+				if ph > 0.85:
+					continue
+				var col: Color = PixelPalette.FIRE[7 - int(ph * 4.0)]
+				ci.draw_rect(Rect2(PxArt.snap(x), PxArt.snap(y), PxArt.PX, PxArt.PX * (2.0 if ph < 0.3 else 1.0)), col)
 	var i := 0
 	while i < _bursts.size():
 		var b: Array = _bursts[i]
 		var age := _clock - float(b[2])
 		var pos: Vector2 = b[0]
-		if FireSkin.draw_burst(ci, project(pos), str(b[1]), age, upright_scale(pos.y)):
+		var at := project(pos)
+		if absf(pos.y - LaneSkin.hit_line_y(field_rect())) < 2.0:
+			at.y = hit_line_screen_y()
+		if FireSkin.draw_burst(ci, at, str(b[1]), age, upright_scale(pos.y)):
 			i += 1
 		else:
 			_bursts.remove_at(i)
@@ -501,10 +567,19 @@ func _draw_hit_line() -> void:
 	for lane in 3:
 		xs.append(project(lane_center(lane)).x)
 		lit.append(_lane_glow(lane))
+	var miss := []
+	for lane in 3:
+		miss.append(_flash_kind[lane] == "miss" and _clock - _flash[lane] < FLASH_TIME * 1.5)
 	var hl := LaneSkin.hit_line_y(field_rect())
-	var y := project(Vector2(0.0, hl)).y
+	var y := hit_line_screen_y()
 	var span := _screen_span()
-	FireSkin.draw_hit_line(self, span.x, span.y, y, xs, 0.33 * FireSkin.REF_LANE * upright_scale(hl), lit, clampf(beat_pulse, 0.0, 1.0))
+	FireSkin.draw_hit_line(self, span.x, span.y, y, xs, 0.33 * FireSkin.REF_LANE * upright_scale(hl), lit, beat_env(), miss)
+
+
+## The hit line's height on screen, on the art grid (anchored at the road's far end).
+func hit_line_screen_y() -> float:
+	var f := field_rect()
+	return PxArt.snap(project(Vector2(0.0, LaneSkin.hit_line_y(f))).y, f.position.y)
 
 
 ## The whole screen's width in this control's coordinates (x from, x to): the hit line runs edge to
@@ -548,9 +623,11 @@ func _draw_timing_ticks(ci: CanvasItem, field: Rect2) -> void:
 		var y := hl + clampf(off / span, -1.0, 1.0) * reach
 		var r: Rect2 = rects[clampi(int(o[2]), 0, 2)]
 		var dash := minf(r.size.x * 0.14, 34.0)
+		if a < 0.3:
+			continue
 		for x0 in [r.position.x + 6.0, r.end.x - 6.0 - dash]:
-			ci.draw_line(Vector2(x0, y), Vector2(x0 + dash, y), Color(Palette.INK, a * 0.8), 9.0)
-			ci.draw_line(Vector2(x0, y), Vector2(x0 + dash, y), Color(col, a), 5.0)
+			ci.draw_rect(Rect2(x0 - 3.0, y - 6.0, dash + 6.0, 12.0), PixelPalette.K[0])
+			ci.draw_rect(Rect2(x0, y - 3.0, dash, 6.0), col)
 
 
 ## The step ticks: a bold chevron at both edges of the lane, pointing up and cool above the hit line
@@ -577,11 +654,13 @@ func _draw_step_ticks(ci: CanvasItem, field: Rect2) -> void:
 		var inset := half + 14.0
 		var y := hl + d * 30.0
 		var col := UIKit.side_color(side)
+		if a < 0.3:
+			continue
 		for cx in [r.position.x + inset, r.end.x - inset]:
 			var tip := Vector2(cx, y + d * half * 0.8)
 			var pts := PackedVector2Array([Vector2(cx - half, y - d * half * 0.2), tip, Vector2(cx + half, y - d * half * 0.2)])
-			ci.draw_polyline(pts, Color(Palette.INK, a * 0.9), 16.0, true)
-			ci.draw_polyline(pts, Color(col, a), 9.0, true)
+			ci.draw_polyline(pts, PixelPalette.K[0], 18.0)
+			ci.draw_polyline(pts, col, 10.0)
 
 
 ## The early/late chevron over a burst: up and cool above the hit for early, down and warm below it
@@ -590,10 +669,10 @@ func _draw_chevron(ci: CanvasItem, pos: Vector2, side: String, age: float) -> vo
 	var t := clampf(age / LaneSkin.BURST_TIME, 0.0, 1.0)
 	var a := minf(1.0, pow(1.0 - t, 1.2) * 1.3)
 	var d := -1.0 if side == "early" else 1.0
+	if a < 0.35:
+		return
 	var cp := pos + Vector2(0.0, d * (30.0 + 26.0 * (1.0 - pow(1.0 - t, 3.0))))
-	var chev := PackedVector2Array([cp + Vector2(-26.0, -d * 15.0), cp, cp + Vector2(26.0, -d * 15.0)])
-	ci.draw_polyline(chev, Color(Palette.INK, a), 17.0, true)
-	ci.draw_polyline(chev, Color(UIKit.side_color(side), a), 9.0, true)
+	FireSkin.px_chevron(ci, cp, 8, d, UIKit.side_color(side))
 
 
 func _draw_marks() -> void:
@@ -612,13 +691,22 @@ func _draw_marks() -> void:
 		var c := Vector2(r.position.x + w * (lane + 0.5), r.get_center().y)
 		match str(m[0]):
 			"wrong":
-				var s := minf(w, r.size.y) * 0.26
-				for dd in [Vector2(s, s), Vector2(s, -s)]:
-					draw_line(c - dd, c + dd, Color(Palette.INK, a), 26.0)
-					draw_line(c - dd, c + dd, Color("#e2574a", a), 14.0)
+				# a red pixel X on the button pressed
+				var n := int(minf(w, r.size.y) * 0.26 / PxArt.PX)
+				var o := (c / PxArt.PX).round() * PxArt.PX
+				for pass_ in 2:
+					for k in range(-n, n + 1):
+						for sd in [-1.0, 1.0]:
+							var q := o + Vector2(float(k), float(k) * sd) * PxArt.PX
+							var rr := Rect2(q - Vector2(PxArt.PX, PxArt.PX), Vector2(PxArt.PX, PxArt.PX) * 2.0)
+							if pass_ == 0:
+								draw_rect(rr.grow(PxArt.PX), PixelPalette.K[0])
+							else:
+								draw_rect(rr, PixelPalette.RED[4])
 			"faint":
 				var p := project(lane_center(lane))
-				draw_arc(p, 40.0, 0.0, TAU, 32, Color(Palette.ASH, a * 0.45), 4.0)
+				if a > 0.4:
+					FireSkin.px_ring(self, p, 16.0, 7.0, 1.0, PixelPalette.BONE[1])
 			"rope":
 				var y := r.position.y + 14.0
 				draw_line(Vector2(r.position.x + 20.0, y), Vector2(r.end.x - 20.0, y), Color(Palette.ROPE_DARK, a), 16.0)
@@ -657,9 +745,6 @@ func _draw_flat_notes(ci: CanvasItem, field: Rect2) -> void:
 				if not n.finished and not (n.done and not n.holding):
 					var head := minf(y, hl) if n.holding else y
 					FireSkin.draw_sash(ci, lanes[n.lane], head, e[2], n.holding, field)
-			Note.Kind.BELL, Note.Kind.RING:
-				if not n.done:
-					FireSkin.draw_bar(ci, field, y, n.up)
 			Note.Kind.REST:
 				if not n.finished:
 					FireSkin.draw_band(ci, field, e[2], y)
@@ -701,14 +786,17 @@ func _draw_upright() -> void:
 				FireSkin.draw_gem(self, project(Vector2(cx, head)), upright_scale(head), false, a)
 			Note.Kind.BELL:
 				if not n.done:
+					_draw_bell_bar(field, y, n.up, a)
 					_bell_words(field, y, n.up, a)
 					FireSkin.draw_badge(self, project(Vector2(field.get_center().x, y)), upright_scale(y), a)
 			Note.Kind.RING:
 				if not n.done:
 					var sc := upright_scale(y)
+					_draw_bell_bar(field, y, n.up, a)
 					FireSkin.draw_badge(self, project(Vector2(field.get_center().x, y)), sc, a)
 					var p := project(Vector2(lanes[n.lane].get_center().x, y))
-					draw_polyline(FireSkin.ellipse_pts(p, 88.0 * sc, 36.0 * sc), Color(FireSkin.CRIMSON, a), maxf(3.0, 7.0 * sc), true)
+					var rr := float(FireSkin.note_rx(sc)) + 4.0
+					FireSkin.px_ring(self, p + Vector2(0, PxArt.PX), rr, rr * 0.46 + 1.0, 2.0, Color(PixelPalette.RED[3], a))
 					FireSkin.draw_gem(self, p, sc, false, a)
 			Note.Kind.SWIPE:
 				if not n.done:
@@ -720,22 +808,26 @@ func _draw_upright() -> void:
 		_rest_words(field, r[0], r[1], taken)
 
 
-## "Raise … Bells" (or "Lower … Bells") carved into the bell bar either side of its badge, upright,
-## sized to the bar's height on screen.
+## The bell bar, upright across the road between its outer rails at flat depth y.
+func _draw_bell_bar(field: Rect2, y: float, up: bool, a: float) -> void:
+	var p := project(Vector2(field.get_center().x, y))
+	var e := road_edges(p.y)
+	FireSkin.draw_bar(self, e.x - PxArt.PX, e.y + PxArt.PX, p.y, upright_scale(y), up, a)
+
+
+## "Raise … Bells" (or "Lower … Bells") on the bell bar either side of its badge, upright, sized to
+## the bar's height on screen.
 func _bell_words(field: Rect2, y: float, up: bool, a: float) -> void:
-	var w := road_scale(y)
-	var bar_h := float((FireCells.CELLS["bar_up"][0] as Vector2).y) * 0.72 * w * w / TOP_W if _road_on() else 65.0
-	var fs := int(round(minf(34.0 * w, bar_h * 0.5)))
-	if fs < 9:
+	var h := FireSkin.bar_h(upright_scale(y))
+	if h < 9:
 		return
-	var font := FireSkin.carved_font(0.3)
+	var P := PxArt.PX
 	for sd in [-1.0, 1.0]:
 		var text := tr("lane_bells") if sd > 0.0 else tr("lane_raise" if up else "lane_lower")
 		var p := project(Vector2(field.get_center().x + sd * field.size.x * 0.21, y))
-		var tw := font.get_string_size(text, HORIZONTAL_ALIGNMENT_LEFT, -1, fs).x
-		var pos := Vector2(p.x - tw * 0.5, p.y + fs * 0.32)
-		draw_string(font, pos + Vector2(0.0, 1.0), text, HORIZONTAL_ALIGNMENT_LEFT, -1, fs, Color(1.0, 0.9, 0.6, 0.35 * a))
-		draw_string(font, pos, text, HORIZONTAL_ALIGNMENT_LEFT, -1, fs, Color(0.16, 0.07, 0.016, a))
+		# dark brown pixel capitals set into the gold plank, on its middle row
+		var top := roundf(p.y - (h + 2) * 0.5 * P) + P * floorf((h - 8) * 0.5 + 1.0) - 2.0 * P
+		PxType.draw(self, "caps", Vector2(p.x, top), text, Color(PixelPalette.GOLD[1], a), 1, 0)
 
 
 ## Whether a note falls between the beats (drawn smaller, in a dashed ring).
@@ -771,18 +863,15 @@ func _rest_words(field: Rect2, y_a: float, y_b: float, taken: Array[float] = [])
 			best_gap = gap
 			best_y = cy
 		cy += 6.0
-	var font := FireSkin.carved_font(0.3)
-	var sc := clampf(road_scale(best_y), 0.6, 1.0)
-	var fs := int(round(30.0 * sc))
+	var P := PxArt.PX
 	var text := tr("lane_still")
-	var w := font.get_string_size(text, HORIZONTAL_ALIGNMENT_LEFT, -1, fs).x
-	var p := project(Vector2(field.get_center().x, best_y))
-	var half := fs * 0.72
-	var back := Rect2(p.x - w * 0.5 - 14.0 * sc, p.y - half, w + 28.0 * sc, half * 2.0)
-	draw_rect(back, Color("#10132e"))
-	draw_rect(back, FireSkin.STILL_BLUE, false, 2.0)
-	var pos := Vector2(p.x - w * 0.5, p.y + fs * 0.36)
-	draw_string(font, pos, text, HORIZONTAL_ALIGNMENT_LEFT, -1, fs, Color("#eef2ff"))
+	var w := PxType.width("caps", text)
+	var p := project(Vector2(field.get_center().x, best_y)).round()
+	var back := Rect2(roundf((p.x - w * 0.5) / P) * P - 5.0 * P, roundf(p.y / P) * P - 6.0 * P, roundf(w / P) * P + 10.0 * P, 13.0 * P)
+	draw_rect(back.grow(P), PixelPalette.K[0])
+	draw_rect(back, FireSkin.STILL_BLUE)
+	draw_rect(back.grow(-P), PixelPalette.NAVY[1])
+	PxType.draw(self, "caps", Vector2(p.x, back.position.y + 2.0 * P), text, PixelPalette.STAR[1], 1, 0)
 	_rest_label_y = best_y
 
 
@@ -799,19 +888,20 @@ func _gone(n: Note, t: float) -> bool:
 
 func _draw_buttons() -> void:
 	var r := buttons_rect()
-	# The panel under the plates, across the whole screen: near-black, with a thin ember line and the
-	# hit line's glow spilling over its top edge.
+	# The panel under the plates, across the whole screen: deep navy, closed on top by a gold rule.
 	var span := _screen_span()
-	var pr := Rect2(span.x, r.position.y, span.y - span.x, r.size.y + 400.0)
-	draw_polygon(PackedVector2Array([pr.position, Vector2(pr.end.x, pr.position.y), pr.end, Vector2(pr.position.x, pr.end.y)]),
-		PackedColorArray([Color("#0b0712"), Color("#0b0712"), Color("#050309"), Color("#050309")]))
-	draw_polygon(PackedVector2Array([pr.position, Vector2(pr.end.x, pr.position.y), Vector2(pr.end.x, pr.position.y + 40.0), Vector2(pr.position.x, pr.position.y + 40.0)]),
-		PackedColorArray([Color(1.0, 0.47, 0.16, 0.3), Color(1.0, 0.47, 0.16, 0.3), Color(1.0, 0.47, 0.16, 0.0), Color(1.0, 0.47, 0.16, 0.0)]))
-	draw_line(pr.position, Vector2(pr.end.x, pr.position.y), Color(1.0, 0.55, 0.2, 0.55), 1.5)
+	var P := PxArt.PX
+	var top := PxArt.snap(r.position.y, field_rect().position.y)
+	draw_rect(Rect2(span.x, top, span.y - span.x, r.size.y + 400.0), PixelPalette.NAVY[0])
+	draw_rect(Rect2(span.x, top, span.y - span.x, P), PixelPalette.K[0])
+	draw_rect(Rect2(span.x, top + P, span.y - span.x, P), PixelPalette.GOLD[2])
+	draw_rect(Rect2(span.x, top + P * 2.0, span.y - span.x, P), PixelPalette.K[0])
 	var w := r.size.x / 3.0
-	var pad := 10.0
+	var pad := 3.0 * P
 	for lane in 3:
-		var br := Rect2(r.position.x + w * lane + pad, r.position.y + pad, w - pad * 2.0, r.size.y - pad * 2.0)
+		var x0 := PxArt.snap(r.position.x + w * lane + pad * (1.0 if lane == 0 else 0.5), field_rect().get_center().x)
+		var x1 := PxArt.snap(r.position.x + w * (lane + 1) - pad * (1.0 if lane == 2 else 0.5), field_rect().get_center().x)
+		var br := Rect2(x0, top + P * 5.0, x1 - x0, PxArt.snap(r.end.y - pad, top) - top - P * 5.0)
 		FireSkin.draw_button(self, br, lane, _button_state(lane))
 
 
