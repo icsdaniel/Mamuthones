@@ -110,6 +110,7 @@ func build() -> void:
 		(bg as ColorRect).color = Palette.BLACK
 	else:
 		backdrop = StreetBackdrop.new()
+		PxType.smooth = not bool(args.get("embedded", false))
 		backdrop.name = "Backdrop"
 		backdrop.bell_set = str(args.get("bell_set", "village"))
 		bg = backdrop

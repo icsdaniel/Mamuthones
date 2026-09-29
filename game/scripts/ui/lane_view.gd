@@ -67,6 +67,10 @@ func word_spot(lane: int) -> Vector2:
 	var f := field_rect()
 	var hl := LaneSkin.hit_line_y(f)
 	var x := lane_center(lane).x if lane >= 0 else f.get_center().x
+	if street != null:
+		# on the street: in the gap between the hit rings and the buttons
+		var hy := hit_line_screen_y()
+		return Vector2(project(Vector2(x, hl)).x, (hy + buttons_rect().position.y) * 0.5 + 12.0)
 	return project(Vector2(x, hl + (f.end.y - hl) * 0.5))
 
 

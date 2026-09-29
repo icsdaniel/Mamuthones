@@ -76,6 +76,7 @@ func open(name: String, args: Dictionary = {}) -> Screen:
 	var prev := current()
 	stack.append(screen)
 	_layer.add_child(screen)
+	PxType.smooth = false
 	screen.build()
 	if prev != null:
 		prev.hide()
@@ -92,6 +93,7 @@ func replace(name: String, args: Dictionary = {}) -> Screen:
 	var screen := _make(name, args)
 	stack.append(screen)
 	_layer.add_child(screen)
+	PxType.smooth = false
 	screen.build()
 	_enter(screen, 1.0)
 	screen_changed.emit(screen)
@@ -115,6 +117,7 @@ func back() -> void:
 	var top: Screen = stack.pop_back()
 	top.queue_free()
 	var prev := current()
+	PxType.smooth = prev.screen_name() == "play_screen" and prev.get("backdrop") != null
 	prev.show()
 	prev.on_resume()
 	_enter(prev, -1.0)
@@ -128,6 +131,7 @@ func rebuild_all() -> void:
 		for c in s.get_children():
 			s.remove_child(c)
 			c.queue_free()
+		PxType.smooth = false
 		s.build()
 
 

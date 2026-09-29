@@ -20,9 +20,22 @@ const SIZES := {"caps": 10, "caps_gold": 10, "big": 20, "big_gold": 20, "score":
 const BASE := {"caps": 9, "caps_gold": 9, "big": 18, "big_gold": 18, "score": 10, "count": 40}
 
 static var _fonts := {}
+## Set while the street play screen is up: the faces become Daniele's-art type (Alegreya, smooth,
+## with a dark outline) instead of the bitmap ones, at SMOOTH_SIZES.
+static var smooth := false
+const SMOOTH_FONTS := {"caps": "AlegreyaSans-ExtraBold", "caps_gold": "AlegreyaSans-ExtraBold", "big": "AlegreyaSans-ExtraBold",
+	"big_gold": "AlegreyaSans-ExtraBold", "score": "AlegreyaSans-ExtraBold", "count": "AlegreyaSans-ExtraBold"}
+const SMOOTH_SIZES := {"caps": 28, "caps_gold": 28, "big": 58, "big_gold": 58, "score": 40, "count": 150}
+const SMOOTH_GOLD := Color("#ffd35a")
+const SMOOTH_OUTLINE := Color("#0a0608")
 
 
 static func font(face: String) -> Font:
+	if smooth:
+		var key := "smooth_" + face
+		if not _fonts.has(key):
+			_fonts[key] = load("res://fonts/%s.ttf" % SMOOTH_FONTS.get(face, "AlegreyaSans-ExtraBold"))
+		return _fonts[key]
 	if _fonts.has(face):
 		return _fonts[face]
 	var f: Font = null
@@ -40,6 +53,8 @@ static func font(face: String) -> Font:
 
 ## The font size that sets `face` at k art px per font px.
 static func size(face: String, k := 1) -> int:
+	if smooth:
+		return int(SMOOTH_SIZES.get(face, 28)) * k
 	return int(SIZES.get(face, 10) * PxArt.PX) * k
 
 
@@ -54,6 +69,15 @@ static func label(l: Label, face: String, color := Color.WHITE, k := 1) -> void:
 	l.add_theme_color_override("font_shadow_color", Color(0, 0, 0, 0))
 	l.add_theme_constant_override("line_spacing", 0)
 	l.material = null
+	if smooth:
+		l.add_theme_color_override("font_color", color * _ink(face))
+		l.add_theme_color_override("font_outline_color", SMOOTH_OUTLINE)
+		l.add_theme_constant_override("outline_size", 8 if SMOOTH_SIZES.get(face, 28) > 40 else 6)
+
+
+## The smooth faces' own ink: gold for the gold faces and the figures, white for the rest.
+static func _ink(face: String) -> Color:
+	return SMOOTH_GOLD if face.ends_with("_gold") or face == "score" or face == "count" else Color.WHITE
 
 
 ## Width of `text` on screen in `face` at k.
@@ -76,4 +100,9 @@ static func draw(ci: CanvasItem, face: String, pos: Vector2, text: String, color
 		var w := f.get_string_size(text, HORIZONTAL_ALIGNMENT_LEFT, -1, fs).x
 		x -= w * (0.5 if align == 0 else 1.0)
 	var p := Vector2(roundf(x / PxArt.PX) * PxArt.PX, roundf(pos.y)) + Vector2(0.0, f.get_ascent(fs))
+	if smooth:
+		p = Vector2(roundf(x), roundf(pos.y)) + Vector2(0.0, f.get_ascent(fs))
+		ci.draw_string_outline(f, p, text, HORIZONTAL_ALIGNMENT_LEFT, -1, fs, maxi(6, fs / 7), Color(SMOOTH_OUTLINE, color.a))
+		ci.draw_string(f, p, text, HORIZONTAL_ALIGNMENT_LEFT, -1, fs, color * _ink(face))
+		return
 	ci.draw_string(f, p, text, HORIZONTAL_ALIGNMENT_LEFT, -1, fs, color)
