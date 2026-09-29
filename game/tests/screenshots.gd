@@ -152,6 +152,8 @@ func _render(shot: Dictionary, size: Vector2i, locale: String, dir: String) -> v
 	vp.size_2d_override_stretch = true
 	vp.render_target_update_mode = SubViewport.UPDATE_ALWAYS
 	vp.transparent_bg = false
+	# as the game's own window (project setting): nearest, so the pixel art stays square in the shots
+	vp.canvas_item_default_texture_filter = Viewport.DEFAULT_CANVAS_ITEM_TEXTURE_FILTER_NEAREST
 	root.add_child(vp)
 	var bg := ColorRect.new()
 	bg.color = Palette.BLACK
