@@ -54,6 +54,8 @@ ROAD_LUT = [
     ["SETT3", "SETT4", "SETT4", "SETT5", "STONE4", "STONE4", "STONE5", "STONE5"],
     # 9 the first beat of a bar
     ["SETT5", "BONE0", "BONE0", "BONE1", "BONE1", "BONE2", "BONE2", "BONE3"],
+    # 10 the lit top of a sett (the fire is up the road)
+    ["SETT2", "SETT2", "SETT3", "STONE2", "STONE3", "STONE3", "STONE4", "STONE5"],
 ]
 
 

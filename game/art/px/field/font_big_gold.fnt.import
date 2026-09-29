@@ -1,0 +1,17 @@
+[remap]
+
+importer="font_data_bmfont"
+type="FontFile"
+uid="uid://cjbyjdh4cot3c"
+path="res://.godot/imported/font_big_gold.fnt-729dd9c85780639568357d64b3d82709.fontdata"
+
+[deps]
+
+source_file="res://art/px/field/font_big_gold.fnt"
+dest_files=["res://.godot/imported/font_big_gold.fnt-729dd9c85780639568357d64b3d82709.fontdata"]
+
+[params]
+
+fallbacks=[]
+compress=true
+scaling_mode=2

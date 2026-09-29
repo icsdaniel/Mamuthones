@@ -279,9 +279,20 @@ static func draw_hit_line(ci: CanvasItem, x0: float, x1: float, y: float, xs: Ar
 	var on := pulse > 0.5
 	var rows := [PixelPalette.K[0], G[3], G[5], G[2], PixelPalette.K[0]] if on else [PixelPalette.K[0], G[2], G[4], G[1], PixelPalette.K[0]]
 	var yy := roundf(y)
-	for i in rows.size():
-		ci.draw_rect(Rect2(x0, yy + float(i - 2) * PX, x1 - x0, PX), rows[i])
 	var trx := target_rx(rx)
+	# the rule runs between the slots, not through them: each slot's hole shows the road
+	var cuts := []
+	for i in xs.size():
+		cuts.append(roundf(float(xs[i])) - float(trx) * PX)
+		cuts.append(roundf(float(xs[i])) + float(trx) * PX)
+	var a := x0
+	for j in range(0, cuts.size() + 1, 2):
+		var b: float = cuts[j] if j < cuts.size() else x1
+		if b > a:
+			for i in rows.size():
+				ci.draw_rect(Rect2(a, yy + float(i - 2) * PX, b - a, PX), rows[i])
+		if j + 1 < cuts.size():
+			a = cuts[j + 1]
 	for i in xs.size():
 		var l: float = lit[i] if i < lit.size() else 0.0
 		var m: bool = miss[i] if i < miss.size() else false

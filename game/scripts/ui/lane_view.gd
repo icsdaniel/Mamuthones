@@ -316,10 +316,10 @@ vec4 road(vec2 UVp) {
 	float pulse = max(env, 0.0);
 	vec2 flat_uv = vec2(clamp(u, 0.0, 1.0), clamp(fy / field.y, 0.0, 1.0));
 	if (outer_d < core_r) {
-		return lut_at(4, 0.25 + 0.4 * pulse + 0.3 * flash - 0.2 * dim, cell);
+		return lut_th(4, 0.25 + 0.4 * pulse + 0.3 * flash - 0.2 * dim, 0.5);
 	}
-	if (outer_d < core_r + px) {
-		return lut_at(5, 0.3 + 0.3 * pulse - 0.2 * dim + 0.3 * clamp(1.0 - fy / (field.y * 0.3), 0.0, 1.0), cell);
+	if (outer_d < core_r + px * (1.0 + step(0.7, w))) {
+		return lut_th(5, 0.3 + 0.3 * pulse - 0.2 * dim + 0.3 * clamp(1.0 - fy / (field.y * 0.3), 0.0, 1.0), 0.5);
 	}
 	if (!inside) {
 		return lut_at(6, 0.2 + 0.6 * clamp(1.0 - fy / (field.y * 0.35), 0.0, 1.0), cell);
@@ -371,7 +371,20 @@ vec4 road(vec2 UVp) {
 			return lut_th(0, light, 0.5);
 		}
 	}
-	// one colour per sett where the light is even: the sett's own threshold, not a checker
+	// each sett is a rounded cobble: its corners fall into the mortar, its top catches the fire's
+	// light from up the road, its lower lip is in shadow; one colour per sett between, chosen by the
+	// sett's own threshold, not a checker
+	float fv = fract(course(cc.y));
+	float fh = fract((fx - off) / bw);
+	if ((fh < 0.06 || fh > 0.94) && (fv < 0.2 || fv > 0.82)) {
+		return lut_th(0, light, 0.5);
+	}
+	if (fv < 0.24) {
+		return lut_th(10, light, 0.5);
+	}
+	if (fv > 0.8) {
+		return lut_th(3, light, 0.5);
+	}
 	float tone = hash(id + 0.37);
 	return lut_th(tone < 0.3 ? 2 : 1, light, 0.15 + 0.7 * hash(id + 1.7));
 }
