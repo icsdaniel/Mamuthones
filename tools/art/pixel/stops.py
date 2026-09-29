@@ -477,6 +477,31 @@ def stop5():
     wd.figure("mamuthone_dark_brown_stand", 148, 128, False, "halfdim")
     wd.figure("mamuthone_black_air", 104, G - 8)
     wd.figure("issohadore_throw", 196, G, False)
+    # someone in the crowd about to be caught by the soha: the rope flies from the Issohadore's loop
+    # over to him and drops round his shoulders
+    ol = Canvas(26, 32)
+    Lo = S.Light(26, 32, ambient=0.35)
+    Lo.add(26, 12, 30, 0.8)
+    S.crowd(ol, Lo, 10, 13, 29, size=1.6, seed=5, fire_x=40, faces=1.0, kerchiefs=0.0, jitter=0)
+    ol.outline("K0")
+    wd.mid.blit(ol, 240 - 12, G + 1 - 30)
+    arc = [(207, 103), (216, 92), (228, 94), (237, 112), (240, 152)]
+    pts = []
+    for i in range(len(arc) - 1):
+        p0 = arc[max(0, i - 1)]
+        p1, p2 = arc[i], arc[i + 1]
+        p3 = arc[min(len(arc) - 1, i + 2)]
+        for k in range(4):
+            t = k / 4
+            t2, t3 = t * t, t * t * t
+            x = 0.5 * (2 * p1[0] + (-p0[0] + p2[0]) * t + (2 * p0[0] - 5 * p1[0] + 4 * p2[0] - p3[0]) * t2 + (-p0[0] + 3 * p1[0] - 3 * p2[0] + p3[0]) * t3)
+            y = 0.5 * (2 * p1[1] + (-p0[1] + p2[1]) * t + (2 * p0[1] - 5 * p1[1] + 4 * p2[1] - p3[1]) * t2 + (-p0[1] + 3 * p1[1] - 3 * p2[1] + p3[1]) * t3)
+            pts.append((round(x), round(y)))
+    # the noose round his shoulders
+    for k in range(13):
+        a = math.pi * 2 * k / 12 - math.pi / 2
+        pts.append((round(240 + 7 * math.cos(a)), round(161 + 3 * math.sin(a))))
+    wd.rope = pts
     wd.row = {"x": 0.3, "ground": G - 30, "front": 2, "back": 2, "isso": 2, "far": True,
               "isso_at": [0.62, G], "onlooker": [0.84, G - 2]}
     return wd
@@ -539,6 +564,7 @@ def stop7():
     L = S.Light(W, H, ambient=0.08)
     L.add(250, 104, 150, 0.35, flat=0.6)
     L.add(26, 150, 70, 0.8)
+    L.add(118, 140, 130, 1.0)
     bg = wd.bg
     S.sky_dusk(bg, 0, 118, seed=71)
     # the sun just gone: a hot line on the horizon
@@ -557,16 +583,22 @@ def stop7():
     S.logs(wd.mid, 26, 152, 20, 8, seed=76)
     wd.glow(26, 136, 40, 30)
     S.crowd(bg, L, -6, 70, 150, size=0.8, seed=77, fire_x=26)
+    # the last great fire, on the road out: the row passes it one last time
+    wd.fire(118, 160, "big")
+    S.logs(wd.mid, 118, 162, 34, 12, seed=79)
+    wd.glow(118, 120, 80, 60)
+    wd.smoke.append({"x": 118, "y": 70})
+    S.crowd(bg, L, 84, 160, 148, size=0.7, seed=80, fire_x=118)
     S.fog(bg, 124, 156, col="RED0", amount=0.4, seed=78)
     wd.fog = {"y0": 140, "y1": H, "col": "RED1"}
     wd.card = (80, 30)
     wd.figure("mamuthone_black_stand", 244, 146, False, "halfdim")
     wd.figure("mamuthone_black_stand", 258, 145, False, "halfdim")
     wd.figure("issohadore_stand", 276, 144, False, "half")
-    wd.figure("mamuthone_black_air", 156, G - 4, True, "dim")
-    wd.figure("mamuthone_black_land", 196, G, True, "dim")
-    wd.figure("issohadore_stand", 232, G + 2, True, "dim")
-    wd.row = {"x": 0.58, "ground": G + 2, "front": 3, "back": 2, "isso": 1, "far": True, "var": "dim", "flip": True}
+    wd.figure("mamuthone_black_air", 166, G - 4, True)
+    wd.figure("mamuthone_black_land", 204, G, True)
+    wd.figure("issohadore_stand", 240, G + 2, True)
+    wd.row = {"x": 0.58, "ground": G + 2, "front": 3, "back": 2, "isso": 1, "far": True, "flip": True}
     return wd
 
 
@@ -717,7 +749,7 @@ def export(worlds):
     ol = Canvas(26, 32)
     Lo = S.Light(26, 32, ambient=0.35)
     Lo.add(26, 12, 30, 0.8)
-    S.crowd(ol, Lo, 12, 13, 29, size=1.6, seed=5, fire_x=40, faces=1.0, kerchiefs=0.0, jitter=0)
+    S.crowd(ol, Lo, 10, 13, 29, size=1.6, seed=5, fire_x=40, faces=1.0, kerchiefs=0.0, jitter=0)
     ol.outline("K0")
     ol.save(os.path.join(OUT, "figs", "onlooker.png"))
     fig_lines.append('\t"onlooker": [Vector2i(%d, %d), Vector2i(%d, %d)],' % (ol.w, ol.h, 12, 30))
