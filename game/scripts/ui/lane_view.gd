@@ -363,6 +363,16 @@ vec4 road(vec2 UVp) {
 			return lut_th(mod(bn, 4.0) < 0.5 ? 9 : 8, light, 0.5);
 		}
 	}
+	// far up the road the joints fade into the fire's haze (a wall of crisp bricks otherwise):
+	// vertical joints thin out first, then the course lines
+	float nearness = clamp(fy / field.y, 0.0, 1.0);
+	if (joint && !seam && hash(id + 3.3) > smoothstep(0.08, 0.5, nearness)) {
+		joint = false;
+	}
+	if (seam && nearness < 0.3) {
+		// a soft course line: the worn tone, not the mortar
+		return lut_th(3, light, 0.5);
+	}
 	if (seam || joint) {
 		float mh = hash(cell * 0.73 + 5.1);
 		if (mh < 0.07 + 0.08 * abs(u - 0.5) * 2.0) {
