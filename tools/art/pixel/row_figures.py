@@ -70,6 +70,40 @@ CHEST_BELL = [
     ["34", "01"],
 ]
 
+_NAME = {v: k for k, v in P.items()}
+_LONE = ("FIRE", "NAVY", "FLEECE")
+
+
+def clean_lone(cv):
+    """No orphans: a firelight, night-sheen or wool-highlight pixel that touches no pixel of its own
+    kind (4-neighbours; any FIRE shade counts for a FIRE pixel) takes the commonest colour round it."""
+    a = cv.a
+    H, W = a.shape[:2]
+    name = [[_NAME[tuple(int(c) for c in a[y, x, :3])] if a[y, x, 3] else None for x in range(W)] for y in range(H)]
+    out = a.copy()
+    for y in range(1, H - 1):
+        for x in range(1, W - 1):
+            v = name[y][x]
+            if v is None or not v.startswith(_LONE):
+                continue
+            nb = [(name[y + dy][x + dx], a[y + dy, x + dx]) for dy, dx in ((0, 1), (0, -1), (1, 0), (-1, 0))]
+            if v.startswith("FIRE"):
+                if any(n and n.startswith("FIRE") for n, _ in nb):
+                    continue
+            elif v.startswith("FLEECE"):
+                # a lighter wool pixel alone among darker ones
+                if any(n == v for n, _ in nb) or not all(n is None or n < v or not n.startswith("FLEECE") for n, _ in nb):
+                    continue
+            elif any(n == v for n, _ in nb):
+                continue
+            pool = [n for n, _ in nb if n and n != "K0" and not n.startswith("FIRE")]
+            if not pool:
+                continue
+            best = max(set(pool), key=pool.count)
+            out[y, x, :3] = P[best]
+    cv.a = out
+
+
 def stamp(cv, rows, x, y, cmap):
     for j, row in enumerate(rows):
         for i, ch in enumerate(row):
@@ -179,9 +213,9 @@ def _drape_head(size_i, lean):
 
 LOCK_SHAPES = [
     # per depth: one hanging lock of wool; h its lit top, b its body ('.' shows the groove under it)
-    [".h.", "hbb", "bbb", "bbb", "bb.", ".b."],
-    [".h.", "hbb", "bbb", "bb.", ".b."],
-    ["hb", "bb", "b."],
+    ["hh.", "hbb", "bbb", "bbb", "bb.", ".b."],
+    ["hh.", "hbb", "bbb", "bb.", ".b."],
+    ["hh", "bb", "b."],
 ]
 LOCK_STEP = [(4, 5), (4, 4), (3, 3)]     # columns and rows between locks, per depth
 # per band (shadow, mid, lit): groove, lock body, lock top - black sheepskin stays in K0/FLEECE0-3
@@ -332,12 +366,12 @@ def row_mamuthone(size="near", pose="stand", var="a", fleece="black"):
 
     # ---- the carriga: big bronze cowbells on the back, behind the far (left) shoulder and down it
     lift = {"stand": 0, "crouch": 1, "air": -q(3), "land": q(2), "land2": q(2)}[pose]
-    swing = {"stand": 0, "crouch": 0, "air": -1, "land": 2, "land2": -2}[pose]
+    swing = {"stand": 0, "crouch": 0, "air": -1, "land": 2, "land2": -1}[pose]
     backs = CARRIGA[size][var]
     for n_, (u, v, a0) in reversed(list(enumerate(backs))):
         k_ = n_ / max(1, len(backs) - 1)
         b, (hx, hy) = back_bell(si, a0 + int(round(swing * (0.5 + 0.5 * k_))))
-        bx = X(u - wide + shear(v))
+        bx = X(u - wide + shear(v) + int(round(swing * 0.5 * k_)))
         by = Y(v - drop - int(round(lift * (0.5 + 0.5 * k_))))
         cv.blit(b, bx - hx, by - hy)
 
@@ -416,6 +450,7 @@ def row_mamuthone(size="near", pose="stand", var="a", fleece="black"):
     hy0 = Y(top + q(10)) + (1 if pose in ("land", "land2") else 0) - my
     cv.blit(head, hx0, hy0)
 
+    clean_lone(cv)
     cv.outline("K0")
     return cv
 

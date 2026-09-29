@@ -392,7 +392,7 @@ func _draw_leader(side: int) -> void:
 	if t >= 0.0:
 		if t < 0.5:
 			pose = "swing"
-		elif t < 0.85:
+		elif t < 0.95:
 			pose = "cast"
 	elif not still and beat > -8.0:
 		# he steps with the beat: down a pixel as the Mamuthones land
@@ -401,13 +401,13 @@ func _draw_leader(side: int) -> void:
 	_shadow(feet, float(pl[1]), 0.0)
 	var at := feet + Vector2(0.0, bob * PX)
 	FigureSprites.draw(self, name, at, PX, side == 1)
-	if t >= 0.0 and t < 0.97:
+	if pose != "stand":
 		_draw_rope(side, at, name, t, amp)
 
 
 ## The soha, a line of hemp-rope pixels on the art grid from his hand: spun as a loop over his head
-## (t < 0.5), cast out and up toward the crowd on his side, away from the road (0.5 .. 0.85), then
-## hauled back in.
+## (t < 0.5), cast out and up toward the crowd on his side, away from the road (0.5 .. 0.75), then
+## hauled back in (.. 0.95).
 func _draw_rope(side: int, at: Vector2, name: String, t: float, amp: float) -> void:
 	var hand_art: Vector2 = FigureCells.HANDS.get(name, Vector2(-6, -60))
 	var out := -1.0 if side == 0 else 1.0        # toward the screen edge
@@ -426,8 +426,8 @@ func _draw_rope(side: int, at: Vector2, name: String, t: float, amp: float) -> v
 		ap = ang + PI
 	else:
 		# cast out and up to the crowd on his side of the road, then hauled back in
-		var k := clampf((t - 0.5) / 0.35, 0.0, 1.0)
-		var back := clampf((t - 0.85) / 0.12, 0.0, 1.0)
+		var k := clampf((t - 0.5) / 0.25, 0.0, 1.0)
+		var back := clampf((t - 0.75) / 0.2, 0.0, 1.0)
 		k = k * (1.0 - back)
 		centre = hand + Vector2(out * (2.0 + 14.0 * k) * (0.5 + 0.5 * amp), -7.0 - 9.0 * sin(k * PI * 0.6))
 		rx = 7.0 + 2.0 * k
