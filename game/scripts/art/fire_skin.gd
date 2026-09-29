@@ -52,7 +52,9 @@ static func sprite(ci: CanvasItem, name: String, at: Vector2, alpha := 1.0, k :=
 	var p := (at - a * PX * k).round()
 	var r := Rect2(p, sz * PX * k)
 	if flip:
-		ci.draw_texture_rect(t, Rect2(r.position.x + r.size.x, r.position.y, -r.size.x, r.size.y), false, Color(1, 1, 1, alpha))
+		ci.draw_set_transform(Vector2(r.end.x, r.position.y), 0.0, Vector2(-1.0, 1.0))
+		ci.draw_texture_rect(t, Rect2(Vector2.ZERO, r.size), false, Color(1, 1, 1, alpha))
+		ci.draw_set_transform(Vector2.ZERO, 0.0, Vector2.ONE)
 	else:
 		ci.draw_texture_rect(t, r, false, Color(1, 1, 1, alpha))
 
@@ -90,7 +92,7 @@ static func px_ring(ci: CanvasItem, c: Vector2, rx: float, ry: float, th: float,
 	var o := c.round()
 	var R := ceili(ry)
 	var rxi := rx - th
-	var ryi := ry - th * ry / maxf(rx, 0.01)
+	var ryi := ry - th
 	for j in range(-R, R):
 		var v := float(j) + 0.5
 		if absf(v) >= ry:
@@ -182,7 +184,9 @@ static func draw_bar(ci: CanvasItem, x0: float, x1: float, y: float, sc: float, 
 		ci.draw_texture_rect_region(tm, Rect2(x, top, w, float(tm.get_height()) * PX), Rect2(0, 0, w / PX, tm.get_height()), a)
 		x += w
 	ci.draw_texture_rect(tc, Rect2(roundf(x0), top, cw, float(tc.get_height()) * PX), false, a)
-	ci.draw_texture_rect(tc, Rect2(end + cw, top, -cw, float(tc.get_height()) * PX), false, a)
+	ci.draw_set_transform(Vector2(end + cw, top), 0.0, Vector2(-1.0, 1.0))
+	ci.draw_texture_rect(tc, Rect2(0.0, 0.0, cw, float(tc.get_height()) * PX), false, a)
+	ci.draw_set_transform(Vector2.ZERO, 0.0, Vector2.ONE)
 
 
 ## Rope-swipe fallback (the rope note is being retired): a plain rope across the road with an arrow.
@@ -454,18 +458,20 @@ static func draw_stomp_hit(ci: CanvasItem, at: Vector2, sc: float, t: float, bot
 		elif t < 0.14:
 			px_ring(ci, o, rx + 1.0, (rx + 1.0) * 0.4, 2.0, F[6])
 		var g1 := 1.0 - pow(1.0 - k, 3.0)
-		var r1 := lerpf(rx + 2.0, rx * 4.2, g1)
-		px_ring(ci, o, r1, r1 * 0.36, 3.0 if k < 0.35 else (2.0 if k < 0.7 else 1.0), _step([F[7], G[5], G[4], G[3], G[2]], k))
+		var r1 := lerpf(rx + 2.0, rx * 2.7, g1)
+		if k < 0.8:
+			px_ring(ci, o, r1, r1 * 0.36, 3.0 if k < 0.4 else 2.0, _step([F[7], G[5], G[4], G[3]], k / 0.8))
 		var k2 := (t - 0.09) / (life - 0.09)
-		if k2 > 0.0:
-			var r2 := lerpf(rx + 1.0, rx * 3.0, 1.0 - pow(1.0 - k2, 2.5))
-			px_ring(ci, o, r2, r2 * 0.36, 1.0, _step([G[5], G[4], G[3], G[2]], k2))
-		_dust(ci, o, rx, k, 26, 1.0, [B[3], B[2], S[5], S[4], S[3]])
+		if k2 > 0.0 and k2 < 0.7:
+			var r2 := lerpf(rx + 1.0, rx * 1.9, 1.0 - pow(1.0 - k2, 2.5))
+			px_ring(ci, o, r2, r2 * 0.36, 2.0, _step([G[5], G[4], G[3]], k2 / 0.7))
+		_dust(ci, o, rx, k, 30, 0.8, [B[3], B[2], S[5], S[4], S[3]])
 		_sparks(ci, o, rx * 0.8, clampf(t / 0.55, 0.0, 1.0), 20, [F[7], F[6], F[5], F[4], F[3]], 1.8)
 	else:
-		var r := lerpf(rx, rx * 2.2, 1.0 - pow(1.0 - k, 2.0))
-		px_ring(ci, o, r, r * 0.36, 2.0 if k < 0.4 else 1.0, _step([G[4], G[3], G[2], G[1]], k))
-		_dust(ci, o, rx, k, 10, 0.55, [B[1], S[4], S[3], S[2]])
+		var r := lerpf(rx, rx * 1.5, 1.0 - pow(1.0 - k, 2.0))
+		if k < 0.75:
+			px_ring(ci, o, r, r * 0.36, 2.0, _step([G[3], G[2], G[1]], k / 0.75))
+		_dust(ci, o, rx, k, 10, 0.45, [B[1], S[4], S[3], S[2]])
 	return true
 
 
@@ -481,7 +487,7 @@ static func _dust(ci: CanvasItem, o: Vector2, rx: float, k: float, n: int, reach
 		var d := rx * (0.9 + 2.2 * _hash(i, 29)) * reach * (1.0 - pow(1.0 - kk, 3.0))
 		var x := side * (rx * 0.7 + d)
 		var y := (_hash(i, 31) - 0.4) * rx * 0.35 - 4.0 * sin(kk * PI) * _hash(i, 37)
-		var s := 2.0 if (i % 3 == 0 and kk < 0.6) else 1.0
+		var s := 2.0 if kk < 0.5 else 1.0
 		ci.draw_rect(Rect2(o + Vector2(roundf(x), roundf(y)) * PX, Vector2(s, s) * PX), _step(ramp, kk))
 
 

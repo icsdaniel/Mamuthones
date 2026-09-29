@@ -26,6 +26,7 @@ var spark_reach := 1.0            ## how high sparks rise, in flame heights
 
 var flame_h := 60.0               ## flame height at rest, art px (before scale_art)
 var flame_w := 26.0               ## half width at the root, art px
+var pyre_k := 0                   ## art px per pyre sprite px (0: follow scale_art)
 
 var _flames: ColorRect
 var _front: Control
@@ -34,6 +35,7 @@ var _sparks: Array = []           ## [x, y (art px from root), vx, vy, born, lif
 var _last_beat := -9999
 var _rng := RandomNumberGenerator.new()
 var _spawn_acc := 0.0
+var _kick := 0.0
 
 
 func _init() -> void:
@@ -63,8 +65,17 @@ func _ready() -> void:
 ## The flare now: 1 on a downbeat, ~0.6 on the other beats, falling away; a little below 0 just
 ## before each beat (the fire draws breath).
 func flare() -> float:
-	var e := PxArt.beat_env(beat, 0.5, 0.6, 0.16)
+	var e := PxArt.beat_env(beat, 0.5, 0.6, 0.16) + _kick
 	return e * (0.35 if reduced_motion else 1.0)
+
+
+## An extra leap now (a full stomp: 1; one thumb: less), dying away over a third of a second, with a
+## burst of sparks.
+func kick(amount := 1.0) -> void:
+	_kick = maxf(_kick, amount * 0.8)
+	var n := int(BURST * amount * (0.35 if reduced_motion else 1.0))
+	for i in n:
+		_spawn(true)
 
 
 ## The flame field in art px (width, height), large enough for the tallest flare.
@@ -74,6 +85,7 @@ func field_art() -> Vector2:
 
 func _process(delta: float) -> void:
 	_clock += delta
+	_kick = maxf(0.0, _kick - delta * 2.4)
 	var f := flare()
 	var fa := field_art()
 	_flames.position = root + Vector2(-floorf(fa.x * 0.5) * px, -(fa.y - 2.0) * px)
@@ -137,7 +149,7 @@ func _draw() -> void:
 	var t := PxArt.scenery("pyre_back")
 	if t == null:
 		return
-	var k := maxi(1, roundi(scale_art))
+	var k := pyre_k if pyre_k > 0 else maxi(1, roundi(scale_art))
 	var at := root + Vector2(-floorf(t.get_width() * 0.5) * px * k, -(t.get_height() - 1) * px * k)
 	PxArt.blit(self, t, at, px * k)
 
@@ -153,7 +165,7 @@ class _Front extends Control:
 		if fire == null:
 			return
 		var px := fire.px
-		var k := maxi(1, roundi(fire.scale_art))
+		var k := fire.pyre_k if fire.pyre_k > 0 else maxi(1, roundi(fire.scale_art))
 		var t := PxArt.scenery("pyre_front")
 		if t != null:
 			PxArt.blit(self, t, fire.root + Vector2(-floorf(t.get_width() * 0.5) * px * k, -(t.get_height() - 1) * px * k), px * k)

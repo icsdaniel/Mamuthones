@@ -30,6 +30,7 @@ var _ground: PxArt.Picture
 var _fire: Bonfire
 var _braziers: Array[Brazier] = []
 var _clock := 0.0
+var _kick := 0.0
 
 
 func _init() -> void:
@@ -64,6 +65,14 @@ func pulse() -> float:
 	return 1.0 - fposmod(beat, 1.0) if beat >= 0.0 else 0.0
 
 
+## The bonfire leaps now, beyond its beat (a stomp: 1 for both thumbs, about 0.4 for one), and its
+## light swells over the square with it.
+func kick(amount := 1.0) -> void:
+	if _fire != null:
+		_fire.kick(amount)
+	_kick = maxf(_kick, amount)
+
+
 ## The road's far end in this control's coordinates: [centre, width].
 func far_end() -> Array:
 	if lanes != null and lanes.is_inside_tree() and is_inside_tree():
@@ -89,7 +98,8 @@ func _process(delta: float) -> void:
 	_clock += delta
 	var g := grid_origin()
 	var px := PxArt.PX
-	var env := PxArt.beat_env(beat, 0.5, 0.6, 0.16) * (0.35 if reduced_motion else 1.0)
+	_kick = maxf(0.0, _kick - delta * 2.4)
+	var env := (PxArt.beat_env(beat, 0.5, 0.6, 0.16) + _kick * 0.8) * (0.35 if reduced_motion else 1.0)
 	var flick := 0.5 + 0.5 * sin(_clock * 9.3) * sin(_clock * 5.7 + 1.3)
 	# The village strip, its far-end row on the far end.
 	var st := PxArt.scenery(STRIP)
