@@ -4,6 +4,8 @@ extends RefCounted
 ## tools/art/pixel/bake_figures.py into res://art/px/figures/. Every screen that shows a character
 ## draws it through here, so the play screen, the title and the story all show the same figures.
 ##
+## The play screen's files have their own drawings, one per depth: row_mamuthone(), row_issohadore().
+##
 ## Sprite names: "mamuthone_<fleece>_<pose>" (fleece "black" or "dark_brown"; pose "stand", "crouch",
 ## "air", "land") and "issohadore_<pose>" (pose "stand", "throw"); "big_" in front for the title-size
 ## drawing. The sprites face right, lit from the right; flip them for the right-hand side of a scene.
@@ -43,6 +45,19 @@ static func mamuthone(fleece: String, pose: String, big := false) -> String:
 
 static func issohadore(pose: String, big := false) -> String:
 	return ("big_" if big else "") + "issohadore_" + pose
+
+
+## The play screen's Mamuthone at depth d ("near", "mid", "far"), pose "stand", "crouch", "air",
+## "land", "land2" (the bells swung the other way) or "dim" (standing, not yet dancing), variant
+## "a" or "b" (tools/art/pixel/row_figures.py). Drawn at PxArt.PX, never scaled.
+static func row_mamuthone(d: String, fleece: String, pose: String, variant := "a") -> String:
+	var fl := fleece if fleece in ["black", "dark_brown"] else "black"
+	return "row_%s_mamuthone_%s_%s_%s" % [d, fl, pose, variant]
+
+
+## The play screen's Issohadore: pose "stand", "swing" (rope hand up) or "cast" (hand out).
+static func row_issohadore(pose: String) -> String:
+	return "row_issohadore_" + pose
 
 
 ## The drawn box of sprite `name` relative to its feet, at px screen pixels per art pixel.
