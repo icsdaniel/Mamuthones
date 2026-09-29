@@ -104,7 +104,7 @@ HAZE_MAP = [
 ]
 
 
-def sky(cv, horizon, seed=11, stars=True, moon=None, top=0, avoid=None):
+def sky(cv, horizon, seed=11, stars=True, moon=None, top=0, avoid=None, density=45):
     """Night sky over rows top..horizon: navy bands deepening upward, dithered at the seams, and
     stars (thinner toward the horizon). avoid: (x, y, rx, ry) kept free of stars (the fire)."""
     xx, yy = cv.grid()
@@ -115,7 +115,7 @@ def sky(cv, horizon, seed=11, stars=True, moon=None, top=0, avoid=None):
         cv._put(region & (idx == i), c)
     if stars:
         r = np.random.default_rng(seed)
-        n = int(cv.w * max(1, horizon - top) / 45)
+        n = int(cv.w * max(1, horizon - top) / density)
         for _ in range(n):
             x = int(r.integers(0, cv.w))
             y = int(top + (r.random() ** 1.8) * (horizon - top) * 0.85)
@@ -650,6 +650,73 @@ def play_ground(W=360, H=480, seed=7):
     return cv, fire
 
 
+def pillar(cv, x, top, w, bottom, fire_x, heat=0.6):
+    """A squat pillar of dressed stone blocks (a brazier stands on it): ashlar courses with mortar,
+    the face toward the fire lit, the other in shadow, a capstone on top."""
+    x, top, w, bottom = int(x), int(top), int(w), int(bottom)
+    toward = 1 if fire_x > x + w / 2 else -1
+    k = heat * 6
+    face = _lv(["NIGHT2", "HILL2", "STONE2", "STONE3", "STONE3", "STONE4", "STONE4"], k)
+    lit = _lv(["HILL2", "STONE3", "STONE4", "STONE5", "STONE5", "STONE6", "STONE6"], k)
+    shade = _lv(["K1", "NIGHT1", "NIGHT2", "STONE1", "STONE1", "STONE2", "STONE2"], k)
+    mortar = _lv(["K1", "K1", "STONE0", "STONE1", "STONE1", "STONE2", "STONE2"], k)
+    cv.rect(x, top, w, bottom - top, face)
+    sw = max(2, w // 4)
+    if toward > 0:
+        cv.rect(x + w - sw, top, sw, bottom - top, lit)
+        cv.rect(x, top, 2, bottom - top, shade)
+    else:
+        cv.rect(x, top, sw, bottom - top, lit)
+        cv.rect(x + w - 2, top, 2, bottom - top, shade)
+    y = top + 3
+    row = 0
+    while y < bottom:
+        cv.hline(x, x + w - 1, y, mortar)
+        off = 0 if row % 2 == 0 else w // 3
+        for jx in range(x + off + w // 2, x + w, max(4, w // 2)):
+            cv.vline(jx, y - 5 if y - 5 > top + 3 else top + 3, y, mortar)
+        y += 6
+        row += 1
+    # the capstone
+    cv.rect(x - 1, top - 3, w + 2, 3, lit)
+    cv.hline(x - 1, x + w, top - 3, _lv(["STONE3", "STONE4", "STONE5", "STONE6", "STONE6", "STONE6", "STONE6"], k))
+    cv.hline(x - 1, x + w, top - 1, shade)
+
+
+def title_scene(W=400, H=250, seed=13):
+    """The title's night in the square: sky with stars and the moon, mountains, the village climbing
+    behind with the bell tower (right), the crowd round the square, and the cobbles lit by the
+    bonfire (the fire, the figures and the braziers are drawn by the game). The picture's bottom
+    row is the scene's bottom; the fire's root at FIRE."""
+    cv = Canvas(W, H)
+    cx = W // 2
+    fire = (cx, 192)
+    ground = 146
+    sky(cv, ground, seed=seed + 1, moon=(cx + 94, 60, 6), avoid=(cx, 120, 50, 110), density=120)
+    mountains(cv, ground - 38, seed=seed + 2, far_base=88, far_amp=22, near_base=100, near_amp=9)
+    cv.rect(0, ground - 38, W, 38, "HILL0")
+    haze(cv, (cx, 150), (70, 95), strength=0.9)
+    village(cv, ground - 3, cx, seed=seed + 3, scale=1.7, tower_x=cx + 60, gap=(cx - 16, cx + 16), heat_r=170.0,
+            rows=((0, 1.0), (9, 0.82), (17, 0.66), (24, 0.5)), tower_h=46)
+    # the back wall of the square under the houses
+    xx, yy = cv.grid()
+    heat = np.clip(1 - np.abs(xx + 0.5 - cx) / 130.0, 0, 1)
+    wall = (yy >= ground - 4) & (yy < ground + 1)
+    cv._put(wall, "STONE1")
+    cv._put(wall & (yy == ground - 4), "STONE2")
+    cv._put(wall & (heat > 0.4) & (yy == ground - 4), "STONE4")
+    cv._put(wall & (heat > 0.4) & (yy > ground - 4), "STONE2")
+    cv._put(wall & (heat < 0.15) & (yy > ground - 4), "HILL0")
+    square(cv, ground + 1, fire, depth=110, light_r=(170, 95), seed=seed + 4, extra_light=None)
+    crowd(cv, 0, cx - 40, ground + 3, cx, seed=seed + 5, scale=1.35, torches=2, heat_r=150.0)
+    crowd(cv, cx + 40, W, ground + 3, cx, seed=seed + 6, scale=1.35, torches=2, heat_r=150.0)
+    # pillars for the braziers at the square's front corners
+    for sx in (-1, 1):
+        px_ = cx + sx * 108 - 9
+        pillar(cv, px_, 205, 18, H, cx, heat=0.45)
+    return cv, fire
+
+
 def lit_twins(cv, fire, radius=(90, 50)):
     """The lit and dim twins: every pixel one step up (lit) or down (dim) its ramp; the plain night
     sky, stars and far hills take the fire's pulse only inside its haze."""
@@ -682,7 +749,11 @@ def main(preview=None):
     pyre(part="back").save(os.path.join(OUT, "pyre_back.png"))
     pyre(part="front").save(os.path.join(OUT, "pyre_front.png"))
     brazier().save(os.path.join(OUT, "brazier.png"))
+    title, tfire = title_scene()
+    tlit, tdim = lit_twins(title, tfire, radius=(80, 130))
+    save_triplet("title_scene", title, tlit, tdim)
     if preview:
+        title.save(os.path.join(preview, "title_bake.png"), scale=2)
         strip.save(os.path.join(preview, "strip.png"), scale=3)
         lit.save(os.path.join(preview, "strip_lit.png"), scale=3)
         ground.save(os.path.join(preview, "ground.png"), scale=2)
