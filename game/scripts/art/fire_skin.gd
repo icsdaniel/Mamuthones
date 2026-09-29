@@ -125,6 +125,20 @@ static func _hash(i: int, salt: int) -> float:
 	return WoodcutDraw.hash01(i, salt)
 
 
+## A chevron of whole art pixels at c pointing up (d -1) or down (d 1), `half` art px wide each side,
+## two pixels thick, in col on a K0 outline.
+static func px_chevron(ci: CanvasItem, c: Vector2, half: int, d: float, col: Color) -> void:
+	var o := (c / PX).round() * PX
+	for pass_ in 2:
+		for i in range(-half, half + 1):
+			var y := o.y + (float(half - absi(i)) * d - float(half) * d * 0.5) * PX
+			var r := Rect2(o.x + float(i) * PX, y - (PX if d < 0.0 else 0.0), PX, 2.0 * PX)
+			if pass_ == 0:
+				ci.draw_rect(r.grow(PX), PixelPalette.K[0])
+			else:
+				ci.draw_rect(r, col)
+
+
 # ------------------------------------------------------------------ upright notes
 
 ## A step: an ember disc with a dark outline. A call (off-beat) step sits in a dashed gold ring.

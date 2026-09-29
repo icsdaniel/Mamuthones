@@ -623,9 +623,11 @@ func _draw_timing_ticks(ci: CanvasItem, field: Rect2) -> void:
 		var y := hl + clampf(off / span, -1.0, 1.0) * reach
 		var r: Rect2 = rects[clampi(int(o[2]), 0, 2)]
 		var dash := minf(r.size.x * 0.14, 34.0)
+		if a < 0.3:
+			continue
 		for x0 in [r.position.x + 6.0, r.end.x - 6.0 - dash]:
-			ci.draw_line(Vector2(x0, y), Vector2(x0 + dash, y), Color(Palette.INK, a * 0.8), 9.0)
-			ci.draw_line(Vector2(x0, y), Vector2(x0 + dash, y), Color(col, a), 5.0)
+			ci.draw_rect(Rect2(x0 - 3.0, y - 6.0, dash + 6.0, 12.0), PixelPalette.K[0])
+			ci.draw_rect(Rect2(x0, y - 3.0, dash, 6.0), col)
 
 
 ## The step ticks: a bold chevron at both edges of the lane, pointing up and cool above the hit line
@@ -652,11 +654,13 @@ func _draw_step_ticks(ci: CanvasItem, field: Rect2) -> void:
 		var inset := half + 14.0
 		var y := hl + d * 30.0
 		var col := UIKit.side_color(side)
+		if a < 0.3:
+			continue
 		for cx in [r.position.x + inset, r.end.x - inset]:
 			var tip := Vector2(cx, y + d * half * 0.8)
 			var pts := PackedVector2Array([Vector2(cx - half, y - d * half * 0.2), tip, Vector2(cx + half, y - d * half * 0.2)])
-			ci.draw_polyline(pts, Color(Palette.INK, a * 0.9), 16.0, true)
-			ci.draw_polyline(pts, Color(col, a), 9.0, true)
+			ci.draw_polyline(pts, PixelPalette.K[0], 18.0)
+			ci.draw_polyline(pts, col, 10.0)
 
 
 ## The early/late chevron over a burst: up and cool above the hit for early, down and warm below it
@@ -665,10 +669,10 @@ func _draw_chevron(ci: CanvasItem, pos: Vector2, side: String, age: float) -> vo
 	var t := clampf(age / LaneSkin.BURST_TIME, 0.0, 1.0)
 	var a := minf(1.0, pow(1.0 - t, 1.2) * 1.3)
 	var d := -1.0 if side == "early" else 1.0
+	if a < 0.35:
+		return
 	var cp := pos + Vector2(0.0, d * (30.0 + 26.0 * (1.0 - pow(1.0 - t, 3.0))))
-	var chev := PackedVector2Array([cp + Vector2(-26.0, -d * 15.0), cp, cp + Vector2(26.0, -d * 15.0)])
-	ci.draw_polyline(chev, Color(Palette.INK, a), 17.0, true)
-	ci.draw_polyline(chev, Color(UIKit.side_color(side), a), 9.0, true)
+	FireSkin.px_chevron(ci, cp, 8, d, UIKit.side_color(side))
 
 
 func _draw_marks() -> void:
@@ -687,13 +691,22 @@ func _draw_marks() -> void:
 		var c := Vector2(r.position.x + w * (lane + 0.5), r.get_center().y)
 		match str(m[0]):
 			"wrong":
-				var s := minf(w, r.size.y) * 0.26
-				for dd in [Vector2(s, s), Vector2(s, -s)]:
-					draw_line(c - dd, c + dd, Color(Palette.INK, a), 26.0)
-					draw_line(c - dd, c + dd, Color("#e2574a", a), 14.0)
+				# a red pixel X on the button pressed
+				var n := int(minf(w, r.size.y) * 0.26 / PxArt.PX)
+				var o := (c / PxArt.PX).round() * PxArt.PX
+				for pass_ in 2:
+					for k in range(-n, n + 1):
+						for sd in [-1.0, 1.0]:
+							var q := o + Vector2(float(k), float(k) * sd) * PxArt.PX
+							var rr := Rect2(q - Vector2(PxArt.PX, PxArt.PX), Vector2(PxArt.PX, PxArt.PX) * 2.0)
+							if pass_ == 0:
+								draw_rect(rr.grow(PxArt.PX), PixelPalette.K[0])
+							else:
+								draw_rect(rr, PixelPalette.RED[4])
 			"faint":
 				var p := project(lane_center(lane))
-				draw_arc(p, 40.0, 0.0, TAU, 32, Color(Palette.ASH, a * 0.45), 4.0)
+				if a > 0.4:
+					FireSkin.px_ring(self, p, 16.0, 7.0, 1.0, PixelPalette.BONE[1])
 			"rope":
 				var y := r.position.y + 14.0
 				draw_line(Vector2(r.position.x + 20.0, y), Vector2(r.end.x - 20.0, y), Color(Palette.ROPE_DARK, a), 16.0)
