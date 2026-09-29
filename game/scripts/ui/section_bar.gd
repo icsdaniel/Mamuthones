@@ -55,21 +55,20 @@ func section_name(t: float) -> String:
 	return out + (" " + num if num != "" else "")
 
 
-## A 4 px line along the screen's top edge: dark, filling ember to gold, a tick at each section start
-## (bone once passed), and a glowing head.
+## A line of pixels along the screen's top edge: a dark groove filling ember to gold as the song goes,
+## a tick at each section start (cream once passed), and a hot head where it has got to.
 func _draw() -> void:
-	var h := 4.0
-	draw_rect(Rect2(0.0, 0.0, size.x, h), Color(0.12, 0.07, 0.13, 0.95))
-	var w := size.x * clampf(progress, 0.0, 1.0)
-	if w > 1.0:
-		var c0 := Color("#7a2a0c")
-		var c1 := Color("#ffc86a")
-		draw_polygon(PackedVector2Array([Vector2(0, 0), Vector2(w, 0), Vector2(w, h), Vector2(0, h)]), PackedColorArray([c0, c1, c1, c0]))
+	var P := PxArt.PX
+	draw_rect(Rect2(0.0, 0.0, size.x, 2.0 * P), PixelPalette.K[0])
+	draw_rect(Rect2(0.0, 0.0, size.x, P), PixelPalette.NAVY[1])
+	var w := floorf(size.x * clampf(progress, 0.0, 1.0) / P) * P
+	if w >= P:
+		draw_rect(Rect2(0.0, 0.0, w, P), PixelPalette.GOLD[3])
+		draw_rect(Rect2(0.0, 0.0, w * 0.5, P), PixelPalette.FIRE[3])
+		draw_rect(Rect2(w - 2.0 * P, 0.0, 2.0 * P, P), PixelPalette.FIRE[7])
 	for m in _marks:
 		if m <= 0.001:
 			continue
-		var x := size.x * m
-		draw_rect(Rect2(x - 1.0, 0.0, 2.0, 8.0), Color("#fff0c8") if m <= progress else Color("#6a5a70"))
-	if w > 1.0:
-		var g := FireSkin.glow()
-		draw_texture_rect(g, Rect2(w - 18.0, -16.0, 36.0, 36.0), false, Color(1.0, 0.9, 0.67, 0.9))
+		var x := floorf(size.x * m / P) * P
+		draw_rect(Rect2(x, 0.0, P, 3.0 * P), PixelPalette.K[0])
+		draw_rect(Rect2(x, 0.0, P, 2.0 * P), PixelPalette.BONE[3] if m <= progress else PixelPalette.NAVY[3])

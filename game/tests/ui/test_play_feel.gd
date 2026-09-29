@@ -252,3 +252,65 @@ func test_bell_cue_is_on_for_easy_and_medium_by_default() -> void:
 	check(not script.bell_cue_on("easy"), "Settings can turn it off")
 	UIHarness.restore_profile()
 
+
+
+func test_words_of_two_lanes_never_print_over_each_other() -> void:
+	var w := JudgementWords.new()
+	w.size = Vector2(720, 1440)
+	tree.root.add_child(w)
+	await tree.process_frame
+	w.show_word("Perfect", "", Vector2(120, 1100), "perfect")
+	w.show_word("Perfect", "", Vector2(360, 1100), "perfect")
+	await tree.process_frame
+	check_eq(w.shown().size(), 1, "a chord of the same word is written once (%s)" % str(w.shown()))
+	var r: Array[Rect2] = w.shown_rects()
+	check(r.size() == 1 and absf(r[0].get_center().x - 240.0) <= 6.0, "between its two lanes (%s)" % str(r))
+	w.show_word("Good", "", Vector2(600, 1100), "good")
+	w.show_word("Perfect", "", Vector2(360, 1100), "perfect")
+	await tree.process_frame
+	r = w.shown_rects()
+	var apart := true
+	for i in r.size():
+		for j in range(i + 1, r.size()):
+			if r[i].intersects(r[j]):
+				apart = false
+	check(r.size() >= 2 and apart, "different words side by side do not overlap (%s)" % str(r))
+	w.queue_free()
+
+
+## Notes hop one step per beat: they stand still most of the beat, hop in its last part (rising and
+## falling back onto the road), and land on the beat itself, so a note reaches the hit line exactly
+## when it must be stepped. With hopping off they slide.
+func test_notes_hop_and_land_on_the_beat() -> void:
+	check_eq(LaneView.hop_grid(7.0), 1.0, "on the beat: whole-beat hops")
+	check_eq(LaneView.hop_grid(7.5), 0.5, "off the beat: half-beat hops")
+	check_near(LaneView.hop_grid(7.0 + 1.0 / 3.0), 1.0 / 3.0, 1e-6, "triplets hop on thirds")
+	check_near(LaneView.hopped(3.0, 1.0), 3.0, 1e-6, "on the beat the grid has just landed")
+	check_near(LaneView.hopped(3.5, 1.0), 3.0, 1e-6, "mid-beat it stands still")
+	check_near(LaneView.hopped(3.999, 1.0), 4.0, 0.01, "and lands as the next beat arrives")
+	check_near(LaneView.hop_arc(3.5, 1.0), 0.0, 1e-6, "standing notes are on the road")
+	check(LaneView.hop_arc(3.85, 1.0) > 0.9, "mid-hop a note is at the top of its arc")
+	var prev := LaneView.hopped(3.0, 1.0)
+	for i in range(1, 101):
+		var h := LaneView.hopped(3.0 + i * 0.01, 1.0)
+		check(h >= prev - 1e-9, "never hops backwards")
+		prev = h
+	var lv := LaneView.new()
+	lv.perspective = false
+	lv.size = Vector2(540, 1100)
+	lv.hop = true
+	lv.spb = 0.5
+	lv.beat_zero = 1.0
+	lv.song_time = 1.0 + 8.0 * 0.5          # beat 8
+	var f := lv.field_rect()
+	var hl := LaneSkin.hit_line_y(f)
+	var pps := lv._px_per_s()
+	check_near(lv.event_y(f, lv.song_time, pps), hl, 0.5, "a note on this beat is on the hit line")
+	var y2 := lv.event_y(f, 1.0 + 10.0 * 0.5, pps)
+	lv.song_time += 0.5 * 0.4                # 40% into the beat: nothing has moved yet
+	check_near(lv.event_y(f, 1.0 + 10.0 * 0.5, pps), y2, 0.5, "between hops the note stands still")
+	lv.hop = false
+	var s1 := lv.event_y(f, 1.0 + 10.0 * 0.5, lv._px_per_s())
+	lv.song_time += 0.05
+	check(lv.event_y(f, 1.0 + 10.0 * 0.5, lv._px_per_s()) > s1, "with hopping off the note slides")
+	lv.free()

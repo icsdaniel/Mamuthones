@@ -168,7 +168,7 @@ func _build_handover(round: Dictionary) -> void:
 	phone.name = "Phone"
 	phone.left_pressed = true
 	phone.right_pressed = true
-	phone.custom_minimum_size = Vector2(0, 200)
+	phone.custom_minimum_size = Vector2(0, 380)  # room for the pixel phone at 2x under its arrow
 	phone.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	box.add_child(phone)
 	_nod(phone)

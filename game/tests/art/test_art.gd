@@ -138,7 +138,7 @@ func test_theme() -> void:
 	check(t.default_font_size >= 26, "default text is at least 26 px")
 	for type in ["Button", "AccentButton", "OptionButton"]:
 		var sb := t.get_stylebox("normal", type)
-		check(sb is StyleBoxTexture and (sb as StyleBoxTexture).texture != null, "%s is a textured box" % type)
+		check(sb is PixelBox and (sb as PixelBox).texture != null, "%s is a pixel-art box" % type)
 		check(t.get_stylebox("pressed", type) != null and t.get_stylebox("disabled", type) != null, "%s has pressed/disabled" % type)
 	for type in ["Label", "TitleLabel", "HeaderLabel", "SubheaderLabel", "CaptionLabel", "HudLabel", "PaperLabel", "PaperHeaderLabel", "Button", "CheckButton", "LineEdit"]:
 		check(t.get_font_size("font_size", type) >= 24, "%s text is at least 24 px" % type)
@@ -146,8 +146,11 @@ func test_theme() -> void:
 	for icon in ["checked", "unchecked"]:
 		check(t.get_icon(icon, "CheckButton") != null, "CheckButton %s icon" % icon)
 	check(t.get_icon("grabber", "HSlider") != null, "slider grabber icon")
-	check(t.get_stylebox("panel", "CardPanel") is StyleBoxTexture, "paper card panel")
-	check(t.get_stylebox("grabber", "VScrollBar") is StyleBoxTexture, "scroll grabber")
+	check(t.get_stylebox("panel", "CardPanel") is PixelBox, "parchment card panel")
+	check(t.get_stylebox("grabber", "VScrollBar") is PixelBox, "scroll grabber")
+	# Pixel art: every kit texture is drawn with nearest filtering at whole art pixels.
+	check(ProjectSettings.get_setting("rendering/textures/canvas_textures/default_texture_filter") == 0, "nearest filtering project-wide")
+	check_eq((t.get_stylebox("normal", "Button") as PixelBox).px, 3.0, "one art pixel is three screen pixels")
 	check_eq(t.get_type_variation_base("AccentButton"), &"Button", "AccentButton is a Button variation")
 
 
@@ -227,7 +230,8 @@ func test_procession_api() -> void:
 	while Time.get_ticks_msec() < t_end:
 		await tree.process_frame
 		top = minf(top, scene._player.root.position.y)
-	check(top < y0 - 1.0, "jolt lifts the player (%.1f -> %.1f)" % [y0, top])
+	# The row stands in the pixel world, so positions are in art pixels; the check is in screen pixels.
+	check((y0 - top) * scene._px > 1.0, "jolt lifts the player (%.1f -> %.1f art px)" % [y0, top])
 	for kind in ["step", "bell", "ring", "miss", "nonsense"]:
 		scene.jolt(kind)
 	await _frames(2)
@@ -303,7 +307,7 @@ func test_procession_staging_and_feedback() -> void:
 		max_rot = maxf(max_rot, absf(scene._player.root.rotation))
 		max_drop = maxf(max_drop, scene._player.root.position.y - y0)
 	check(max_rot > r0 + 0.1, "a miss pitches your Mamuthone over (%.2f rad)" % max_rot)
-	check(max_drop > 3.0, "and drops him (%.1f px)" % max_drop)
+	check(max_drop * scene._px > 3.0, "and drops him (%.1f art px)" % max_drop)
 	await tree.create_timer(1.5).timeout
 	check(absf(scene._player.root.rotation) < 0.05, "then he recovers")
 	# Bells ring: motion is shown per Mamuthone; at full unison every front Mamuthone rings at once.
@@ -382,8 +386,8 @@ func test_early_late_colours_match_ui() -> void:
 	var ll := Palette.LATE.get_luminance()
 	check(absf(le - ll) > 0.1, "early and late differ in greyscale (%.2f vs %.2f)" % [le, ll])
 	check(_contrast(Palette.EARLY, Palette.INK) >= 3.0 and _contrast(Palette.LATE, Palette.INK) >= 3.0, "both read against their ink outline")
-	var src := FileAccess.get_file_as_string("res://scripts/art/lane_skin.gd")
-	check("Palette.EARLY if up else Palette.LATE" in src, "LaneSkin bursts use the shared pair")
+	var src := FileAccess.get_file_as_string("res://scripts/art/fire_skin.gd")
+	check("Palette.EARLY if quality == \"early\" else Palette.LATE" in src, "the hit bursts (FireSkin, LaneSkin) use the shared pair")
 
 
 func test_rope_is_natural_fibre() -> void:
@@ -537,7 +541,7 @@ func test_stop_cards_and_icons() -> void:
 		var tex := StopArt.card(n)
 		check(tex != null, "card %d exists" % n)
 		if tex:
-			check_eq(Vector2i(tex.get_size()), StopArt.SIZE, "card %d is 640x400" % n)
+			check_eq(Vector2i(tex.get_size()), StopArt.SIZE, "card %d is the pixel card size (StopCells.CARD)" % n)
 		check(StopArt.caption(n) != "", "card %d has a caption" % n)
 	check(StopArt.card(99) != null, "out-of-range card still returns a texture")
 	for key in AppIcon.FILES:
@@ -549,11 +553,18 @@ func test_stop_cards_and_icons() -> void:
 
 
 func test_note_sprites_baked() -> void:
-	# Every sprite LaneSkin asks for was baked by tools/art/bake.sh (else it silently draws vectors).
-	for job in LaneSkin.sprite_jobs():
-		var name: String = job[0]
-		check(FileAccess.file_exists(LaneSkin.NOTES_DIR + name + ".png"), "note sprite %s baked" % name)
-		check(LaneSkin.sprite(name) != null, "note sprite %s loads" % name)
+	# Every play-field sprite FireSkin draws was baked by tools/art/pixel/field.py, at the size its
+	# cell says (else a note, target or button would silently not draw).
+	for name in FireCells.CELLS:
+		var t := PxArt.field(name)
+		check(t != null, "field sprite %s loads" % name)
+		if t != null:
+			check_eq(Vector2(t.get_size()), (FireCells.CELLS[name] as Array)[0] as Vector2, "field sprite %s is its cell's size" % name)
+	for sz in range(FireCells.NOTE_MIN, FireCells.NOTE_MAX + 1):
+		for kind in ["step", "call", "heal", "stomp"]:
+			check(FireCells.CELLS.has("note_%s_%d" % [kind, sz]), "a %s note at half-width %d" % [kind, sz])
+	for face in PxType.SIZES:
+		check(PxType.font(face) is FontFile, "pixel face %s loads" % face)
 
 
 func test_fonts_cover_both_languages() -> void:

@@ -33,6 +33,7 @@ const DEFAULT_SETTINGS := {
 	"slam": false,
 	"reduced_motion": false,
 	"note_speed": 1.0,
+	"note_hop": true,        # notes step down the road on the beat (off: they slide smoothly)
 	"music_volume": 1.0,
 	"sfx_volume": 1.0,
 	"audio_offset": 0.0,     # seconds, from the tap test or set by hand

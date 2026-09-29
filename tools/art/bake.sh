@@ -1,12 +1,23 @@
 #!/bin/bash
-# Regenerates every art asset: textures and UI nine-patches (numpy), then the app icons and the stop
+# Regenerates every art asset: textures, the pixel UI kit, logo and icons (numpy), then the stop
 # cards (Godot, needs xvfb-run). Godot runs on a private copy of game/ so it never touches the shared
 # import cache; the results are written back into game/art/.
 set -e
 ROOT="$(cd "$(dirname "$0")/../.." && pwd)"
 python3 "$ROOT/tools/art/make_textures.py"
-# The Fire Night play-screen sprites, cut from the mockup's canvas code (Node + Playwright's Chromium).
-if command -v node >/dev/null; then node "$ROOT/tools/art/fire_night/render.js"; fi
+# The pixel UI kit, menu backdrop, logo, word mark and app icons (numpy).
+python3 "$ROOT/tools/art/pixel/ui_kit.py"
+python3 "$ROOT/tools/art/pixel/logo.py"
+# The characters, then everything drawn with them.
+python3 "$ROOT/tools/art/pixel/bake_figures.py"
+# The play field and title scene in pixel art: scenery, field sprites and pixel type (numpy).
+python3 "$ROOT/tools/art/pixel/scenery.py"
+python3 "$ROOT/tools/art/pixel/field.py"
+python3 "$ROOT/tools/art/pixel/type.py"
+# The story stops, workshop overlays and setup pictures.
+python3 "$ROOT/tools/art/pixel/stops.py"
+python3 "$ROOT/tools/art/pixel/workshop.py"
+python3 "$ROOT/tools/art/pixel/setup_pics.py"
 WORK="${ART_WORK:-/tmp/w-art-bake}"
 mkdir -p "$WORK/game"
 find "$WORK/game" -mindepth 1 -maxdepth 1 ! -name .godot -exec rm -rf {} +

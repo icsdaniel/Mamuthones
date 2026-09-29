@@ -184,6 +184,8 @@ func build() -> void:
 	lanes.show_buttons = not session.piazza
 	lanes.visible = not session.piazza
 	lanes.spb = _spb
+	lanes.beat_zero = song.offset_for(session.remix)
+	lanes.hop = bool(Profile.get_setting("note_hop"))
 	if not session.piazza:
 		scene.lanes = lanes
 		backdrop.lanes = lanes
@@ -523,12 +525,17 @@ func _on_stomp(note: Note, judgement: String, _offset: float, both: bool) -> voi
 	if both:
 		Sound.stomp(note.lane, step_quality(judgement))
 		_stomp_sounded = true
-		scene.jolt("ring")
+		if scene.has_method("stomp"):
+			scene.stomp()
+		else:
+			scene.jolt("ring")
 		UIKit.vibrate(40)
 	else:
 		Sound.stomp_half(note.lane)
 		words.show_word(tr("judge_one_thumb"), "", lanes.word_spot(note.lane), "early")
 	lanes.stomp_hit(note.lane, judgement, both)
+	if backdrop != null:
+		backdrop.kick(1.0 if both else 0.4)
 
 
 ## The side shown for a judgement: none on Perfect, the offset's side on Good, the band's own side on
@@ -578,6 +585,7 @@ func _tick_health(delta: float) -> void:
 	var want := 1.0 if session.health <= HealthPips.LOW else 0.0
 	_dim = move_toward(_dim, want, delta * 1.5)
 	backdrop.dim = _dim
+	lanes.fire_dim = _dim
 
 
 ## Where a lane note's burst goes (its lane at the hit line).
@@ -601,6 +609,7 @@ func _on_failed() -> void:
 	scene.set_still(true)
 	if backdrop != null:
 		backdrop.dim = 1.0
+		lanes.fire_dim = 1.0
 	var fade := create_tween()
 	fade.tween_property(conductor.player, "volume_db", -40.0, 0.6)
 	fade.tween_callback(conductor.player.stop)   # the clock runs on silently; nothing reads it now

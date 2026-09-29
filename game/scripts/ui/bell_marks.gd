@@ -1,7 +1,11 @@
 class_name BellMarks
 extends Control
-## Up to three small cowbells: earned ones in ember ink, the rest as empty outlines. Used for a stop's
-## best, a difficulty's best and the results. `animate()` rings them in one by one.
+## Up to three small bronze cowbells in pixel art (tools/art/pixel/ui_kit.py): earned ones in bronze, the
+## rest as hollow outlines. Used for a stop's best, a difficulty's best and the results. `animate()`
+## pops them in one by one on the art grid (1, 2, 3, 4 then 3 pixels a pixel), ringing each.
+
+## One earned bell has popped in (index 0..2): for sounds and screen juice.
+signal popped(index: int)
 
 var count := 0:
 	set(v):
@@ -9,32 +13,23 @@ var count := 0:
 		queue_redraw()
 var total := 3
 var bell_size := 44.0
-var empty_color := Palette.BONE_FAINT   ## the outline of a bell not yet earned
-var _host: Button                       ## the button it sits on, if any (red when pressed/primary)
+var empty_color := Palette.BONE_FAINT   ## kept for callers; the empty bell is its own sprite
 var _pop: Array[float] = [1.0, 1.0, 1.0]
+var _full: Texture2D
+var _empty: Texture2D
+
+const PX := 3
 
 
 func _init(p_count := 0, p_size := 44.0) -> void:
 	count = p_count
 	bell_size = p_size
-	custom_minimum_size = Vector2(p_size * 3.4, p_size * 1.15)
+	var big := p_size >= 48.0
+	_full = Palette.ui("bell_big" if big else "bell_small")
+	_empty = Palette.ui("bell_big_empty" if big else "bell_small_empty")
+	var cell := (_full.get_size() if _full != null else Vector2(11, 12)) * PX
+	custom_minimum_size = Vector2(cell.x * 3.0 + 6.0 * (2 if big else 1), cell.y + (6.0 if big else 0.0))
 	mouse_filter = Control.MOUSE_FILTER_IGNORE
-
-
-func _ready() -> void:
-	var p := get_parent()
-	while p != null and not p is Button:
-		p = p.get_parent()
-	_host = p as Button
-	if _host != null:
-		_host.draw.connect(queue_redraw)   # redrawn whenever the button changes state
-
-
-## The outline colour now: on a red (pressed or primary) button the grey goes muddy, so bone.
-func _empty_ink() -> Color:
-	if _host != null and (_host.button_pressed or _host.theme_type_variation == UIKit.PRIMARY) and empty_color == Palette.BONE_FAINT:
-		return Color(Palette.BONE, 0.75)
-	return empty_color
 
 
 ## Pop the earned bells in turn, ringing one each.
@@ -45,39 +40,30 @@ func animate(delay := 0.3, ring := true) -> void:
 	for i in count:
 		var tw := create_tween()
 		tw.tween_interval(delay + i * 0.35)
-		if ring:
-			tw.tween_callback(func() -> void: Sound.bell(Profile.get_look().get("bell_set", "light"), i % 2 == 0, "perfect"))
+		tw.tween_callback(func() -> void:
+			if ring:
+				Sound.bell(Profile.get_look().get("bell_set", "light"), i % 2 == 0, "perfect")
+			popped.emit(i))
 		tw.tween_method(func(v: float) -> void:
 			_pop[i] = v
 			queue_redraw(), 0.0, 1.0, 0.3).set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT)
 
 
 func _draw() -> void:
-	var step := size.x / float(total)
+	if _full == null:
+		return
+	var cell := _full.get_size() * PX
+	var gap := (size.x - cell.x * total) / maxf(total - 1, 1)
 	for i in total:
-		var c := Vector2(step * (i + 0.5), size.y * 0.5)
 		var earned := i < count
-		var s := bell_size * (lerpf(0.3, 1.0, _pop[i]) if earned else 1.0)
-		_draw_bell(c, s, earned)
-
-
-func _draw_bell(c: Vector2, s: float, earned: bool) -> void:
-	# A cowbell: flared trapezoid body, a strap loop on top, a clapper below.
-	var w_top := s * 0.42
-	var w_bot := s * 0.78
-	var h := s * 0.78
-	var top := c.y - h * 0.5
-	var bot := c.y + h * 0.5
-	var body := PackedVector2Array([
-		Vector2(c.x - w_top * 0.5, top), Vector2(c.x + w_top * 0.5, top),
-		Vector2(c.x + w_bot * 0.5, bot), Vector2(c.x - w_bot * 0.5, bot)])
-	var ink := Palette.EMBER if earned else _empty_ink()
-	if earned:
-		draw_colored_polygon(body, ink)
-		draw_line(Vector2(c.x - w_bot * 0.32, bot - h * 0.3), Vector2(c.x - w_top * 0.2, top + h * 0.2), Palette.EMBER_HOT, 2.0)
-	else:
-		var loop := body.duplicate()
-		loop.append(body[0])
-		draw_polyline(loop, ink, 3.0)
-	draw_arc(Vector2(c.x, top), s * 0.14, PI, TAU, 10, ink, 3.0)
-	draw_circle(Vector2(c.x, bot + s * 0.06), s * 0.08, ink)
+		var tex := _full if earned else _empty
+		var k := PX
+		if earned and _pop[i] <= 0.0:
+			tex = _empty
+		elif earned and _pop[i] < 1.0:
+			k = clampi(roundi(1.0 + 2.6 * _pop[i]), 1, PX + 1)
+		elif earned and _pop[i] > 1.0:
+			k = PX + 1
+		var sz := tex.get_size() * k
+		var c := Vector2(i * (cell.x + gap) + cell.x * 0.5, size.y * 0.5)
+		draw_texture_rect(tex, Rect2((c - sz * 0.5).round(), sz), false)

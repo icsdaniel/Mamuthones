@@ -19,7 +19,8 @@ func build() -> void:
 	UIKit.header(box, tr("ws_title"), on_back)
 	portrait = MamuthonePortrait.new()
 	portrait.name = "Portrait"
-	portrait.custom_minimum_size = Vector2(0, 340)
+	portrait.animate = not UIKit.reduced_motion()
+	portrait.custom_minimum_size = Vector2(0, MamuthonePortrait.ART_H * 3 + 6)
 	box.add_child(portrait)
 	_refresh_look()
 	Profile.changed.connect(_refresh_look)
@@ -53,6 +54,7 @@ func _refresh_look() -> void:
 		var walking := _body.get_node_or_null("Walking") as ProcessionScene if _body != null else null
 		if walking != null:
 			UIKit.show_look(walking)
+			walking.bell_set = bs
 	var hp := part if tab == "mask" else ""
 	if portrait.highlight_part != hp:
 		portrait.highlight_part = hp
@@ -90,6 +92,7 @@ func _walking_row() -> void:
 	scene.set_unison(2)
 	scene.set_reduced_motion(UIKit.reduced_motion())
 	UIKit.show_look(scene)
+	scene.bell_set = str(Profile.get_look().get("bell_set", "light"))
 
 
 func _spec() -> Dictionary:
@@ -102,7 +105,7 @@ func _build_mask() -> void:
 	_body.add_child(UIKit.label(tr("ws_points_note"), UIKit.CAPTION))
 	mask = MaskView.new()
 	mask.name = "Mask"
-	mask.custom_minimum_size = Vector2(0, 420)
+	mask.custom_minimum_size = Vector2(0, 360)
 	mask.show_halo = true
 	mask.spec = _spec()
 	mask.highlight_part = part
@@ -113,7 +116,7 @@ func _build_mask() -> void:
 	parts.add_theme_constant_override("v_separation", 8)
 	_body.add_child(parts)
 	for p in MaskSpec.PARTS:
-		var b := UIKit.button(MaskSpec.name_of(p, I18n.locale()), _pick_part.bind(p))
+		var b := UIKit.button(MaskSpec.name_of(p, I18n.locale()), _pick_part.bind(p), UIKit.COMPACT)
 		b.toggle_mode = true
 		b.set_pressed_no_signal(p == part)
 		b.size_flags_horizontal = Control.SIZE_EXPAND_FILL
@@ -131,6 +134,7 @@ func _build_mask() -> void:
 		var b := Button.new()
 		b.focus_mode = Control.FOCUS_NONE
 		b.toggle_mode = true
+		b.theme_type_variation = UIKit.COMPACT
 		b.custom_minimum_size = Vector2(UIKit.TOUCH, UIKit.TOUCH * 1.15)
 		b.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 		b.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART

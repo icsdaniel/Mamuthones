@@ -1,6 +1,6 @@
 class_name FailMenu
 extends Control
-## Over the play screen when health runs out: "The fire goes out" in the carved serif, over the dimmed
+## Over the play screen when health runs out: "The fire goes out" on the kit's board, over the dimmed
 ## road, with Restart (the same song from the start, with the count-in) and Quit.
 
 signal chosen(what: String)
@@ -20,24 +20,29 @@ func _ready() -> void:
 	var center := CenterContainer.new()
 	center.set_anchors_preset(Control.PRESET_FULL_RECT)
 	add_child(center)
+	# the same board as the pause menu, so the two read as one family
+	var panel := PanelContainer.new()
+	panel.theme_type_variation = UIKit.BOARD
+	panel.custom_minimum_size.x = 540
+	center.add_child(panel)
 	var box := VBoxContainer.new()
-	box.custom_minimum_size.x = 520
-	box.add_theme_constant_override("separation", 18)
-	center.add_child(box)
+	box.add_theme_constant_override("separation", 16)
+	panel.add_child(box)
 	var title := UIKit.label(tr("fail_title"), UIKit.HEADER, true, HORIZONTAL_ALIGNMENT_CENTER)
 	title.name = "Title"
-	FireSkin.carve_label(title, 60, Color.WHITE, Color(1.0, 0.7, 0.3, 0.6), 10, 0.3)
-	var grad := FireSkin.text_gradient(Color("#fff4dc"), Color("#f0c878"), Color("#c8501e"))
-	title.material = grad
-	title.resized.connect(func() -> void: grad.set_shader_parameter("height", maxf(title.size.y, 1.0)))
+	title.add_theme_color_override("font_color", Palette.EMBER_HOT)
+	title.add_theme_color_override("font_shadow_color", Palette.RED_DEEP)
 	box.add_child(title)
 	var sub := UIKit.label(tr("fail_hint"), UIKit.CAPTION, true, HORIZONTAL_ALIGNMENT_CENTER)
 	sub.name = "Hint"
-	FireSkin.carve_label(sub, 26, Color("#d9a24a"), Color(0, 0, 0, 0), 6)
 	box.add_child(sub)
-	var gap := Control.new()
-	gap.custom_minimum_size.y = 12
-	box.add_child(gap)
+	box.add_child(HSeparator.new())
+	# the board fades up a moment after the fire dies
+	if not UIKit.reduced_motion():
+		panel.modulate.a = 0.0
+		var tw := panel.create_tween()
+		tw.tween_interval(0.15)
+		tw.tween_property(panel, "modulate:a", 1.0, 0.35)
 	for item in [["restart", "pause_restart", UIKit.PRIMARY], ["quit", "pause_quit", UIKit.QUIET]]:
 		var b := UIKit.button(tr(item[1]), func() -> void: chosen.emit(item[0]), item[2])
 		b.name = str(item[0]).capitalize()

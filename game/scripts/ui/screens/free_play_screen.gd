@@ -104,7 +104,7 @@ func _badge(b: Button, bells: int, score: String) -> void:
 	row.alignment = BoxContainer.ALIGNMENT_END
 	row.add_theme_constant_override("separation", 10)
 	row.set_anchors_and_offsets_preset(Control.PRESET_RIGHT_WIDE)
-	row.offset_right = -24.0
+	row.offset_right = -46.0   # clear of the frame's right-hand diamond
 	row.grow_horizontal = Control.GROW_DIRECTION_BEGIN
 	if score != "":
 		var l := UIKit.label(score, UIKit.CAPTION, false)
