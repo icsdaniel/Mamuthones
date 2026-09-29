@@ -21,16 +21,16 @@ extends Control
 const STREET := "res://art/street/street.png"
 const IMG := Vector2(941.0, 1672.0)
 ## The painted lines, x = a + b * y in the picture's pixels: the road's edges and the lane dividers.
-const RAILS := [Vector2(841.79, -0.68736), Vector2(594.94, -0.22449), Vector2(360.31, 0.21206), Vector2(131.30, 0.65777)]
-const VANISH_Y := 530.0              ## where the lines meet (the horizon), picture px
-const FAR_Y := 672.0                 ## the road's far end, just in front of the fire, picture px
-const STRETCH_FROM := 650.0          ## the picture is only ever stretched below this row
-const FIRE := Vector2(470.0, 545.0)  ## the fire's heart, picture px
-const LANTERNS := [Vector2(77, 417), Vector2(881, 436), Vector2(280, 560), Vector2(313, 580), Vector2(641, 582), Vector2(673, 562)]
+const RAILS := [Vector2(706.35, -0.65983), Vector2(546.98, -0.21123), Vector2(428.27, 0.17173), Vector2(274.43, 0.61683)]
+const VANISH_Y := 325.0              ## where the lines meet (the horizon), picture px
+const FAR_Y := 472.0                 ## the road's far end, just in front of the fire, picture px
+const STRETCH_FROM := 460.0          ## the picture is only ever stretched below this row
+const FIRE := Vector2(480.0, 370.0)  ## the fire's heart, picture px
+const LANTERNS := [Vector2(106, 258), Vector2(856, 274), Vector2(322, 382)]
 const EDGE_CLEAR := 0.12             ## an outer note's centre stays this share of the width off the edge
 ## The portrait frames' corners (picture px, the left one; the right mirrors it), from the play-screen
 ## reference.
-const FRAME := [Vector2(-12, 430), Vector2(226, 494), Vector2(262, 800), Vector2(-12, 930)]
+const FRAME := [Vector2(-12, 232), Vector2(226, 296), Vector2(272, 612), Vector2(-12, 748)]
 const BOB := 0.1                     ## how far a figure drops on the beat, share of its portrait's height
 const BOB_SQUASH := 0.03             ## how much it squashes at the bottom of the drop
 const BOB_HOLD := 0.03               ## seconds it stays down after the beat
@@ -505,9 +505,9 @@ uniform vec2 pic = vec2(941.0, 1672.0);
 uniform vec2 rect = vec2(720.0, 1440.0);
 uniform float sc = 1.0;
 uniform float off = 0.0;
-uniform float y0 = 650.0;
+uniform float y0 = 460.0;
 uniform float stretch = 1.0;
-uniform vec2 fire = vec2(470.0, 545.0);
+uniform vec2 fire = vec2(480.0, 370.0);
 uniform float t = 0.0;
 uniform float flare = 0.0;
 uniform float dim = 0.0;
@@ -520,9 +520,9 @@ void fragment() {
 		p.y = y0 + (p.y - y0) / stretch;
 	}
 	// the flames: an ellipse over the fire, strongest in its upper part
-	vec2 d = (p - fire) / vec2(95.0, 120.0);
+	vec2 d = (p - fire) / vec2(120.0, 150.0);
 	float m = clamp(1.0 - dot(d, d), 0.0, 1.0);
-	m *= smoothstep(fire.y + 75.0, fire.y + 25.0, p.y);
+	m *= smoothstep(fire.y + 100.0, fire.y + 40.0, p.y);
 	float wave = sin(p.y * 0.07 + t * 8.0) * 0.6 + sin(p.y * 0.13 - t * 11.0 + p.x * 0.05) * 0.4;
 	p.x += wave * 3.5 * m * motion;
 	p.y += (sin(t * 6.0 + p.x * 0.08) * 2.0) * m * motion;
