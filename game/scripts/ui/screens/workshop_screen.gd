@@ -116,7 +116,7 @@ func _build_mask() -> void:
 	parts.add_theme_constant_override("v_separation", 8)
 	_body.add_child(parts)
 	for p in MaskSpec.PARTS:
-		var b := UIKit.button(MaskSpec.name_of(p, I18n.locale()), _pick_part.bind(p))
+		var b := UIKit.button(MaskSpec.name_of(p, I18n.locale()), _pick_part.bind(p), UIKit.COMPACT)
 		b.toggle_mode = true
 		b.set_pressed_no_signal(p == part)
 		b.size_flags_horizontal = Control.SIZE_EXPAND_FILL
@@ -134,6 +134,7 @@ func _build_mask() -> void:
 		var b := Button.new()
 		b.focus_mode = Control.FOCUS_NONE
 		b.toggle_mode = true
+		b.theme_type_variation = UIKit.COMPACT
 		b.custom_minimum_size = Vector2(UIKit.TOUCH, UIKit.TOUCH * 1.15)
 		b.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 		b.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART

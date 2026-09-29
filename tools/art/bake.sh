@@ -1,10 +1,13 @@
 #!/bin/bash
-# Regenerates every art asset: textures and UI nine-patches (numpy), then the app icons and the stop
+# Regenerates every art asset: textures, the pixel UI kit, logo and icons (numpy), then the stop
 # cards (Godot, needs xvfb-run). Godot runs on a private copy of game/ so it never touches the shared
 # import cache; the results are written back into game/art/.
 set -e
 ROOT="$(cd "$(dirname "$0")/../.." && pwd)"
 python3 "$ROOT/tools/art/make_textures.py"
+# The pixel UI kit, menu backdrop, logo, word mark and app icons (numpy).
+python3 "$ROOT/tools/art/pixel/ui_kit.py"
+python3 "$ROOT/tools/art/pixel/logo.py"
 # The Fire Night play-screen sprites, cut from the mockup's canvas code (Node + Playwright's Chromium).
 if command -v node >/dev/null; then node "$ROOT/tools/art/fire_night/render.js"; fi
 WORK="${ART_WORK:-/tmp/w-art-bake}"

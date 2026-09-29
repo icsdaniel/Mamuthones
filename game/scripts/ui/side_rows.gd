@@ -23,9 +23,14 @@ const FILE_AT := [0.44, 0.24, 0.08]
 const LEADER_BOX := Vector2(90.0, 210.0)
 const FILE_H := [190.0, 150.0, 120.0]
 const CLEAR := 14.0                 ## px kept between a figure's box and the road edge (tests ask 12)
-const JUMP := 0.16                  ## jump height, in figure heights
-const AIR := 0.55                   ## share of the beat spent in the air (ends on the beat)
+const JUMP := 0.15                  ## jump height, in figure heights
+const AIR := 0.46                   ## share of the beat spent in the air (ends on the beat)
+const CROUCH := 0.14                ## the crouch before take-off, as a share of the beat
+const LAND := 0.16                  ## the squashed landing after the beat, as a share of the beat
 const WAVE := 0.035                 ## beats of delay from one Mamuthone to the next down the file
+
+## A Mamuthone joined the file (the unison went up): level is the new unison level.
+signal joined(level: int)
 
 var lanes: Control
 var beat := 0.0                     ## the song's beat now (fractional); negative before the music
@@ -73,6 +78,8 @@ func set_unison(level: int) -> void:
 	unison = clampi(level, 0, ACTIVE.size() - 1)
 	for i in range(before, active_count()):
 		_joined_at[i] = _clock
+	if active_count() > before:
+		joined.emit(unison)
 
 
 func set_still(on: bool) -> void:
@@ -89,6 +96,12 @@ func jolt(kind := "step") -> void:
 
 
 func throw_rope() -> void:
+	_throw_at = _clock
+
+
+## A full two-thumb stomp: the whole file slams down together, dust flies, the leaders throw.
+func stomp() -> void:
+	jolt("stomp")
 	_throw_at = _clock
 
 
@@ -273,7 +286,31 @@ func _shadow(feet: Vector2, h: float, lift: float) -> void:
 
 ## A pixel figure with its feet at `feet`, h tall (the right file's are mirrored to face the road).
 func _blit(name: String, feet: Vector2, h: float, rot: float, sq: float, tint: Color, flip := false) -> void:
-	FigureSprites.draw(self, name, feet, _px(name, h), flip, tint, rot, sq)
+	var px := _px(sprite_name(0, 0) if name.begins_with("issohadore") else name, h)
+	var pxs := roundf(px) if px >= 1.5 else px
+	FigureSprites.draw(self, name, Vector2(_snap(feet.x, pxs), _snap(feet.y, pxs)), pxs, flip, tint, rot, sq)
+
+
+## The heavy jump through one beat (f = 0 on the beat): [pose, lift 0..1, squash]. The landing is ON
+## the beat: a squashed "land" pose just after it, standing, a crouch to gather, then the jump - a
+## slow rise and a fast drop, like something heavy.
+static func jump_phase(f: float) -> Array:
+	if f < LAND:
+		var t := f / LAND
+		return ["land", 0.0, lerpf(0.86, 1.0, t * t)]
+	var take_off := 1.0 - AIR
+	if f < take_off - CROUCH:
+		return ["stand", 0.0, 1.0]
+	if f < take_off:
+		var t := (f - (take_off - CROUCH)) / CROUCH
+		return ["crouch", 0.0, 1.0 - 0.06 * sin(t * PI * 0.5)]
+	var a := (f - take_off) / AIR
+	return ["air", sin(PI * pow(a, 1.45)), 1.02]
+
+
+## Snaps a length to whole art pixels (px screen pixels each), so moving figures keep the grid.
+static func _snap(v: float, px: float) -> float:
+	return roundf(v / px) * px if px >= 1.5 else v
 
 
 func _draw_one(feet: Vector2, h: float, i: int, side: int) -> void:
@@ -282,36 +319,73 @@ func _draw_one(feet: Vector2, h: float, i: int, side: int) -> void:
 	var rot := 0.0
 	var sq := 1.0
 	var amp := 0.35 if reduced_motion else 1.0
-	var airborne := false
+	var pose := "stand"
+	var land := -1.0     # seconds-ish share of the beat since touching down, for the dust
 	if active and not still and beat > -8.0:
 		var b := beat - WAVE * i
 		var f := fposmod(b, 1.0)
-		var air := clampf((f - (1.0 - AIR)) / AIR, 0.0, 1.0)
-		y = -sin(air * PI) * JUMP * h * amp
-		airborne = air > 0.0 and air < 1.0
-		# Landing squash for a moment after the beat, and the bells swung to the other side.
-		sq = 1.0 - 0.07 * amp * clampf(1.0 - f / 0.12, 0.0, 1.0)
+		var ph := jump_phase(f)
+		pose = ph[0]
+		y = -float(ph[1]) * JUMP * h * amp
+		sq = 1.0 - (1.0 - float(ph[2])) * amp
+		if f < 0.3:
+			land = f
+		# the bells swing to the other side each landing
 		var dir := 1.0 if posmod(floori(b), 2) == 0 else -1.0
-		rot = dir * 0.05 * amp * (1.0 - f)
+		rot = dir * 0.035 * amp * (1.0 - f)
 	var age := _clock - _jolt_at
 	var x := 0.0
 	var tint := Color.WHITE
-	if active and age < 0.35:
-		var k := 1.0 - age / 0.35
+	if active and age < 0.4:
+		var k := 1.0 - age / 0.4
 		match _jolt_kind:
 			"miss":
 				x = sin(age * 60.0) * h * 0.04 * k * amp
 				tint = Color(1.0, 0.55 + 0.45 * (1.0 - k), 0.5 + 0.5 * (1.0 - k))
 			"bell", "ring":
 				rot += (0.1 if side == 0 else -0.1) * k * amp
+			"stomp":
+				# everyone slams down together: a deep squash and a big cloud of dust
+				pose = "land"
+				y = 0.0
+				sq = 1.0 - 0.18 * k * amp
+				land = age * 0.5
 			_:
 				y -= h * 0.02 * k * amp
 	var dim := Color(0.5, 0.45, 0.45, 0.85)
 	if not active:
 		tint = dim
+		pose = "stand"
 	else:
 		var fade := clampf((_clock - _joined_at[i]) / 0.25, 0.0, 1.0)
 		tint = tint.lerp(dim, 1.0 - fade)
+	var name := sprite_name(side, i + 1, pose)
+	var px := _px(sprite_name(side, i + 1), h)     # every pose at the standing figure's scale
+	var pxs := roundf(px) if px >= 1.5 else px
 	_shadow(feet, h, clampf(-y / (JUMP * h), 0.0, 1.0))
-	var name := sprite_name(side, i + 1, "air" if airborne else "stand")
-	_blit(name, feet + Vector2(x, y), h, rot, sq, tint, side == 1)
+	if land >= 0.0 and active:
+		_dust(feet, pxs, land, _jolt_kind == "stomp" and age < 0.4, side)
+	var at := Vector2(_snap(feet.x + x, pxs), _snap(feet.y + y, pxs))
+	FigureSprites.draw(self, name, at, pxs, side == 1, tint, rot, sq)
+
+
+## Dust kicked up by a landing: a few pixel clods that fly out low either side of the feet and fade,
+## drawn on the art grid. t is the share of the beat since the landing.
+func _dust(feet: Vector2, px: float, t: float, big: bool, _side: int) -> void:
+	var life := 0.3
+	if t >= life:
+		return
+	var k := t / life
+	var reach := (16.0 if big else 10.0) * px
+	var n := 7 if big else 5
+	for j in n:
+		var dir := -1.0 if j % 2 == 0 else 1.0
+		var spread := (0.35 + 0.65 * float(j) / float(n)) * dir
+		var dx := spread * reach * (0.3 + 0.7 * k)
+		var dy := -sin(minf(k * 1.4, 1.0) * PI) * (2.0 + float(j % 3)) * px - px
+		var a := (1.0 - k) * (0.9 if big else 0.7)
+		var sz := px * (2.0 if j % 3 == 0 else 1.0)
+		var p := Vector2(_snap(feet.x + dx, px), _snap(feet.y + dy, px))
+		draw_rect(Rect2(p, Vector2(sz, sz)), Color(PixelPalette.STONE[4], a))
+		if j % 2 == 0:
+			draw_rect(Rect2(p + Vector2(0, sz), Vector2(sz, px)), Color(PixelPalette.STONE[2], a))

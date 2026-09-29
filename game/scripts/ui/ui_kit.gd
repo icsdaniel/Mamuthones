@@ -12,12 +12,14 @@ const TITLE := "TitleLabel"
 const HEADER := "HeaderLabel"
 const CAPTION := "CaptionLabel"
 const SUB := "SubheaderLabel"
+const LEAD := "LeadLabel"   ## an instruction sentence (serif, pale gold), not small caps
 const PAPER := "PaperLabel"
 const PAPER_HEADER := "PaperHeaderLabel"
 const HUD := "HudLabel"
 const BOARD := "BoardPanel"
 const PRIMARY := "AccentButton"
 const QUIET := "QuietButton"
+const COMPACT := "CompactButton"   ## framed, no lozenges: dense grids of choices
 const CARD := "CardPanel"
 
 ## One early/late language everywhere (bursts, the timing ticks, judgement hints, the results
@@ -127,6 +129,13 @@ static func column_with_footer(parent: Control, separation := 16) -> Array[VBoxC
 	var foot := VBoxContainer.new()
 	foot.add_theme_constant_override("separation", 8)
 	foot.name = "Footer"
+	# the list sinks into shadow in three stepped bands above the footer instead of being cut off
+	foot.draw.connect(func() -> void:
+		if foot.get_child_count() == 0 or not sc.get_v_scroll_bar().visible:
+			return
+		for i in 3:
+			foot.draw_rect(Rect2(-GUTTER, -36.0 + i * 8.0, foot.size.x + 2.0 * GUTTER, 8.0), Color(PixelPalette.K[0], 0.25 * (i + 1))))
+	sc.get_v_scroll_bar().visibility_changed.connect(foot.queue_redraw)
 	outer.add_child(foot)
 	return [box, foot]
 
@@ -169,7 +178,57 @@ static func button(text: String, on_press: Callable, variation := "") -> Button:
 		b.pressed.connect(func() -> void:
 			Sound.ui("tap")
 			on_press.call())
+	juice(b)
+	fit_text(b)
 	return b
+
+
+## The press feel of every kit button: the face drops one art pixel (the pressed PixelBox) and the
+## whole button flashes gold for a moment.
+static func juice(b: BaseButton) -> void:
+	b.button_down.connect(func() -> void:
+		var hot := Color(1.35, 1.2, 0.9) if not reduced_motion() else Color(1.15, 1.08, 0.97)
+		b.self_modulate = hot
+		var tw := b.create_tween()
+		tw.tween_property(b, "self_modulate", Color.WHITE, 0.24).set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_OUT))
+
+
+## Shrinks a button's label (down to `min_size`, never under the 26 px floor) until it fits between
+## the button's ornaments, whatever the language. The button asks only for room for its text at
+## `min_size`, so long translations shrink the type instead of pushing the layout off the screen.
+static func fit_text(b: Button, min_size := 26) -> void:
+	var refit := func() -> void:
+		if b.text == "" or not b.is_inside_tree() or b.has_meta("fitting"):
+			return
+		if b.get_child_count() > 0 and b.alignment == HORIZONTAL_ALIGNMENT_LEFT:
+			return   # list rows with a badge on the right lay out their own text
+		b.set_meta("fitting", true)
+		b.remove_theme_font_size_override("font_size")
+		var font := b.get_theme_font("font")
+		var fs := b.get_theme_font_size("font_size")
+		var sb := b.get_theme_stylebox("normal")
+		var pads := sb.get_margin(SIDE_LEFT) + sb.get_margin(SIDE_RIGHT) if sb != null else 0.0
+		var line := b.text.get_slice("\n", 0)
+		if font == null:
+			b.remove_meta("fitting")
+			return
+		var own: float = b.get_meta("own_min_w", b.custom_minimum_size.x)
+		b.set_meta("own_min_w", own)
+		var need := ceilf(font.get_string_size(line, HORIZONTAL_ALIGNMENT_LEFT, -1, mini(fs, min_size)).x + pads) + 2.0
+		b.text_overrun_behavior = TextServer.OVERRUN_TRIM_ELLIPSIS
+		if absf(b.custom_minimum_size.x - maxf(own, need)) > 0.5:
+			b.custom_minimum_size.x = maxf(own, need)
+		var room := b.size.x - pads
+		if room <= 0.0:
+			b.remove_meta("fitting")
+			return
+		while fs > min_size and font.get_string_size(line, HORIZONTAL_ALIGNMENT_LEFT, -1, fs).x > room:
+			fs -= 1
+		if fs != b.get_theme_font_size("font_size"):
+			b.add_theme_font_size_override("font_size", fs)
+		b.remove_meta("fitting")
+	b.resized.connect(refit)
+	b.tree_entered.connect(refit)
 
 
 static func label(text: String, variation := "", wrap := true, align := HORIZONTAL_ALIGNMENT_LEFT) -> Label:

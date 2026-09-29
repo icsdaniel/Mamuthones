@@ -1,10 +1,11 @@
 #!/usr/bin/env python3
-"""Bake the woodcut textures and UI nine-patches for Mamuthones.
+"""Bake the shared woodcut textures for Mamuthones (paper, grain, hatch, chisel, fog, speckle, glow,
+fleece). The UI kit is pixel art now: tools/art/pixel/ui_kit.py writes game/art/ui/.
 
 Everything is procedural (numpy only) and tileable, so the pictures stay small and cheap on a phone:
 the game repeats them instead of stretching large images.
 
-    python3 tools/art/make_textures.py            # writes game/art/textures/ and game/art/ui/
+    python3 tools/art/make_textures.py            # writes game/art/textures/
 
 Palette (docs/design.md section 8): black #141110, bone #ede6da, red #c0392b, ember #e0a24a.
 """
@@ -18,7 +19,6 @@ from pngio import write_png  # noqa: E402
 
 ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
 TEX = os.path.join(ROOT, "game", "art", "textures")
-UI = os.path.join(ROOT, "game", "art", "ui")
 
 BLACK = np.array([20, 17, 16], float)
 INK = np.array([12, 10, 9], float)
@@ -187,219 +187,8 @@ def speckle(size=256):
     return np.dstack([np.full((size, size), 255.0), np.clip(a, 0, 1) * 255])
 
 
-# ---------------------------------------------------------------- nine-patches
-
-class Patch:
-    """Coordinates for a tileable nine-patch: margin M, centre Cw x Ch (periodic in both axes)."""
-
-    def __init__(self, m, cw, ch, seed):
-        self.m, self.cw, self.ch = m, cw, ch
-        self.w, self.h = cw + 2 * m, ch + 2 * m
-        self.y, self.x = np.mgrid[0:self.h, 0:self.w].astype(float)
-        self.u = ((self.x - m) % cw).astype(int)
-        self.v = ((self.y - m) % ch).astype(int)
-        self.seed = seed
-
-    def noise(self, beta=1.6, k=0, fx=1.0):
-        f = fbm(self.ch, self.cw, beta, self.seed * 97 + k, fx=fx)
-        return f[self.v, self.u]
-
-    def sd_box(self, inset, radius):
-        """Signed distance to a rounded box inset from the texture edge (negative inside)."""
-        hx, hy = self.w / 2 - inset, self.h / 2 - inset
-        px = np.abs(self.x + 0.5 - self.w / 2) - (hx - radius)
-        py = np.abs(self.y + 0.5 - self.h / 2) - (hy - radius)
-        out = np.sqrt(np.maximum(px, 0) ** 2 + np.maximum(py, 0) ** 2)
-        return out + np.minimum(np.maximum(px, py), 0) - radius
-
-    def grain(self, k=5, lines=None):
-        lines = lines or max(2, self.ch // 9)
-        warp = self.noise(3.0, k, fx=3.0) * 1.5
-        r = np.abs(np.sin((self.v / self.ch * lines + warp) * np.pi))
-        return smooth(0.8, 0.98, r)
-
-
-def rgba(rgb, a):
-    return np.dstack([np.clip(rgb, 0, 255), np.clip(a, 0, 1) * 255])
-
-
-def button(fill, line, seed, line_alpha=1.0, gaps=0.25, fill_grain=0.12, rim=True, dark_grain=False):
-    p = Patch(22, 96, 40, seed)
-    rough = (p.noise(1.4, 1) - 0.5) * 3.2
-    sd = p.sd_box(3, 10) + rough
-    body = smooth(0.7, -0.7, sd)
-    g = p.grain()
-    col = np.ones(sd.shape + (3,)) * fill
-    if dark_grain:
-        col = blend(col, INK, g * fill_grain * 3)
-    else:
-        col = blend(col, BONE, g * fill_grain)
-    chis = smooth(0.72, 0.85, p.noise(0.9, 2)) * 0.5
-    col = blend(col, INK, chis * (sd < -3))
-    # Carved bone line inset from the edge, broken by chisel nicks.
-    lsd = sd + 8.0 + (p.noise(1.8, 3) - 0.5) * 1.6
-    lw = 1.5 + 0.7 * p.noise(2.0, 4)
-    lm = smooth(lw + 0.7, lw - 0.7, np.abs(lsd))
-    nick = smooth(gaps - 0.03, gaps + 0.03, p.noise(1.2, 6, fx=2.0))
-    col = blend(col, line, lm * nick * line_alpha)
-    if rim:
-        edge = smooth(-2.6, -1.2, sd) * body
-        col = blend(col, INK, edge)
-    return rgba(col, body)
-
-
-def focus_ring(seed):
-    p = Patch(22, 96, 40, seed)
-    sd = p.sd_box(1, 12) + (p.noise(1.4, 1) - 0.5) * 2.4
-    ring = smooth(2.2, 1.2, np.abs(sd))
-    return rgba(np.ones(sd.shape + (3,)) * EMBER, ring)
-
-
-def panel_dark(seed=60):
-    p = Patch(28, 128, 128, seed)
-    sd = p.sd_box(2, 6) + (p.noise(1.3, 1) - 0.5) * 3.0
-    body = smooth(0.7, -0.7, sd)
-    col = np.ones(sd.shape + (3,)) * np.array([27, 22, 19], float)
-    col = blend(col, BONE, p.grain(5, 12) * 0.05)
-    col = blend(col, INK, smooth(0.7, 0.85, p.noise(0.8, 2)) * 0.5)
-    for off, w, a in ((7.0, 1.6, 0.85), (12.0, 0.8, 0.45)):
-        lsd = sd + off + (p.noise(1.8, 3 + int(off)) - 0.5) * 1.4
-        lm = smooth(w + 0.7, w - 0.7, np.abs(lsd))
-        nick = smooth(0.18, 0.24, p.noise(1.2, 9 + int(off), fx=2.0))
-        col = blend(col, BONE, lm * nick * a)
-    col = blend(col, INK, smooth(-2.5, -1.0, sd))
-    return rgba(col, body)
-
-
-def panel_paper(seed=70):
-    p = Patch(28, 128, 128, seed)
-    sd = p.sd_box(3, 4) + (p.noise(1.2, 1) - 0.5) * 4.0
-    body = smooth(0.7, -0.7, sd)
-    col = np.ones(sd.shape + (3,)) * BONE
-    col *= (0.94 + 0.06 * p.noise(2.4, 2))[..., None]
-    col = blend(col, BONE * 0.82, smooth(0.66, 0.9, p.noise(0.7, 3)) * 0.4)
-    # Ink border: thick outer rule with a thin inner rule, like a printed card frame.
-    ink = smooth(-4.5, -3.3, sd)
-    inner = sd + 10.0 + (p.noise(1.8, 4) - 0.5) * 1.4
-    ink = np.maximum(ink, smooth(1.6, 0.8, np.abs(inner)) * 0.9)
-    # Edge darkening (old paper).
-    col = blend(col, np.array([150, 120, 90], float), smooth(-26, -4, sd) * 0.25)
-    col = blend(col, INK, ink)
-    return rgba(col, body)
-
-
-def groove(fill, seed, edge=BONE, edge_a=0.8, ch=8, m=8):
-    """Slider/progress track: a gouged channel with rough bone lips."""
-    p = Patch(m, 64, ch, seed)
-    sd = p.sd_box(1, m - 1) + (p.noise(1.4, 1) - 0.5) * 1.8
-    body = smooth(0.7, -0.7, sd)
-    col = np.ones(sd.shape + (3,)) * fill
-    col = blend(col, INK if fill.mean() > 60 else BONE, p.grain(5, 2) * 0.15)
-    lip = smooth(1.4, 0.4, np.abs(sd + 1.2))
-    col = blend(col, edge, lip * edge_a)
-    return rgba(col, body)
-
-
-def line_patch(color, seed, thick=2.2):
-    p = Patch(8, 64, 4, seed)
-    wob = (p.noise(1.8, 1) - 0.5) * 1.6
-    d = np.abs(p.y + 0.5 - p.h / 2 + wob)
-    a = smooth(thick + 0.6, thick - 0.6, d)
-    a *= smooth(0.12, 0.2, p.noise(1.1, 2, fx=2.0))
-    return rgba(np.ones(d.shape + (3,)) * color, a)
-
-
-def scroll_grabber(color, seed):
-    p = Patch(6, 6, 48, seed)
-    sd = p.sd_box(1, 5) + (p.noise(1.4, 1) - 0.5) * 1.2
-    body = smooth(0.7, -0.7, sd)
-    col = np.ones(sd.shape + (3,)) * color
-    col = blend(col, INK, smooth(-1.8, -0.8, sd))
-    return rgba(col, body)
-
-
-def field(y, x, cx, cy):
-    return np.sqrt((x - cx) ** 2 + (y - cy) ** 2)
-
-
-def icon_grabber(fill, ring, size=44, seed=90):
-    y, x = np.mgrid[0:size, 0:size].astype(float) + 0.5
-    c = size / 2
-    rough = (fbm(size, size, 1.4, seed) - 0.5) * 2.0
-    # Diamond (a lozenge cut with four gouge strokes).
-    d = (np.abs(x - c) + np.abs(y - c)) + rough
-    body = smooth(c - 1.0, c - 2.2, d)
-    col = np.ones((size, size, 3)) * INK
-    col = blend(col, ring, smooth(c - 4.0, c - 5.2, d))
-    col = blend(col, fill, smooth(c - 8.5, c - 9.7, d))
-    col = blend(col, INK, smooth(3.6, 2.4, field(y, x, c, c)))
-    return rgba(col, body)
-
-
-def icon_toggle(on, disabled=False, w=88, h=48, seed=100):
-    y, x = np.mgrid[0:h, 0:w].astype(float) + 0.5
-    r = h / 2 - 3
-    px = np.abs(x - w / 2) - (w / 2 - 3 - r)
-    d = np.sqrt(np.maximum(px, 0) ** 2 + (y - h / 2) ** 2) - r + (fbm(h, w, 1.4, seed) - 0.5) * 2.0
-    body = smooth(0.7, -0.7, d)
-    fill = RED if on else WOOD
-    line = BONE
-    if disabled:
-        fill = fill * 0.5 + WOOD * 0.5
-        line = BONE * 0.45
-    col = np.ones((h, w, 3)) * fill
-    col = blend(col, line, smooth(1.8, 0.8, np.abs(d + 4.0)))
-    col = blend(col, INK, smooth(-2.0, -0.8, d))
-    kx = w - 3 - r if on else 3 + r
-    kd = field(y, x, kx, h / 2) - (r - 6) + (fbm(h, w, 1.4, seed + 1) - 0.5) * 1.6
-    col = blend(col, INK, smooth(1.8, 0.6, kd))
-    col = blend(col, line if not on else BONE, smooth(0.6, -0.6, kd + 2.0))
-    # Carved dimple on the knob.
-    col = blend(col, INK, smooth(2.6, 1.4, field(y, x, kx, h / 2)) * 0.8)
-    return rgba(col, np.maximum(body, smooth(0.6, -0.6, kd)))
-
-
-def icon_check(on, disabled=False, size=44, radio=False, seed=110):
-    y, x = np.mgrid[0:size, 0:size].astype(float) + 0.5
-    c = size / 2
-    rough = (fbm(size, size, 1.4, seed) - 0.5) * 1.8
-    if radio:
-        d = field(y, x, c, c) - (c - 4) + rough
-    else:
-        q = np.maximum(np.abs(x - c), np.abs(y - c))
-        d = q - (c - 4) + rough
-    line = BONE * (0.45 if disabled else 1.0)
-    col = np.ones((size, size, 3)) * WOOD
-    body = smooth(0.7, -0.7, d)
-    col = blend(col, line, smooth(1.9, 0.9, np.abs(d + 3.5)))
-    col = blend(col, INK, smooth(-1.6, -0.6, d))
-    if on:
-        if radio:
-            m = smooth(0.6, -0.6, field(y, x, c, c) - (c - 13) + rough)
-        else:
-            # A carved tick: two tapered gouges.
-            def seg(ax, ay, bx, by, w0, w1):
-                vx, vy = bx - ax, by - ay
-                t = np.clip(((x - ax) * vx + (y - ay) * vy) / (vx * vx + vy * vy), 0, 1)
-                dd = np.sqrt((x - ax - vx * t) ** 2 + (y - ay - vy * t) ** 2)
-                return smooth(0.6, -0.6, dd - (w0 + (w1 - w0) * t))
-            m = np.maximum(seg(11, 22, 19, 31, 2.0, 4.0), seg(19, 31, 34, 11, 4.0, 1.6))
-        col = blend(col, RED if not disabled else RED * 0.5, m)
-    return rgba(col, body)
-
-
-def arrow_icon(color, size=32, seed=120):
-    """Down chevron for option buttons."""
-    y, x = np.mgrid[0:size, 0:size].astype(float) + 0.5
-    c = size / 2
-    d = np.abs(np.abs(x - c) - (y - c + 6) * 1.0) / 1.4 - 2.4 + (fbm(size, size, 1.4, seed) - 0.5) * 1.2
-    m = smooth(0.6, -0.6, d) * (y > c - 7) * (y < c + 7)
-    return rgba(np.ones((size, size, 3)) * color, m)
-
-
 def main():
     os.makedirs(TEX, exist_ok=True)
-    os.makedirs(UI, exist_ok=True)
     out = {
         (TEX, "paper.png"): paper(),
         (TEX, "grain.png"): grain(),
@@ -409,37 +198,6 @@ def main():
         (TEX, "speckle.png"): speckle(),
         (TEX, "glow.png"): glow(),
         (TEX, "fleece.png"): fleece(),
-        (UI, "button_normal.png"): button(WOOD, BONE, 1),
-        (UI, "button_hover.png"): button(WOOD * 1.25, BONE, 1, fill_grain=0.16),
-        (UI, "button_pressed.png"): button(RED, BONE, 1, dark_grain=True),
-        (UI, "button_disabled.png"): button(np.array([26, 22, 20], float), BONE * 0.5, 1, line_alpha=0.6, gaps=0.45),
-        (UI, "button_focus.png"): focus_ring(2),
-        (UI, "accent_normal.png"): button(RED, BONE, 3, dark_grain=True),
-        (UI, "accent_pressed.png"): button(RED * 0.72, EMBER, 3, dark_grain=True),
-        (UI, "panel_dark.png"): panel_dark(),
-        (UI, "panel_paper.png"): panel_paper(),
-        (UI, "groove.png"): groove(INK, 80),
-        (UI, "groove_red.png"): groove(RED, 81, edge=BONE, edge_a=0.5),
-        (UI, "groove_ember.png"): groove(EMBER, 82, edge=BONE, edge_a=0.4),
-        (UI, "field.png"): groove(np.array([14, 12, 11], float), 83, ch=40, m=12),
-        (UI, "rule.png"): line_patch(BONE, 84),
-        (UI, "rule_ink.png"): line_patch(INK, 85),
-        (UI, "scroll_grabber.png"): scroll_grabber(BONE * 0.8, 86),
-        (UI, "scroll_grabber_hi.png"): scroll_grabber(EMBER, 86),
-        (UI, "grabber.png"): icon_grabber(RED, BONE),
-        (UI, "grabber_hi.png"): icon_grabber(EMBER, BONE),
-        (UI, "grabber_off.png"): icon_grabber(WOOD, BONE * 0.45),
-        (UI, "toggle_on.png"): icon_toggle(True),
-        (UI, "toggle_off.png"): icon_toggle(False),
-        (UI, "toggle_on_off.png"): icon_toggle(True, True),
-        (UI, "toggle_off_off.png"): icon_toggle(False, True),
-        (UI, "check_on.png"): icon_check(True),
-        (UI, "check_off.png"): icon_check(False),
-        (UI, "check_on_off.png"): icon_check(True, True),
-        (UI, "check_off_off.png"): icon_check(False, True),
-        (UI, "radio_on.png"): icon_check(True, radio=True),
-        (UI, "radio_off.png"): icon_check(False, radio=True),
-        (UI, "arrow.png"): arrow_icon(BONE),
     }
     for (folder, name), img in out.items():
         write_png(os.path.join(folder, name), img)

@@ -2,16 +2,16 @@
 
 importer="texture"
 type="CompressedTexture2D"
-uid="uid://dq35810dp8nf8"
-path="res://.godot/imported/groove_ember.png-a61dacf0b1a8bacb43eacc7512f2865f.ctex"
+uid="uid://cr1aayjrq0i63"
+path="res://.godot/imported/banner_glow.png-854a00f7d00a1b406de7ee15c70e18ff.ctex"
 metadata={
 "vram_texture": false
 }
 
 [deps]
 
-source_file="res://art/ui/groove_ember.png"
-dest_files=["res://.godot/imported/groove_ember.png-a61dacf0b1a8bacb43eacc7512f2865f.ctex"]
+source_file="res://art/px/ui/banner_glow.png"
+dest_files=["res://.godot/imported/banner_glow.png-854a00f7d00a1b406de7ee15c70e18ff.ctex"]
 
 [params]
 

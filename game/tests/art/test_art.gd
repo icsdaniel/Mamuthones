@@ -138,7 +138,7 @@ func test_theme() -> void:
 	check(t.default_font_size >= 26, "default text is at least 26 px")
 	for type in ["Button", "AccentButton", "OptionButton"]:
 		var sb := t.get_stylebox("normal", type)
-		check(sb is StyleBoxTexture and (sb as StyleBoxTexture).texture != null, "%s is a textured box" % type)
+		check(sb is PixelBox and (sb as PixelBox).texture != null, "%s is a pixel-art box" % type)
 		check(t.get_stylebox("pressed", type) != null and t.get_stylebox("disabled", type) != null, "%s has pressed/disabled" % type)
 	for type in ["Label", "TitleLabel", "HeaderLabel", "SubheaderLabel", "CaptionLabel", "HudLabel", "PaperLabel", "PaperHeaderLabel", "Button", "CheckButton", "LineEdit"]:
 		check(t.get_font_size("font_size", type) >= 24, "%s text is at least 24 px" % type)
@@ -146,8 +146,11 @@ func test_theme() -> void:
 	for icon in ["checked", "unchecked"]:
 		check(t.get_icon(icon, "CheckButton") != null, "CheckButton %s icon" % icon)
 	check(t.get_icon("grabber", "HSlider") != null, "slider grabber icon")
-	check(t.get_stylebox("panel", "CardPanel") is StyleBoxTexture, "paper card panel")
-	check(t.get_stylebox("grabber", "VScrollBar") is StyleBoxTexture, "scroll grabber")
+	check(t.get_stylebox("panel", "CardPanel") is PixelBox, "parchment card panel")
+	check(t.get_stylebox("grabber", "VScrollBar") is PixelBox, "scroll grabber")
+	# Pixel art: every kit texture is drawn with nearest filtering at whole art pixels.
+	check(ProjectSettings.get_setting("rendering/textures/canvas_textures/default_texture_filter") == 0, "nearest filtering project-wide")
+	check_eq((t.get_stylebox("normal", "Button") as PixelBox).px, 3.0, "one art pixel is three screen pixels")
 	check_eq(t.get_type_variation_base("AccentButton"), &"Button", "AccentButton is a Button variation")
 
 

@@ -18,7 +18,7 @@ var played_today := false
 ## A neutral picture for a hidden song: the game's mask, dimmed, on dark wood.
 class Veiled extends Control:
 	func _draw() -> void:
-		draw_rect(Rect2(Vector2.ZERO, size), Palette.WOOD)
+		draw_rect(Rect2(Vector2.ZERO, size), Palette.NAVY_DEEP)
 		var c := size * 0.5
 		draw_set_transform(c, 0.0, Vector2.ONE)
 		Logo.paint(self, Vector2.ZERO, minf(size.x, size.y) * 0.3, true)
@@ -26,27 +26,34 @@ class Veiled extends Control:
 		draw_rect(Rect2(Vector2.ZERO, size), Color(Palette.INK, 0.45))
 
 
-## One day of the last seven: a ring, filled in ember when that day's procession was walked, with a
-## brighter ring around today.
+## One day of the last seven, in the kit's pixel art: a bronze bell when that day's procession was
+## walked, a hollow one when not, and today marked by a gold rule with a lit lozenge under it.
 class DayMark extends Control:
+	const PX := 3.0
 	var walked := false
 	var today := false
 
 	func _init(p_walked: bool, p_today: bool) -> void:
 		walked = p_walked
 		today = p_today
-		custom_minimum_size = Vector2(44, 44)
+		custom_minimum_size = Vector2(48, 72)
 		mouse_filter = Control.MOUSE_FILTER_IGNORE
 
 	func _draw() -> void:
-		var c := size * 0.5
-		var r := minf(size.x, size.y) * 0.34
-		if walked:
-			draw_circle(c, r, Palette.EMBER)
-		else:
-			draw_arc(c, r, 0.0, TAU, 32, Palette.BONE_DIM, 2.5, true)
+		var bell := Palette.ui("bell_small" if walked else "bell_small_empty")
+		if bell == null:
+			return
+		var bs := bell.get_size() * PX
+		var top := Vector2(roundf((size.x - bs.x) * 0.5 / PX) * PX, 0.0)
+		draw_texture_rect(bell, Rect2(top, bs), false)
 		if today:
-			draw_arc(c, r + 7.0, 0.0, TAU, 40, Palette.EMBER_HOT, 3.0, true)
+			var y := top.y + bs.y + 2.0 * PX
+			draw_rect(Rect2(top.x - PX, y, bs.x + 2.0 * PX, PX), PixelPalette.GOLD[4])
+			draw_rect(Rect2(top.x - PX, y + PX, bs.x + 2.0 * PX, PX), PixelPalette.K[0])
+			var dia := Palette.ui("diamond_lit")
+			if dia != null:
+				var ds := dia.get_size() * PX
+				draw_texture_rect(dia, Rect2(Vector2(roundf((size.x - ds.x) * 0.5 / PX) * PX, y + 2.0 * PX), ds), false)
 
 
 func build() -> void:
