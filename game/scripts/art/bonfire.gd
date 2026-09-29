@@ -251,8 +251,9 @@ void fragment() {
 	float I = s * 1.1 + (detail - 0.5) * 0.4 + 0.08 + 0.08 * fl * (1.0 - vp);
 	I *= 1.0 - 0.28 * low;
 	// the white-hot heart low in the middle, bigger when it leaps
-	float core = 1.0 - length(vec2(xs / (W * (0.3 + 0.08 * fl)), (q.y - H * 0.1) / (H * (0.14 + 0.05 * fl))));
-	I = max(I, core * (1.1 + 0.12 * fl - 0.3 * low) + (detail - 0.5) * 0.2);
+	// (broken up by the licks, so it reads as flame and never as a flat white disc)
+	float core = 1.0 - length(vec2(xs / (W * (0.3 + 0.08 * fl)), (q.y - H * 0.16) / (H * (0.16 + 0.05 * fl))));
+	I = max(I, core * (0.98 + 0.14 * fl - 0.3 * low) + (streak2 - 0.5) * 0.3 + (detail - 0.5) * 0.35);
 	if (q.y / H < -0.02) { I = 0.0; }
 	float lv = I * 7.0 + (bayer4(p) - 0.5) * 0.55;
 	int idx = int(floor(lv));
