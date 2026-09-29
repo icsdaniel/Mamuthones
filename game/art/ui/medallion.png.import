@@ -2,16 +2,16 @@
 
 importer="texture"
 type="CompressedTexture2D"
-uid="uid://dq35810dp8nf8"
-path="res://.godot/imported/groove_ember.png-a61dacf0b1a8bacb43eacc7512f2865f.ctex"
+uid="uid://djw3ajqual3qo"
+path="res://.godot/imported/medallion.png-263a51a8a74408c6ae7f9ca1f28a9a6d.ctex"
 metadata={
 "vram_texture": false
 }
 
 [deps]
 
-source_file="res://art/ui/groove_ember.png"
-dest_files=["res://.godot/imported/groove_ember.png-a61dacf0b1a8bacb43eacc7512f2865f.ctex"]
+source_file="res://art/ui/medallion.png"
+dest_files=["res://.godot/imported/medallion.png-263a51a8a74408c6ae7f9ca1f28a9a6d.ctex"]
 
 [params]
 

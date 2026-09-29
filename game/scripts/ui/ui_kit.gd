@@ -169,7 +169,40 @@ static func button(text: String, on_press: Callable, variation := "") -> Button:
 		b.pressed.connect(func() -> void:
 			Sound.ui("tap")
 			on_press.call())
+	juice(b)
+	fit_text(b)
 	return b
+
+
+## The press feel of every kit button: the face drops one art pixel (the pressed PixelBox) and the
+## whole button flashes gold for a moment.
+static func juice(b: BaseButton) -> void:
+	b.button_down.connect(func() -> void:
+		var hot := Color(1.35, 1.2, 0.9) if not reduced_motion() else Color(1.15, 1.08, 0.97)
+		b.self_modulate = hot
+		var tw := b.create_tween()
+		tw.tween_property(b, "self_modulate", Color.WHITE, 0.24).set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_OUT))
+
+
+## Shrinks a button's label (down to `min_size`, never under the 26 px floor) until it fits between
+## the button's ornaments, whatever the language.
+static func fit_text(b: Button, min_size := 26) -> void:
+	var refit := func() -> void:
+		if b.text == "" or b.size.x <= 0.0:
+			return
+		b.remove_theme_font_size_override("font_size")
+		var font := b.get_theme_font("font")
+		var fs := b.get_theme_font_size("font_size")
+		var sb := b.get_theme_stylebox("normal")
+		var room := b.size.x - (sb.get_margin(SIDE_LEFT) + sb.get_margin(SIDE_RIGHT) if sb != null else 0.0)
+		if b.get_child_count() > 0 and b.alignment == HORIZONTAL_ALIGNMENT_LEFT:
+			return   # list rows with a badge on the right lay out their own text
+		var line := b.text.get_slice("\n", 0)
+		while fs > min_size and font != null and font.get_string_size(line, HORIZONTAL_ALIGNMENT_LEFT, -1, fs).x > room:
+			fs -= 1
+		if fs != b.get_theme_font_size("font_size"):
+			b.add_theme_font_size_override("font_size", fs)
+	b.resized.connect(refit)
 
 
 static func label(text: String, variation := "", wrap := true, align := HORIZONTAL_ALIGNMENT_LEFT) -> Label:

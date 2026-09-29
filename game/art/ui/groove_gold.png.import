@@ -2,16 +2,16 @@
 
 importer="texture"
 type="CompressedTexture2D"
-uid="uid://cc7reqi0hb6g"
-path="res://.godot/imported/rule_ink.png-1d240faff8f44ec28326ca9af5036351.ctex"
+uid="uid://bd5wrfnwintd2"
+path="res://.godot/imported/groove_gold.png-89a24ec1a1b20ad9df2640447d335a62.ctex"
 metadata={
 "vram_texture": false
 }
 
 [deps]
 
-source_file="res://art/ui/rule_ink.png"
-dest_files=["res://.godot/imported/rule_ink.png-1d240faff8f44ec28326ca9af5036351.ctex"]
+source_file="res://art/ui/groove_gold.png"
+dest_files=["res://.godot/imported/groove_gold.png-89a24ec1a1b20ad9df2640447d335a62.ctex"]
 
 [params]
 
