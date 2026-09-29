@@ -13,7 +13,7 @@ extends Control
 ## Over the picture, all subtle so the notes stay the clearest thing: the fire flickers and flares on
 ## the beat (a shader on the picture) and sparks rise from it, the lanterns flicker, the four lines
 ## pulse on the beat, a warm light flashes where a note is hit, and two framed portraits (the
-## Issohadore, a Mamuthone, cut from Daniele's turnarounds) sway on the beat.
+## Issohadore, a Mamuthone, cut from Daniele's turnarounds) bob down on every beat.
 ##
 ## It stands in for FireBackdrop (beat, dim, kick) and SideRows (jolt, stomp, set_still, ...), so the
 ## play screen drives it the same way.
@@ -31,8 +31,10 @@ const EDGE_CLEAR := 0.12             ## an outer note's centre stays this share 
 ## The portrait frames' corners (picture px, the left one; the right mirrors it), from the play-screen
 ## reference.
 const FRAME := [Vector2(-12, 430), Vector2(226, 494), Vector2(262, 800), Vector2(-12, 930)]
-const SWAY := 3.2                    ## degrees a figure leans at each beat
-const SWAY_MOVE := 0.55              ## share of each beat spent moving over (it arrives on the beat)
+const BOB := 0.1                     ## how far a figure drops on the beat, share of its portrait's height
+const BOB_SQUASH := 0.03             ## how much it squashes at the bottom of the drop
+const BOB_HOLD := 0.03               ## seconds it stays down after the beat
+const BOB_BACK := 0.1                ## seconds after the beat it is back up
 
 var lanes: LaneView
 var beat := -1000.0
@@ -283,36 +285,44 @@ func _process(delta: float) -> void:
 		_mat.set_shader_parameter("motion", 0.35 if reduced_motion else 1.0)
 	if _sparks != null:
 		_sparks.speed_scale = 1.0 - 0.5 * dim
-	_sway()
+	_bob_figures()
 	_glow.queue_redraw()
 
 
-## Each figure leans onto one foot and arrives there on the beat, alternating, and settles a touch
-## lower as the weight lands (a slight squash). Never a jump.
-func _sway() -> void:
-	var lean := 0.0
-	var land := 0.0
+## The figures bob on every beat, after the character in Daniele's recording: on the beat each drops
+## at once (BOB of its portrait's height, a slight squash with it), holds there for a moment, and
+## springs back up within a tenth of a second, then stands still until the next beat. Never a jump.
+func _bob_figures() -> void:
+	var down := 0.0
+	var spb := lanes.spb if lanes != null and lanes.spb > 0.0 else 0.5
 	if beat > -999.0 and not still:
-		var k := floorf(beat)
-		var f := beat - k
-		var from := 1.0 if posmod(int(k), 2) == 0 else -1.0
-		var x := clampf((f - (1.0 - SWAY_MOVE)) / SWAY_MOVE, 0.0, 1.0)
-		lean = lerpf(from, -from, x * x * (3.0 - 2.0 * x))
-		land = exp(-f * 9.0)                  # the weight lands on the beat
+		down = _bob((beat - floorf(beat)) * spb)
 	var m := 0.35 if reduced_motion else 1.0
 	var age := _clock - _jolt_at
-	var extra := 0.0
+	var shake := 0.0
 	match _jolt_kind:
 		"miss":
-			extra = sin(age * 28.0) * exp(-age * 7.0) * 0.9
+			shake = sin(age * 28.0) * exp(-age * 7.0)
 		"stomp":
-			land = maxf(land, exp(-age * 6.0) * 1.6)
+			down = maxf(down, _bob(age) * 1.4)
 	for i in _figures.size():
 		var s := _figures[i]
 		var base: Vector2 = s.get_meta("base_scale", Vector2.ONE)
-		s.rotation = deg_to_rad(SWAY) * m * (lean + extra) * (1.0 if i == 1 else 0.8)
-		var q := 0.022 * land * m
+		var at: Vector2 = s.get_meta("base_pos", s.position)
+		var h: float = s.get_meta("frame_h", 0.0)
+		s.position = at + Vector2(shake * 0.02 * h, down * BOB * h) * m
+		s.rotation = 0.0
+		var q := BOB_SQUASH * down * m
 		s.scale = base * Vector2(1.0 + q * 0.6, 1.0 - q)
+
+
+## How far down a figure is (1 = the full drop) t seconds after the beat: down at once, held for a
+## frame or two, back up by 0.1 s.
+static func _bob(t: float) -> float:
+	if t < 0.0:
+		return 0.0
+	var x := clampf((t - BOB_HOLD) / (BOB_BACK - BOB_HOLD), 0.0, 1.0)
+	return 1.0 - x * x * (3.0 - 2.0 * x)
 
 
 # ------------------------------------------------------------------ the portraits
@@ -381,6 +391,8 @@ func _place_frames() -> void:
 		var cx := lerpf(pts[0].x, pts[1].x, 0.5) if i == 0 else lerpf(pts[0].x, pts[1].x, 0.5)
 		cx = (pts[0].x + pts[1].x + pts[2].x + pts[3].x) * 0.25 + (8.0 if i == 0 else -8.0) * pic_scale
 		fig.position = Vector2(cx, bottom + h * 0.1)
+		fig.set_meta("base_pos", fig.position)
+		fig.set_meta("frame_h", bottom - top)
 		fig.set_meta("base_scale", Vector2(sc, sc))
 		fig.scale = Vector2(sc, sc)
 		fig.flip_h = false
