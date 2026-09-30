@@ -32,15 +32,19 @@ const EDGE_CLEAR := 0.12             ## an outer note's centre stays this share 
 ## reference.
 const FRAME := [Vector2(-12, 232), Vector2(226, 296), Vector2(272, 612), Vector2(-12, 748)]
 ## The Mamuthone's dance, from Daniele's pose sheet: four moments of one stamp onto his left leg,
-## always facing the road (Daniele: no switching sides). The stamp lands on the beat.
+## always facing the road (Daniele: no switching sides). The stamp lands on the beat; the gathering
+## pose is not used, as his reference clip has no wind-up before the beat.
 const DANCE_POSES := [0, 1, 2, 3]
 const ANTICIPATE := 0
 const IMPACT := 1
 const FOLLOW := 2
 const SETTLE := 3
-const IMPACT_TIME := 0.09            ## seconds after the beat the impact pose shows
-const FOLLOW_TIME := 0.24            ## ... then the follow-through until this long after the beat
-const ANTICIPATE_TIME := 0.14        ## seconds before the next beat he gathers for it
+## Timed on Daniele's reference clip (30 fps): no wind-up before the beat; on the beat the figure
+## snaps straight into the crouch and drops, holds it two frames, one in-between frame on the way
+## up, and is standing still again 0.1 s after the beat.
+const IMPACT_TIME := 0.067           ## seconds after the beat the impact pose shows
+const FOLLOW_TIME := 0.095           ## ... then the in-between until this long after the beat
+const DANCE_DROP := 0.5              ## the Mamuthone's drop, as a share of BOB (his crouch carries the rest)
 const BOB := 0.1                     ## how far a figure drops on the beat, share of its portrait's height
 const BOB_SQUASH := 0.03             ## how much it squashes at the bottom of the drop
 const BOB_HOLD := 0.03               ## seconds it stays down after the beat
@@ -320,9 +324,9 @@ func _bob_figures() -> void:
 	for i in _figures.size():
 		var s := _figures[i]
 		if i == 1 and not _dance.is_empty():
-			# the Mamuthone's poses carry the drop themselves: only the miss shake moves him
+			# the Mamuthone's crouch carries most of the drop; the rest is a snap down with it
 			var h1: float = s.get_meta("frame_h", 0.0)
-			s.position = (s.get_meta("base_pos", s.position) as Vector2) + Vector2(shake * 0.02 * h1 * m, 0.0)
+			s.position = (s.get_meta("base_pos", s.position) as Vector2) + Vector2(shake * 0.02 * h1, down * BOB * DANCE_DROP * h1) * m
 			s.scale = s.get_meta("base_scale", Vector2.ONE)
 			continue
 		var base: Vector2 = s.get_meta("base_scale", Vector2.ONE)
@@ -345,10 +349,7 @@ func _dance_pose() -> void:
 	if beat > -999.0 and not still:
 		var k := floorf(beat)
 		var t := (beat - k) * spb
-		var to_next := spb - t
-		if to_next < minf(ANTICIPATE_TIME, spb * 0.3):
-			pose = ANTICIPATE
-		elif t < IMPACT_TIME:
+		if t < IMPACT_TIME:
 			pose = IMPACT
 		elif t < FOLLOW_TIME:
 			pose = FOLLOW
