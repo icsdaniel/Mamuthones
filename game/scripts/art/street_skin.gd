@@ -11,7 +11,8 @@ extends RefCounted
 ## perspective.
 ##
 ##   step      blue gem
-##   call      red gem (the Issohadore's call); off-beat steps too, a little narrower
+##   call      a narrower blue gem with a white diamond near each end (the Issohadore's call);
+##             off-beat steps too, so every tap is blue and only its shape says it falls off the beat
 ##   heal      green gem with a white cross
 ##   hold      gold gem, a gold ribbon down the lane, a small gold gem at its end
 ##   stomp     violet gem the full lane wide, deeper, with a double rim and two thumb prints
@@ -23,12 +24,12 @@ const RIM := Color("#ffffff")
 const STILL_BLUE := Color("#5f8fe8")
 ## [light facet, body, dark facet, glow] per kind
 const K_STEP := [Color("#9fe0ff"), Color("#2ea6ff"), Color("#1a64d0"), Color("#48b4ff")]
-const K_CALL := [Color("#ff9aa8"), Color("#ff2e52"), Color("#c0142f"), Color("#ff3a5a")]
 const K_HEAL := [Color("#a8ffc8"), Color("#2ee07a"), Color("#12a052"), Color("#40ff90")]
 const K_HOLD := [Color("#fff0a0"), Color("#ffcc1a"), Color("#d08a00"), Color("#ffd040")]
 const K_STOMP := [Color("#eab0ff"), Color("#b240ff"), Color("#7418c8"), Color("#c060ff")]
 const K_UP := [Color("#fff0a0"), Color("#ffcc1a"), Color("#d08a00"), Color("#ffd040")]
 const K_DOWN := [Color("#9fe0ff"), Color("#2ea6ff"), Color("#1a64d0"), Color("#48b4ff")]
+const OFF_W := 0.74                  ## an off-beat step or call is this much narrower than a step
 const GEM_W := 0.9                   ## a gem's width, as a share of its lane's width
 const GEM_D := 0.22                  ## a gem's depth on screen, as a share of its lane's width
 const TIP := 0.12                    ## how far in the pointed ends start, share of the half width
@@ -214,7 +215,7 @@ static func _cross(lv: LaneView, f: Callable, lw: float, alpha: float) -> void:
 	lv.draw_rect(Rect2(c.x - t * 0.5, c.y - h, t, 2.0 * h), _a(RIM, alpha))
 
 
-## A call's mark (so it differs from a step by shape too): a white diamond near each end.
+## A call's or off-beat step's mark: a white diamond near each end.
 static func _notches(lv: LaneView, f: Callable, lw: float, alpha: float) -> void:
 	var r := lw * 0.05
 	if r < 1.5 or alpha <= 0.01:
@@ -347,8 +348,8 @@ static func draw_notes(lv: LaneView, field: Rect2) -> void:
 				if n.heal:
 					_cross(lv, gem(lv, field, sp.x, sp.y, y, K_HEAL, a), lw, a)
 				elif n.call or lv._off_beat(n):
-					sp = span(rects[n.lane], GEM_W * (1.0 if n.call else 0.8))
-					_notches(lv, gem(lv, field, sp.x, sp.y, y, K_CALL, a), lw, a)
+					sp = span(rects[n.lane], GEM_W * OFF_W)
+					_notches(lv, gem(lv, field, sp.x, sp.y, y, K_STEP, a), lw, a)
 				else:
 					gem(lv, field, sp.x, sp.y, y, K_STEP, a)
 			Note.Kind.HOLD:
