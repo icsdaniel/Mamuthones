@@ -31,15 +31,18 @@ const EDGE_CLEAR := 0.12             ## an outer note's centre stays this share 
 ## The portrait frames' corners (picture px, the left one; the right mirrors it), from the play-screen
 ## reference.
 const FRAME := [Vector2(-12, 232), Vector2(226, 296), Vector2(272, 612), Vector2(-12, 748)]
-## The Mamuthone's bob, from Daniele's three-pose sheet (2026-09-30): standing, the drop on the beat
+## The figures' bob, from Daniele's three-pose sheets (2026-09-30): standing, the drop on the beat
 ## and halfway back up, one camera, feet fixed, facing the road. Timed on his reference clip (30 fps):
 ## the drop pose for two frames after the beat, one in-between frame, standing again by 0.1 s.
 const STAND := 0
 const DROP := 1
 const HALF := 2
 const DROP_TIME := 0.067             ## seconds after the beat the drop pose shows
-const HALF_TIME := 0.095             ## ... then the halfway pose until this long after the beat
-const POSE_BOB := 0.5                ## the Mamuthone's own sink with the poses, as a share of BOB
+const HALF_TIME := 0.12              ## ... then the halfway pose until this long after the beat (long enough to show at 30 fps)
+## Whether the Issohadore rests with his rope raised overhead (his sheet's standing pose). Off: the
+## rope would jump from his hip to over his head every beat, so he rests with it at his hip.
+const ROPE_UP := false
+const POSE_BOB := 0.5                ## a figure's own sink with its poses, as a share of BOB
 const BOB_LEAN := 2.0                ## degrees a figure leans toward the road at the bottom of the drop
 const BOB := 0.1                     ## how far a figure drops on the beat, share of its portrait's height
 const BOB_SQUASH := 0.03             ## how much it squashes at the bottom of the drop
@@ -65,7 +68,7 @@ var _glow: Control                   ## additive: lines pulsing, lanterns, hit f
 var _sparks: CPUParticles2D
 var _frames: Array[Node2D] = []
 var _figures: Array[Sprite2D] = []
-var _poses: Array[Texture2D] = []    ## the Mamuthone's poses (STAND, DROP, HALF), all the same size, feet at the bottom centre
+var _poses: Array = []               ## per figure, its poses (STAND, DROP, HALF), all the same size, feet at the bottom centre
 var _glow_tex: Texture2D
 var _flashes: Array = []             ## [local pos, t0, strength]
 var _clock := 0.0
@@ -319,24 +322,21 @@ func _bob_figures() -> void:
 	_dance_pose()
 	for i in _figures.size():
 		var s := _figures[i]
-		var mam := i == 1 and not _poses.is_empty()
+		var posed := i < _poses.size()
 		var base: Vector2 = s.get_meta("base_scale", Vector2.ONE)
 		var at: Vector2 = s.get_meta("base_pos", s.position)
 		var h: float = s.get_meta("frame_h", 0.0)
-		# the Mamuthone's poses carry part of the drop themselves: a smaller sink, no squash
-		s.position = at + Vector2(shake * 0.02 * h, down * BOB * (POSE_BOB if mam else 1.0) * h) * m
+		# the poses carry part of the drop themselves: a smaller sink, no squash
+		s.position = at + Vector2(shake * 0.02 * h, down * BOB * (POSE_BOB if posed else 1.0) * h) * m
 		# a slight lean toward the road with the drop (the left portrait's road is to its right)
 		s.rotation = deg_to_rad(BOB_LEAN) * down * m * (1.0 if i == 0 else -1.0)
-		var q := 0.0 if mam else BOB_SQUASH * down * m
+		var q := 0.0 if posed else BOB_SQUASH * down * m
 		s.scale = base * Vector2(1.0 + q * 0.6, 1.0 - q)
 
 
-## The Mamuthone's pose for this moment of the beat: the drop just after the beat, halfway back up,
+## The figures' pose for this moment of the beat: the drop just after the beat, halfway back up,
 ## then standing until the next beat.
 func _dance_pose() -> void:
-	if _poses.is_empty() or _figures.size() < 2:
-		return
-	var fig := _figures[1]
 	var pose := STAND
 	var spb := lanes.spb if lanes != null and lanes.spb > 0.0 else 0.5
 	if beat > -999.0 and not still:
@@ -345,8 +345,10 @@ func _dance_pose() -> void:
 			pose = DROP
 		elif t < HALF_TIME and not reduced_motion:
 			pose = HALF
-	if fig.texture != _poses[pose]:
-		fig.texture = _poses[pose]
+	for i in mini(_poses.size(), _figures.size()):
+		var tex: Texture2D = _poses[i][HALF if i == 0 and pose == STAND and not ROPE_UP else pose]
+		if _figures[i].texture != tex:
+			_figures[i].texture = tex
 
 
 ## How far down a figure is (1 = the full drop) t seconds after the beat: down at once, held for a
@@ -373,12 +375,11 @@ func _make_frame(i: int) -> Node2D:
 	root.add_child(panel)
 	var fig := Sprite2D.new()
 	fig.name = "Figure"
-	if i == 0:
-		fig.texture = load("res://art/street/issohadore.png")
-	else:
-		for k in [STAND, DROP, HALF]:
-			_poses.append(load("res://art/street/mamuthone_bob_%d.png" % k))
-		fig.texture = _poses[STAND]
+	var poses: Array[Texture2D] = []
+	for k in [STAND, DROP, HALF]:
+		poses.append(load("res://art/street/%s_bob_%d.png" % ["issohadore" if i == 0 else "mamuthone", k]))
+	_poses.append(poses)
+	fig.texture = poses[STAND]
 	fig.centered = false
 	fig.texture_filter = CanvasItem.TEXTURE_FILTER_LINEAR
 	var ts := fig.texture.get_size()
@@ -424,10 +425,10 @@ func _place_frames() -> void:
 		# the figure's feet a little below the frame's lower edge, its head near the top
 		var top := (pts[0].y + pts[1].y) * 0.5
 		var bottom := (pts[2].y + pts[3].y) * 0.5
-		var h := (bottom - top) * (1.12 if i == 0 else 0.9)
+		var h := (bottom - top) * (0.98 if i == 0 else 0.9)
 		var sc := h / ts.y
 		var cx := lerpf(pts[0].x, pts[1].x, 0.5) if i == 0 else lerpf(pts[0].x, pts[1].x, 0.5)
-		cx = (pts[0].x + pts[1].x + pts[2].x + pts[3].x) * 0.25 + (8.0 if i == 0 else 14.0) * pic_scale
+		cx = (pts[0].x + pts[1].x + pts[2].x + pts[3].x) * 0.25 + (34.0 if i == 0 else 14.0) * pic_scale
 		fig.position = Vector2(cx, bottom + h * 0.1)
 		fig.set_meta("base_pos", fig.position)
 		fig.set_meta("frame_h", bottom - top)

@@ -26,7 +26,7 @@ def cut(src, box, tol):
     return cut_array(np.asarray(Image.open(os.path.join(SRC, src)).convert("RGB").crop(box)).astype(float), tol)
 
 
-def cut_array(a, tol):
+def cut_array(a, tol, clear_holes=False):
     # the backdrop's colour, smoothly varying: a heavy blur of the border rows and columns
     border = np.concatenate([a[:4].reshape(-1, 3), a[-4:].reshape(-1, 3), a[:, :4].reshape(-1, 3), a[:, -4:].reshape(-1, 3)])
     bg = np.median(border, axis=0)
@@ -58,6 +58,13 @@ def cut_array(a, tol):
         sizes = ndimage.sum(fg, lab2, range(1, n2 + 1))
         fg = lab2 == (1 + int(np.argmax(sizes)))
     fg = ndimage.binary_fill_holes(fg)
+    if clear_holes:
+        # backdrop seen through a loop (the Issohadore's rope): clear patches of backdrop colour
+        # inside the figure, bigger than a few pixels
+        lab3, n3 = ndimage.label(fg & near)
+        if n3:
+            sizes = ndimage.sum(np.ones_like(near), lab3, range(1, n3 + 1))
+            fg &= ~np.isin(lab3, 1 + np.where(sizes > 40)[0])
     alpha = ndimage.gaussian_filter(fg.astype(float), 0.8)
     alpha = np.clip((alpha - 0.15) / 0.7, 0, 1)
     ys, xs = np.where(alpha > 0.02)
@@ -73,29 +80,33 @@ def feet_x(img):
     return float(np.mean(xs[low]))
 
 
-# The Mamuthone's bob (Daniele, 2026-09-30): standing, the drop on the beat, halfway back up, one
+# The figures' bob (Daniele, 2026-09-30): standing, the drop on the beat, halfway back up, one
 # camera and feet fixed. Same treatment as the dance; every pose keeps its own height on a canvas
 # the standing pose's height, feet at the bottom, so the drop reads as the figure sinking.
-BOB = ("mamuthone_bob_sheet.png", [0, 493, 959, None], 18)
+BOBS = {
+    "mamuthone": ("mamuthone_bob_sheet.png", [0, 493, 959, None], 18),
+    "issohadore": ("issohadore_bob_sheet.png", [0, 478, 966, None], 18),
+}
 
 
-def bob():
-    src, cuts, tol = BOB
+def bob(name):
+    src, cuts, tol = BOBS[name]
     sheet = np.asarray(Image.open(os.path.join(SRC, src)).convert("RGB")).astype(float)
     cuts = [c if c is not None else sheet.shape[1] for c in cuts]
-    poses = [cut_array(sheet[:, cuts[i]:cuts[i + 1]], tol) for i in range(3)]
+    poses = [cut_array(sheet[:, cuts[i]:cuts[i + 1]], tol, name == "issohadore") for i in range(3)]
     fx = [feet_x(p) for p in poses]
     half = int(max(max(f, p.size[0] - f) for f, p in zip(fx, poses))) + 2
     h = max(p.size[1] for p in poses)
     for i, p in enumerate(poses):
         canvas = Image.new("RGBA", (half * 2, h), (0, 0, 0, 0))
         canvas.paste(p, (int(round(half - fx[i])), h - p.size[1]))
-        canvas.save(os.path.join(OUT, "mamuthone_bob_%d.png" % i))
-        print("bob", i, p.size, canvas.size)
+        canvas.save(os.path.join(OUT, "%s_bob_%d.png" % (name, i)))
+        print(name, "bob", i, p.size, canvas.size)
 
 
 os.makedirs(OUT, exist_ok=True)
-bob()
+for name in BOBS:
+    bob(name)
 if "--bob" in sys.argv:
     sys.exit()
 for name, (src, box, tol) in CUTS.items():
