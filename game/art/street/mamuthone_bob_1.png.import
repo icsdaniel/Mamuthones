@@ -2,16 +2,16 @@
 
 importer="texture"
 type="CompressedTexture2D"
-uid="uid://cqmtp3tpoxeqh"
-path="res://.godot/imported/mamuthone_dance_2.png-74cfdde7e20ef7c07c5dbf87a336d004.ctex"
+uid="uid://xyuu8hgicmb8"
+path="res://.godot/imported/mamuthone_bob_1.png-9bbf1d3c28dd8c7b1d32ea2c31fa1819.ctex"
 metadata={
 "vram_texture": false
 }
 
 [deps]
 
-source_file="res://art/street/mamuthone_dance_2.png"
-dest_files=["res://.godot/imported/mamuthone_dance_2.png-74cfdde7e20ef7c07c5dbf87a336d004.ctex"]
+source_file="res://art/street/mamuthone_bob_1.png"
+dest_files=["res://.godot/imported/mamuthone_bob_1.png-9bbf1d3c28dd8c7b1d32ea2c31fa1819.ctex"]
 
 [params]
 

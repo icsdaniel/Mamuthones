@@ -12,7 +12,7 @@ from PIL import Image
 from scipy import ndimage
 import cv2
 
-SRC = sys.argv[1] if len(sys.argv) > 1 else "/mnt/project-files/mockups/lowpoly"
+SRC = sys.argv[1] if len(sys.argv) > 1 and not sys.argv[1].startswith("--") else "/mnt/project-files/mockups/lowpoly"
 OUT = os.path.join(os.path.dirname(__file__), "../../../game/art/street")
 
 # name: (source, crop box l, t, r, b, tolerance)
@@ -66,13 +66,6 @@ def cut_array(a, tol):
     return Image.fromarray(rgba, "RGBA")
 
 
-# The Mamuthone's dance: four moments of one stamp onto his left leg, side by side on one sheet
-# (anticipation, impact, follow-through, settle). Split at the gaps between the figures, cut each
-# out, and put all four on one canvas with the feet at the same place (bottom centre), so the
-# game can swap between them without the figure sliding.
-DANCE = ("mamuthone_dance_sheet_v2.png", [0, 408, 826, 1258, None], 18)
-
-
 def feet_x(img):
     al = np.asarray(img)[..., 3] > 128
     ys, xs = np.where(al)
@@ -80,23 +73,31 @@ def feet_x(img):
     return float(np.mean(xs[low]))
 
 
-def dance():
-    src, cuts, tol = DANCE
+# The Mamuthone's bob (Daniele, 2026-09-30): standing, the drop on the beat, halfway back up, one
+# camera and feet fixed. Same treatment as the dance; every pose keeps its own height on a canvas
+# the standing pose's height, feet at the bottom, so the drop reads as the figure sinking.
+BOB = ("mamuthone_bob_sheet.png", [0, 493, 959, None], 18)
+
+
+def bob():
+    src, cuts, tol = BOB
     sheet = np.asarray(Image.open(os.path.join(SRC, src)).convert("RGB")).astype(float)
     cuts = [c if c is not None else sheet.shape[1] for c in cuts]
-    poses = [cut_array(sheet[:, cuts[i]:cuts[i + 1]], tol) for i in range(4)]
+    poses = [cut_array(sheet[:, cuts[i]:cuts[i + 1]], tol) for i in range(3)]
     fx = [feet_x(p) for p in poses]
     half = int(max(max(f, p.size[0] - f) for f, p in zip(fx, poses))) + 2
     h = max(p.size[1] for p in poses)
     for i, p in enumerate(poses):
         canvas = Image.new("RGBA", (half * 2, h), (0, 0, 0, 0))
         canvas.paste(p, (int(round(half - fx[i])), h - p.size[1]))
-        canvas.save(os.path.join(OUT, "mamuthone_dance_%d.png" % i))
-        print("dance", i, canvas.size)
+        canvas.save(os.path.join(OUT, "mamuthone_bob_%d.png" % i))
+        print("bob", i, p.size, canvas.size)
 
 
 os.makedirs(OUT, exist_ok=True)
-dance()
+bob()
+if "--bob" in sys.argv:
+    sys.exit()
 for name, (src, box, tol) in CUTS.items():
     img = cut(src, box, tol)
     img.save(os.path.join(OUT, name + ".png"))
