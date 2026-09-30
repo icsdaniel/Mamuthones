@@ -112,7 +112,9 @@ static func gem(lv: LaneView, field: Rect2, x0: float, x1: float, y: float, k: A
 	ci_poly(lv, PackedVector2Array([b[2], r, b[4], f.call(Vector2(1.0 - TIP * 2.2, 0.0) * inset)]), _a(dark, alpha))
 	# the fire's light along the far edge, and a glint on the far slope
 	lv.draw_line(b[1], b[2], _a(Color("#ffd9a0"), 0.9 * alpha), maxf(1.0, rim * 0.8), true)
-	ci_poly(lv, PackedVector2Array([b[1].lerp(b[2], 0.08), b[1].lerp(b[2], 0.3), l.lerp(r, 0.28), l.lerp(r, 0.12)]), _a(RIM, 0.55 * alpha))
+	# the glint flares on every beat, so the notes ring with the bells
+	var gl := 0.4 + 0.6 * lv.beat_env()
+	ci_poly(lv, PackedVector2Array([b[1].lerp(b[2], 0.08), b[1].lerp(b[2], 0.3), l.lerp(r, 0.28), l.lerp(r, 0.12)]), _a(RIM, gl * alpha))
 	# the moment: a white-hot line across the middle
 	lv.draw_line(sil[0], sil[3], _a(RIM, alpha), maxf(1.5, lw * 0.022), true)
 	return f
@@ -212,13 +214,27 @@ static func _cross(lv: LaneView, f: Callable, lw: float, alpha: float) -> void:
 	lv.draw_rect(Rect2(c.x - t * 0.5, c.y - h, t, 2.0 * h), _a(RIM, alpha))
 
 
+## A call's mark (so it differs from a step by shape too): a white diamond near each end.
+static func _notches(lv: LaneView, f: Callable, lw: float, alpha: float) -> void:
+	var r := lw * 0.05
+	if r < 1.5 or alpha <= 0.01:
+		return
+	for sx: float in [-0.7, 0.7]:
+		var c: Vector2 = f.call(Vector2(sx, 0.0))
+		var d := PackedVector2Array([c + Vector2(0, -r), c + Vector2(r * 1.2, 0), c + Vector2(0, r), c + Vector2(-r * 1.2, 0)])
+		var ring := d.duplicate()
+		ring.append(d[0])
+		lv.draw_polyline(ring, _a(OUTLINE, alpha), 3.0, true)
+		ci_poly(lv, d, _a(RIM, alpha))
+
+
 ## Two bare feet on a stomp gem, like the button's own: both thumbs, on this button.
 static func _prints(lv: LaneView, f: Callable, lw: float, alpha: float) -> void:
-	var sz := lw * 0.13
+	var sz := lw * 0.16
 	if sz < 2.0 or alpha <= 0.01:
 		return
 	for foot: float in [-1.0, 1.0]:
-		var c: Vector2 = f.call(Vector2(foot * 0.2, 0.1))
+		var c: Vector2 = f.call(Vector2(foot * 0.22, 0.1))
 		_foot(lv, c, sz + 2.5, foot, _a(OUTLINE, alpha))
 		_foot(lv, c, sz, foot, _a(RIM, alpha))
 
@@ -332,7 +348,7 @@ static func draw_notes(lv: LaneView, field: Rect2) -> void:
 					_cross(lv, gem(lv, field, sp.x, sp.y, y, K_HEAL, a), lw, a)
 				elif n.call or lv._off_beat(n):
 					sp = span(rects[n.lane], GEM_W * (1.0 if n.call else 0.8))
-					gem(lv, field, sp.x, sp.y, y, K_CALL, a)
+					_notches(lv, gem(lv, field, sp.x, sp.y, y, K_CALL, a), lw, a)
 				else:
 					gem(lv, field, sp.x, sp.y, y, K_STEP, a)
 			Note.Kind.HOLD:
