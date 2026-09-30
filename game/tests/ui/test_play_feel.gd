@@ -297,3 +297,38 @@ func test_notes_slide_smoothly() -> void:
 		check(y > prev, "the note keeps sliding closer at every moment")
 		prev = y
 	lv.free()
+
+
+## The figures' bob follows the clock, never the pictures: whichever pictures a figure has, the drop
+## shows just after the beat, halfway back up next, and the rest pose for the rest of the beat. Each
+## figure has all three pictures, one size, so a swap never shifts or rescales it.
+func test_figure_poses_follow_the_beat() -> void:
+	check_eq(StreetBackdrop.pose_at(0.0), StreetBackdrop.DROP, "on the beat: the drop")
+	check_eq(StreetBackdrop.pose_at(StreetBackdrop.DROP_TIME - 0.001), StreetBackdrop.DROP, "still down just before DROP_TIME")
+	check_eq(StreetBackdrop.pose_at(StreetBackdrop.DROP_TIME + 0.001), StreetBackdrop.HALF, "then halfway back up")
+	check_eq(StreetBackdrop.pose_at(StreetBackdrop.HALF_TIME + 0.001), StreetBackdrop.STAND, "then resting")
+	check_eq(StreetBackdrop.pose_at(0.4), StreetBackdrop.STAND, "resting until the next beat")
+	check_eq(StreetBackdrop.pose_at(0.09, true), StreetBackdrop.STAND, "reduced motion skips the halfway pose")
+	check(StreetBackdrop.HALF_TIME - StreetBackdrop.DROP_TIME >= 1.0 / 30.0, "the halfway pose lasts at least a frame at 30 fps")
+	for fig in ["issohadore", "mamuthone"]:
+		var size := Vector2.ZERO
+		for k in 3:
+			var path := "res://art/street/%s_bob_%d.png" % [fig, k]
+			check(ResourceLoader.exists(path), "%s has picture %d" % [fig, k])
+			if not ResourceLoader.exists(path):
+				continue
+			var s: Vector2 = (load(path) as Texture2D).get_size()
+			if k == 0:
+				size = s
+			check_eq(s, size, "%s picture %d is the same size as its rest pose" % [fig, k])
+	var b := StreetBackdrop.new()
+	b.size = Vector2(720, 1440)
+	tree.root.add_child(b)
+	b.set_process(false)
+	for t in [0.02, 0.1, 0.3]:
+		b.beat = 8.0 + t / 0.5
+		b._bob_figures()
+		var want := StreetBackdrop.pose_at(t)
+		for i in b._figures.size():
+			check(b._figures[i].texture == b._poses[i][want], "figure %d shows pose %d at %.2f s after the beat" % [i, want, t])
+	b.queue_free()

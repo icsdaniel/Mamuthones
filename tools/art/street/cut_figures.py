@@ -80,33 +80,62 @@ def feet_x(img):
     return float(np.mean(xs[low]))
 
 
-# The figures' bob (Daniele, 2026-09-30): standing, the drop on the beat, halfway back up, one
-# camera and feet fixed. Same treatment as the dance; every pose keeps its own height on a canvas
-# the standing pose's height, feet at the bottom, so the drop reads as the figure sinking.
+# The figures' bob (Daniele, 2026-09-30). A sheet is three poses of one figure side by side, one
+# camera, feet in the same spot, on a plain backdrop, in the order standing, the drop on the beat,
+# halfway back up. To replace a figure's pictures, save a new sheet over <figure>_bob_sheet.png in
+# the reference folder and run this script with --bob: it finds the three poses by itself, cuts
+# them out, lines their feet up on one canvas and writes game/art/street/<figure>_bob_0/1/2.png
+# (0 rest, 1 drop, 2 halfway). The game's timing is in StreetBackdrop and doesn't change.
+#
+# REST picks which of the sheet's poses the figure stands in between beats. The Issohadore's sheet
+# holds the rope overhead in its standing pose, so the rope jumped up every beat; Daniele chose to
+# keep him resting with it at his hip (the halfway pose). Set it back to 0 for a sheet whose
+# standing pose sits close to the other two.
 BOBS = {
-    "mamuthone": ("mamuthone_bob_sheet.png", [0, 493, 959, None], 18),
-    "issohadore": ("issohadore_bob_sheet.png", [0, 478, 966, None], 18),
+    "mamuthone": {"tol": 18, "rest": 0},
+    "issohadore": {"tol": 18, "rest": 2, "clear_holes": True},
 }
 
 
+def split3(sheet, tol=30):
+    """The columns that split a sheet into its three poses: the middle of the widest runs of
+    empty backdrop, or, where two poses touch, the emptiest column near a third of the width."""
+    bg = np.median(np.concatenate([sheet[:5].reshape(-1, 3), sheet[-5:].reshape(-1, 3)]), axis=0)
+    ink = (np.sqrt(((sheet - bg) ** 2).sum(-1)) > tol).sum(0)
+    w = len(ink)
+    cuts = []
+    for k in (1, 2):
+        lo, hi = int(w * (k / 3 - 0.1)), int(w * (k / 3 + 0.1))
+        low = ink[lo:hi].min()
+        xs = np.where(ink[lo:hi] == low)[0] + lo
+        # the middle of the longest run at that minimum
+        runs = np.split(xs, np.where(np.diff(xs) > 1)[0] + 1)
+        run = max(runs, key=len)
+        cuts.append(int(run[len(run) // 2]))
+    return [0] + cuts + [w]
+
+
 def bob(name):
-    src, cuts, tol = BOBS[name]
-    sheet = np.asarray(Image.open(os.path.join(SRC, src)).convert("RGB")).astype(float)
-    cuts = [c if c is not None else sheet.shape[1] for c in cuts]
-    poses = [cut_array(sheet[:, cuts[i]:cuts[i + 1]], tol, name == "issohadore") for i in range(3)]
+    cfg = BOBS[name]
+    sheet = np.asarray(Image.open(os.path.join(SRC, name + "_bob_sheet.png")).convert("RGB")).astype(float)
+    cuts = split3(sheet)
+    poses = [cut_array(sheet[:, cuts[i]:cuts[i + 1]], cfg["tol"], cfg.get("clear_holes", False)) for i in range(3)]
     fx = [feet_x(p) for p in poses]
     half = int(max(max(f, p.size[0] - f) for f, p in zip(fx, poses))) + 2
     h = max(p.size[1] for p in poses)
-    for i, p in enumerate(poses):
+    order = [cfg["rest"], 1, 2]
+    for i, k in enumerate(order):
+        p = poses[k]
         canvas = Image.new("RGBA", (half * 2, h), (0, 0, 0, 0))
-        canvas.paste(p, (int(round(half - fx[i])), h - p.size[1]))
+        canvas.paste(p, (int(round(half - fx[k])), h - p.size[1]))
         canvas.save(os.path.join(OUT, "%s_bob_%d.png" % (name, i)))
-        print(name, "bob", i, p.size, canvas.size)
+        print(name, "bob", i, "from sheet pose", k, "split at", cuts[1:3], canvas.size)
 
 
 os.makedirs(OUT, exist_ok=True)
 for name in BOBS:
-    bob(name)
+    if os.path.exists(os.path.join(SRC, name + "_bob_sheet.png")):
+        bob(name)
 if "--bob" in sys.argv:
     sys.exit()
 for name, (src, box, tol) in CUTS.items():
