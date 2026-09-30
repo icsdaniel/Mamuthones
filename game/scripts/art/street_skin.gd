@@ -31,6 +31,10 @@ const K_UP := [Color("#fff0a0"), Color("#ffcc1a"), Color("#d08a00"), Color("#ffd
 const K_DOWN := [Color("#9fe0ff"), Color("#2ea6ff"), Color("#1a64d0"), Color("#48b4ff")]
 const OFF_W := 0.74                  ## an off-beat step or call is this much narrower than a step
 const GEM_W := 0.9                   ## a gem's width, as a share of its lane's width
+const GEM_H := 0.17                  ## how tall a gem stands, in lane widths
+const GIRDLE := 0.5                  ## the share of its height that is straight sides (the rest is the crown)
+const TABLE := Vector2(0.8, 0.45)    ## the table on top, as a share of the base outline
+const FORE := 0.42                   ## how much the road's depth is foreshortened on screen (for the lighting)
 const GEM_D := 0.22                  ## a gem's depth on screen, as a share of its lane's width
 const TIP := 0.12                    ## how far in the pointed ends start, share of the half width
 ## The gem's outline in its own frame: u across (-1..1), v along the road (-1 far .. 1 near).
@@ -61,64 +65,136 @@ static func _pts(f: Callable, local: Array, s := Vector2.ONE) -> PackedVector2Ar
 	return out
 
 
-## A gem across [x0, x1] (flat field x) at flat depth y. k: the kind's colours. depth: its depth on
-## screen as a share of the lane's width. rims: 2 draws a second rim inside the first. Returns its
-## frame (for marks drawn on it).
-static func gem(lv: LaneView, field: Rect2, x0: float, x1: float, y: float, k: Array, alpha := 1.0, depth := GEM_D, glow := 1.0, rims := 1) -> Callable:
+## A gem across [x0, x1] (flat field x) at flat depth y: a real solid, cut like a baguette stone, with
+## straight sides up from the road, a bevelled crown and a flat table on top. Each face is lit on its
+## own (low-poly flat shading): the fire ahead rims the far and upper faces warm, the night sky lights
+## the table, the faces toward the player are in the gem's own colour, and the table flashes white
+## on the beat. k: the kind's colours. depth: its depth on screen as a share of the lane's width;
+## height: how tall it stands, in lane widths. Returns a Callable mapping (u, v) on its table top to
+## the screen, for marks drawn on it.
+static func gem(lv: LaneView, field: Rect2, x0: float, x1: float, y: float, k: Array, alpha := 1.0, depth := GEM_D, glow := 1.0, height := GEM_H) -> Callable:
 	var lw := lv.road_scale(y) * field.size.x / 3.0
 	var hw := (x1 - x0) * 0.5
-	var f := _frame(lv, x0 + hw, y, hw, lw * depth)
+	var f := _frame3(lv, field, x0 + hw, y, hw, lw * depth)
+	var top := func(p: Vector2) -> Vector2: return f.call(Vector3(p.x * TABLE.x, height, p.y * TABLE.y))
 	if alpha <= 0.01 or lw < 2.0:
-		return f
-	var light: Color = k[0]
-	var body: Color = k[1]
-	var dark: Color = k[2]
-	var sil := _pts(f, SHAPE)
-	var c: Vector2 = f.call(Vector2.ZERO)
-	var w_px := sil[3].x - sil[0].x
-	var d_px := sil[4].y - sil[1].y
+		return top
+	# the model: base, girdle and table outlines; metric scale in lane widths for the lighting
+	var verts: Array[Vector3] = []
+	for sh in [Vector3(1.0, 0.0, 1.0), Vector3(1.0, GIRDLE, 1.0), Vector3(TABLE.x, 1.0, TABLE.y)]:
+		for q: Vector2 in SHAPE:
+			verts.append(Vector3(q.x * sh.x, height * sh.y, q.y * sh.z))
+	var faces: Array = []
+	for i in 6:
+		var j := (i + 1) % 6
+		faces.append([i, j, 6 + j, 6 + i])
+		faces.append([6 + i, 6 + j, 12 + j, 12 + i])
+	faces.append([12, 13, 14, 15, 16, 17])
+	var metric := Vector3(hw / (field.size.x / 3.0), 1.0, depth * 0.5 / FORE)
+	var c: Vector2 = f.call(Vector3.ZERO)
+	var w_px := (f.call(Vector3(1, 0, 0)) as Vector2).x - (f.call(Vector3(-1, 0, 0)) as Vector2).x
 	# its shadow on the road, and the light it casts round it
-	_glow(lv, c + Vector2(0.0, d_px * 0.55), Vector2(w_px * 0.6, d_px * 1.1), Color(0.0, 0.0, 0.03, 0.55 * alpha))
-	_glow(lv, c, Vector2(w_px * 0.7, d_px * 1.8), _a(k[3], 0.35 * alpha * glow))
-	# its thickness: the near edges dropped a little, dark
-	var thick := Vector2(0.0, maxf(2.0, d_px * 0.3))
-	var ow := maxf(2.0, lw * 0.022)
-	var hull := PackedVector2Array([sil[0], sil[1], sil[2], sil[3], sil[3] + thick, sil[4] + thick, sil[5] + thick, sil[0] + thick])
-	var ring := hull.duplicate()
-	ring.append(hull[0])
-	lv.draw_polyline(ring, _a(OUTLINE, alpha), ow * 2.0, true)
-	ci_poly(lv, hull, _a(OUTLINE, alpha))
-	for e in [[0, 5, 0.55], [5, 4, 0.4], [4, 3, 0.62]]:
-		var p0: Vector2 = sil[e[0]]
-		var p1: Vector2 = sil[e[1]]
-		var sh: float = e[2]
-		ci_poly(lv, PackedVector2Array([p0, p1, p1 + thick * 0.8, p0 + thick * 0.8]), _a(dark.darkened(sh), alpha))
-	# a thin bright rim, then the body flat-shaded in four facets round the middle
-	ci_poly(lv, sil, _a(light.lerp(RIM, 0.7), alpha))
-	var rim := maxf(1.5, lw * 0.03)
-	var inset := Vector2(1.0 - rim / maxf(w_px * 0.5, 1.0) * 1.3, 1.0 - rim / maxf(d_px * 0.5, 1.0))
-	if rims > 1:
-		ci_poly(lv, _pts(f, SHAPE, inset), _a(dark, alpha))
-		inset -= Vector2(rim * 1.2 / maxf(w_px * 0.5, 1.0), rim * 1.0 / maxf(d_px * 0.5, 1.0))
-		ci_poly(lv, _pts(f, SHAPE, inset), _a(light.lerp(RIM, 0.7), alpha))
-		inset -= Vector2(rim * 1.3 / maxf(w_px * 0.5, 1.0), rim / maxf(d_px * 0.5, 1.0))
-	# a crystal ingot: the far slope catches the fire's light, the near slope is the body colour,
-	# the pointed ends are in shade
-	var b := _pts(f, SHAPE, inset)
-	var l: Vector2 = b[0]
-	var r: Vector2 = b[3]
-	ci_poly(lv, PackedVector2Array([b[1], b[2], r, l]), _a(light, alpha))
-	ci_poly(lv, PackedVector2Array([l, r, b[4], b[5]]), _a(body, alpha))
-	ci_poly(lv, PackedVector2Array([l, b[1], f.call(Vector2(-1.0 + TIP * 2.2, 0.0) * inset), b[5]]), _a(light.lerp(body, 0.5), alpha))
-	ci_poly(lv, PackedVector2Array([b[2], r, b[4], f.call(Vector2(1.0 - TIP * 2.2, 0.0) * inset)]), _a(dark, alpha))
-	# the fire's light along the far edge, and a glint on the far slope
-	lv.draw_line(b[1], b[2], _a(Color("#ffd9a0"), 0.9 * alpha), maxf(1.0, rim * 0.8), true)
-	# the glint flares on every beat, so the notes ring with the bells
-	var gl := 0.4 + 0.6 * lv.beat_env()
-	ci_poly(lv, PackedVector2Array([b[1].lerp(b[2], 0.08), b[1].lerp(b[2], 0.3), l.lerp(r, 0.28), l.lerp(r, 0.12)]), _a(RIM, gl * alpha))
-	# the moment: a white-hot line across the middle
-	lv.draw_line(sil[0], sil[3], _a(RIM, alpha), maxf(1.5, lw * 0.022), true)
-	return f
+	_glow(lv, c + Vector2(0.0, lw * depth * 0.4), Vector2(w_px * 0.62, lw * depth * 1.2), Color(0.0, 0.0, 0.03, 0.6 * alpha))
+	_glow(lv, c, Vector2(w_px * 0.75, lw * depth * 2.0), _a(k[3], 0.35 * alpha * glow))
+	var flash := lv.beat_env()
+	solid(lv, f, verts, faces, metric, k, alpha, maxf(2.0, lw * 0.022), flash)
+	# crisp cut edges round the table, and a glint across it that flares on the beat
+	var tp := PackedVector2Array()
+	for i in 6:
+		tp.append(f.call(verts[12 + i]))
+	tp.append(tp[0])
+	lv.draw_polyline(tp, _a((k[0] as Color).lerp(RIM, 0.6), 0.9 * alpha), maxf(1.0, lw * 0.012), true)
+	var g0: Vector2 = top.call(Vector2(-0.55, -1.0))
+	var g1: Vector2 = top.call(Vector2(-0.3, -1.0))
+	var g2: Vector2 = top.call(Vector2(-0.45, 1.0))
+	var g3: Vector2 = top.call(Vector2(-0.7, 1.0))
+	ci_poly(lv, PackedVector2Array([g0, g1, g2, g3]), _a(RIM, (0.35 + 0.5 * flash) * alpha))
+	return top
+
+
+## A note's frame on the road: centre flat x, flat depth y, half width hw (flat px), and the flat
+## half depth that shows `px_d` screen px deep. Returns a Callable mapping (u, h, v) to the screen:
+## u across (-1..1), v along the road (-1 far .. 1 near), h up from the road in lane widths.
+static func _frame3(lv: LaneView, field: Rect2, cx: float, y: float, hw: float, px_d: float) -> Callable:
+	var dsdy := maxf(0.05, (lv.project(Vector2(cx, y + 1.0)).y - lv.project(Vector2(cx, y - 1.0)).y) * 0.5)
+	var hd := px_d * 0.5 / dsdy
+	var lane := field.size.x / 3.0
+	return func(p: Vector3) -> Vector2:
+		var fy := y + p.z * hd
+		return lv.project(Vector2(cx + p.x * hw, fy)) - Vector2(0.0, p.y * lv.road_scale(fy) * lane)
+
+
+## Draws a convex solid: verts in (u, h, v) through frame f, faces as vertex index loops, metric the
+## model's scale in lane widths (for the normals). Faces turned away are skipped; the rest are
+## flat-shaded from k [light, body, dark, glow], inside a dark outline of width ow.
+static func solid(lv: LaneView, f: Callable, verts: Array[Vector3], faces: Array, metric: Vector3, k: Array, alpha: float, ow: float, flash := 0.0) -> void:
+	var scr := PackedVector2Array()
+	for v in verts:
+		scr.append(f.call(v))
+	var mid := Vector3.ZERO
+	for v in verts:
+		mid += v * metric
+	mid /= float(verts.size())
+	# the outline: the whole silhouette, a little bigger
+	var hull := Geometry2D.convex_hull(scr)
+	if hull.size() >= 3:
+		lv.draw_polyline(hull, _a(OUTLINE, alpha), ow * 2.0, true)
+		ci_poly(lv, hull, _a(OUTLINE, alpha))
+	var front_sign := 0.0
+	var shaded: Array = []
+	for fi in faces.size():
+		var loop: Array = faces[fi]
+		var m0: Vector3 = verts[loop[0]] * metric
+		var m1: Vector3 = verts[loop[1]] * metric
+		var m2: Vector3 = verts[loop[loop.size() - 1]] * metric
+		var n := (m1 - m0).cross(m2 - m0).normalized()
+		var fc := Vector3.ZERO
+		for i in loop:
+			fc += verts[i] * metric
+		fc /= float(loop.size())
+		if n.dot(fc - mid) < 0.0:
+			n = -n
+		var pts := PackedVector2Array()
+		for i in loop:
+			pts.append(scr[i])
+		var area := 0.0
+		for i in pts.size():
+			area += pts[i].cross(pts[(i + 1) % pts.size()])
+		# which screen winding faces the player: the table (the last face, facing up) always does
+		var sgn := signf(area) * signf((m1 - m0).cross(m2 - m0).dot(n))
+		shaded.append([pts, n, sgn, absf(area)])
+	front_sign = shaded[shaded.size() - 1][2]
+	for e in shaded:
+		if e[2] != front_sign or e[3] < 0.5:
+			continue
+		_convex(lv, e[0], _a(_shade(e[1], k, flash), alpha))
+
+
+## A convex polygon as a fan of triangles (never fails on a face seen nearly edge-on).
+static func _convex(ci: CanvasItem, pts: PackedVector2Array, col: Color) -> void:
+	if col.a <= 0.004:
+		return
+	var cols := PackedColorArray([col, col, col])
+	for i in range(1, pts.size() - 1):
+		ci.draw_primitive(PackedVector2Array([pts[0], pts[i], pts[i + 1]]), cols, PackedVector2Array())
+
+
+const L_SKY := Vector3(-0.4, 1.0, 0.15)    ## the key light: from above, a little to the left
+const L_FIRE := Vector3(0.0, 0.5, -1.0)    ## the bonfire, far up the road
+const FIRE_TINT := Color("#ffb468")
+
+
+## A face's colour from its normal: bright where the sky lights it, the kind's own colour toward the
+## player, a warm rim where it faces the fire, a white glint on the table on the beat.
+static func _shade(n: Vector3, k: Array, flash: float) -> Color:
+	var sky := maxf(0.0, n.dot(L_SKY.normalized()))
+	var fire := maxf(0.0, n.dot(L_FIRE.normalized()))
+	var b := 1.3 * sky - 0.05
+	var col: Color = (k[2] as Color).lerp(k[1], clampf(b, 0.0, 1.0)) if b <= 1.0 else (k[1] as Color).lerp(k[0], clampf((b - 1.0) * 4.0, 0.0, 1.0))
+	col = col.lerp(FIRE_TINT, 0.55 * fire * fire)
+	if n.y > 0.97:
+		col = col.lerp(Color.WHITE, 0.12 + 0.3 * flash)
+	return col
 
 
 static var _glow_tex: Texture2D
@@ -150,29 +226,26 @@ static func span(rect: Rect2, share: float) -> Vector2:
 	return Vector2(rect.position.x + m, rect.end.x - m)
 
 
-## A hold's ribbon down its lane from flat depth ya (far) to yb (near), `share` of the lane wide: a
-## long crystal beam, faceted like the gems (a lit left slope, the body, a shaded right slope).
+## A hold's beam down its lane from flat depth ya (far) to yb (near), `share` of the lane wide: a long
+## low bar of the hold's gold, lit like the gems, glowing while it is held.
 static func ribbon(lv: LaneView, field: Rect2, cx: float, ya: float, yb: float, share: float, lit: bool, alpha := 1.0) -> void:
-	var hw := field.size.x / 3.0 * share * 0.5
-	var k: Array = K_HOLD
-	var strip := func(u0: float, u1: float) -> PackedVector2Array:
-		var pts := PackedVector2Array()
-		var n := 10
-		for i in n + 1:
-			pts.append(lv.project(Vector2(cx + u0 * hw, lerpf(ya, yb, float(i) / n))))
-		for i in range(n, -1, -1):
-			pts.append(lv.project(Vector2(cx + u1 * hw, lerpf(ya, yb, float(i) / n))))
-		return pts
-	var body := 0.9 if lit else 0.55
-	var out: PackedVector2Array = strip.call(-1.0, 1.0)
-	var ring := out.duplicate()
-	ring.append(out[0])
-	lv.draw_polyline(ring, _a(OUTLINE, 0.9 * alpha), 5.0, true)
-	ci_poly(lv, out, _a(k[2], body * alpha))
-	ci_poly(lv, strip.call(-0.86, 0.2), _a(k[1], body * alpha))
-	ci_poly(lv, strip.call(-0.86, -0.3), _a(k[0], body * alpha))
+	var lane := field.size.x / 3.0
+	var hw := lane * share * 0.5
+	var f := func(p: Vector3) -> Vector2:
+		var fy := lerpf(ya, yb, (p.z + 1.0) * 0.5)
+		return lv.project(Vector2(cx + p.x * hw, fy)) - Vector2(0.0, p.y * lv.road_scale(fy) * lane)
+	var h := GEM_H * 0.45
+	var verts: Array[Vector3] = [Vector3(-1, 0, -1), Vector3(1, 0, -1), Vector3(1, 0, 1), Vector3(-1, 0, 1),
+		Vector3(-1, h, -1), Vector3(1, h, -1), Vector3(1, h, 1), Vector3(-1, h, 1)]
+	var faces := [[0, 1, 5, 4], [1, 2, 6, 5], [2, 3, 7, 6], [3, 0, 4, 7], [4, 5, 6, 7]]
+	var metric := Vector3(share * 0.5, 1.0, maxf(yb - ya, 1.0) / lane * 0.5)
 	if lit:
-		ci_poly(lv, strip.call(-0.5, -0.2), _a(RIM, 0.8 * alpha))
+		_glow(lv, (f.call(Vector3(0, 0, 1)) as Vector2), Vector2(hw * 2.0, hw), _a(K_HOLD[3], 0.5 * alpha))
+	solid(lv, f, verts, faces, metric, K_HOLD, (1.0 if lit else 0.8) * alpha, 2.5, -0.4)
+	# a hot core line along the top
+	var c0: Vector2 = f.call(Vector3(-0.35, h, -1))
+	var c1: Vector2 = f.call(Vector3(-0.35, h, 1))
+	lv.draw_line(c0, c1, _a(RIM, (0.9 if lit else 0.5) * alpha), maxf(2.0, hw * 0.12), true)
 
 
 ## A bell bar across the whole road at flat depth y: a long gem with a big arrow in each lane,
@@ -187,7 +260,7 @@ static func bell(lv: LaneView, field: Rect2, rects: Array[Rect2], y: float, up: 
 	var h := lw * GEM_D * 1.25 * 0.36
 	var a := h * 1.25
 	for i in 3:
-		var c := lv.project(Vector2(rects[i].get_center().x, y))
+		var c := lv.project(Vector2(rects[i].get_center().x, y)) - Vector2(0.0, GEM_H * lw)
 		var tri := PackedVector2Array([c + Vector2(-a, -d * h), c + Vector2(0.0, d * h), c + Vector2(a, -d * h)])
 		var ring := tri.duplicate()
 		ring.append(tri[0])
@@ -374,7 +447,7 @@ static func draw_notes(lv: LaneView, field: Rect2) -> void:
 					continue
 				var sp := span(rects[n.lane], 1.0)
 				var ta := a * (0.6 if n.thumbs > 0 else 1.0)
-				_prints(lv, gem(lv, field, sp.x, sp.y, y, K_STOMP, ta, GEM_D * 1.5, 1.2, 2), lw, ta)
+				_prints(lv, gem(lv, field, sp.x, sp.y, y, K_STOMP, ta, GEM_D * 1.4, 1.2, GEM_H * 1.6), lw, ta)
 
 
 ## The hit line across the road, and in each lane a slot: a gem's outline in white with dark glass
