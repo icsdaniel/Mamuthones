@@ -44,7 +44,11 @@ const SETTLE := 3
 ## up, and is standing still again 0.1 s after the beat.
 const IMPACT_TIME := 0.067           ## seconds after the beat the impact pose shows
 const FOLLOW_TIME := 0.095           ## ... then the in-between until this long after the beat
-const DANCE_DROP := 0.5              ## the Mamuthone's drop, as a share of BOB (his crouch carries the rest)
+const DANCE_DROP := 0.5              ## the Mamuthone's drop with the crouch, as a share of BOB
+## Whether the Mamuthone swaps into the sheet's crouch on the beat. Off (Daniele, 2026-09-30: the big
+## pose change "feels wrong"): he keeps the standing pose and bobs like the Issohadore, as in the clip.
+const DANCE_CROUCH := false
+const BOB_LEAN := 2.0                ## degrees a figure leans toward the road at the bottom of the drop
 const BOB := 0.1                     ## how far a figure drops on the beat, share of its portrait's height
 const BOB_SQUASH := 0.03             ## how much it squashes at the bottom of the drop
 const BOB_HOLD := 0.03               ## seconds it stays down after the beat
@@ -323,7 +327,7 @@ func _bob_figures() -> void:
 	_dance_pose()
 	for i in _figures.size():
 		var s := _figures[i]
-		if i == 1 and not _dance.is_empty():
+		if i == 1 and not _dance.is_empty() and DANCE_CROUCH:
 			# the Mamuthone's crouch carries most of the drop; the rest is a snap down with it
 			var h1: float = s.get_meta("frame_h", 0.0)
 			s.position = (s.get_meta("base_pos", s.position) as Vector2) + Vector2(shake * 0.02 * h1, down * BOB * DANCE_DROP * h1) * m
@@ -333,7 +337,8 @@ func _bob_figures() -> void:
 		var at: Vector2 = s.get_meta("base_pos", s.position)
 		var h: float = s.get_meta("frame_h", 0.0)
 		s.position = at + Vector2(shake * 0.02 * h, down * BOB * h) * m
-		s.rotation = 0.0
+		# a slight lean toward the road with the drop (the left portrait's road is to its right)
+		s.rotation = deg_to_rad(BOB_LEAN) * down * m * (1.0 if i == 0 else -1.0)
 		var q := BOB_SQUASH * down * m
 		s.scale = base * Vector2(1.0 + q * 0.6, 1.0 - q)
 
@@ -346,7 +351,7 @@ func _dance_pose() -> void:
 	var fig := _figures[1]
 	var pose := SETTLE
 	var spb := lanes.spb if lanes != null and lanes.spb > 0.0 else 0.5
-	if beat > -999.0 and not still:
+	if beat > -999.0 and not still and DANCE_CROUCH:
 		var k := floorf(beat)
 		var t := (beat - k) * spb
 		if t < IMPACT_TIME:
