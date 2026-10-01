@@ -65,6 +65,7 @@ const STOMP_POINTS := {"perfect": 450, "good": 225, "early": 75, "late": 75}
 ## "together" spread over 20-60 ms; 80 ms keeps a deliberate double tap (about 150 ms) apart.
 const STOMP_GAP := 0.080
 const HOLD_BONUS := 150
+const END_PAD := 2.0        ## a whole song ends this many seconds after its last note (not at the end of the audio)
 const HOLD_GRACE := 0.120    ## a hold released up to 120 ms before its end still counts as kept
 const STILL_PENALTY := 100
 ## A stand-still kept to its end: STILL_BONUS × beats × unison × weight. 800 puts stillness at about
@@ -193,7 +194,8 @@ func _init(p_song: SongData, p_difficulty: String, p_bell_set: String = "light",
 	elif is_finite(to_beat) or is_finite(from_beat):
 		_end_time = last_end + 1.0
 	else:
-		_end_time = maxf(song.length_for(remix), last_end + 1.0)
+		# A couple of seconds after the last note, not the whole outro: the play screen fades the music.
+		_end_time = maxf(minf(song.length_for(remix), last_end + END_PAD), last_end + 1.0)
 	score_timeline.append(Vector2(notes[0].t - 1.0 if not notes.is_empty() else 0.0, 0.0))
 	health_on = not piazza and not options.has("from_beat") and not options.has("to_beat") and bool(options.get("health", true))
 	if health_on:

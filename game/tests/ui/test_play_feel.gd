@@ -111,18 +111,18 @@ func test_the_count_in_is_seen_on_the_audio_sticks() -> void:
 	var s: Session = play.get("session")
 	var song: SongData = s.song
 	var cv: CountInView = play.get("count_view")
-	check(bool(play.get("_audio_count")), "a song from the start counts in with its own sticks")
-	# The music's sticks are on beats -4..-1: the digits land on them.
-	for pair in [[-3.95, 4], [-3.05, 4], [-2.95, 3], [-1.5, 2], [-0.05, 1]]:
-		await _to_time(c, song.time_of(pair[0]))
-		await tree.process_frame
-		check_eq(cv.digit, int(pair[1]), "beat %.2f shows %d" % [pair[0], pair[1]])
-	check(cv.beat_phase > 0.9, "the digit pulses with the beat (phase %.2f late in the beat)" % cv.beat_phase)
-	# After the count, "Get ready" with the bars left, until the first note.
-	await _to_time(c, song.time_of(0.2))
+	# Carnival's intro is long, so the music starts inside it: "Get ready" first, then "4 3 2 1" on the
+	# music's beats over the bar just before the first note's bar.
+	check(not bool(play.get("_audio_count")) and bool(play.get("_bar_count")), "a long intro is joined partway, counted on its own bar")
+	var cb: float = float(play.call("first_bar")) - 4.0
+	await _to_time(c, song.time_of(cb - 1.5))
 	await tree.process_frame
-	if s.notes[0].t > song.time_of(0.3):
-		check(cv.digit == 0 and cv.ready_bars >= 1, "then get ready, %d bars to go" % cv.ready_bars)
+	check(cv.digit == 0 and cv.ready_bars >= 1, "get ready first, %d bars to go" % cv.ready_bars)
+	for pair in [[0.05, 4], [0.95, 4], [1.05, 3], [2.5, 2], [3.88, 1]]:
+		await _to_time(c, song.time_of(cb + pair[0]))
+		await tree.process_frame
+		check_eq(cv.digit, int(pair[1]), "beat %.2f shows %d" % [cb + pair[0], pair[1]])
+	check(cv.beat_phase > 0.85, "the digit pulses with the beat (phase %.2f late in the beat)" % cv.beat_phase)
 	await _to_time(c, s.notes[0].t + 0.01)
 	await tree.process_frame
 	check(not cv.is_showing(), "nothing is shown once the notes arrive")
