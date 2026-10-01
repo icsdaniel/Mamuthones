@@ -45,6 +45,8 @@ var _progress := 0.0
 var _streak := 0.0
 var _laid := Vector2(-1, -1)
 var _punch := 0.0
+var beat := -1000.0          ## the song's beat now, for the badge's bounce
+var _bounce := 0.0           ## 1 on the beat, falling away
 var _punched := 0
 
 
@@ -211,14 +213,21 @@ func _panel(ci: CanvasItem, r: Rect2, glow := 1.0) -> void:
 ## A frame in relief: a thick slab standing out of the screen (its lower sides show below it), a
 ## bevelled orange rim lit from the top left (the light faces bright, the shaded ones deep bronze) and
 ## a dark panel sunk inside it, with the glow round the outside.
-func _shape(ci: CanvasItem, pts: PackedVector2Array, glow: float) -> void:
+func _shape(ci: CanvasItem, pts: PackedVector2Array, glow: float, pal: Array = []) -> void:
+	if pal.is_empty():
+		pal = [EDGE, EDGE_HOT, EDGE_DARK, SIDE, Color(1.0, 0.5, 0.1)]
+	var edge: Color = pal[0]
+	var hot: Color = pal[1]
+	var dark: Color = pal[2]
+	var side: Color = pal[3]
+	var halo: Color = pal[4]
 	var g := PackedVector2Array()
 	for p in pts:
 		g.append(_to_frames(p))
 	var closed := g.duplicate()
 	closed.append(g[0])
 	for k in 3:
-		ci.draw_polyline(closed, Color(1.0, 0.5, 0.1, 0.12 * glow), 18.0 - k * 5.0, true)
+		ci.draw_polyline(closed, Color(halo, 0.12 * glow), 18.0 - k * 5.0, true)
 	var n := g.size()
 	# the slab's sides, below it
 	var down := Vector2(0.0, DEPTH)
@@ -230,14 +239,14 @@ func _shape(ci: CanvasItem, pts: PackedVector2Array, glow: float) -> void:
 		var p1 := g[(i + 1) % n]
 		var nn := _normal(p0, p1)
 		if nn.y > 0.05:
-			_quad(ci, [p0, p1, p1 + down, p0 + down], SIDE.lerp(SIDE.darkened(0.5), clampf(0.5 + nn.x * 0.5, 0.0, 1.0)))
+			_quad(ci, [p0, p1, p1 + down, p0 + down], side.lerp(side.darkened(0.5), clampf(0.5 + nn.x * 0.5, 0.0, 1.0)))
 	# the bevelled rim
 	var inner := _inset(g, BEVEL)
 	for i in n:
 		var p0 := g[i]
 		var p1 := g[(i + 1) % n]
 		var lit := _normal(p0, p1).dot(LIGHT)
-		var col := EDGE.lerp(EDGE_HOT, clampf(lit, 0.0, 1.0)) if lit >= 0.0 else EDGE.lerp(EDGE_DARK, clampf(-lit, 0.0, 1.0))
+		var col := edge.lerp(hot, clampf(lit, 0.0, 1.0)) if lit >= 0.0 else edge.lerp(dark, clampf(-lit, 0.0, 1.0))
 		_quad(ci, [p0, p1, inner[(i + 1) % n], inner[i]], col)
 	# the sunk panel: darker at its top, where the rim shades it
 	ci.draw_colored_polygon(inner, PANEL)
@@ -255,7 +264,7 @@ func _shape(ci: CanvasItem, pts: PackedVector2Array, glow: float) -> void:
 	var ring := inner.duplicate()
 	ring.append(inner[0])
 	ci.draw_polyline(ring, OUTLINE, 2.0, true)
-	ci.draw_polyline(closed, Color(EDGE_HOT, 0.9), 1.5, true)
+	ci.draw_polyline(closed, Color(hot, 0.9), 1.5, true)
 
 
 static func _moved(pts: PackedVector2Array, d: Vector2) -> PackedVector2Array:
@@ -331,27 +340,73 @@ func _draw_frames() -> void:
 	if session.health_on:
 		_panel(ci, b[0])
 	_panel(ci, b[2])
-	# the badge: a tall hexagon, flaring when a level is gained; its lower rim fills with the streak
+	# the badge: a tall hexagon, flaring when a level is gained; its lower rim fills with the streak.
+	# It bounces on every beat, and grows and burns hotter in colour as the multiplier rises.
 	var r: Rect2 = b[1]
+	var lvl := session.unison_level
+	var pal := _tier(lvl)
 	var fl := clampf(1.0 - (_clock - _flare_at) / 0.4, 0.0, 1.0)
-	var hx := PackedVector2Array([Vector2(r.get_center().x, r.position.y), Vector2(r.end.x, r.position.y + r.size.y * 0.26),
-		Vector2(r.end.x, r.end.y - r.size.y * 0.26), Vector2(r.get_center().x, r.end.y), Vector2(r.position.x, r.end.y - r.size.y * 0.26),
-		Vector2(r.position.x, r.position.y + r.size.y * 0.26)])
-	_shape(ci, hx, 1.0 + 2.0 * fl)
+	var sc := badge_scale()
+	var ctr := r.get_center()
+	# light rays turning behind it from the third level up, in its colours
+	if lvl >= 3:
+		var n := 12
+		var ray_r := r.size.y * (0.75 + 0.12 * float(lvl - 3)) * sc
+		for i in n:
+			var an := TAU * float(i) / n + _clock * 0.6
+			var w := 0.09
+			var col: Color = pal[1] if i % 2 == 0 else pal[0]
+			if lvl >= 5:
+				col = Color.from_hsv(fposmod(float(i) / n + _clock * 0.25, 1.0), 0.75, 1.0)
+			ci.draw_polygon(PackedVector2Array([ctr, ctr + Vector2(cos(an - w), sin(an - w)) * ray_r, ctr + Vector2(cos(an + w), sin(an + w)) * ray_r]),
+				PackedColorArray([Color(col, 0.55), Color(col, 0.0), Color(col, 0.0)]))
+	var hx := PackedVector2Array()
+	for q in [Vector2(0.0, -0.5), Vector2(0.5, -0.24), Vector2(0.5, 0.24), Vector2(0.0, 0.5), Vector2(-0.5, 0.24), Vector2(-0.5, -0.24)]:
+		hx.append(ctr + q * r.size * sc)
+	_shape(ci, hx, 1.0 + 0.8 * float(lvl) + 2.0 * fl + 1.5 * _bounce, pal)
 	if _streak > 0.0:
 		var p0 := _to_frames(hx[4])
 		var p1 := _to_frames(hx[3])
 		var p2 := _to_frames(hx[2])
 		var k := clampf(_streak, 0.0, 1.0) * 2.0
 		var q := p0.lerp(p1, minf(k, 1.0))
-		ci.draw_line(p0, q, EDGE_HOT, 5.0)
+		ci.draw_line(p0, q, pal[1], 5.0)
 		if k > 1.0:
-			ci.draw_line(p1, p1.lerp(p2, k - 1.0), EDGE_HOT, 5.0)
-	for p in [Vector2(r.get_center().x, r.position.y), Vector2(r.get_center().x, r.end.y)]:
-		_diamond(ci, p, 8.0, Color.WHITE.lerp(EDGE_HOT, 1.0 - fl))
+			ci.draw_line(p1, p1.lerp(p2, k - 1.0), pal[1], 5.0)
+	for p in [hx[0], hx[3]]:
+		_diamond(ci, p, 8.0 * sc, Color.WHITE.lerp(pal[1], 1.0 - fl))
 	for sx: float in [-1.0, 1.0]:
-		var c := _to_frames(Vector2(r.get_center().x + sx * (r.size.x * 0.5 + 10.0), r.end.y - 8.0))
-		ci.draw_colored_polygon(PackedVector2Array([c + Vector2(-sx * 10.0, -8.0), c + Vector2(sx * 6.0, 8.0), c + Vector2(-sx * 14.0, 8.0)]), EDGE)
+		var c := _to_frames(Vector2(ctr.x + sx * (r.size.x * 0.5 * sc + 10.0), ctr.y + r.size.y * 0.5 * sc - 8.0))
+		ci.draw_colored_polygon(PackedVector2Array([c + Vector2(-sx * 10.0, -8.0), c + Vector2(sx * 6.0, 8.0), c + Vector2(-sx * 14.0, 8.0)]), pal[0])
+
+
+## The badge's colours by unison level: [rim, lit rim, shaded rim, side, glow, number]. It heats up
+## from a dull ember through orange and gold to fire red and violet, and the top level shifts
+## through every colour.
+func _tier(level: int) -> Array:
+	var tiers := [
+		[Color("#b8641e"), Color("#e8a050"), Color("#5a2a08"), Color("#3e1c06"), Color(0.9, 0.4, 0.1), Color("#e8c890")],
+		[Color("#ff9a32"), Color("#ffd27a"), Color("#7a2e06"), Color("#5a2408"), Color(1.0, 0.5, 0.1), Color("#ffd35a")],
+		[Color("#ffc42a"), Color("#fff0a0"), Color("#8a5200"), Color("#5e3a04"), Color(1.0, 0.75, 0.1), Color("#fff2a8")],
+		[Color("#ff4a24"), Color("#ffb070"), Color("#7a0e06"), Color("#4e0a04"), Color(1.0, 0.3, 0.1), Color("#ffe0b0")],
+		[Color("#d23cff"), Color("#ffa8ff"), Color("#5a0a7a"), Color("#3a0650"), Color(0.8, 0.3, 1.0), Color("#ffe0ff")],
+		[Color("#40c8ff"), Color("#e0ffff"), Color("#0a3a7a"), Color("#062650"), Color(0.3, 0.8, 1.0), Color("#ffffff")],
+	]
+	var t: Array = tiers[clampi(level, 0, tiers.size() - 1)].duplicate()
+	if level >= 5:
+		var hue := fposmod(_clock * 0.25, 1.0)
+		t[0] = Color.from_hsv(hue, 0.8, 1.0)
+		t[1] = Color.from_hsv(hue, 0.3, 1.0)
+		t[2] = Color.from_hsv(hue, 0.9, 0.45)
+		t[4] = Color.from_hsv(hue, 0.7, 1.0)
+	return t
+
+
+## The badge's size now: bigger at each unison level, and a bounce on every beat (smaller with
+## reduced motion).
+func badge_scale() -> float:
+	var lvl := session.unison_level if session != null else 0
+	return (1.0 + 0.07 * float(lvl)) * (1.0 + (0.05 + 0.025 * float(lvl)) * _bounce)
 
 
 ## The pause button: two bars in a small carved hexagon.
@@ -391,6 +446,13 @@ func tick(t: float, delta: float) -> void:
 	_score.pivot_offset = _score.size * 0.5
 	_score.scale = Vector2.ONE * (1.0 + _punch)
 	_streak = float(session.unison_streak) / float(Session.UNISON_STEP) if session.unison_level < 5 else 1.0
+	# the badge bounces on the beat: a quick swell, easing back before the next one
+	_bounce = 0.0 if beat < 0.0 else pow(1.0 - fposmod(beat, 1.0), 3.0) * (0.35 if UIKit.reduced_motion() else 1.0)
+	var bs := badge_scale()
+	_unison.pivot_offset = _unison.size * 0.5
+	if not _unison_tweening():
+		_unison.scale = Vector2(bs, bs)
+	_unison.add_theme_color_override("font_color", _tier(session.unison_level)[5])
 	_meter.fill = _streak
 	_bar.progress = session.progress(t)
 	_progress = _bar.progress
@@ -416,10 +478,14 @@ func set_unison(level: int, animate := true) -> void:
 		_unison.modulate = Color(1.4, 1.3, 1.1)
 		if not UIKit.reduced_motion():
 			_unison.pivot_offset = _unison.size * 0.5
-			_unison.scale = Vector2(1.18, 1.18)
-			tw.tween_property(_unison, "scale", Vector2.ONE, 0.22).set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT)
+			_unison.scale = Vector2.ONE * badge_scale() * 1.25
+			tw.tween_property(_unison, "scale", Vector2.ONE * badge_scale(), 0.22).set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT)
 		tw.parallel().tween_property(_unison, "modulate", Color.WHITE, 0.3)
 		_meter.flare()
+
+
+func _unison_tweening() -> bool:
+	return _clock - _flare_at < 0.22
 
 
 static func _mult_text(m: float) -> String:

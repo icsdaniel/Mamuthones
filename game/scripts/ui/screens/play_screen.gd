@@ -359,6 +359,7 @@ func _process(delta: float) -> void:
 ## The beat now, for everything that moves with it: the rows' jumps, the beads on the rails, the fire.
 func _set_beat(beat: float) -> void:
 	lanes.beat = beat
+	hud.beat = beat
 	if scene is SideRows:
 		scene.beat = beat
 	if backdrop != null:
