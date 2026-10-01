@@ -160,6 +160,37 @@ func test_pause_resume_counts_back_in_from_a_bar_line() -> void:
 	UIHarness.restore_profile()
 
 
+## No song makes the player sit through its whole intro or outro: the music starts on a bar line
+## (so the beat grid is untouched) between 4.5 s (the play screen's LEAD_MIN) and about eight seconds before the first note,
+## and a whole run ends a couple of seconds after its last note.
+func test_short_intros_and_outros() -> void:
+	UIHarness.fresh_profile()
+	var ids: Array = []
+	for sd in SongLibrary.story():
+		ids.append(sd.id)
+	for sd in SongLibrary.piazza():
+		ids.append(sd.id)
+	for id in ids:
+		var diff := "piazza" if SongLibrary.get_song(id).kind == "piazza" else "hard"
+		var app := UIHarness.make_app(tree, "play", {"song_id": id, "difficulty": diff, "bell_set": "light"})
+		await UIHarness.frames(tree, 3)
+		var play := app.current()
+		var s: Session = play.get("session")
+		var sd: SongData = play.get("song")
+		var first: float = s.notes[0].t
+		var start: float = play.call("intro_start_time")
+		var lead := first - start
+		check(lead >= 4.5 - 0.001 and lead < 8.0, "%s: %.1f s from the music's start to the first note" % [id, lead])
+		var sb := sd.beat_at(start)
+		check(start == 0.0 or absf(sb - roundf(sb / 4.0) * 4.0) < 0.001, "%s: starts on a bar line (beat %.2f)" % [id, sb])
+		var last := 0.0
+		for n in s.notes:
+			last = maxf(last, n.end_t)
+		check(s.end_time() - last <= Session.END_PAD + 0.001, "%s: ends %.1f s after the last note" % [id, s.end_time() - last])
+		UIHarness.free_app(app)
+	UIHarness.restore_profile()
+
+
 ## The first played note comes well under a minute after launch: seven taps (language, headphones,
 ## buttons-or-tilt, skip delay, try), and the only waits the game itself adds are the screen
 ## transitions and the tutorial's one-bar lead-in. Reading time is the player's; this checks the

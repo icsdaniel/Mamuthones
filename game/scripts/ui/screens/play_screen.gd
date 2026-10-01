@@ -26,6 +26,9 @@ const SCENE_SHARE := 0.27         ## Piazza: share of the screen height given to
 const GUTTER := 0.0               ## the road fills the width; the Mamuthones stand beside its far end
 const BANNER_SHARE := 0.4         ## the count-in and the stand-still moment use this top share of the lanes
 const FAIL_MENU_DELAY := 0.5      ## seconds from running out of health to the fail menu
+const LEAD_MIN := 4.5             ## a song starts at least this many seconds (and two bars) before its first note
+const INTRO_FADE := 0.4           ## seconds the music fades in when it starts inside its intro
+const END_FADE := 1.2             ## seconds the music fades out after the last note before the results
 const FIELD_MAX_W := 900.0        ## lanes and buttons stay thumb-sized on a tablet
 const JUDGE_WORDS := {
 	"perfect": "judge_perfect", "good": "judge_good", "early": "judge_ok", "late": "judge_ok",
@@ -64,6 +67,7 @@ var _count_from := 0.0           ## real time the first count-in stick is heard
 var _count_music_t := 0.0        ## song time the music starts from after the count-in
 var _played := false             ## the music has run since the last count-in
 var _audio_count := false        ## the song started at its own count-in (sticks in the music)
+var _bar_count := false          ## the song started inside its intro: 4-3-2-1 over the bar before the first note's
 var _tap_hit := false            ## the tap being handled judged a note (set by _on_judged)
 var _tap_quality := ""           ## how well it hit: perfect, good, ok (Sound.step's quality)
 var _clock := 0.0
@@ -72,6 +76,7 @@ var _still := false
 var _fail_panel: Control
 var failed := false               ## health ran out: the run is over and records nothing
 var _fail_at := -1.0              ## _clock when the fail menu comes up (-1: not pending)
+var _finish_at := -1.0            ## _clock when the end fade is over and the results come (-1: not pending)
 var _dim := 0.0                   ## how far the bonfire is dimmed for low health (0..1)
 
 
@@ -276,8 +281,14 @@ func _start() -> void:
 	var start := 0.0
 	if _first_t < 4.0 * _spb + 0.5:
 		start = _first_t - (4.0 * _spb + 0.5)
+	else:
+		start = intro_start_time()
 	_audio_count = start <= song.time_of(-4.0, session.remix) + 0.01
 	conductor.play(song, session.remix, start)
+	if start > 0.0:
+		_bar_count = true
+		conductor.player.volume_db = -30.0
+		create_tween().tween_property(conductor.player, "volume_db", 0.0, INTRO_FADE)
 	_played = true
 
 
@@ -285,6 +296,22 @@ func _start() -> void:
 static func bell_cue_on(difficulty: String) -> bool:
 	var v: Variant = Profile.get_setting("bell_cue")
 	return (v == null or bool(v)) and difficulty in ["easy", "medium"]
+
+
+## Song time the music starts from: the latest bar line that leaves at least two bars and LEAD_MIN
+## seconds before the first note, so nobody waits through a whole intro (0: the song's very start,
+## with its own count-in sticks, when the intro is that short already).
+func intro_start_time() -> float:
+	var b := first_bar() - 8.0
+	while b > -4.0 and _first_t - song.time_of(b, session.remix) < LEAD_MIN:
+		b -= 4.0
+	return song.time_of(b, session.remix) if b > -4.0 else 0.0
+
+
+## Beat of the bar line the first note falls in (a note on a bar line is in that bar, whatever the
+## rounding of its time).
+func first_bar() -> float:
+	return floorf(song.beat_at(_first_t, session.remix) / 4.0 + 0.001) * 4.0
 
 
 ## Song time of the bar line one bar before the bar of the first note (bars of four beats from beat 0).
@@ -327,6 +354,9 @@ func _process(delta: float) -> void:
 	if _fail_at >= 0.0 and _clock >= _fail_at:
 		_fail_at = -1.0
 		_open_fail_menu()
+	if _finish_at >= 0.0 and _clock >= _finish_at:
+		_finish_at = -1.0
+		_finish()
 	if done or session == null or conductor == null:
 		return
 	_tap_hit = false
@@ -352,8 +382,8 @@ func _process(delta: float) -> void:
 	_count_in(t)
 	if ghost != null:
 		scene.set_ghost_delta(ghost.lead_seconds(session.score, t))
-	if session.is_over(t):
-		_finish()
+	if session.is_over(t) and _finish_at < 0.0:
+		_end_fade()
 
 
 ## The beat now, for everything that moves with it: the rows' jumps, the beads on the rails, the fire.
@@ -406,11 +436,15 @@ func _schedule(t: float) -> void:
 
 
 ## Song start: "4 3 2 1" on the music's own count-in sticks (beats -4..-1), then "Get ready" with the
-## bars left until the first note.
+## bars left until the first note. A song started inside its intro counts "4 3 2 1" over the music's
+## bar just before the first note's bar instead.
 func _count_in(t: float) -> void:
 	var b := song.beat_at(t, session.remix)
+	var cb := first_bar() - 4.0
 	if _audio_count and b >= -4.0 and b < 0.0:
 		count_view.show_digit(int(-floorf(b)), fposmod(b, 1.0))
+	elif _bar_count and b >= cb and b < cb + 4.0 and t < _first_t - 0.05:
+		count_view.show_digit(int(cb + 4.0 - floorf(b)), fposmod(b, 1.0))
 	elif t < _first_t - 0.05 and b >= -4.0:
 		var bf := song.beat_at(_first_t, session.remix)
 		count_view.show_ready(maxi(ceili((bf - b) / 4.0), 1), fposmod(b, 1.0))
@@ -750,6 +784,18 @@ func _notification(what: int) -> void:
 func _on_music_finished() -> void:
 	# The chart can end after the audio (a lesson's last rest); session.is_over decides.
 	pass
+
+
+## The last note is behind: the music fades out over END_FADE, then the results (a lesson inside the
+## tutorial hands back at once).
+func _end_fade() -> void:
+	if bool(args.get("embedded", false)):
+		_finish()
+		return
+	router.release_all()
+	router.enabled = false
+	create_tween().tween_property(conductor.player, "volume_db", -40.0, END_FADE)
+	_finish_at = _clock + END_FADE
 
 
 func _finish() -> void:
