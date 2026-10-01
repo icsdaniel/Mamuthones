@@ -13,7 +13,12 @@ signal pause_pressed
 const HEIGHT := 176.0
 const EDGE := Color("#ff9a32")
 const EDGE_HOT := Color("#ffd27a")
-const PANEL := Color(0.07, 0.04, 0.05, 0.86)
+const EDGE_DARK := Color("#7a2e06")
+const SIDE := Color("#5a2408")      ## the frames' sides, below their faces
+const LIGHT := Vector2(-0.45, -0.89)  ## where the HUD's light comes from (top left)
+const DEPTH := 7.0                  ## how far the frames stand out of the screen, px
+const BEVEL := 7.0                  ## the width of their bevelled rim, px
+const PANEL := Color(0.07, 0.04, 0.05, 0.9)
 const INK := Color("#fff1d6")
 const GOLD_INK := Color("#ffd35a")
 const SCORE_INK := Color("#ffe6a0")
@@ -56,8 +61,11 @@ static func style(l: Label, size: int, color: Color, bold := true, outline := 6)
 	l.add_theme_color_override("font_color", color)
 	l.add_theme_color_override("font_outline_color", OUTLINE)
 	l.add_theme_constant_override("outline_size", outline)
-	l.add_theme_constant_override("shadow_outline_size", 0)
-	l.add_theme_color_override("font_shadow_color", Color(0, 0, 0, 0))
+	# the letters stand out in relief: a bronze side below each one
+	l.add_theme_constant_override("shadow_outline_size", outline)
+	l.add_theme_color_override("font_shadow_color", Color("#9a4410"))
+	l.add_theme_constant_override("shadow_offset_x", 0)
+	l.add_theme_constant_override("shadow_offset_y", maxi(2, size / 12))
 	l.material = null
 
 
@@ -198,6 +206,9 @@ func _panel(ci: CanvasItem, r: Rect2, glow := 1.0) -> void:
 		_diamond(ci, p, 9.0)
 
 
+## A frame in relief: a thick slab standing out of the screen (its lower sides show below it), a
+## bevelled orange rim lit from the top left (the light faces bright, the shaded ones deep bronze) and
+## a dark panel sunk inside it, with the glow round the outside.
 func _shape(ci: CanvasItem, pts: PackedVector2Array, glow: float) -> void:
 	var g := PackedVector2Array()
 	for p in pts:
@@ -205,24 +216,93 @@ func _shape(ci: CanvasItem, pts: PackedVector2Array, glow: float) -> void:
 	var closed := g.duplicate()
 	closed.append(g[0])
 	for k in 3:
-		ci.draw_polyline(closed, Color(1.0, 0.5, 0.1, 0.12 * glow), 16.0 - k * 5.0, true)
-	ci.draw_colored_polygon(g, PANEL)
-	ci.draw_polyline(closed, EDGE, 3.0, true)
-	var c := Vector2.ZERO
-	for p in g:
-		c += p
-	c /= g.size()
-	var inner := PackedVector2Array()
-	for p in closed:
-		inner.append(c + (p - c) * 0.9)
-	ci.draw_polyline(inner, Color(EDGE, 0.35), 1.5, true)
+		ci.draw_polyline(closed, Color(1.0, 0.5, 0.1, 0.12 * glow), 18.0 - k * 5.0, true)
+	var n := g.size()
+	# the slab's sides, below it
+	var down := Vector2(0.0, DEPTH)
+	var hull := Geometry2D.convex_hull(PackedVector2Array(Array(g) + Array(_moved(g, down))))
+	ci.draw_polyline(hull, OUTLINE, 5.0, true)
+	ci.draw_colored_polygon(hull, OUTLINE)
+	for i in n:
+		var p0 := g[i]
+		var p1 := g[(i + 1) % n]
+		var nn := _normal(p0, p1)
+		if nn.y > 0.05:
+			_quad(ci, [p0, p1, p1 + down, p0 + down], SIDE.lerp(SIDE.darkened(0.5), clampf(0.5 + nn.x * 0.5, 0.0, 1.0)))
+	# the bevelled rim
+	var inner := _inset(g, BEVEL)
+	for i in n:
+		var p0 := g[i]
+		var p1 := g[(i + 1) % n]
+		var lit := _normal(p0, p1).dot(LIGHT)
+		var col := EDGE.lerp(EDGE_HOT, clampf(lit, 0.0, 1.0)) if lit >= 0.0 else EDGE.lerp(EDGE_DARK, clampf(-lit, 0.0, 1.0))
+		_quad(ci, [p0, p1, inner[(i + 1) % n], inner[i]], col)
+	# the sunk panel: darker at its top, where the rim shades it
+	ci.draw_colored_polygon(inner, PANEL)
+	var top_y := INF
+	var bot_y := -INF
+	for p in inner:
+		top_y = minf(top_y, p.y)
+		bot_y = maxf(bot_y, p.y)
+	var shade := PackedVector2Array()
+	for p in inner:
+		shade.append(Vector2(p.x, minf(p.y, top_y + (bot_y - top_y) * 0.35)))
+	var sh := Geometry2D.convex_hull(shade)
+	if sh.size() >= 4:
+		ci.draw_colored_polygon(sh, Color(0, 0, 0, 0.35))
+	var ring := inner.duplicate()
+	ring.append(inner[0])
+	ci.draw_polyline(ring, OUTLINE, 2.0, true)
+	ci.draw_polyline(closed, Color(EDGE_HOT, 0.9), 1.5, true)
 
 
+static func _moved(pts: PackedVector2Array, d: Vector2) -> PackedVector2Array:
+	var out := PackedVector2Array()
+	for p in pts:
+		out.append(p + d)
+	return out
+
+
+## The outward normal of the edge p0 -> p1 of a polygon wound clockwise on screen.
+static func _normal(p0: Vector2, p1: Vector2) -> Vector2:
+	var e := (p1 - p0).normalized()
+	return Vector2(e.y, -e.x)
+
+
+## A convex polygon moved in by d along each edge (corners mitred).
+static func _inset(pts: PackedVector2Array, d: float) -> PackedVector2Array:
+	var n := pts.size()
+	var out := PackedVector2Array()
+	for i in n:
+		var a := _normal(pts[(i - 1 + n) % n], pts[i])
+		var b := _normal(pts[i], pts[(i + 1) % n])
+		var m := (a + b).normalized()
+		out.append(pts[i] - m * d / maxf(m.dot(b), 0.3))
+	return out
+
+
+static func _quad(ci: CanvasItem, q: Array, col: Color) -> void:
+	var pts := PackedVector2Array(q)
+	ci.draw_primitive(PackedVector2Array([pts[0], pts[1], pts[2]]), PackedColorArray([col, col, col]), PackedVector2Array())
+	ci.draw_primitive(PackedVector2Array([pts[0], pts[2], pts[3]]), PackedColorArray([col, col, col]), PackedVector2Array())
+
+
+## A cut diamond stud: four facets lit from the top left, on a dark base that shows below it.
 func _diamond(ci: CanvasItem, at: Vector2, r: float, col := EDGE_HOT) -> void:
 	var p := _to_frames(at)
-	ci.draw_colored_polygon(PackedVector2Array([p + Vector2(0, -r - 2), p + Vector2(r + 2, 0), p + Vector2(0, r + 2), p + Vector2(-r - 2, 0)]), OUTLINE)
-	ci.draw_colored_polygon(PackedVector2Array([p + Vector2(0, -r), p + Vector2(r, 0), p + Vector2(0, r), p + Vector2(-r, 0)]), EDGE)
-	ci.draw_colored_polygon(PackedVector2Array([p + Vector2(0, -r * 0.45), p + Vector2(r * 0.45, 0), p + Vector2(0, r * 0.45), p + Vector2(-r * 0.45, 0)]), col)
+	var t := p + Vector2(0, -r)
+	var rt := p + Vector2(r, 0)
+	var bt := p + Vector2(0, r)
+	var lf := p + Vector2(-r, 0)
+	var d := Vector2(0, 3.0)
+	ci.draw_colored_polygon(PackedVector2Array([t + Vector2(0, -2), rt + Vector2(2, 0), rt + d + Vector2(2, 0), bt + d + Vector2(0, 2), lf + d + Vector2(-2, 0), lf + Vector2(-2, 0)]), OUTLINE)
+	_quad(ci, [lf, bt, bt + d, lf + d], SIDE)
+	_quad(ci, [bt, rt, rt + d, bt + d], SIDE.darkened(0.4))
+	var c := p + Vector2(-r * 0.12, -r * 0.12)
+	ci.draw_colored_polygon(PackedVector2Array([t, c, lf]), col.lightened(0.35))
+	ci.draw_colored_polygon(PackedVector2Array([t, rt, c]), col)
+	ci.draw_colored_polygon(PackedVector2Array([lf, c, bt]), EDGE)
+	ci.draw_colored_polygon(PackedVector2Array([c, rt, bt]), EDGE_DARK)
 
 
 func _draw_frames() -> void:
@@ -234,13 +314,16 @@ func _draw_frames() -> void:
 	# the progress line between two diamonds
 	var a := _to_frames(Vector2(line.x + 14.0, line.z))
 	var e := _to_frames(Vector2(line.y - 14.0, line.z))
-	ci.draw_line(a, e, OUTLINE, 9.0)
-	ci.draw_line(a, e, Color(0.18, 0.1, 0.08, 0.95), 6.0)
+	# a groove for the progress, lit along its lower lip; the filled part a round glowing rod in it
+	ci.draw_line(a, e, OUTLINE, 11.0)
+	ci.draw_line(a, e, Color(0.1, 0.05, 0.04, 0.95), 8.0)
+	ci.draw_line(a + Vector2(0, 3.5), e + Vector2(0, 3.5), Color(EDGE_DARK, 0.9), 1.5)
 	var fx := a.lerp(e, clampf(_progress, 0.0, 1.0))
 	if fx.x > a.x + 1.0:
 		ci.draw_line(a, fx, Color(1.0, 0.5, 0.1, 0.25), 14.0)
-		ci.draw_line(a, fx, EDGE, 5.0)
-		ci.draw_line(a, fx, EDGE_HOT, 2.0)
+		ci.draw_line(a, fx, EDGE_DARK, 7.0)
+		ci.draw_line(a + Vector2(0, -0.5), fx + Vector2(0, -0.5), EDGE, 5.0)
+		ci.draw_line(a + Vector2(0, -1.5), fx + Vector2(0, -1.5), EDGE_HOT, 2.0)
 	for p in [Vector2(line.x + 8.0, line.z), Vector2(line.y - 8.0, line.z)]:
 		_diamond(ci, p, 8.0)
 	if session.health_on:
@@ -272,17 +355,17 @@ func _draw_frames() -> void:
 ## The pause button: two bars in a small carved hexagon.
 func _draw_pause() -> void:
 	var down := _pause.button_pressed or _pause.is_hovered()
-	var c := _pause.size * 0.5
+	var c := _pause.size * 0.5 + (Vector2(0, DEPTH * 0.5) if down else Vector2.ZERO)
 	var r := 21.0
 	var pts := PackedVector2Array()
 	for i in 6:
 		var a := TAU * float(i) / 6.0
 		pts.append(c + Vector2(cos(a), sin(a)) * r)
-	_pause.draw_colored_polygon(pts, Color("#3a2010") if down else PANEL)
-	pts.append(pts[0])
-	_pause.draw_polyline(pts, EDGE, 3.0, true)
+	_shape(_pause, pts, 0.6)
 	for sx: float in [-1.0, 1.0]:
-		_pause.draw_rect(Rect2(c.x + sx * 6.0 - 3.0, c.y - 9.0, 6.0, 18.0), INK)
+		var bar := Rect2(c.x + sx * 6.0 - 3.0, c.y - 9.0, 6.0, 18.0)
+		_pause.draw_rect(Rect2(bar.position + Vector2(0, 2.0), bar.size), Color("#3a1404"))
+		_pause.draw_rect(bar, INK)
 
 
 func set_pause_visible(v: bool) -> void:

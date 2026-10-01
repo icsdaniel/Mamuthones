@@ -7,6 +7,7 @@ extends Control
 const LOW := 3
 const PIP := 21.0            ## (old flames' pitch, kept for callers)
 const HEART := 40.0          ## pitch between hearts
+const DEPTH := 3.0           ## how far the hearts stand out of the screen, px
 const LOSE_TIME := 0.5
 const LIGHT_TIME := 0.6
 const SHAKE_TIME := 0.35
@@ -71,12 +72,15 @@ func _draw() -> void:
 				lit_at = maxf(lit_at, float(_lit[k]))
 		var flare := clampf(1.0 - (_clock - lit_at) / LIGHT_TIME, 0.0, 1.0)
 		var col := Color("#e8322a").lerp(Color("#ff7a5a"), pulse * 0.6).lerp(Color("#fff0c0"), flare)
+		# each heart stands in relief: its side shows below it, and its upper left swells into the light
+		_heart(c + Vector2(0, DEPTH), 15.0, Color("#0a0608"), 3.0)
 		_heart(c, 15.0, Color("#0a0608"), 3.0)
+		_heart(c + Vector2(0, DEPTH), 15.0, Color("#1a0a0c"), 0.0)
 		_heart(c, 15.0, Color("#2a1418"), 0.0)
-		if pts == 2:
-			_heart(c, 15.0, col, 0.0)
-		elif pts == 1:
-			_heart(c, 15.0, col, 0.0, true)
+		if pts > 0:
+			_heart(c + Vector2(0, DEPTH), 15.0, col.darkened(0.55), 0.0, pts == 1)
+			_heart(c, 15.0, col, 0.0, pts == 1)
+			_heart(c + Vector2(-3.5, -3.0), 9.0, col.lightened(0.3), 0.0, pts == 1)
 		for k in [i * 2, i * 2 + 1]:
 			if _lost.has(k) and k >= h:
 				var a := clampf((_clock - float(_lost[k])) / LOSE_TIME, 0.0, 1.0)
