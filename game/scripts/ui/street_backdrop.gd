@@ -31,17 +31,16 @@ const EDGE_CLEAR := 0.12             ## an outer note's centre stays this share 
 ## The portrait frames' corners (picture px, the left one; the right mirrors it), from the play-screen
 ## reference.
 const FRAME := [Vector2(-12, 232), Vector2(226, 296), Vector2(272, 612), Vector2(-12, 748)]
-## The figures' bob, from Daniele's three-pose sheets (2026-09-30): standing, the drop on the beat
-## and halfway back up, one camera, feet fixed, facing the road. Timed on his reference clip (30 fps):
-## the drop pose for two frames after the beat, one in-between frame, standing again by 0.1 s.
+## The figures' bob, from Daniele's three-pose sheets (2026-09-30). Each figure has three pictures,
+## art/street/<figure>_bob_0/1/2.png: 0 the rest pose, 1 the drop on the beat, 2 halfway back up,
+## all on one canvas size with the feet at the bottom centre (tools/art/street/cut_figures.py makes
+## them from a sheet). The timing lives here, in seconds after each beat, and never depends on the
+## pictures: replacing the pictures keeps it. Timed on Daniele's reference clip (30 fps).
 const STAND := 0
 const DROP := 1
 const HALF := 2
 const DROP_TIME := 0.067             ## seconds after the beat the drop pose shows
 const HALF_TIME := 0.12              ## ... then the halfway pose until this long after the beat (long enough to show at 30 fps)
-## Whether the Issohadore rests with his rope raised overhead (his sheet's standing pose). Off: the
-## rope would jump from his hip to over his head every beat, so he rests with it at his hip.
-const ROPE_UP := false
 const POSE_BOB := 0.5                ## a figure's own sink with its poses, as a share of BOB
 const BOB_LEAN := 2.0                ## degrees a figure leans toward the road at the bottom of the drop
 const BOB := 0.1                     ## how far a figure drops on the beat, share of its portrait's height
@@ -340,15 +339,20 @@ func _dance_pose() -> void:
 	var pose := STAND
 	var spb := lanes.spb if lanes != null and lanes.spb > 0.0 else 0.5
 	if beat > -999.0 and not still:
-		var t := (beat - floorf(beat)) * spb
-		if t < DROP_TIME:
-			pose = DROP
-		elif t < HALF_TIME and not reduced_motion:
-			pose = HALF
+		pose = pose_at((beat - floorf(beat)) * spb, reduced_motion)
 	for i in mini(_poses.size(), _figures.size()):
-		var tex: Texture2D = _poses[i][HALF if i == 0 and pose == STAND and not ROPE_UP else pose]
+		var tex: Texture2D = _poses[i][pose]
 		if _figures[i].texture != tex:
 			_figures[i].texture = tex
+
+
+## Which pose (STAND, DROP, HALF) shows t seconds after a beat.
+static func pose_at(t: float, reduced := false) -> int:
+	if t >= 0.0 and t < DROP_TIME:
+		return DROP
+	if t >= 0.0 and t < HALF_TIME and not reduced:
+		return HALF
+	return STAND
 
 
 ## How far down a figure is (1 = the full drop) t seconds after the beat: down at once, held for a
