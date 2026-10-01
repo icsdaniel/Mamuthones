@@ -74,6 +74,8 @@ var _clock := 0.0
 var _kick := 0.0
 var _jolt_kind := ""
 var _jolt_at := -9.0
+var _surge_at := -9.0
+const SURGE_TIME := 0.5
 var _layout := Vector3.ZERO
 
 
@@ -256,6 +258,13 @@ func stomp() -> void:
 
 func kick(amount := 1.0) -> void:
 	_kick = maxf(_kick, amount)
+
+
+## A surge of light runs up the four lines from the player to the fire, and the fire roars (the
+## procession's unison rose).
+func surge() -> void:
+	_surge_at = _clock
+	kick(1.0)
 
 
 func set_ghost_delta(_seconds: float) -> void:
@@ -470,6 +479,21 @@ func _draw_glow(ci: CanvasItem) -> void:
 				var p1 := a.lerp(b, float(k + 1) / n)
 				var w := lerpf(2.0, 9.0, float(k) / n) * pic_scale / 0.86
 				ci.draw_line(p0, p1, Color(1.0, 0.6, 0.2, 0.3 * env * lerpf(0.4, 1.0, float(k) / n)), w)
+	# a surge running up the lines
+	var sa := (_clock - _surge_at) / SURGE_TIME
+	if lanes != null and lanes.visible and sa >= 0.0 and sa < 1.0:
+		var y_far := FAR_Y + 20.0
+		var y1 := IMG.y
+		for i in 4:
+			for k in 6:
+				var u0 := clampf(1.0 - sa * 1.15 + float(k) * 0.03, 0.0, 1.0)
+				var u1 := clampf(u0 + 0.03, 0.0, 1.0)
+				var ya := lerpf(y_far, y1, u0)
+				var yb := lerpf(y_far, y1, u1)
+				var p0 := to_local_pic(Vector2(rail_x(i, ya), ya))
+				var p1 := to_local_pic(Vector2(rail_x(i, yb), yb))
+				var w := lerpf(4.0, 16.0, u0) * pic_scale / 0.86
+				ci.draw_line(p0, p1, Color(1.0, 0.85, 0.5, (1.0 - float(k) / 6.0) * (1.0 - sa)), w)
 	# warm flashes where notes were hit
 	var i := 0
 	while i < _flashes.size():

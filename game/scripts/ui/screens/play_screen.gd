@@ -323,6 +323,7 @@ func _layout_router() -> void:
 
 func _process(delta: float) -> void:
 	_clock += delta
+	_tick_shake(delta)
 	if _fail_at >= 0.0 and _clock >= _fail_at:
 		_fail_at = -1.0
 		_open_fail_menu()
@@ -529,8 +530,30 @@ func _on_stomp(note: Note, judgement: String, _offset: float, both: bool) -> voi
 		Sound.stomp_half(note.lane)
 		words.show_word(tr("judge_one_thumb"), "", lanes.word_spot(note.lane), "early")
 	lanes.stomp_hit(note.lane, judgement, both)
+	if both:
+		shake(7.0)
 	if backdrop != null:
 		backdrop.kick(1.0 if both else 0.4)
+
+
+var _last_unison := 0
+var _shake := 0.0
+
+
+## A short jolt of the whole screen, `px` at its strongest (none with reduced motion).
+func shake(px: float) -> void:
+	if not UIKit.reduced_motion():
+		_shake = maxf(_shake, px)
+
+
+func _tick_shake(delta: float) -> void:
+	if _shake <= 0.05:
+		if position != Vector2.ZERO:
+			position = Vector2.ZERO
+		_shake = 0.0
+		return
+	position = Vector2(sin(_clock * 71.0), cos(_clock * 53.0)) * _shake
+	_shake = move_toward(_shake, 0.0, delta * 30.0)
 
 
 ## The side shown for a judgement: none on Perfect, the offset's side on Good, the band's own side on
@@ -565,6 +588,10 @@ func _on_still_kept(_note: Note, points: float) -> void:
 
 
 func _on_unison(level: int) -> void:
+	if level > _last_unison and backdrop != null:
+		backdrop.surge()
+		shake(4.0)
+	_last_unison = level
 	Sound.row_bells(level)
 	hud.set_unison(level)
 	scene.set_unison(level)

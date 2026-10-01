@@ -156,6 +156,10 @@ static func _glow(ci: CanvasItem, c: Vector2, r: Vector2, col: Color) -> void:
 	ci.draw_texture_rect(_glow_tex, Rect2(c - r, r * 2.0), false, col)
 
 
+## How close the note being drawn is to the hit line (0 far .. 1 on it): it glows brighter as it comes.
+static var _near := 0.0
+
+
 static func _lane(field: Rect2) -> float:
 	return field.size.x / 3.0
 
@@ -184,7 +188,7 @@ static func disc(lv: LaneView, field: Rect2, cx: float, y: float, r: float, k: A
 	var c: Vector2 = f.call(Vector3.ZERO)
 	var rx := r * lw
 	_glow(lv, c + Vector2(0.0, rx * FORE * 0.5), Vector2(rx * 1.25, rx * FORE * 1.6), Color(0.0, 0.0, 0.03, 0.6 * alpha))
-	_glow(lv, c, Vector2(rx * 1.5, rx * FORE * 2.6), _a(k[3], 0.3 * alpha * glow))
+	_glow(lv, c, Vector2(rx * 1.5, rx * FORE * 2.6) * (1.0 + 0.4 * _near), _a(k[3], (0.3 + 0.45 * _near) * alpha * glow))
 	solid(lv, f, verts, faces, Vector3(r, 1.0, r), k, alpha, maxf(2.0, lw * 0.02), -0.4)
 	return top
 
@@ -320,6 +324,12 @@ static func rope(lv: LaneView, field: Rect2, cx: float, ya: float, yb: float, li
 		yy -= step_y
 	if lit:
 		lv.draw_line(f.call(Vector3(-0.3, h, -1)), f.call(Vector3(-0.3, h, 1)), _a(RIM, 0.6 * alpha), 2.0, true)
+		# sparks fly off the rope where it runs into the slot while it is held
+		var at: Vector2 = f.call(Vector3(0, h, 1))
+		var lw := lv.road_scale(yb) * lane
+		for i in 3:
+			var age := fposmod(lv._clock + float(i) * 0.11, 0.33)
+			_embers(lv, at, lw * 0.6, age, 4, int(lv._clock / 0.33) * 5 + i, K_ROPE[0], 0.8)
 
 
 ## A bell note: the Mamuthone's leather bell strap across the whole road at flat depth y, a bronze
@@ -406,33 +416,66 @@ static func _foot(ci: CanvasItem, c: Vector2, s: float, foot: float, col: Color)
 		ci.draw_circle(c + Vector2(tx, -s * 0.66 + absf(float(t) - 1.0) * s * 0.06), s * (0.15 if t == 0 else 0.11), col)
 
 
-## A hit burst: a ring spreading out of the slot, light rising from the lane and sparks thrown up
-## and out. False once it is over.
+## A hit burst: the pintadera's pattern stamped into the road where the note landed, glowing and
+## fading; light rising from the lane; and a spray of embers thrown up out of the slot, falling back.
+## A miss is a dull red ring and a few grey cinders. False once it is over.
 static func burst(ci: CanvasItem, at: Vector2, quality: String, age: float, sc: float) -> bool:
 	var tt := age / LaneSkin.BURST_TIME
 	if tt >= 1.0 or tt < 0.0:
 		return false
-	var col: Color = {
-		"perfect": Color("#fffbe8"), "good": Color("#ffd35a"), "ok": Color("#ff9a3a"), "early": Color("#ff9a3a"),
-		"late": Color("#ff9a3a"), "heal": Color("#8affb8"), "held": Color("#ffe27a"), "stomp": Color("#ffc060"),
-	}.get(quality, Color("#ffd35a"))
 	var lw := sc * 240.0
 	if ci is LaneView:
 		lw = sc * (ci as LaneView).field_rect().size.x / 3.0
 	var e := 1.0 - pow(1.0 - tt, 3.0)
 	var a := pow(1.0 - tt, 1.4)
+	var seed := int(absf(at.x) * 13.0) + quality.length() * 7
+	if quality == "miss":
+		_ring(ci, at, Vector2(lw * DISC_R, lw * DISC_R * FORE) * (1.0 + 0.3 * e), maxf(2.0, lw * 0.03), Color(0.75, 0.15, 0.12, 0.8 * a))
+		_embers(ci, at, lw, age, 5, seed, Color(0.45, 0.4, 0.4), 0.5)
+		return true
+	var col: Color = {
+		"perfect": Color("#fffbe8"), "good": Color("#ffd35a"), "ok": Color("#ff9a3a"), "early": Color("#ff9a3a"),
+		"late": Color("#ff9a3a"), "heal": Color("#8affb8"), "held": Color("#ffe27a"), "stomp": Color("#ffc060"),
+	}.get(quality, Color("#ffd35a"))
+	var big := 1.6 if quality == "stomp" else (1.25 if quality == "perfect" else 1.0)
+	# light rising from the lane
 	var pw := lw * 0.42 * (1.0 - 0.3 * tt)
-	var ph := lw * (0.9 + 0.6 * e)
-	ci.draw_polygon(PackedVector2Array([at + Vector2(-pw, 0), at + Vector2(pw, 0), at + Vector2(pw * 0.7, -ph), at + Vector2(-pw * 0.7, -ph)]),
-		PackedColorArray([Color(col, 0.6 * a), Color(col, 0.6 * a), Color(col, 0.0), Color(col, 0.0)]))
-	_glow(ci, at, Vector2(lw * (0.6 + 0.3 * e), lw * (0.3 + 0.15 * e)), Color(col, 0.8 * a))
-	var r := lw * DISC_R * (1.0 + 0.8 * e)
-	_ring(ci, at, Vector2(r, r * FORE), maxf(2.0, lw * 0.035 * (1.0 - tt)), Color(col, a))
-	for i in 8:
-		var ang := -PI * (0.1 + 0.8 * float(i) / 7.0)
-		var dir := Vector2(cos(ang), sin(ang) * 1.1)
-		ci.draw_line(at + dir * lw * (0.2 + 0.35 * e), at + dir * lw * (0.3 + 0.55 * e), Color(col, a), maxf(2.0, lw * 0.03 * (1.0 - tt)), true)
+	var ph := lw * (0.9 + 0.7 * e) * big
+	ci.draw_polygon(PackedVector2Array([at + Vector2(-pw, 0), at + Vector2(pw, 0), at + Vector2(pw * 0.6, -ph), at + Vector2(-pw * 0.6, -ph)]),
+		PackedColorArray([Color(col, 0.65 * a), Color(col, 0.65 * a), Color(col, 0.0), Color(col, 0.0)]))
+	_glow(ci, at, Vector2(lw * (0.7 + 0.4 * e), lw * (0.35 + 0.2 * e)) * big, Color(col, 0.9 * a))
+	# the stamp: the pintadera's rim and teeth pressed into the road, spreading a little as it fades
+	var r := lw * DISC_R * (1.0 + 0.25 * e) * big
+	var top := func(p: Vector2) -> Vector2: return at + Vector2(p.x * r, p.y * r * FORE)
+	var sa := a * a
+	_ring(ci, at, Vector2(r, r * FORE) * 0.86, maxf(2.0, lw * 0.03), Color(col, sa))
+	for i in 12:
+		var a0 := TAU * float(i) / 12.0
+		var a1 := TAU * float(i + 1) / 12.0
+		var am := (a0 + a1) * 0.5
+		ci.draw_colored_polygon(PackedVector2Array([top.call(Vector2(cos(a0), sin(a0)) * 0.46), top.call(Vector2(cos(am), sin(am)) * 0.7), top.call(Vector2(cos(a1), sin(a1)) * 0.46)]), Color(col, 0.8 * sa))
+	# the outer shock ring
+	_ring(ci, at, Vector2(r, r * FORE) * (1.0 + 0.9 * e), maxf(2.0, lw * 0.04 * (1.0 - tt)), Color(col, 0.8 * a))
+	_embers(ci, at, lw * big, age, 14 if quality == "stomp" else 10, seed, col, 1.0)
 	return true
+
+
+## Embers thrown up from `at` and falling back under gravity, `n` of them, the same for the same seed.
+static func _embers(ci: CanvasItem, at: Vector2, lw: float, age: float, n: int, seed: int, col: Color, power: float) -> void:
+	var life := LaneSkin.BURST_TIME * 1.1
+	if age >= life:
+		return
+	var k := 1.0 - age / life
+	for i in n:
+		var h := hash(seed * 31 + i * 7919)
+		var ang := -PI * (0.12 + 0.76 * float(h % 1000) / 1000.0)
+		var spd := lw * power * (2.2 + 2.6 * float((h / 1000) % 1000) / 1000.0)
+		var v := Vector2(cos(ang), sin(ang)) * spd
+		var p := at + v * age + Vector2(0.0, lw * 9.0 * age * age)
+		var tail := p - (v + Vector2(0.0, lw * 18.0 * age)) * 0.03
+		var w := maxf(1.5, lw * 0.025 * k)
+		ci.draw_line(tail, p, Color(col.lerp(Color("#ff7a20"), 1.0 - k), k), w, true)
+		ci.draw_circle(p, w * 0.8, Color(Color.WHITE.lerp(col, 0.5), k))
 
 
 static func _ellipse(ci: CanvasItem, c: Vector2, r: Vector2, col: Color) -> void:
@@ -493,6 +536,7 @@ static func draw_notes(lv: LaneView, field: Rect2) -> void:
 		var n: Note = it[2]
 		var cx: float = it[3]
 		var a: float = it[4]
+		_near = clampf(1.0 - (hl - y) / (_lane(field) * 2.5), 0.0, 1.0)
 		match str(it[1]):
 			"knot":
 				_knot(lv, field, cx, y, a)

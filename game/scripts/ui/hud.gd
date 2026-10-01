@@ -44,6 +44,8 @@ var _clock := 0.0
 var _progress := 0.0
 var _streak := 0.0
 var _laid := Vector2(-1, -1)
+var _punch := 0.0
+var _punched := 0
 
 
 func _init() -> void:
@@ -379,7 +381,15 @@ func tick(t: float, delta: float) -> void:
 		return
 	# The number counts up quickly rather than jumping, so big hits read as big.
 	_shown_score = move_toward(_shown_score, session.score, maxf(40.0, absf(session.score - _shown_score) * 12.0) * delta)
-	_score.text = UIKit.fmt_score(roundi(_shown_score))
+	var shown := UIKit.fmt_score(roundi(_shown_score))
+	if shown != _score.text and session.score > _punched:
+		# the number swells as points land, more for a bigger jump
+		_punch = clampf(0.06 + float(session.score - _punched) / 4000.0, 0.06, 0.2)
+		_punched = session.score
+	_score.text = shown
+	_punch = move_toward(_punch, 0.0, delta * 0.8)
+	_score.pivot_offset = _score.size * 0.5
+	_score.scale = Vector2.ONE * (1.0 + _punch)
 	_streak = float(session.unison_streak) / float(Session.UNISON_STEP) if session.unison_level < 5 else 1.0
 	_meter.fill = _streak
 	_bar.progress = session.progress(t)
