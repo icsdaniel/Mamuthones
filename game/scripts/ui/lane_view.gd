@@ -1226,7 +1226,9 @@ func _rest_tag(field: Rect2, y_a: float, y_b: float, taken: Array[float], hl: fl
 	var best_y := (top + bottom) * 0.5
 	var best_gap := -INF
 	var cy := top + 22.0
-	while cy <= bottom - 22.0:
+	# with nothing crossing the band the label sits in the middle of what shows of it, not squeezed at
+	# its far edge where it is smallest
+	while not taken.is_empty() and cy <= bottom - 22.0:
 		var gap := INF
 		for ty in taken:
 			gap = minf(gap, absf(ty - cy))

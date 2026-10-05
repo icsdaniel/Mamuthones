@@ -67,6 +67,10 @@ var dim := 0.0
 var reduced_motion := false
 var still := false
 var unison := 0
+## The HUD's lower edge in this control's coordinates (-INF: unknown). The portraits and their
+## figures move down as far as needed for the heads to stay under it (a notch pushes the HUD down).
+var hud_bottom := -INF
+const HUD_GAP := 6.0
 var bell_set := "village"
 ## The pixel look (set before this enters the tree): the street as pixel art, and the figures as
 ## puppets whose parts slide (PixelFigure) instead of Daniele's three-pose pictures.
@@ -537,7 +541,14 @@ func _make_frame(i: int) -> Node2D:
 	return root
 
 
-func _frame_points(i: int) -> PackedVector2Array:
+## Tells the street where the HUD ends (this control's coordinates); the portraits make room.
+func set_hud_bottom(y: float) -> void:
+	if absf(y - hud_bottom) > 0.5:
+		hud_bottom = y
+		_place_frames()
+
+
+func _frame_points(i: int, drop := 0.0) -> PackedVector2Array:
 	var pts := PackedVector2Array()
 	# placed on the screen as on the picture before ZOOM (the zoom is for the road), and grown by
 	# FRAME_GROW from the outer top corner, so the bigger figures fit and stay clear of the HUD
@@ -548,13 +559,31 @@ func _frame_points(i: int) -> PackedVector2Array:
 		var p: Vector2 = FRAME[k] - Vector2(0.0, FRAME_LIFT.x if k < 2 else FRAME_LIFT.y)
 		p = anchor + (p - anchor) * FRAME_GROW
 		var q := p if i == 0 else Vector2(IMG.x - p.x, p.y)
-		pts.append(Vector2(bo + q.x * bs, q.y * bs))
+		pts.append(Vector2(bo + q.x * bs, q.y * bs + drop))
 	return pts
 
 
+## The top of figure i's head when it stands in a portrait at pts (its pose at rest).
+func _head_top(i: int, pts: PackedVector2Array) -> float:
+	var top := (pts[0].y + pts[1].y) * 0.5
+	var bottom := (pts[2].y + pts[3].y) * 0.5
+	if pixel:
+		if i >= _puppets.size():
+			return top
+		var h := (bottom - top) * (0.98 if i == 0 else 0.9)
+		return bottom + h * 0.1 - _puppets[i].art_height() * PxArt.PX
+	var hf := (bottom - top) * FIGURE_FILL
+	return bottom + hf * 0.1 - hf
+
+
 func _place_frames() -> void:
+	# down just enough that no head reaches into the HUD
+	var drop := 0.0
+	if is_finite(hud_bottom):
+		for i in _frames.size():
+			drop = maxf(drop, hud_bottom + HUD_GAP - _head_top(i, _frame_points(i)))
 	for i in _frames.size():
-		var pts := _frame_points(i)
+		var pts := _frame_points(i, drop)
 		var f := _frames[i]
 		(f.get_node("Panel") as Polygon2D).polygon = pts
 		# everything above the frame's lower edge, out past its sides

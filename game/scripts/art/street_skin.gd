@@ -606,7 +606,9 @@ static func draw_notes(lv: LaneView, field: Rect2) -> void:
 				var y0 := maxf(minf(y, e[2]), 0.0)
 				var y1 := minf(maxf(y, e[2]), hl)
 				if y1 - y0 > 2.0:
-					band(lv, lv.project(Vector2(0, y0)), lv.project(Vector2(field.size.x, y0)), lv.project(Vector2(field.size.x, y1)), lv.project(Vector2(0, y1)), lv._haze(y0, field))
+					# faded by its near edge: a long stand-still whose far end is still past the end of the
+					# road must show as soon as it comes into view, not only once its end does
+					band(lv, lv.project(Vector2(0, y0)), lv.project(Vector2(field.size.x, y0)), lv.project(Vector2(field.size.x, y1)), lv.project(Vector2(0, y1)), lv._haze(y1, field))
 			Note.Kind.HOLD:
 				if n.finished or (n.done and not n.holding):
 					continue
@@ -614,7 +616,8 @@ static func draw_notes(lv: LaneView, field: Rect2) -> void:
 				var head := minf(y, hl) if n.holding else y
 				var tail := maxf(float(e[2]), 0.0)
 				if head - tail > 1.0:
-					rope(lv, field, cx, tail, head, n.holding, lv._haze(tail, field))
+					# faded by its near end, like the band: a rope still running past the end of the road shows
+					rope(lv, field, cx, tail, head, n.holding, lv._haze(head, field))
 				if float(e[2]) > 0.0:
 					items.append([float(e[2]), "knot", n, cx, lv._haze(e[2], field)])
 				items.append([head, "hold", n, cx, lv._haze(head, field)])

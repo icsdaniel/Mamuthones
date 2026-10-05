@@ -142,6 +142,9 @@ static func column_with_footer(parent: Control, separation := 16) -> Array[VBoxC
 
 ## Safe-area insets in canvas units (left, top, right, bottom) for notches and home bars.
 static func safe_margins(node: Control) -> Vector4:
+	if OS.has_environment("SAFE_TOP"):
+		# screenshots: a phone's notch, in base px
+		return Vector4(0.0, float(OS.get_environment("SAFE_TOP")), 0.0, 0.0)
 	var win := DisplayServer.window_get_size()
 	var safe := DisplayServer.get_display_safe_area()
 	if win.x <= 0 or safe.size.x <= 0 or safe.size.x > win.x:

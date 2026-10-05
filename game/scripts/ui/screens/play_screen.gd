@@ -461,6 +461,9 @@ func _process(delta: float) -> void:
 	_set_beat(beat)
 	hud.tick(t, delta)
 	_tick_health(delta)
+	if backdrop != null:
+		var hb := hud.get_global_transform() * Vector2(0.0, hud.frames_bottom())
+		backdrop.set_hud_bottom((backdrop.get_global_transform().affine_inverse() * hb).y)
 	if cue != null:
 		cue.song_time = tv
 	_schedule(t)

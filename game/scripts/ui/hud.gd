@@ -4,8 +4,8 @@ extends Control
 ## play_screen_hud_target.png): a thin progress line across the top between two diamonds, then three
 ## carved frames with glowing orange edges - health as hearts on the left, the unison multiplier in
 ## a big hexagonal badge in the middle (its lower rim fills with the streak toward the next level),
-## the score on the right. Under the score, the ghost (ahead or behind your best); under the hearts,
-## the song's section. A small pause button sits at the top right.
+## the score on the right. The ghost line (ahead or behind your best) and the song's section are
+## kept but not shown. A small pause button sits at the top right.
 ## Node names (Score, Ghost, Health, Unison, Pause, Progress) are what the tests look for.
 
 signal pause_pressed
@@ -151,6 +151,11 @@ func setup(p_session: Session, p_ghost: Ghost) -> void:
 	_bar.visible = false
 	_bar.setup(session)
 	add_child(_bar)
+	# No words under the frames (Daniele, 2026-10-05): the song's section and the line against your
+	# best run are hidden, so the figures' heads have the space under the HUD to themselves. They
+	# are still kept up to date (tests read them).
+	_section.visible = false
+	_ghost.visible = false
 	resized.connect(_layout)
 	_layout()
 	set_unison(session.unison_level, false)
@@ -511,6 +516,12 @@ func _unison_tweening() -> bool:
 
 static func _mult_text(m: float) -> String:
 	return ("%dx" % int(m)) if is_equal_approx(m, roundf(m)) else ("%.1fx" % m)
+
+
+## The lower edge of the side frames (hearts and score), in this HUD's coordinates: the street keeps
+## the figures' heads under it.
+func frames_bottom() -> float:
+	return PANEL_Y + PANEL_H + DEPTH
 
 
 ## Whether any note has been judged yet (the ghost line waits for it).
