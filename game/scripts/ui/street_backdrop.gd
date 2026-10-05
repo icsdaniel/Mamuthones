@@ -67,6 +67,7 @@ var stretch := 1.0
 
 var _pic: TextureRect
 var _vp: SubViewport                 ## the pixel look: the street drawn at one texel per lens cell
+var own_cells := true                ## false when the whole play screen is already drawn one px per cell
 var _cells: TextureRect              ## ... and shown scaled up
 var _mat: ShaderMaterial
 var _glow: Control                   ## additive: lines pulsing, lanterns, hit flashes
@@ -105,7 +106,7 @@ func _ready() -> void:
 	sh.code = PICTURE_SHADER
 	_mat.shader = sh
 	_pic.material = _mat
-	if pixel:
+	if pixel and own_cells:
 		# the pixel look draws the street (its moving road is the costly part) at one texel per
 		# cell of the lens, then shows it scaled up: a ninth of the work, and crisp on the grid
 		_vp = SubViewport.new()

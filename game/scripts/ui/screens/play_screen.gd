@@ -115,24 +115,28 @@ func build() -> void:
 	# The Piazza keeps its plain black ground under the procession; songs play on the Fire Night.
 	pixel = str(Profile.get_setting("art_style")) == "pixel" and not session.piazza
 	StreetSkin.pixel = pixel
-	# The pixel look draws the street, the lanes and the HUD into their own picture at the game's base
-	# size (720 wide), where the lens turns them into pixel art, and shows that picture enlarged with
-	# hard pixel edges. A phone's screen has two to four times the pixels: drawing and filtering
-	# them all every frame made the pixel look lag, and its cells come out the same either way.
+	# The pixel look draws the street, the lanes and the HUD straight into one small picture, one
+	# pixel per art pixel (a third of the base size each way), and shows it enlarged with hard edges.
+	# That is the pixel art itself: no filter reads the screen back and no other picture is drawn,
+	# so a phone does far less work per frame than for the painted look at full resolution.
 	var host: Node = self
 	if pixel and not OS.has_environment("NO_WORLD"):
 		world = SubViewportContainer.new()
 		world.name = "World"
 		world.stretch = true
+		world.stretch_shrink = int(PxArt.PX)
 		world.set_anchors_preset(Control.PRESET_FULL_RECT)
 		world.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
 		world_vp = SubViewport.new()
 		world_vp.name = "WorldView"
 		world_vp.disable_3d = true
 		world_vp.handle_input_locally = true
+		world_vp.size_2d_override_stretch = true
 		world_vp.canvas_item_default_texture_filter = Viewport.DEFAULT_CANVAS_ITEM_TEXTURE_FILTER_NEAREST
 		world.add_child(world_vp)
 		add_child(world)
+		world.resized.connect(func() -> void: world_vp.size_2d_override = Vector2i(world.size.round()))
+		world_vp.size_2d_override = Vector2i(world.size.round())
 		host = world_vp
 	# a picture of its own does not inherit the app's theme: hand it on to what is drawn in it
 	var host_theme: Theme = null
@@ -153,6 +157,7 @@ func build() -> void:
 		PxType.smooth = not bool(args.get("embedded", false)) and not pixel
 		backdrop.name = "Backdrop"
 		backdrop.pixel = pixel
+		backdrop.own_cells = world == null
 		backdrop.bell_set = str(args.get("bell_set", "village"))
 		bg = backdrop
 	bg.set_anchors_preset(Control.PRESET_FULL_RECT)
@@ -246,7 +251,7 @@ func build() -> void:
 		cue.mouse_filter = Control.MOUSE_FILTER_IGNORE
 		_field_box.add_child(cue)
 
-	if pixel and not OS.has_environment("NO_LENS"):
+	if pixel and world == null and not OS.has_environment("NO_LENS"):
 		filter = PixelFilter.new()
 		filter.name = "PixelFilter"
 		host.add_child(filter)
