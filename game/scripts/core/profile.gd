@@ -37,6 +37,7 @@ const DEFAULT_SETTINGS := {
 	"sfx_volume": 1.0,
 	"audio_offset": 0.0,     # seconds, from the tap test or set by hand
 	"bell_cue": true,        # the bell cue shown at Easy and Medium
+	"art_style": "pixel",    # the play screen's look: "pixel" (pixel art in 3D motion) or "painted"
 }
 const FLAGS: Array[String] = ["language_chosen", "headphones_seen", "calibrated", "latency_tested", "tutorial_done"]
 const FLEECES: Array[String] = ["black", "dark_brown"]

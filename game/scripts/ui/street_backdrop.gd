@@ -19,6 +19,7 @@ extends Control
 ## play screen drives it the same way.
 
 const STREET := "res://art/street/street.png"
+const PIXEL_STREET := "res://art/pixel/street.png"   ## the same street as pixel art (tools/art/pixel3d)
 const IMG := Vector2(941.0, 1672.0)
 ## The painted lines, x = a + b * y in the picture's pixels: the road's edges and the lane dividers.
 const RAILS := [Vector2(609.17, -0.45827), Vector2(510.90, -0.14397), Vector2(445.17, 0.12678), Vector2(356.72, 0.43025)]
@@ -55,6 +56,9 @@ var reduced_motion := false
 var still := false
 var unison := 0
 var bell_set := "village"
+## The pixel look (set before this enters the tree): the street as pixel art, and the figures as
+## puppets whose parts slide (PixelFigure) instead of Daniele's three-pose pictures.
+var pixel := false
 
 ## The picture on screen: scale, x offset, and the stretch below STRETCH_FROM.
 var pic_scale := 1.0
@@ -67,6 +71,7 @@ var _glow: Control                   ## additive: lines pulsing, lanterns, hit f
 var _sparks: CPUParticles2D
 var _frames: Array[Node2D] = []
 var _figures: Array[Sprite2D] = []
+var _puppets: Array[PixelFigure] = []
 var _poses: Array = []               ## per figure, its poses (STAND, DROP, HALF), all the same size, feet at the bottom centre
 var _glow_tex: Texture2D
 var _flashes: Array = []             ## [local pos, t0, strength]
@@ -87,10 +92,10 @@ func _init() -> void:
 func _ready() -> void:
 	_pic = TextureRect.new()
 	_pic.name = "Street"
-	_pic.texture = load(STREET)
+	_pic.texture = load(PIXEL_STREET if pixel else STREET)
 	_pic.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
 	_pic.stretch_mode = TextureRect.STRETCH_SCALE
-	_pic.texture_filter = CanvasItem.TEXTURE_FILTER_LINEAR
+	_pic.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST if pixel else CanvasItem.TEXTURE_FILTER_LINEAR
 	_pic.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	_pic.set_anchors_preset(Control.PRESET_FULL_RECT)
 	_mat = ShaderMaterial.new()
@@ -307,8 +312,35 @@ func _process(delta: float) -> void:
 		_mat.set_shader_parameter("motion", 0.35 if reduced_motion else 1.0)
 	if _sparks != null:
 		_sparks.speed_scale = 1.0 - 0.5 * dim
+	if pixel:
+		_move_road()
 	_bob_figures()
 	_glow.queue_redraw()
+
+
+## The pixel look's road moves with the notes: its cobbles travel toward the player at the notes'
+## speed, so a note rides the road like a stone set in it (still with reduced motion).
+func _move_road() -> void:
+	if _mat == null or lanes == null or not lanes.is_inside_tree():
+		return
+	var fr := lanes.field_rect()
+	var lane := maxf(fr.size.x / 3.0, 1.0)
+	var hl := LaneSkin.hit_line_y(fr)
+	var yh := _hit_line_local() / pic_scale
+	if yh > STRETCH_FROM:
+		yh = STRETCH_FROM + (yh - STRETCH_FROM) / stretch
+	var a := Vector4(RAILS[0].x, RAILS[1].x, RAILS[2].x, RAILS[3].x)
+	var b := Vector4(RAILS[0].y, RAILS[1].y, RAILS[2].y, RAILS[3].y)
+	_mat.set_shader_parameter("road", true)
+	_mat.set_shader_parameter("rail_a", a)
+	_mat.set_shader_parameter("rail_b", b)
+	_mat.set_shader_parameter("vanish_y", VANISH_Y)
+	_mat.set_shader_parameter("far_y", FAR_Y)
+	_mat.set_shader_parameter("inv_far", 1.0 / (FAR_Y - VANISH_Y))
+	_mat.set_shader_parameter("inv_hit", 1.0 / maxf(yh - VANISH_Y, 1.0))
+	_mat.set_shader_parameter("depth", hl / lane)
+	var sc := 0.0 if reduced_motion else lanes.song_time * lanes._px_per_s() / lane
+	_mat.set_shader_parameter("scroll", fposmod(sc, 4096.0))
 
 
 ## The figures bob on every beat, after the character in Daniele's recording: on the beat each drops
@@ -328,6 +360,20 @@ func _bob_figures() -> void:
 		"stomp":
 			down = maxf(down, _bob(age) * 1.4)
 	_dance_pose()
+	if not _puppets.is_empty():
+		var t := 99.0
+		var bar := 0.0
+		if beat > -999.0:
+			t = (beat - floorf(beat)) * spb
+			bar = fposmod(beat, 4.0)
+		if _jolt_kind == "stomp" and age < 0.3:
+			t = minf(t, age)
+		for p in _puppets:
+			p.reduced_motion = reduced_motion
+			p.pose(t, bar, still)
+			var at: Vector2 = p.get_meta("base_pos", p.position)
+			p.position = at + Vector2(shake * 0.02 * float(p.get_meta("frame_h", 0.0)), 0.0) * m
+		return
 	for i in _figures.size():
 		var s := _figures[i]
 		var posed := i < _poses.size()
@@ -386,6 +432,12 @@ func _make_frame(i: int) -> Node2D:
 	panel.color = Color.WHITE
 	panel.vertex_colors = PackedColorArray([Color("#1a0f10"), Color("#1a0f10"), Color("#3a1a0e"), Color("#3a1a0e")])
 	root.add_child(panel)
+	if pixel:
+		var pup := PixelFigure.new("issohadore" if i == 0 else "mamuthone")
+		pup.name = "Figure"
+		pup.mirror = i == 1
+		panel.add_child(pup)
+		_puppets.append(pup)
 	var fig := Sprite2D.new()
 	fig.name = "Figure"
 	var poses: Array[Texture2D] = []
@@ -397,8 +449,9 @@ func _make_frame(i: int) -> Node2D:
 	fig.texture_filter = CanvasItem.TEXTURE_FILTER_LINEAR
 	var ts := fig.texture.get_size()
 	fig.offset = Vector2(-ts.x * 0.5, -ts.y)           # the feet are the pivot
-	panel.add_child(fig)
-	_figures.append(fig)
+	if not pixel:
+		panel.add_child(fig)
+		_figures.append(fig)
 	var border := Line2D.new()
 	border.name = "Frame"
 	border.closed = true
@@ -433,6 +486,9 @@ func _place_frames() -> void:
 		(f.get_node("Panel") as Polygon2D).polygon = pts
 		(f.get_node("Frame") as Line2D).points = pts
 		(f.get_node("Halo") as Line2D).points = pts
+		if pixel:
+			_place_puppet(i, pts)
+			continue
 		var fig := _figures[i]
 		var ts := fig.texture.get_size()
 		# the figure's feet a little below the frame's lower edge, its head near the top
@@ -451,6 +507,24 @@ func _place_frames() -> void:
 			fig.flip_h = false
 
 
+## The pixel look's puppet in its portrait: as tall as the picture figure, feet just below the frame.
+func _place_puppet(i: int, pts: PackedVector2Array) -> void:
+	if i >= _puppets.size():
+		return
+	var p := _puppets[i]
+	var top := (pts[0].y + pts[1].y) * 0.5
+	var bottom := (pts[2].y + pts[3].y) * 0.5
+	# one art px is one cell of the lens (PxArt.PX base px), and the feet sit on the lens's grid, so
+	# the figure comes through it crisp while it stands
+	var h := (bottom - top) * (0.98 if i == 0 else 0.9)
+	var sc := PxArt.PX
+	var cx := (pts[0].x + pts[1].x + pts[2].x + pts[3].x) * 0.25 + (34.0 if i == 0 else 14.0) * pic_scale
+	p.position = PxArt.snap2(Vector2(cx, bottom + h * 0.1))
+	p.scale = Vector2(sc, sc)
+	p.set_meta("base_pos", p.position)
+	p.set_meta("frame_h", bottom - top)
+
+
 # ------------------------------------------------------------------ the glow layer
 
 func _draw_glow(ci: CanvasItem) -> void:
@@ -461,7 +535,9 @@ func _draw_glow(ci: CanvasItem) -> void:
 		var p := to_local_pic(LANTERNS[i])
 		var f := 0.75 + 0.25 * sin(_clock * (8.0 + i * 1.7) + i * 2.0) * sin(_clock * 13.0 + i)
 		var r := 46.0 * pic_scale / 0.86 * (1.0 + 0.1 * f)
-		ci.draw_texture_rect(_glow_tex, Rect2(p - Vector2(r, r), Vector2(r, r) * 2.0), false, Color(1.0, 0.62, 0.25, 0.34 * f * (1.0 - 0.5 * dim)))
+		# (the pixel look keeps the lanterns' light off the portraits: it washes their few colours out)
+		var la := 0.34 if not pixel else (0.12 if i < 2 else 0.3)
+		ci.draw_texture_rect(_glow_tex, Rect2(p - Vector2(r, r), Vector2(r, r) * 2.0), false, Color(1.0, 0.62, 0.25, la * f * (1.0 - 0.5 * dim)))
 	# the fire's own breath, and its flare on the beat
 	var fp := to_local_pic(FIRE + Vector2(0, 40))
 	var fr := 190.0 * pic_scale / 0.86 * (1.0 + 0.08 * env + 0.2 * _kick)
@@ -580,6 +656,98 @@ uniform float t = 0.0;
 uniform float flare = 0.0;
 uniform float dim = 0.0;
 uniform float motion = 1.0;
+// the pixel look's moving road: cobbles laid in the lanes that travel toward the player with the
+// notes (scroll, in lane widths), lit by the picture's own light
+uniform bool road = false;
+uniform vec4 rail_a;
+uniform vec4 rail_b;
+uniform float vanish_y = 265.0;
+uniform float far_y = 468.0;
+uniform float inv_far = 0.005;
+uniform float inv_hit = 0.001;
+uniform float depth = 6.0;
+uniform float scroll = 0.0;
+uniform vec2 stone = vec2(0.3, 0.12);
+
+vec2 hash2(vec2 q) {
+	q = vec2(dot(q, vec2(127.1, 311.7)), dot(q, vec2(269.5, 183.3)));
+	return fract(sin(q) * 43758.5453);
+}
+
+// x: distance to the nearest stone's centre, y: to the gap between two stones, z: the stone's own
+// tone, w: which side of its centre this is (+ the far side, toward the fire)
+vec4 cobble(vec2 x) {
+	vec2 n = floor(x);
+	vec2 f = fract(x);
+	vec2 best = vec2(8.0);
+	vec2 bo = vec2(0.0);
+	vec2 bc = vec2(0.0);
+	for (int j = -1; j <= 1; j++) {
+		for (int i = -1; i <= 1; i++) {
+			vec2 g = vec2(float(i), float(j));
+			vec2 o = 0.2 + 0.6 * hash2(n + g);
+			vec2 r = g + o - f;
+			float dd = dot(r, r);
+			if (dd < best.x) { best.x = dd; bo = r; bc = n + g; }
+		}
+	}
+	float edge = 8.0;
+	for (int j = -1; j <= 1; j++) {
+		for (int i = -1; i <= 1; i++) {
+			vec2 g = vec2(float(i), float(j));
+			vec2 o = 0.2 + 0.6 * hash2(n + g);
+			vec2 r = g + o - f;
+			if (dot(bo - r, bo - r) > 0.0001) {
+				edge = min(edge, dot(0.5 * (bo + r), normalize(r - bo)));
+			}
+		}
+	}
+	return vec4(sqrt(best.x), edge, hash2(bc).x, bo.y);
+}
+
+vec3 moving_road(sampler2D tex, vec2 p, vec3 c) {
+	if (p.y < far_y + 4.0) {
+		return c;
+	}
+	vec4 xs = rail_a + rail_b * p.y;
+	// the whole street floor moves, not just the lanes: out to where the houses stand on it
+	float wall = p.x < 470.0 ? 470.0 + (330.0 - p.x) * 0.545 : 470.0 + (p.x - 610.0) * 0.574;
+	if (p.y < wall + 2.0) {
+		return c;
+	}
+	float u = p.x < xs.y ? (p.x - xs.x) / (xs.y - xs.x) : (p.x < xs.z ? 1.0 + (p.x - xs.y) / (xs.z - xs.y) : 2.0 + (p.x - xs.z) / (xs.w - xs.z));
+	float k = (1.0 / (p.y - vanish_y) - inv_far) / (inv_hit - inv_far);
+	float v = k * depth - scroll;
+	vec4 cb = cobble(vec2(u, v) / stone);
+	// the light here: the picture down the middle of this lane (clear of the lines), a little blurred
+	int li = int(clamp(floor(u), 0.0, 2.0));
+	float lx = mix(xs[li], xs[li + 1], 0.5);
+	if (u < 0.0) {
+		lx = xs.x - (xs.y - xs.x) * min(0.5 - floor(u), 2.5);
+	} else if (u > 3.0) {
+		lx = xs.w + (xs.w - xs.z) * min(floor(u) - 2.5, 2.5);
+	}
+	lx = clamp(lx, 4.0, pic.x - 4.0);
+	vec3 light = vec3(0.0);
+	for (int i = -2; i <= 2; i++) {
+		light += texture(tex, vec2(lx + float(i) * 7.0, p.y + float(i) * 3.0) / pic).rgb;
+	}
+	light = light / 5.0;
+	float rail = min(min(abs(u), abs(u - 1.0)), min(abs(u - 2.0), abs(u - 3.0)));
+	// the lines' own glow spilling onto the stones beside them
+	light += vec3(0.55, 0.25, 0.05) * exp(-rail * 9.0);
+	float dome = 1.0 - 0.6 * cb.x * cb.x;
+	vec3 st = light * (0.95 + 0.3 * (cb.z - 0.5)) * (0.72 + 0.5 * dome);
+	// a lit lip on each stone's far side (the fire is up the road), a shaded one on its near side
+	float lip = 1.0 - smoothstep(0.08, 0.18, cb.y);
+	st *= 1.0 + lip * (cb.w > 0.0 ? 0.25 : -0.2);
+	vec3 col = cb.y < 0.06 ? light * 0.4 : st;
+	// tiny far stones would shimmer: fade to the picture there; keep the lines themselves
+	float lane_px = (xs.z - xs.y) * sc;
+	float fade = smoothstep(10.0, 26.0, lane_px * stone.x);
+	fade *= smoothstep(0.035, 0.08, rail) * smoothstep(wall + 2.0, wall + 14.0, p.y);
+	return mix(c, col, fade);
+}
 
 void fragment() {
 	vec2 s = UV * rect;
@@ -595,6 +763,9 @@ void fragment() {
 	p.x += wave * 3.5 * m * motion;
 	p.y += (sin(t * 6.0 + p.x * 0.08) * 2.0) * m * motion;
 	vec4 c = texture(TEXTURE, p / pic);
+	if (road) {
+		c.rgb = moving_road(TEXTURE, p, c.rgb);
+	}
 	float lum = dot(c.rgb, vec3(0.3, 0.55, 0.15));
 	float hot = m * smoothstep(0.45, 0.9, lum);
 	float flick = 0.06 * sin(t * 17.0) + 0.04 * sin(t * 29.0 + 1.7);

@@ -2,6 +2,7 @@ extends SceneTree
 ## Starts a song in Autoplay for recording with Godot's movie maker:
 ##   godot --path game --rendering-driver opengl3 --resolution 720x1440 --write-movie out.avi \
 ##       --fixed-fps 60 -s res://tests/record.gd -- <song_id> <difficulty> [remix] [human] [bells=<set>]
+##       [from=<beat>] [style=pixel|painted]
 ## Plays the song through to the results screen, holds the results for a few seconds, then quits.
 ## Uses a throwaway profile, so the recording never changes the player's own progress.
 
@@ -35,8 +36,16 @@ func _init() -> void:
 		return
 	_app = load("res://scenes/main.tscn").instantiate()
 	_app.set("start_screen", "play")
-	_app.set("start_args", {"song_id": song_id, "difficulty": diff, "bell_set": bells, "remix": "remix" in a,
-		"autoplay": true, "human": "human" in a, "piazza": diff == "piazza"})
+	var start := {"song_id": song_id, "difficulty": diff, "bell_set": bells, "remix": "remix" in a,
+		"autoplay": true, "human": "human" in a, "piazza": diff == "piazza"}
+	for x in a:
+		# from=<beat>: start a short way into the song (with --quit-after, a clip of the action)
+		if x.begins_with("from="):
+			start.from_beat = float(x.substr(5))
+			start.to_beat = float(x.substr(5)) + 64.0
+		elif x.begins_with("style="):
+			profile.set_setting("art_style", x.substr(6))
+	_app.set("start_args", start)
 	root.add_child(_app)
 	process_frame.connect(_tick)
 

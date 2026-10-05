@@ -117,7 +117,7 @@ func back() -> void:
 	var top: Screen = stack.pop_back()
 	top.queue_free()
 	var prev := current()
-	PxType.smooth = prev.screen_name() == "play_screen" and prev.get("backdrop") != null
+	PxType.smooth = prev.screen_name() == "play_screen" and prev.get("backdrop") != null and not bool(prev.get("pixel"))
 	prev.show()
 	prev.on_resume()
 	_enter(prev, -1.0)

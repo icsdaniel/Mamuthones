@@ -28,6 +28,9 @@ const PANEL_H := 64.0
 const BADGE := Vector2(122.0, 112.0)
 
 var session: Session
+## The pixel look: the HUD's words and figures are the pixel type (PxType), set over PixelFilter's
+## lens so they stay crisp; the frames under it come out as pixel art through the lens.
+var pixel := false
 var ghost: Ghost
 var _score: Label
 var _unison: Label
@@ -59,6 +62,20 @@ static func font(bold := true) -> Font:
 	return load("res://fonts/AlegreyaSans-ExtraBold.ttf" if bold else "res://fonts/AlegreyaSC-Bold.ttf")
 
 
+## In the pixel look: the bitmap face that stands in for a smooth font size, over the lens.
+func pstyle(l: Label, size: int, color: Color, bold := true, outline := 6) -> void:
+	if not pixel:
+		style(l, size, color, bold, outline)
+		return
+	var face := "caps"
+	if size >= 56:
+		face = "big"
+	elif size >= 40:
+		face = "score"
+	PxType.label(l, face, color)
+	l.z_index = PixelFilter.Z_OVER
+
+
 static func style(l: Label, size: int, color: Color, bold := true, outline := 6) -> void:
 	l.add_theme_font_override("font", font(bold))
 	l.add_theme_font_size_override("font_size", size)
@@ -84,14 +101,14 @@ func setup(p_session: Session, p_ghost: Ghost) -> void:
 	_score = Label.new()
 	_score.name = "Score"
 	_score.text = "0"
-	style(_score, 42, SCORE_INK)
+	pstyle(_score, 42, SCORE_INK)
 	_score.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	_score.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
 	_score.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	add_child(_score)
 	_ghost = Label.new()
 	_ghost.name = "Ghost"
-	style(_ghost, 24, INK, false, 5)
+	pstyle(_ghost, 24, INK, false, 5)
 	_ghost.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
 	_ghost.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	add_child(_ghost)
@@ -105,7 +122,7 @@ func setup(p_session: Session, p_ghost: Ghost) -> void:
 	add_child(_health)
 	_unison = Label.new()
 	_unison.name = "Unison"
-	style(_unison, 60, GOLD_INK, true, 8)
+	pstyle(_unison, 60, GOLD_INK, true, 8)
 	_unison.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	_unison.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
 	_unison.mouse_filter = Control.MOUSE_FILTER_IGNORE
@@ -125,7 +142,7 @@ func setup(p_session: Session, p_ghost: Ghost) -> void:
 	add_child(_pause)
 	_section = Label.new()
 	_section.name = "Section"
-	style(_section, 24, GOLD_INK, false, 5)
+	pstyle(_section, 24, GOLD_INK, false, 5)
 	_section.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	add_child(_section)
 	# The song's progress: kept for its sections; the line itself is drawn with the frames.
