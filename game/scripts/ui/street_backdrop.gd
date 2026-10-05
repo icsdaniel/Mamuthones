@@ -39,9 +39,10 @@ const ZOOM := 1.2
 ## reference.
 ## Raised by FRAME_LIFT (Daniele, 2026-10-05) so more of the street and the notes' road shows.
 const FRAME := [Vector2(-12, 232), Vector2(226, 296), Vector2(272, 612), Vector2(-12, 748)]
+const FIGURE_IN := 24.0           ## picture px each figure stands in from its portrait's middle, toward the road (mirrored)
 const FIGURE_FILL := 1.12          ## a painted figure's height, as a share of its portrait's
 const FRAME_GROW := 140.0 / 118.0   ## the portraits grew with the pixel figures (bake_figures.py H, 118 -> 140)
-const FRAME_LIFT := Vector2(55.0, 55.0)   ## picture px the portraits' top and bottom edges are raised (as far as the HUD's words allow; the puppets keep their size)
+const FRAME_LIFT := Vector2(20.0, 55.0)   ## picture px the portraits' top and bottom edges are raised (as far as the HUD's words allow; the puppets keep their size)
 ## The figures' bob, from Daniele's three-pose sheets (2026-09-30). Each figure has three pictures,
 ## art/street/<figure>_bob_0/1/2.png: 0 the rest pose, 1 the drop on the beat, 2 halfway back up,
 ## all on one canvas size with the feet at the bottom centre (tools/art/street/cut_figures.py makes
@@ -574,7 +575,7 @@ func _place_frames() -> void:
 		var h := (bottom - top) * FIGURE_FILL
 		var sc := h / ts.y
 		var cx := lerpf(pts[0].x, pts[1].x, 0.5) if i == 0 else lerpf(pts[0].x, pts[1].x, 0.5)
-		cx = (pts[0].x + pts[1].x + pts[2].x + pts[3].x) * 0.25 + (34.0 if i == 0 else 14.0) * pic_scale
+		cx = (pts[0].x + pts[1].x + pts[2].x + pts[3].x) * 0.25 + (FIGURE_IN if i == 0 else -FIGURE_IN) * pic_scale / ZOOM
 		fig.position = Vector2(cx, bottom + h * 0.1)
 		fig.set_meta("base_pos", fig.position)
 		fig.set_meta("frame_h", bottom - top)
@@ -595,7 +596,7 @@ func _place_puppet(i: int, pts: PackedVector2Array) -> void:
 	# the figure comes through it crisp while it stands
 	var h := (bottom - top) * (0.98 if i == 0 else 0.9)
 	var sc := PxArt.PX
-	var cx := (pts[0].x + pts[1].x + pts[2].x + pts[3].x) * 0.25 + (34.0 if i == 0 else 14.0) * pic_scale
+	var cx := (pts[0].x + pts[1].x + pts[2].x + pts[3].x) * 0.25 + (FIGURE_IN if i == 0 else -FIGURE_IN) * pic_scale / ZOOM
 	p.position = PxArt.snap2(Vector2(cx, bottom + h * 0.1))
 	p.scale = Vector2(sc, sc)
 	p.set_meta("base_pos", p.position)
@@ -795,7 +796,11 @@ vec3 moving_road(sampler2D tex, vec2 p, vec3 c) {
 	float u = p.x < xs.y ? (p.x - xs.x) / (xs.y - xs.x) : (p.x < xs.z ? 1.0 + (p.x - xs.y) / (xs.z - xs.y) : 2.0 + (p.x - xs.z) / (xs.w - xs.z));
 	float k = (1.0 / (p.y - vanish_y) - inv_far) / (inv_hit - inv_far);
 	float v = k * depth - scroll;
-	vec4 cb = cobble(vec2(u, v) / stone);
+	// the stones are laid on the ground in true perspective: across, in middle-lane widths from the
+	// road's centre line (a straight line to the vanishing point), so they keep their shape out past
+	// the painted lines instead of shearing along them
+	float gx = (p.x - (xs.y + xs.z) * 0.5) / (xs.z - xs.y);
+	vec4 cb = cobble(vec2(gx, v) / stone);
 	// the light here: the picture down the middle of this lane (clear of the lines), a little blurred
 	int li = int(clamp(floor(u), 0.0, 2.0));
 	float lx = mix(xs[li], xs[li + 1], 0.5);
