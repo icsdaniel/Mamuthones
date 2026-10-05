@@ -51,11 +51,6 @@ var _punch := 0.0
 var beat := -1000.0          ## the song's beat now, for the badge's bounce
 var _bounce := 0.0           ## 1 on the beat, falling away
 var _punched := 0
-## Where the multiplier stands, in this HUD's coordinates, when it rises out of the street's bonfire
-## (Daniele, 2026-10-05: the fire and the combo are one thing). INF: in its badge at the top.
-var fire_at := Vector2.INF
-const RISE := 70.0              ## px a new multiplier rises out of the flames
-const RISE_TIME := 0.45
 
 
 func _init() -> void:
@@ -203,8 +198,8 @@ func _layout() -> void:
 	_health.position = left.get_center() - _health.size * 0.5
 	_section.position = Vector2(left.position.x + 12.0, left.end.y + 8.0)
 	_section.size = Vector2(left.size.x, 30.0)
+	_unison.position = badge.position
 	_unison.size = badge.size
-	_unison.position = badge.position if not in_fire() else fire_at - badge.size * 0.5
 	_pause.position = Vector2(line.y + 34.0, line.z + 16.0) - _pause.size * 0.5
 	_frames.position = Vector2.ZERO
 	_frames.size = size
@@ -366,8 +361,6 @@ func _draw_frames() -> void:
 	if session.health_on:
 		_panel(ci, b[0])
 	_panel(ci, b[2])
-	if in_fire():
-		return
 	# the badge: a tall hexagon, flaring when a level is gained; its lower rim fills with the streak.
 	# It bounces on every beat, and grows and burns hotter in colour as the multiplier rises.
 	var r: Rect2 = b[1]
@@ -477,11 +470,6 @@ func tick(t: float, delta: float) -> void:
 	# the badge bounces on the beat: a quick swell, easing back before the next one
 	_bounce = 0.0 if beat < 0.0 else pow(1.0 - fposmod(beat, 1.0), 3.0) * (0.35 if UIKit.reduced_motion() else 1.0)
 	var bs := badge_scale()
-	if in_fire():
-		# out of the fire: a new level rises up out of the flames to its place
-		var r := clampf((_clock - _flare_at) / RISE_TIME, 0.0, 1.0)
-		var up := (1.0 - r) * (1.0 - r) * RISE * (0.0 if UIKit.reduced_motion() else 1.0)
-		_unison.position = fire_at - _unison.size * 0.5 + Vector2(0.0, up)
 	_unison.pivot_offset = _unison.size * 0.5
 	if not _unison_tweening():
 		_unison.scale = Vector2(bs, bs)
@@ -515,11 +503,6 @@ func set_unison(level: int, animate := true) -> void:
 			tw.tween_property(_unison, "scale", Vector2.ONE * badge_scale(), 0.22).set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT)
 		tw.parallel().tween_property(_unison, "modulate", Color.WHITE, 0.3)
 		_meter.flare()
-
-
-## Whether the multiplier stands over the bonfire instead of in its badge.
-func in_fire() -> bool:
-	return fire_at.is_finite()
 
 
 func _unison_tweening() -> bool:

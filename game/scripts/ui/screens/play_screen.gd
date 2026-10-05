@@ -51,7 +51,6 @@ var hud: Hud
 var scene                         ## SideRows (songs) or ProcessionScene (Piazza): the same calls
 var banner: Control               ## over the top of the lanes: count-in and stand-still moment
 var lanes: LaneView
-const FIRE_NUMBER_UP := 190.0   ## picture px the multiplier stands above the fire's heart
 var backdrop: StreetBackdrop     ## the street picture, the fire and the swaying portraits (songs)
 var words: JudgementWords
 var filter: PixelFilter           ## the pixel look's lens over the whole screen (art style "pixel")
@@ -461,7 +460,6 @@ func _process(delta: float) -> void:
 	_set_beat(beat)
 	hud.tick(t, delta)
 	_tick_health(delta)
-	_tick_fire()
 	if cue != null:
 		cue.song_time = tv
 	_schedule(t)
@@ -725,8 +723,6 @@ func _on_unison(level: int) -> void:
 	if level > _last_unison and backdrop != null:
 		backdrop.surge()
 		shake(4.0)
-	elif level < _last_unison and backdrop != null:
-		backdrop.choke()
 	_last_unison = level
 	Sound.row_bells(level)
 	hud.set_unison(level)
@@ -744,18 +740,6 @@ func _tick_health(delta: float) -> void:
 	_dim = move_toward(_dim, want, delta * 1.5)
 	backdrop.dim = _dim
 	lanes.fire_dim = _dim
-
-
-## The bonfire is the multiplier (Daniele, 2026-10-05): it burns harder with every level and with the
-## streak toward the next one, and the multiplier itself stands over it, above the flames.
-func _tick_fire() -> void:
-	if backdrop == null:
-		return
-	var top := Session.UNISON_MULTS.size() - 1
-	var streak := float(session.unison_streak) / float(Session.UNISON_STEP) if session.unison_level < top else 0.0
-	backdrop.heat = clampf((float(session.unison_level) + streak) / float(top), 0.0, 1.0)
-	var at := backdrop.get_global_transform() * backdrop.to_local_pic(StreetBackdrop.FIRE + Vector2(0.0, -FIRE_NUMBER_UP))
-	hud.fire_at = hud.get_global_transform().affine_inverse() * at
 
 
 ## Where a lane note's burst goes (its lane at the hit line).
