@@ -482,3 +482,32 @@ func test_rings_duck_the_music() -> void:
 	s.set_volume("music", 1.0)
 	check_near(AudioServer.get_bus_volume_db(AudioServer.get_bus_index("Bells")), 0.0, 0.01, "Bells bus has no trim")
 	await _settle()
+
+
+## The on-time bell accent: the chime plays the key's root on a tilt down and its fifth on a tilt up,
+## kept within a tritone of its sample; nothing for an Ok ring or a free tilt; the calls run headless.
+func test_bell_accent() -> void:
+	var s := _sound()
+	if s == null:
+		return
+	check_near(s.chime_pitch(0, false), 1.0, 0.0001, "C, tilt down: the chime's own C")
+	check_near(s.chime_pitch(0, true), pow(2.0, -5.0 / 12.0), 0.0001, "C, tilt up: G, a fourth below the sample")
+	check_near(s.chime_pitch(2, true), pow(2.0, -3.0 / 12.0), 0.0001, "D, tilt up: A")
+	for pc in 12:
+		for up in [true, false]:
+			var p: float = s.chime_pitch(pc, up)
+			check(p >= pow(2.0, -5.5 / 12.0) and p <= pow(2.0, 6.5 / 12.0), "key %d stays within a tritone" % pc)
+	var before := 0
+	for p: AudioStreamPlayer in s._accent_pool:
+		before += 1 if p.playing else 0
+	s.bell_accent(true, "ok", 3)
+	s.bell_accent(false, "free", 3)
+	var after := 0
+	for p: AudioStreamPlayer in s._accent_pool:
+		after += 1 if p.playing else 0
+	check(after == before, "no accent for an Ok ring or a free tilt")
+	s.bell_accent(true, "perfect", 1)
+	s.bell_accent(false, "good", 6)
+	s.hold_done(2)
+	check(s._thumps.size() == 2 and s._chimes.size() == 2, "the accent's samples loaded")
+	await _settle()

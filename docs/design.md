@@ -34,6 +34,10 @@ and `docs/rubric.md` says how every part is judged.
   thumbs at once, on the crack of the Issohadore's rope. Medium and Hard stomp on the middle button,
   Expert follows the rope to the outer button on its side. (Replaced the rope swipe, 2026-09-28.)
 - **Full ring (Hard and Expert):** a step and a bell on the same beat.
+- **Chord (Medium and up):** two step buttons at once, one per thumb, where two layers of the music
+  strike together on an accent. A cord joins the two notes on the road. Medium has a few on the
+  climax's phrase downbeats, Hard about one a bar, Expert up to one every half bar. Both thumbs are
+  free and rested around a chord, and no bell, hold or stomp sits next to it. (Added 2026-10-05.)
 - **Stand still:** grey bars across the lanes. Ringing the bell during them costs points.
 - **Accessibility "slam":** an option that replaces the tilt with pressing Left and Right together.
   Runs with slam on are marked, and don't go on the global ladder.
@@ -105,9 +109,15 @@ Every song has four charts, all written to the music:
 | Level | Steps | Bells | Extras |
 | --- | --- | --- | --- |
 | Easy | the walking beat, one lane at a time | one per phrase, on strong beats | stand-stills |
-| Medium | beat and some half-beats | alternating with the steps (step, step, step, bell) | holds, two-thumb stomps |
-| Hard | steady patterns across lanes | on beats different from the steps | off-beat calls, full rings |
-| Expert | dense patterns, triplets in the finale | independent of the steps | everything, triple rings |
+| Medium | beat and some half-beats | alternating with the steps (step, step, step, bell) | holds, two-thumb stomps, chords in the climax |
+| Hard | steady patterns across lanes | on beats different from the steps | off-beat calls, full rings, chords |
+| Expert | dense patterns, triplets in the finale | independent of the steps | everything, triple rings, many chords |
+
+Expert is the peak in every song and Hard sits at the difficult threshold, from the first stop on;
+the story's curve only nudges them, and slow songs are capped by how many notes their music has.
+Medium is the challenge for the average player; Easy is for everyone. (Daniele, 2026-10-05.)
+
+Medium and Hard keep to beats and half-beats (triplet eighths in triplet sections); sixteenths are Expert's. On the road (pixel look), blue notes sit on the beat, violet ones on the half-beat (or a triplet), silver ones on a sixteenth (Expert only), pink ones are the Issohadore's calls.
 
 Charts follow simple readability rules: no more than one input per hand per eighth at Hard (per
 sixteenth at Expert; in triplet sections an eighth is a triplet eighth), bells at least half a beat apart, and nothing hidden under a hold's own lane.

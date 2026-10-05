@@ -27,6 +27,10 @@ const SWING_LAG := 0.04       ## ... the bells and the rope
 const SWING := 10.0            ## degrees the bells and the rope swing after the drop
 const SWING_HZ := 3.2         ## how fast they swing
 const SWING_DAMP := 5.0       ## how fast the swing dies away
+const RING_SWING := 22.0      ## degrees the load and the rope swing when a bell is rung on time
+const RING_HZ := 4.5
+const RING_DAMP := 6.0
+const RING_THROW := 4.0       ## art px the load is thrown up (a tilt up) or down by the ring
 const SWAY := 1.2             ## art px the figure leans across a bar
 const SWAY_DEPTH := 1.6       ## extra art px for a part at depth 1
 
@@ -87,13 +91,24 @@ func _pivot(tex: Texture2D, rule: String) -> Vector2:
 
 
 ## Poses the puppet t seconds after the last beat; bar is the beat's place in its bar (0..4).
-func pose(t: float, bar: float, still := false) -> void:
+## The swing (degrees) of the load `age` seconds after a bell rung on time (0 when long gone).
+static func ring_swing(age: float) -> float:
+	if age < 0.0 or age > 1.0:
+		return 0.0
+	return RING_SWING * sin(TAU * RING_HZ * age) * exp(-RING_DAMP * age)
+
+
+## `ring`: seconds since a bell was rung on time (the load is thrown `ring_up` and swings hard).
+func pose(t: float, bar: float, still := false, ring := 9.0, ring_up := true) -> void:
 	var m := 0.35 if reduced_motion else 1.0
 	var d := 0.0 if still else StreetBackdrop._bob(t) * DROP * m
 	var dh := 0.0 if still else StreetBackdrop._bob(t - HEAD_LAG) * DROP * 1.15 * m
 	var ds := 0.0 if still else StreetBackdrop._bob(t - SWING_LAG) * DROP * 1.3 * m
 	var ts := maxf(0.0, t - SWING_LAG)
 	var swing := 0.0 if still else SWING * m * sin(TAU * SWING_HZ * ts) * exp(-SWING_DAMP * ts)
+	if ring >= 0.0 and ring < 1.0:
+		swing += ring_swing(ring) * m
+		ds += (-1.0 if ring_up else 1.0) * RING_THROW * m * exp(-ring * 12.0) * sin(minf(ring * 30.0, PI * 0.5))
 	var lean := sin(bar / 4.0 * TAU) * (0.0 if reduced_motion else 1.0)
 	var toward := -1.0 if mirror else 1.0
 	for e: Array in _parts:

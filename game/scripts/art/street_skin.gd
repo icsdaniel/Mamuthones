@@ -29,6 +29,7 @@ const K_WOOD := [Color("#8a7468"), Color("#2c2226"), Color("#120c10"), Color("#f
 const K_ROPE := [Color("#f0c878"), Color("#c0842c"), Color("#5e3810"), Color("#ffc060")]
 const K_UP := [Color("#ff9c8c"), Color("#c8282a"), Color("#5e0c10"), Color("#ff5040")]
 const K_OFF := [Color("#d8b4ff"), Color("#8a3fd8"), Color("#461a7a"), Color("#b070ff")]   ## the pixel look's off-beat step
+const K_SIX := [Color("#ffffff"), Color("#d2d8e8"), Color("#6c7490"), Color("#eef2ff")]   ## ... a sixteenth (Expert): silver
 const K_CALL := [Color("#ffb0d8"), Color("#e0408c"), Color("#7a1446"), Color("#ff70b0")]  ## ... and its call
 const K_DOWN := [Color("#a4b6ff"), Color("#3450c0"), Color("#141e5e"), Color("#6080ff")]
 const DISC_R := 0.4                  ## a pintadera's radius, in lane widths
@@ -237,13 +238,14 @@ static func _pintadera(lv, top: Callable, lw: float, col: Color, alpha: float, t
 	_convex(lv, _circle(top, 0.2, 16), _a(col, alpha))
 
 
-## A tap: a pintadera in its lane at flat depth y. small: an off-beat step or a call.
-static func step(lv, field: Rect2, cx: float, y: float, alpha: float, small := false, call := false) -> void:
+## A tap: a pintadera in its lane at flat depth y. small: an off-beat step or a call. six: a
+## sixteenth (a quarter of a beat off), which the pixel look shows in silver.
+static func step(lv, field: Rect2, cx: float, y: float, alpha: float, small := false, call := false, six := false) -> void:
 	var lw: float = lv.road_scale(y) * _lane(field)
 	if pixel:
 		# the pixel look keeps every tap round and full size; the kind shows in its colour: blue on
-		# the beat, violet off it, pink for a call
-		var k: Array = K_CALL if call else (K_OFF if small else K_STEP)
+		# the beat, violet on the half-beat (or a triplet), silver on a sixteenth, pink for a call
+		var k: Array = K_CALL if call else (K_SIX if six else (K_OFF if small else K_STEP))
 		var top := disc(lv, field, cx, y, DISC_R, k, alpha)
 		_pintadera(lv, top, lw, CREAM, 0.92 * alpha)
 		_dot(lv, top, lw, k[2], alpha)
@@ -360,10 +362,10 @@ static func rope(lv: LaneView, field: Rect2, cx: float, ya: float, yb: float, li
 
 ## A bell note: the Mamuthone's leather bell strap across the whole road at flat depth y, a bronze
 ## cowbell standing on it at each lane divider, and a big arrow in each lane the way to tilt.
-static func bell(lv: LaneView, field: Rect2, y: float, up: bool, alpha := 1.0) -> void:
+static func bell(lv: LaneView, field: Rect2, y: float, up: bool, alpha := 1.0, pal: Array = [], cowbells := true) -> void:
 	var lane := _lane(field)
 	var lw: float = lv.road_scale(y) * lane
-	var k: Array = K_UP if up else K_DOWN
+	var k: Array = pal if not pal.is_empty() else (K_UP if up else K_DOWN)
 	var x0 := -field.size.x * 0.02
 	var x1 := field.size.x * 1.02
 	var hw := (x1 - x0) * 0.5
@@ -387,7 +389,7 @@ static func bell(lv: LaneView, field: Rect2, y: float, up: bool, alpha := 1.0) -
 			lv.draw_line(f.call(Vector3(u, h, v)), f.call(Vector3(u + 0.012, h, v)), _a(CREAM, 0.85 * alpha), maxf(1.0, lw * 0.014), true)
 			u += 0.03
 	# the bells at the lane dividers, the arrows in the lanes
-	for i in 2:
+	for i in (2 if cowbells else 0):
 		var bx := lane * float(i + 1)
 		var at := lv.project(Vector2(bx, y)) - Vector2(0.0, h * lw)
 		_cowbell(lv, at, lw * 0.3, alpha)
@@ -637,6 +639,8 @@ static func draw_notes(lv: LaneView, field: Rect2) -> void:
 			if near > 0.0 and (incoming[lane] == null or near > float(incoming[lane][1])):
 				incoming[lane] = [_kind(lv, n, str(it[1]) == "hold"), near]
 	_hit_line(lv, field, rects, hl, incoming)
+	for c in lv.chords_shown(shown):
+		cord(lv, field, rects[c[1]].get_center().x, rects[c[2]].get_center().x, float(c[0]), lv._haze(c[0], field))
 	items.sort_custom(func(p: Array, q: Array) -> bool: return p[0] < q[0])
 	for it in items:
 		var y: float = it[0]
@@ -657,7 +661,7 @@ static func draw_notes(lv: LaneView, field: Rect2) -> void:
 						if n.heal:
 							heal(lv, field, cx, y, a)
 						else:
-							step(lv, field, cx, y, a, n.call or lv._off_beat(n), n.call)
+							step(lv, field, cx, y, a, n.call or lv._off_beat(n), n.call, not n.call and lv._sixteenth(n))
 					Note.Kind.STOMP:
 						stomp(lv, field, cx, y, a * (0.6 if n.thumbs > 0 else 1.0))
 					Note.Kind.BELL:
@@ -665,6 +669,20 @@ static func draw_notes(lv: LaneView, field: Rect2) -> void:
 					Note.Kind.RING:
 						bell(lv, field, y, n.up, a)
 						step(lv, field, cx, y, a, true)
+
+
+## A chord: two notes on one beat, joined by a bar in the steps' blue lying across the road between their centres, so
+## the pair reads as one press with both thumbs. Drawn under the notes.
+static func cord(lv: LaneView, field: Rect2, x0: float, x1: float, y: float, alpha: float) -> void:
+	var lw: float = lv.road_scale(y) * _lane(field)
+	if lw < 2.0 or alpha <= 0.01:
+		return
+	var a: Vector2 = lv.project(Vector2(x0, y))
+	var b: Vector2 = lv.project(Vector2(x1, y))
+	var w := maxf(2.0, lw * 0.11)
+	lv.draw_line(a, b, _a(K_STEP[2], alpha), w + maxf(2.0, lw * 0.05))
+	lv.draw_line(a, b, _a(K_STEP[1], alpha), w)
+	lv.draw_line(a + Vector2(0, -w * 0.22), b + Vector2(0, -w * 0.22), _a(K_STEP[0], alpha * 0.8), maxf(1.0, w * 0.3))
 
 
 ## Stamps a note from the pixel look's sheet, with its glow drawn live under it. False when the
@@ -686,6 +704,8 @@ static func _stamp(lv: LaneView, field: Rect2, what: String, n: Note, cx: float,
 						key = "heal"; k = K_HEAL
 					elif n.call:
 						key = "call"; k = K_CALL
+					elif lv._sixteenth(n):
+						key = "six"; k = K_SIX
 					elif lv._off_beat(n):
 						key = "off"; k = K_OFF
 					else:
@@ -730,6 +750,8 @@ static func _kind(lv: LaneView, n: Note, hold: bool) -> Array:
 				return K_HEAL
 			if pixel and n.call:
 				return K_CALL
+			if pixel and lv._sixteenth(n):
+				return K_SIX
 			if pixel and lv._off_beat(n):
 				return K_OFF
 	return K_STEP
@@ -787,3 +809,83 @@ static func _hit_line(lv: LaneView, field: Rect2, rects: Array[Rect2], hl: float
 			rim = rim.lerp(kk[0], near)
 			lv.draw_polyline(slot[3], _a(kk[0], 0.8 * near), 3.0, true)
 		lv.draw_polyline(ring, rim, 5.0 if pixel else 3.5, true)
+
+
+# ------------------------------------------------------------------ the bell strike
+
+const STRIKE_TIME := 0.5          ## how long a bell strike shows
+const STRIKE_HOLD := 0.16         ## the struck strap stays on the hit line this long
+const K_WHITE := [Color("#ffffff"), Color("#fff6dc"), Color("#c8b48c"), Color("#ffffff")]
+
+
+## A bell rung on time. The strap stays on the hit line for a moment, white-hot, then in its tilt's
+## colour lit up, kicked a little the way the phone was tilted; then it breaks into a shock line that
+## runs on that way (up the road towards the fire for a tilt up, down over the rings for a tilt down)
+## with a glow under it. The two cowbells are thrown off the strap, bigger, swinging, with ring
+## arcs thrown out from both sides, and embers fly up all along it. `chain` (on-time bells in a row)
+## makes it bigger, up to 1.35x at 6, and from 4 a second shock line follows and the rings burn gold.
+## Good is a smaller version without the white instant. Drawn into the World's one-px-per-cell
+## view, so the shapes come out as pixels. Returns false once over.
+static func bell_strike(lv: LaneView, field: Rect2, up: bool, quality: String, chain: int, age: float) -> bool:
+	if age < 0.0 or age >= STRIKE_TIME:
+		return false
+	var tt := age / STRIKE_TIME
+	var perfect := quality == "perfect"
+	var big := (1.0 if perfect else 0.8) * (1.0 + 0.07 * float(clampi(chain - 1, 0, 5)))
+	var hot := chain >= 4
+	var k: Array = K_UP if up else K_DOWN
+	var dir := -1.0 if up else 1.0
+	var hl := LaneSkin.hit_line_y(field)
+	var lane := field.size.x / 3.0
+	var lw := lv.road_scale(hl) * lane
+	# the struck strap: kicked the tilt's way and back, white for the first instant, then lit
+	if age < STRIKE_HOLD:
+		var kick := dir * lane * 0.08 * big * sin(age / STRIKE_HOLD * PI)
+		var pal: Array = K_WHITE if age < 0.05 and perfect else [k[0], k[3], k[1], Color.WHITE]
+		bell(lv, field, hl + kick, up, 1.0, pal, false)
+	# the shock line(s) running on the tilt's way, with a glow under them
+	var reach := lane * (3.0 if up else 1.1) * big
+	for w in (2 if hot else 1):
+		var kk := (age - 0.06 - 0.08 * float(w)) / (STRIKE_TIME * 0.7)
+		if kk <= 0.0 or kk >= 1.0:
+			continue
+		var g := 1.0 - pow(1.0 - kk, 2.0)
+		var fy := hl + dir * reach * g * (1.0 - 0.25 * float(w))
+		var p0 := lv.project(Vector2(-field.size.x * 0.02, fy))
+		var p1 := lv.project(Vector2(field.size.x * 1.02, fy))
+		var sl := lv.road_scale(fy) * lane
+		var col: Color = [Color.WHITE, k[0], k[3], k[1]][mini(int(kk * 4.0), 3)]
+		var hot_col: Color = PX_HOT[mini(int(kk * 4.0), 3)]
+		_glow(lv, (p0 + p1) * 0.5, Vector2((p1.x - p0.x) * 0.55, sl * 0.25), _a(k[3], 0.5 * (1.0 - kk)))
+		var thick := maxf(PxArt.PX, sl * 0.07 * (1.0 - kk) * big)
+		lv.draw_line(p0, p1, hot_col if hot else col, thick)
+	# the cowbells thrown off the strap, swinging, ringing
+	var hy := lv.project(Vector2(0.0, hl)).y
+	var bs := lw * 0.42 * big
+	var throw := exp(-age * 7.0) * sin(minf(age * 24.0, PI * 0.5)) * bs * 0.9
+	var swing := sin(age * 30.0) * exp(-age * 5.0) * 0.55
+	var fade := clampf((0.42 - age) / 0.14, 0.0, 1.0)   # gone before the next notes need the line
+	for i in (2 if fade > 0.0 else 0):
+		var bx := lv.project(Vector2(lane * float(i + 1), hl)).x
+		var at := Vector2(bx, hy - bs * 0.35 - throw)
+		var c := at + Vector2(0.0, -bs * 0.5)
+		# the ring arcs, three in a row, each opening out and cooling
+		for r in 3:
+			var rk := tt * 1.8 - float(r) * 0.18
+			if rk <= 0.0 or rk >= 1.0:
+				continue
+			var rad := bs * (0.6 + 1.1 * rk) * (1.0 + 0.12 * float(r))
+			var rc: Color = ([Color.WHITE, PX_HOT[1], PX_HOT[2], PX_HOT[3]] if hot or perfect else [Color.WHITE, k[0], k[3], k[1]])[mini(int(rk * 4.0), 3)]
+			var wid := maxf(PxArt.PX, bs * 0.09 * (1.0 - rk))
+			lv.draw_arc(c, rad, -0.5, 0.5, 6, rc, wid)
+			lv.draw_arc(c, rad, PI - 0.5, PI + 0.5, 6, rc, wid)
+		lv.draw_set_transform(at, swing * (1.0 if i == 0 else -1.0), Vector2.ONE)
+		_cowbell(lv, Vector2(0.0, bs * 0.0), bs, fade)
+		lv.draw_set_transform(Vector2.ZERO, 0.0, Vector2.ONE)
+	# embers all along the strap
+	var seed := (7 if up else 13) + chain * 5
+	for i in 6:
+		var c := lv.project(Vector2(lane * (float(i) + 0.5) * 0.5, hl))
+		c.y = hy
+		_embers_px(lv, c, lw * 0.8 * big, age, 4 if perfect else 2, seed * 3 + i, PX_HOT if perfect else [k[0], k[3], k[1], k[2]], 1.0)
+	return true

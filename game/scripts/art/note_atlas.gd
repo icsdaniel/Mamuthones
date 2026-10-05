@@ -8,7 +8,7 @@ extends Node
 ## A note's look depends only on how far down the road it is (its size and how flat it lies), so a
 ## sheet row per size covers the road; the nearest size is stretched by a few percent to fit.
 
-const KINDS := ["step", "off", "call", "heal", "hold", "stomp", "knot"]
+const KINDS := ["step", "off", "six", "call", "heal", "hold", "stomp", "knot"]
 const STEP := 3.0               ## sheet px a cell grows by from one row to the next (a note is stretched by under 1 px)
 const CELL := Vector2(1.08, 0.78)  ## a cell's size in lane widths at its size (a stomp's disc fits)
 const REACH := 1.3             ## the sheet's biggest note: this times a note's size on the hit line
@@ -180,6 +180,8 @@ class _Painter extends Node2D:
 						StreetSkin.step(self, field, cx, y, 1.0)
 					"off":
 						StreetSkin.step(self, field, cx, y, 1.0, true)
+					"six":
+						StreetSkin.step(self, field, cx, y, 1.0, true, false, true)
 					"call":
 						StreetSkin.step(self, field, cx, y, 1.0, true, true)
 					"heal":
