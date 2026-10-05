@@ -67,9 +67,6 @@ var dim := 0.0
 var reduced_motion := false
 var still := false
 var unison := 0
-## How hard the bonfire burns, 0..1: the multiplier and the streak toward the next one (Daniele,
-## 2026-10-05: the fire and the combo are one thing). The play screen sets it every frame.
-var heat := 0.0
 var bell_set := "village"
 ## The pixel look (set before this enters the tree): the street as pixel art, and the figures as
 ## puppets whose parts slide (PixelFigure) instead of Daniele's three-pose pictures.
@@ -98,9 +95,6 @@ var _kick := 0.0
 var _jolt_kind := ""
 var _jolt_at := -9.0
 var _surge_at := -9.0
-var _heat := 0.0                     ## heat, eased
-var _choke_at := -9.0                ## the fire choked (the multiplier dropped)
-const CHOKE_TIME := 0.6
 const SURGE_TIME := 0.5
 var _layout := Vector3.ZERO
 
@@ -327,18 +321,6 @@ func kick(amount := 1.0) -> void:
 	_kick = maxf(_kick, amount)
 
 
-## The multiplier dropped: the fire chokes, sinking and darkening for a moment before it settles at
-## its new, lower heat.
-func choke() -> void:
-	_choke_at = _clock
-
-
-## How hard the fire burns right now (0..1): its heat eased, pressed down while it chokes.
-func blaze() -> float:
-	var ck := clampf(1.0 - (_clock - _choke_at) / CHOKE_TIME, 0.0, 1.0)
-	return clampf(_heat - 0.45 * ck * ck, 0.0, 1.0)
-
-
 ## A surge of light runs up the four lines from the player to the fire, and the fire roars (the
 ## procession's unison rose).
 func surge() -> void:
@@ -378,21 +360,14 @@ func _process(delta: float) -> void:
 	_clock += delta
 	_solve()
 	_kick = maxf(0.0, _kick - delta * 2.0)
-	# the fire catches quickly and dies down more slowly
-	_heat = move_toward(_heat, clampf(heat, 0.0, 1.0), delta * (1.2 if heat > _heat else 0.5))
-	var bz := blaze()
 	var env := beat_env()
 	if _mat != null:
 		_mat.set_shader_parameter("t", _clock)
 		_mat.set_shader_parameter("flare", 0.18 * env + 0.35 * _kick)
 		_mat.set_shader_parameter("dim", dim)
-		_mat.set_shader_parameter("heat", bz)
 		_mat.set_shader_parameter("motion", 0.35 if reduced_motion else 1.0)
 	if _sparks != null:
-		# more sparks, flying faster and wider, the hotter it burns
-		_sparks.speed_scale = (0.45 + 1.1 * bz) * (1.0 - 0.5 * dim)
-		_sparks.emission_rect_extents = Vector2(24.0 + 40.0 * bz, 16.0)
-		_sparks.modulate.a = 0.35 + 0.65 * bz
+		_sparks.speed_scale = 1.0 - 0.5 * dim
 	_move_road()
 	_bob_figures()
 	_glow.queue_redraw()
@@ -649,12 +624,10 @@ func _draw_glow(ci: CanvasItem) -> void:
 		var la := 0.34 if not pixel else (0.12 if i < 2 else 0.3)
 		ci.draw_texture_rect(_glow_tex, Rect2(p - Vector2(r, r), Vector2(r, r) * 2.0), false, Color(1.0, 0.62, 0.25, la * f * (1.0 - 0.5 * dim)))
 	# the fire's own breath, and its flare on the beat
-	var bz := blaze()
 	var fp := to_local_pic(FIRE + Vector2(0, 40))
-	var fr := 190.0 * pic_scale / 0.86 * (0.7 + 0.6 * bz + 0.08 * env + 0.2 * _kick)
+	var fr := 190.0 * pic_scale / 0.86 * (1.0 + 0.08 * env + 0.2 * _kick)
 	ci.draw_texture_rect(_glow_tex, Rect2(fp - Vector2(fr, fr * 0.8), Vector2(fr, fr * 0.8) * 2.0), false,
-		Color(1.0, 0.45, 0.12, (0.06 + 0.08 * fl + 0.22 * env + 0.3 * _kick + 0.25 * bz) * (1.0 - 0.7 * dim)))
-	_draw_flames(ci, bz, env)
+		Color(1.0, 0.45, 0.12, (0.1 + 0.08 * fl + 0.22 * env + 0.3 * _kick) * (1.0 - 0.7 * dim)))
 	# the four lines pulse on the beat, brightest near the player
 	if lanes != null and lanes.visible and env > 0.01:
 		for i in 4:
@@ -694,33 +667,6 @@ func _draw_glow(ci: CanvasItem) -> void:
 		var k := 1.0 - age / 0.3
 		var r := 120.0 * float(fh[2]) * (0.7 + 0.5 * (1.0 - k))
 		ci.draw_texture_rect(_glow_tex, Rect2(fh[0] - Vector2(r, r * 0.6), Vector2(r, r * 0.6) * 2.0), false, Color(1.0, 0.6, 0.2, 0.5 * k * k))
-
-
-## The flames the multiplier adds over the painted fire: tongues licking up out of it, taller and
-## more of them the hotter it burns, swaying and flaring on the beat. Low embers add none.
-func _draw_flames(ci: CanvasItem, bz: float, env: float) -> void:
-	if bz < 0.05:
-		return
-	var n := 3 + int(round(6.0 * bz))
-	var base := FIRE + Vector2(0.0, 70.0)
-	var motion := 0.35 if reduced_motion else 1.0
-	for i in n:
-		var u := (float(i) + 0.5) / float(n) * 2.0 - 1.0          # -1..1 across the fire
-		var seed := float(i) * 1.7
-		var w := (34.0 - 10.0 * absf(u)) * (0.8 + 0.4 * bz)
-		var h := (120.0 + 230.0 * bz) * (1.0 - 0.55 * u * u) * (0.75 + 0.25 * sin(_clock * (5.0 + i) + seed))
-		h *= 1.0 + 0.15 * env
-		var sway := sin(_clock * 3.1 + seed) * 14.0 * motion
-		var b := base + Vector2(u * 95.0, 0.0)
-		var tip := b + Vector2(sway + u * 18.0, -h)
-		var mid := b.lerp(tip, 0.5) + Vector2(-sway * 0.6, 0.0)
-		for layer in 2:
-			var ww := w * (1.0 if layer == 0 else 0.5)
-			var col := Color(1.0, 0.36, 0.06, 0.32 * bz) if layer == 0 else Color(1.0, 0.8, 0.35, 0.3 * bz)
-			var tt := b.lerp(tip, 1.0 if layer == 0 else 0.7)
-			var pts := PackedVector2Array([to_local_pic(b + Vector2(-ww, 0.0)), to_local_pic(mid + Vector2(-ww * 0.7, 0.0)),
-				to_local_pic(tt), to_local_pic(mid + Vector2(ww * 0.7, 0.0)), to_local_pic(b + Vector2(ww, 0.0))])
-			ci.draw_colored_polygon(pts, col)
 
 
 static func _radial() -> Texture2D:
@@ -794,7 +740,6 @@ uniform vec2 fire = vec2(480.0, 370.0);
 uniform float t = 0.0;
 uniform float flare = 0.0;
 uniform float dim = 0.0;
-uniform float heat = 0.5;
 uniform float motion = 1.0;
 // the pixel look's moving road: cobbles laid in the lanes that travel toward the player with the
 // notes (scroll, in lane widths), lit by the picture's own light
@@ -936,7 +881,7 @@ void fragment() {
 	float m = clamp(1.0 - dot(d, d), 0.0, 1.0);
 	m *= smoothstep(fire.y + 100.0, fire.y + 40.0, p.y);
 	float wave = sin(p.y * 0.07 + t * 8.0) * 0.6 + sin(p.y * 0.13 - t * 11.0 + p.x * 0.05) * 0.4;
-	p.x += wave * (2.0 + 3.0 * heat) * m * motion;
+	p.x += wave * 3.5 * m * motion;
 	p.y += (sin(t * 6.0 + p.x * 0.08) * 2.0) * m * motion;
 	vec4 c = texture(TEXTURE, p / pic);
 	if (road) {
@@ -948,9 +893,7 @@ void fragment() {
 	float lum = dot(c.rgb, vec3(0.3, 0.55, 0.15));
 	float hot = m * smoothstep(0.45, 0.9, lum);
 	float flick = 0.06 * sin(t * 17.0) + 0.04 * sin(t * 29.0 + 1.7);
-	// the multiplier's heat: embers at none, a white-hot blaze at the top
-	c.rgb *= 1.0 + hot * (flare + flick * motion + 0.6 * heat - 0.4) - hot * 0.55 * dim;
-	c.rgb += hot * heat * heat * vec3(0.22, 0.16, 0.04);
+	c.rgb *= 1.0 + hot * (flare + flick * motion) - hot * 0.55 * dim;
 	// low health: the night closes in, the far end darkest
 	c.rgb *= 1.0 - 0.35 * dim;
 	COLOR = vec4(c.rgb, 1.0);
