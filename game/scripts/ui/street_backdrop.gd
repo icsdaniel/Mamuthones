@@ -475,8 +475,10 @@ static func _bob(t: float) -> float:
 
 # ------------------------------------------------------------------ the portraits
 
-## A portrait: a dark panel in a gold frame, following the wall's perspective, the figure standing
-## in it (clipped by it), a warm light glowing up from its bottom.
+## A portrait: a dark panel in a gold frame, following the wall's perspective, a warm light glowing
+## up from its bottom. The figure stands in front of it (Daniele, 2026-10-05): its legs go down into
+## the frame, cut at the frame's lower edge, and the rest of it stands out over the frame, so it bobs
+## out of the box.
 func _make_frame(i: int) -> Node2D:
 	var root := Node2D.new()
 	root.name = "Portrait" + ("L" if i == 0 else "R")
@@ -489,11 +491,15 @@ func _make_frame(i: int) -> Node2D:
 		# warmer firelight behind the pixel figures, so the Mamuthone's dark fleece stands out of it
 		panel.vertex_colors = PackedColorArray([Color("#2a1a1c"), Color("#2a1a1c"), Color("#6a3416"), Color("#6a3416")])
 	root.add_child(panel)
+	# the figure's layer, over the frame: clips only below the frame's lower edge (see _place_frames)
+	var stand := Polygon2D.new()
+	stand.name = "Stand"
+	stand.clip_children = CanvasItem.CLIP_CHILDREN_ONLY
 	if pixel:
 		var pup := PixelFigure.new("issohadore" if i == 0 else "mamuthone")
 		pup.name = "Figure"
 		pup.mirror = i == 1
-		panel.add_child(pup)
+		stand.add_child(pup)
 		_puppets.append(pup)
 	var fig := Sprite2D.new()
 	fig.name = "Figure"
@@ -507,7 +513,7 @@ func _make_frame(i: int) -> Node2D:
 	var ts := fig.texture.get_size()
 	fig.offset = Vector2(-ts.x * 0.5, -ts.y)           # the feet are the pivot
 	if not pixel:
-		panel.add_child(fig)
+		stand.add_child(fig)
 		_figures.append(fig)
 	var border := Line2D.new()
 	border.name = "Frame"
@@ -525,6 +531,7 @@ func _make_frame(i: int) -> Node2D:
 	add.blend_mode = CanvasItemMaterial.BLEND_MODE_ADD
 	halo.material = add
 	root.add_child(halo)
+	root.add_child(stand)
 	return root
 
 
@@ -548,6 +555,11 @@ func _place_frames() -> void:
 		var pts := _frame_points(i)
 		var f := _frames[i]
 		(f.get_node("Panel") as Polygon2D).polygon = pts
+		# everything above the frame's lower edge, out past its sides
+		var out := (pts[3] - pts[2]).normalized() * 600.0
+		var low_l := pts[3] + out
+		var low_r := pts[2] - out
+		(f.get_node("Stand") as Polygon2D).polygon = PackedVector2Array([low_l - Vector2(0, 3000), low_r - Vector2(0, 3000), low_r, low_l])
 		(f.get_node("Frame") as Line2D).points = pts
 		(f.get_node("Halo") as Line2D).points = pts
 		if pixel:
