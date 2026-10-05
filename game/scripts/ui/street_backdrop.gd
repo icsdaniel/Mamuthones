@@ -359,13 +359,13 @@ func _process(delta: float) -> void:
 		_mat.set_shader_parameter("motion", 0.35 if reduced_motion else 1.0)
 	if _sparks != null:
 		_sparks.speed_scale = 1.0 - 0.5 * dim
-	if pixel:
-		_move_road()
+	_move_road()
 	_bob_figures()
 	_glow.queue_redraw()
 
 
-## The pixel look's cobbled road, laid in the street's perspective. It stays still: Daniele found the
+## The road's shader settings: the pixel look's cobbled road, laid in the street's perspective,
+## and the smooth lanes (both looks). It stays still: Daniele found the
 ## travelling road too much on his phone (2026-10-05), so only the notes move.
 func _move_road() -> void:
 	if _mat == null or lanes == null or not lanes.is_inside_tree():
@@ -378,7 +378,8 @@ func _move_road() -> void:
 		yh = STRETCH_FROM + (yh - STRETCH_FROM) / stretch
 	var a := Vector4(RAILS[0].x, RAILS[1].x, RAILS[2].x, RAILS[3].x)
 	var b := Vector4(RAILS[0].y, RAILS[1].y, RAILS[2].y, RAILS[3].y)
-	_mat.set_shader_parameter("road", true)
+	_mat.set_shader_parameter("road", pixel)
+	_mat.set_shader_parameter("smooth_lanes", true)
 	_mat.set_shader_parameter("rail_a", a)
 	_mat.set_shader_parameter("rail_b", b)
 	_mat.set_shader_parameter("vanish_y", VANISH_Y)
@@ -791,14 +792,42 @@ vec3 moving_road(sampler2D tex, vec2 p, vec3 c) {
 	float lip = 1.0 - smoothstep(0.08, 0.18, cb.y);
 	st *= 1.0 + lip * (cb.w > 0.0 ? 0.18 : -0.12);
 	vec3 col = cb.y < 0.05 ? light * 0.55 : st;
-	// quieter inside the lanes, where the notes travel: they must stay the clearest thing
-	if (u > 0.0 && u < 3.0) {
-		col = mix(light * 0.88, col, 0.6);
-	}
 	// tiny far stones would shimmer: fade to the picture there; keep the lines themselves
 	float lane_px = (xs.z - xs.y) * sc;
 	float fade = smoothstep(10.0, 26.0, lane_px * stone.x);
 	fade *= smoothstep(0.035, 0.08, rail) * smoothstep(wall + 2.0, wall + 14.0, p.y);
+	return mix(c, col, fade);
+}
+
+// the three lanes the notes slide down are kept smooth (Daniele, 2026-10-05: no cobbles where the
+// notes travel, for readability): an even surface in the picture's own light, averaged across the
+// lane and along a stretch of road so no stone shows, a little darker than the street so the notes
+// stand out, with the lines' glow spilling onto it. The lines themselves stay the picture's.
+uniform bool smooth_lanes = false;
+
+vec3 smooth_lane(sampler2D tex, vec2 p, vec3 c) {
+	if (p.y < far_y + 2.0) {
+		return c;
+	}
+	vec4 xs = rail_a + rail_b * p.y;
+	if (p.x <= xs.x || p.x >= xs.w) {
+		return c;
+	}
+	float u = p.x < xs.y ? (p.x - xs.x) / (xs.y - xs.x) : (p.x < xs.z ? 1.0 + (p.x - xs.y) / (xs.z - xs.y) : 2.0 + (p.x - xs.z) / (xs.w - xs.z));
+	int li = int(clamp(floor(u), 0.0, 2.0));
+	float x0 = xs[li];
+	float x1 = xs[li + 1];
+	float span = max((x1 - x0) * 0.35, 6.0);
+	vec3 light = vec3(0.0);
+	for (int j = -3; j <= 3; j++) {
+		for (int i = 1; i <= 3; i++) {
+			light += texture(tex, vec2(mix(x0, x1, float(i) * 0.25), p.y + float(j) * span * 0.33) / pic).rgb;
+		}
+	}
+	light = light / 21.0;
+	float rail = min(min(abs(u), abs(u - 1.0)), min(abs(u - 2.0), abs(u - 3.0)));
+	vec3 col = light * 0.72 + vec3(0.55, 0.25, 0.05) * exp(-rail * 9.0) * 0.45;
+	float fade = smoothstep(0.03, 0.07, rail) * smoothstep(far_y + 2.0, far_y + 14.0, p.y);
 	return mix(c, col, fade);
 }
 
@@ -818,6 +847,9 @@ void fragment() {
 	vec4 c = texture(TEXTURE, p / pic);
 	if (road) {
 		c.rgb = moving_road(TEXTURE, p, c.rgb);
+	}
+	if (smooth_lanes) {
+		c.rgb = smooth_lane(TEXTURE, p, c.rgb);
 	}
 	float lum = dot(c.rgb, vec3(0.3, 0.55, 0.15));
 	float hot = m * smoothstep(0.45, 0.9, lum);
