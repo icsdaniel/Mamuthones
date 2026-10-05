@@ -347,6 +347,14 @@ func _moment(screen: Node, what: String) -> void:
 			lanes.set_process(false)
 	if what == "showcase":
 		_showcase(screen, s, c.song_time())
+		if OS.has_environment("SHOT_UNISON"):
+			# the fire at a given multiplier level (0..5), already burning at that heat
+			s.call("_set_unison", int(OS.get_environment("SHOT_UNISON")), c.song_time())
+			s.unison_streak = 0
+			screen.call("_tick_fire")
+			var bd: Object = screen.get("backdrop")
+			if bd != null:
+				bd.set("_heat", bd.get("heat"))
 	if what == "wrong":
 		# The player's thumb lands on the left button while the right lane's note is due.
 		s.tap(0, c.song_time(), 7)
