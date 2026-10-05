@@ -28,7 +28,10 @@ const FAR_Y := 468.0                 ## the road's far end, just in front of the
 const STRETCH_FROM := 460.0          ## the picture is only ever stretched below this row
 const FIRE := Vector2(480.0, 370.0)  ## the fire's heart, picture px
 const LANTERNS := [Vector2(104, 256), Vector2(855, 276), Vector2(320, 382)]
-const EDGE_CLEAR := 0.12             ## an outer note's centre stays this share of the width off the edge
+## On the hit line, an outer lane's whole slot and its biggest note (a stomp, StreetSkin.STOMP_R,
+## with its outline) stay on screen: their edge keeps EDGE_PAD of the width off the screen's edge.
+const CLEAR_R := 0.53                ## lane widths from an outer lane's centre that must show
+const EDGE_PAD := 0.035
 ## The portrait frames' corners (picture px, the left one; the right mirrors it), from the play-screen
 ## reference.
 const FRAME := [Vector2(-12, 232), Vector2(226, 296), Vector2(272, 612), Vector2(-12, 748)]
@@ -166,12 +169,15 @@ func _solve() -> void:
 	_layout = key
 	pic_scale = maxf(size.x / IMG.x, size.y / IMG.y)
 	pic_off = (size.x - IMG.x * pic_scale) * 0.5
-	var margin := size.x * EDGE_CLEAR
+	var margin := size.x * EDGE_PAD
 	var x_min := (margin - pic_off) / pic_scale
 	var x_max := (size.x - margin - pic_off) / pic_scale
-	# the outer lanes' middles: halfway between the edge line and the divider
-	var yl := _solve_y(0, 1, 0.5, x_min)
-	var yr := _solve_y(2, 3, 0.5, x_max)
+	# the outer lanes' middles (halfway between the edge line and the divider), less or plus CLEAR_R
+	# of the middle lane's width (the size LaneView draws notes at): the lowest picture row where both
+	# outer slots still fit; the hit line is stretched up to it
+	var lane: Vector2 = RAILS[2] - RAILS[1]
+	var yl := _solve_line(RAILS[0].lerp(RAILS[1], 0.5) - lane * CLEAR_R, x_min)
+	var yr := _solve_line(RAILS[2].lerp(RAILS[3], 0.5) + lane * CLEAR_R, x_max)
 	var need := minf(yl, yr)
 	var hl_img := hl / pic_scale
 	stretch = maxf(1.0, (hl_img - STRETCH_FROM) / maxf(need - STRETCH_FROM, 1.0))
@@ -190,8 +196,8 @@ func _solve() -> void:
 
 
 ## The picture row where the line between rails i and j at fraction f reaches picture x.
-func _solve_y(i: int, j: int, f: float, x: float) -> float:
-	var a: Vector2 = RAILS[i].lerp(RAILS[j], f)
+## The picture row where the line x = a.x + a.y * y reaches picture x.
+func _solve_line(a: Vector2, x: float) -> float:
 	return (x - a.x) / a.y if absf(a.y) > 0.0001 else 1e6
 
 
