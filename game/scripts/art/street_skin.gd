@@ -37,6 +37,9 @@ const FORE := 0.42                   ## how much the road's depth is foreshorten
 const SIDES := 24                    ## a disc's facets round its edge
 const ROPE_W := 0.2                  ## the rope's width, in lane widths
 const STRAP_D := 0.42                ## the bell strap's depth along the road, in lane widths
+## The pixel look (PixelFilter over the screen): bursts and sparks are drawn as opaque pixel shapes
+## (no soft glows or fades, which the lens would turn to mud): flashes, stamped rings and square embers.
+static var pixel := false
 
 
 static func _a(c: Color, a: float) -> Color:
@@ -189,7 +192,7 @@ static func disc(lv: LaneView, field: Rect2, cx: float, y: float, r: float, k: A
 	var rx := r * lw
 	_glow(lv, c + Vector2(0.0, rx * FORE * 0.5), Vector2(rx * 1.25, rx * FORE * 1.6), Color(0.0, 0.0, 0.03, 0.6 * alpha))
 	_glow(lv, c, Vector2(rx * 1.5, rx * FORE * 2.6) * (1.0 + 0.4 * _near), _a(k[3], (0.3 + 0.45 * _near) * alpha * glow))
-	solid(lv, f, verts, faces, Vector3(r, 1.0, r), k, alpha, maxf(2.0, lw * 0.02), -0.4)
+	solid(lv, f, verts, faces, Vector3(r, 1.0, r), k, alpha, maxf(PxArt.PX * 0.75 if pixel else 2.0, lw * 0.02), -0.4)
 	return top
 
 
@@ -329,7 +332,10 @@ static func rope(lv: LaneView, field: Rect2, cx: float, ya: float, yb: float, li
 		var lw := lv.road_scale(yb) * lane
 		for i in 3:
 			var age := fposmod(lv._clock + float(i) * 0.11, 0.33)
-			_embers(lv, at, lw * 0.6, age, 4, int(lv._clock / 0.33) * 5 + i, K_ROPE[0], 0.8)
+			if pixel:
+				_embers_px(lv, at, lw * 0.6, age, 4, int(lv._clock / 0.33) * 5 + i, PX_HOT, 0.8)
+			else:
+				_embers(lv, at, lw * 0.6, age, 4, int(lv._clock / 0.33) * 5 + i, K_ROPE[0], 0.8)
 
 
 ## A bell note: the Mamuthone's leather bell strap across the whole road at flat depth y, a bronze
@@ -426,6 +432,9 @@ static func burst(ci: CanvasItem, at: Vector2, quality: String, age: float, sc: 
 	var lw := sc * 240.0
 	if ci is LaneView:
 		lw = sc * (ci as LaneView).field_rect().size.x / 3.0
+	if pixel:
+		_burst_px(ci, at, quality, age, tt, lw)
+		return true
 	var e := 1.0 - pow(1.0 - tt, 3.0)
 	var a := pow(1.0 - tt, 1.4)
 	var seed := int(absf(at.x) * 13.0) + quality.length() * 7
@@ -458,6 +467,69 @@ static func burst(ci: CanvasItem, at: Vector2, quality: String, age: float, sc: 
 	_ring(ci, at, Vector2(r, r * FORE) * (1.0 + 0.9 * e), maxf(2.0, lw * 0.04 * (1.0 - tt)), Color(col, 0.8 * a))
 	_embers(ci, at, lw * big, age, 14 if quality == "stomp" else 10, seed, col, 1.0)
 	return true
+
+
+const PX_HOT := [Color("#fffaf0"), Color("#ffe9a8"), Color("#ffd35a"), Color("#ff9a32"), Color("#c8282a")]
+
+
+## The pixel look's hit: a white flash for a frame or two, the pintadera's stamp pressed into the road
+## in the hit's colour that breaks up as it fades, a shock ring running out, and square embers thrown
+## up that cool from white through gold to red. A miss: a dull red ring and grey cinders.
+static func _burst_px(ci: CanvasItem, at: Vector2, quality: String, age: float, tt: float, lw: float) -> void:
+	var px := PxArt.PX
+	var e := 1.0 - pow(1.0 - tt, 3.0)
+	var seed := int(absf(at.x) * 13.0) + quality.length() * 7
+	if quality == "miss":
+		if tt < 0.7:
+			_ring(ci, at, Vector2(lw * DISC_R, lw * DISC_R * FORE) * (1.0 + 0.3 * e), px * 2.0, Color("#a83030"))
+		_embers_px(ci, at, lw, age, 5, seed, [Color("#8a7e7a"), Color("#5a4e4e")], 0.5)
+		return
+	var col: Color = {
+		"perfect": Color("#fffbe8"), "good": Color("#ffd35a"), "ok": Color("#ff9a3a"), "early": Color("#ff9a3a"),
+		"late": Color("#ff9a3a"), "heal": Color("#8affb8"), "held": Color("#ffe27a"), "stomp": Color("#ffc060"),
+	}.get(quality, Color("#ffd35a"))
+	var big := 1.6 if quality == "stomp" else (1.25 if quality == "perfect" else 1.0)
+	var r := lw * DISC_R * (1.0 + 0.25 * e) * big
+	# the flash: the whole stamp lit white for the first instant
+	if age < 0.05:
+		_ellipse(ci, at, Vector2(r, r * FORE) * 1.05, Color.WHITE)
+	# the stamp: rim and teeth, whole at first, then every other piece, then gone
+	var keep := 1 if tt < 0.35 else (2 if tt < 0.6 else 0)
+	if keep > 0:
+		var top := func(p: Vector2) -> Vector2: return at + Vector2(p.x * r, p.y * r * FORE)
+		_ring(ci, at, Vector2(r, r * FORE) * 0.86, px * 2.0, col)
+		for i in 12:
+			if i % keep != 0:
+				continue
+			var a0 := TAU * float(i) / 12.0
+			var a1 := TAU * float(i + 1) / 12.0
+			var am := (a0 + a1) * 0.5
+			ci.draw_colored_polygon(PackedVector2Array([top.call(Vector2(cos(a0), sin(a0)) * 0.46), top.call(Vector2(cos(am), sin(am)) * 0.72), top.call(Vector2(cos(a1), sin(a1)) * 0.46)]), col)
+	# the shock ring running out, thinning to one pixel
+	if tt < 0.55:
+		_ring(ci, at, Vector2(r, r * FORE) * (1.0 + 0.9 * e), px * (2.0 if tt < 0.3 else 1.0), col.lerp(Color.WHITE, 0.3))
+	_embers_px(ci, at, lw * big, age, 14 if quality == "stomp" else 10, seed, PX_HOT, 1.0)
+
+
+## Square embers (whole pixels) thrown up from `at` and falling back, cooling through `ramp`.
+static func _embers_px(ci: CanvasItem, at: Vector2, lw: float, age: float, n: int, seed: int, ramp: Array, power: float) -> void:
+	var life := LaneSkin.BURST_TIME * 1.1
+	if age >= life:
+		return
+	var k := age / life
+	var px := PxArt.PX
+	for i in n:
+		var h := hash(seed * 31 + i * 7919)
+		var ang := -PI * (0.12 + 0.76 * float(h % 1000) / 1000.0)
+		var spd := lw * power * (2.2 + 2.6 * float((h / 1000) % 1000) / 1000.0)
+		var v := Vector2(cos(ang), sin(ang)) * spd
+		var p := at + v * age + Vector2(0.0, lw * 9.0 * age * age)
+		# some die early, so the spray thins out instead of fading
+		if k > 0.45 + 0.5 * float((h / 7) % 100) / 100.0:
+			continue
+		var col: Color = ramp[mini(int(k * ramp.size()), ramp.size() - 1)]
+		var sz := px * (2.0 if k < 0.4 and i % 3 == 0 else 1.0)
+		ci.draw_rect(Rect2(p - Vector2(sz, sz) * 0.5, Vector2(sz, sz)), col)
 
 
 ## Embers thrown up from `at` and falling back under gravity, `n` of them, the same for the same seed.

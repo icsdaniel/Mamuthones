@@ -191,6 +191,10 @@ func _layout() -> void:
 	_score.size = right.size - Vector2(36.0, 0.0)
 	_ghost.position = Vector2(right.position.x, right.end.y + 8.0)
 	_ghost.size = Vector2(right.size.x - 10.0, 30.0)
+	if pixel:
+		# the pixel type runs wider: the line wraps onto two, right-aligned under the score
+		_ghost.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+		_ghost.size.y = 54.0
 	_health.position = left.get_center() - _health.size * 0.5
 	_section.position = Vector2(left.position.x + 12.0, left.end.y + 8.0)
 	_section.size = Vector2(left.size.x, 30.0)

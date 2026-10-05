@@ -34,6 +34,19 @@ func build() -> void:
 	_toggle(box, "vibration", tr("set_vibration"))
 	_toggle(box, "slam", tr("set_slam"), tr("set_slam_note"))
 	_toggle(box, "reduced_motion", tr("set_reduced_motion"))
+	# the play screen's look: pixel art (the default) or Daniele's painted pictures
+	box.add_child(UIKit.label(tr("set_look"), UIKit.CAPTION))
+	var looks := HBoxContainer.new()
+	looks.name = "Looks"
+	looks.add_theme_constant_override("separation", 12)
+	for style in ["pixel", "painted"]:
+		var lb := UIKit.button(tr("look_" + style), _look.bind(style, looks))
+		lb.toggle_mode = true
+		lb.set_pressed_no_signal(str(Profile.get_setting("art_style")) == style)
+		lb.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		lb.name = "Look_" + style
+		looks.add_child(lb)
+	box.add_child(looks)
 
 	box.add_child(UIKit.label(tr("set_sound"), UIKit.SUB))
 	_slider(box, "music_volume", tr("set_music"), 0.0, 1.0, 0.05,
@@ -128,3 +141,9 @@ func _language(code: String) -> void:
 	Profile.set_setting("language", code)
 	I18n.set_locale(code)
 	app.rebuild_all()
+
+
+func _look(style: String, row: Control) -> void:
+	Profile.set_setting("art_style", style)
+	for c in row.get_children():
+		(c as Button).set_pressed_no_signal(c.name == "Look_" + style)

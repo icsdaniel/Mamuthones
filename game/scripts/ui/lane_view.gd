@@ -427,6 +427,8 @@ var perspective := true          ## false: the flat lanes (the Piazza hides them
 ## the lanes follow its painted lines: project() asks the street where a flat point lies, and this
 ## control draws the notes, the hit line, the bursts and the buttons over it (_draw_street).
 var street: StreetBackdrop
+## The pixel look (PixelFilter over the screen): the buttons are drawn as pixel art on its grid.
+var pixel := false
 var beat := -1000.0              ## the song's beat now (fractional), for the beads on the rails
 var spb := 0.0                   ## seconds per beat (0: no beads)
 var fire_dim := 0.0              ## 0..1 the fire burns low (health): the road's light dims with it
@@ -1200,6 +1202,9 @@ func _street_chevron(pos: Vector2, side: String, age: float, size_k := 1.0) -> v
 ## middle one), lit gold while pressed, hot on a hit, dull red on a miss, their edge glowing when a
 ## note is about to reach their lane.
 func _draw_street_buttons() -> void:
+	if pixel:
+		_draw_pixel_buttons()
+		return
 	var r := buttons_rect()
 	var span := _screen_span()
 	var panel := Rect2(span.x, r.position.y, span.y - span.x, r.size.y + 400.0)
@@ -1253,6 +1258,146 @@ func _draw_street_buttons() -> void:
 			var ox := 0.0 if feet.size() == 1 else (float(i) - 0.5) * fs * 1.5
 			_footprint(br.get_center() + Vector2(ox, 0.0), fs, feet[i], foot)
 	_draw_street_marks(r, w)
+
+
+# ------------------------------------------------------------------ the pixel look's buttons
+
+const PX_WOOD := [Color("#120a0c"), Color("#2a1a16"), Color("#3e2a20"), Color("#5a3c26")]   ## shade, face, lit, lip
+const PX_BRONZE := [Color("#4e2a0a"), Color("#b0701e"), Color("#f2c46a")]
+const PX_LIFT := 3          ## art px a button stands up from the panel (its side shows below it)
+
+
+## A rect in this control's coordinates snapped to the lens's grid (whole art px on screen).
+func _grid_rect(r: Rect2) -> Rect2:
+	var xf := get_global_transform()
+	var inv := xf.affine_inverse()
+	var k := xf.get_scale().x
+	var a := PxArt.snap2(xf * r.position, Vector2.ZERO, PxArt.PX * k)
+	var b := PxArt.snap2(xf * r.end, Vector2.ZERO, PxArt.PX * k)
+	return Rect2(inv * a, (inv * b) - (inv * a))
+
+
+## A block of whole art px: x, y, w, h in art px from the origin o.
+func _px(o: Vector2, x: float, y: float, w: float, h: float, col: Color) -> void:
+	var p := PxArt.PX
+	draw_rect(Rect2(o + Vector2(x, y) * p, Vector2(w, h) * p), col)
+
+
+## The three step buttons as pixel art: carved wooden steps edged in bronze, standing up out of the
+## panel (their side shows below them). A press sinks the step into the panel; a hit lights it hot,
+## a miss dull red; a note about to reach its lane lights its edge. A bare foot is burnt into each
+## (both feet in the middle one).
+func _draw_pixel_buttons() -> void:
+	var r := buttons_rect()
+	var span := _screen_span()
+	var panel := _grid_rect(Rect2(span.x, r.position.y, span.y - span.x, r.size.y + 400.0))
+	draw_rect(panel, Color("#0b0709"))
+	var env := beat_env()
+	var p := PxArt.PX
+	_px(panel.position, 0, 0, panel.size.x / p, 1, PX_BRONZE[1].lerp(PX_BRONZE[2], env))
+	_px(panel.position, 0, 1, panel.size.x / p, 1, PX_BRONZE[0])
+	var w := r.size.x / 3.0
+	for lane in 3:
+		var br := _grid_rect(Rect2(r.position.x + w * lane + 9.0, r.position.y + 15.0, w - 18.0, r.size.y - 30.0))
+		var st := _button_state(lane)
+		var cols := int(br.size.x / p)
+		var rows := int(br.size.y / p) - PX_LIFT
+		var down := PX_LIFT if st == "pressed" or st == "hit" else 0
+		var o := br.position + Vector2(0, down * p)
+		var face: Color = PX_WOOD[1]
+		var lit: Color = PX_WOOD[2]
+		var lip: Color = PX_WOOD[3]
+		var edge: Color = PX_BRONZE[1]
+		var foot := "idle"
+		match st:
+			"cued":
+				edge = Color("#ffc445")
+				lip = Color("#8a5a2a")
+				foot = "bright"
+			"pressed":
+				face = Color("#4a3014")
+				lit = Color("#6a4420")
+				lip = Color("#ffd27a")
+				edge = Color("#ffe08a")
+				foot = "bright"
+			"hit":
+				face = Color("#c47a1c")
+				lit = Color("#e8a020")
+				lip = Color("#fff2c0")
+				edge = Color("#fff2c0")
+				foot = "hot"
+			"miss":
+				face = Color("#3a1212")
+				lit = Color("#5e1a14")
+				lip = Color("#a83030")
+				edge = Color("#a83030")
+				foot = "dim"
+		# the step's side under it (the part that sinks into the panel when pressed)
+		var side := PX_LIFT - down
+		if side > 0:
+			_px(o, 1, rows, cols - 2, side, PX_BRONZE[0])
+			_px(o, 2, rows + side - 1, cols - 4, 1, PX_WOOD[0])
+		# the edge: a bronze band with its corners cut, then the face, a lit top lip and a shaded foot
+		_px(o, 2, 0, cols - 4, rows, edge)
+		_px(o, 1, 1, cols - 2, rows - 2, edge)
+		_px(o, 0, 2, cols, rows - 4, edge)
+		_px(o, 2, 1, cols - 4, rows - 2, face)
+		_px(o, 1, 2, cols - 2, rows - 4, face)
+		_px(o, 2, 1, cols - 4, 1, lip)
+		_px(o, 1, 2, cols - 2, 2, lit)
+		_px(o, 1, rows - 3, cols - 2, 1, PX_WOOD[0].lerp(face, 0.4))
+		_px(o, 2, rows - 2, cols - 4, 1, PX_WOOD[0])
+		if st == "cued" or st == "hit":
+			draw_rect(Rect2(o - Vector2(p, p), Vector2(cols + 2, rows + 2) * p), Color(edge, 0.35), false, p)
+		# wood grain across the face
+		var gy := 6
+		while gy < rows - 4:
+			var gx := 3 + (gy * 7) % 5
+			_px(o, gx, gy, cols - gx - 4 - (gy * 3) % 4, 1, face.darkened(0.18))
+			gy += 5
+		# the feet burnt into it, pixel by pixel
+		var fcol := {"idle": Palette.BONE, "bright": Color("#fff6e0"), "hot": Color("#fffaf0"), "dim": Palette.BONE.darkened(0.45)}[foot] as Color
+		var feet := [-1.0, 1.0] if lane == 1 else ([-1.0] if lane == 0 else [1.0])
+		var fh := clampi(int(rows * 0.62), 20, 38)
+		for i in feet.size():
+			var cx := cols * 0.5 + (0.0 if feet.size() == 1 else (float(i) - 0.5) * fh * 0.75)
+			_pixel_foot(o, Vector2(roundf(cx), roundf(rows * 0.5)), fh, feet[i], fcol, PX_WOOD[0])
+	_draw_street_marks(r, w)
+
+
+## A bare footprint in whole art px: centre c (art px from o), h art px tall, left (-1) or right (1)
+## foot, filled in col with a one-px shadow below its edge.
+func _pixel_foot(o: Vector2, c: Vector2, h: int, foot: float, col: Color, shade: Color) -> void:
+	var w := int(ceil(h * 0.3))
+	var inside := func(x: float, y: float) -> bool:
+		# in units of half the foot's height: y -1 the toes' tips .. 1 the heel; x across, + outward
+		var u := x / (h * 0.5) * foot
+		var v := y / (h * 0.5)
+		# the sole: widest at the ball, narrowing to the heel, the arch cut in on the inner side
+		if v >= -0.5 and v <= 1.0:
+			var half := lerpf(0.36, 0.25, clampf((v + 0.3) / 1.1, 0.0, 1.0))
+			if v < -0.3:
+				half = lerpf(0.26, 0.36, (v + 0.5) / 0.2)
+			var inner := half
+			if v > 0.05 and v < 0.6:
+				inner = half - 0.12 * sin((v - 0.05) / 0.55 * PI)
+			var lo := -inner
+			if v > 0.85:
+				var r := sqrt(maxf(0.0, 1.0 - pow((v - 0.85) / 0.15, 2.0)))
+				return u >= -inner * r and u <= half * r
+			return u >= lo and u <= half
+		# the toes: the big one on the inside, the rest smaller, stepping down outward
+		var toes := [Vector3(-0.16, -0.8, 0.14), Vector3(0.08, -0.84, 0.085), Vector3(0.26, -0.78, 0.075), Vector3(0.42, -0.68, 0.07), Vector3(0.55, -0.55, 0.065)]
+		for t: Vector3 in toes:
+			if (u - t.x) * (u - t.x) + (v - t.y) * (v - t.y) <= t.z * t.z:
+				return true
+		return false
+	for pass_ in 2:
+		for yy in range(-h / 2 - 2, h / 2 + 2):
+			for xx in range(-w, w + 1):
+				if inside.call(float(xx) + 0.5, float(yy) + 0.5):
+					var dy := 1 if pass_ == 0 else 0
+					_px(o, c.x + xx, c.y + yy + dy, 1, 1, shade if pass_ == 0 else col)
 
 
 ## A bare footprint (left foot for -1, right for 1): the sole and five toes.

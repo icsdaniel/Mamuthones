@@ -25,8 +25,8 @@ FIXED = [
     "#9ccaff", "#2f78e0", "#163a94", "#5aa8ff",                       # step blue
     "#a8ffc8", "#26b862", "#0e6632",                                  # heal green
     "#ffe9a8", "#e8a820", "#7e5006",                                  # hold gold
-    "#ff9c8c", "#c8282a", "#5e0c10",                                  # bell up red
-    "#a4b6ff", "#3450c0", "#141e5e",                                  # bell down indigo
+    "#ff9c8c", "#e06a5c", "#d84848", "#c8282a", "#8e1a1e", "#5e0c10",  # bell up red
+    "#a4b6ff", "#6c80e8", "#4e64d4", "#3450c0", "#24348a", "#141e5e",  # bell down indigo
     "#f2c46a", "#b0701e", "#4e2a0a",                                  # bronze
     "#ff9a32", "#ffd27a", "#ffd35a", "#7a2e06",                       # hud edge, gold ink
     "#8a2fd0", "#d070ff",                                             # top unison purple

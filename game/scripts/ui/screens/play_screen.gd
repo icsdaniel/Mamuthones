@@ -112,6 +112,7 @@ func build() -> void:
 
 	# The Piazza keeps its plain black ground under the procession; songs play on the Fire Night.
 	pixel = str(Profile.get_setting("art_style")) == "pixel" and not session.piazza
+	StreetSkin.pixel = pixel
 	var bg: Control
 	if session.piazza:
 		bg = ColorRect.new()
@@ -194,6 +195,7 @@ func build() -> void:
 	if not session.piazza:
 		backdrop.lanes = lanes
 		lanes.street = backdrop
+		lanes.pixel = pixel
 	_field_box.add_child(lanes)
 	words = JudgementWords.new()
 	words.set_anchors_preset(Control.PRESET_FULL_RECT)

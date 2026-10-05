@@ -66,6 +66,8 @@ var pic_off := 0.0
 var stretch := 1.0
 
 var _pic: TextureRect
+var _vp: SubViewport                 ## the pixel look: the street drawn at one texel per lens cell
+var _cells: TextureRect              ## ... and shown scaled up
 var _mat: ShaderMaterial
 var _glow: Control                   ## additive: lines pulsing, lanterns, hit flashes
 var _sparks: CPUParticles2D
@@ -103,7 +105,27 @@ func _ready() -> void:
 	sh.code = PICTURE_SHADER
 	_mat.shader = sh
 	_pic.material = _mat
-	add_child(_pic)
+	if pixel:
+		# the pixel look draws the street (its moving road is the costly part) at one texel per
+		# cell of the lens, then shows it scaled up: a ninth of the work, and crisp on the grid
+		_vp = SubViewport.new()
+		_vp.name = "StreetCells"
+		_vp.disable_3d = true
+		_vp.transparent_bg = false
+		_vp.render_target_update_mode = SubViewport.UPDATE_ALWAYS
+		_vp.add_child(_pic)
+		add_child(_vp)
+		_cells = TextureRect.new()
+		_cells.name = "StreetView"
+		_cells.texture = _vp.get_texture()
+		_cells.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+		_cells.stretch_mode = TextureRect.STRETCH_SCALE
+		_cells.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
+		_cells.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		_cells.set_anchors_preset(Control.PRESET_FULL_RECT)
+		add_child(_cells)
+	else:
+		add_child(_pic)
 	_glow_tex = _radial()
 	for i in 2:
 		var f := _make_frame(i)
@@ -125,6 +147,11 @@ func _ready() -> void:
 
 func _fit() -> void:
 	_layout = Vector3.ZERO
+	if _vp != null:
+		_vp.size = Vector2i(maxi(1, ceili(size.x / PxArt.PX)), maxi(1, ceili(size.y / PxArt.PX)))
+		_cells.size = Vector2(_vp.size) * PxArt.PX
+		_cells.set_anchors_preset(Control.PRESET_TOP_LEFT)
+		_cells.size = Vector2(_vp.size) * PxArt.PX
 	_solve()
 
 
@@ -149,7 +176,7 @@ func _solve() -> void:
 	stretch = maxf(1.0, (hl_img - STRETCH_FROM) / maxf(need - STRETCH_FROM, 1.0))
 	if _mat != null:
 		_mat.set_shader_parameter("pic", IMG)
-		_mat.set_shader_parameter("rect", size)
+		_mat.set_shader_parameter("rect", Vector2(_vp.size) * PxArt.PX if _vp != null else size)
 		_mat.set_shader_parameter("sc", pic_scale)
 		_mat.set_shader_parameter("off", pic_off)
 		_mat.set_shader_parameter("y0", STRETCH_FROM)
@@ -736,12 +763,16 @@ vec3 moving_road(sampler2D tex, vec2 p, vec3 c) {
 	float rail = min(min(abs(u), abs(u - 1.0)), min(abs(u - 2.0), abs(u - 3.0)));
 	// the lines' own glow spilling onto the stones beside them
 	light += vec3(0.55, 0.25, 0.05) * exp(-rail * 9.0);
-	float dome = 1.0 - 0.6 * cb.x * cb.x;
-	vec3 st = light * (0.95 + 0.3 * (cb.z - 0.5)) * (0.72 + 0.5 * dome);
+	float dome = 1.0 - 0.5 * cb.x * cb.x;
+	vec3 st = light * (0.95 + 0.2 * (cb.z - 0.5)) * (0.78 + 0.35 * dome);
 	// a lit lip on each stone's far side (the fire is up the road), a shaded one on its near side
 	float lip = 1.0 - smoothstep(0.08, 0.18, cb.y);
-	st *= 1.0 + lip * (cb.w > 0.0 ? 0.25 : -0.2);
-	vec3 col = cb.y < 0.06 ? light * 0.4 : st;
+	st *= 1.0 + lip * (cb.w > 0.0 ? 0.18 : -0.12);
+	vec3 col = cb.y < 0.05 ? light * 0.55 : st;
+	// quieter inside the lanes, where the notes travel: they must stay the clearest thing
+	if (u > 0.0 && u < 3.0) {
+		col = mix(light * 0.88, col, 0.6);
+	}
 	// tiny far stones would shimmer: fade to the picture there; keep the lines themselves
 	float lane_px = (xs.z - xs.y) * sc;
 	float fade = smoothstep(10.0, 26.0, lane_px * stone.x);

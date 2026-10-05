@@ -20,11 +20,11 @@ const PARTS := {
 	"mamuthone": [["legs", "feet", 0.0], ["body", "feet", 0.0], ["back_bells", "strap", 1.0], ["front_bells", "strap", -0.6], ["head", "neck", -0.2]],
 	"issohadore": [["legs", "feet", 0.0], ["body", "feet", 0.0], ["rope", "hand", -0.7], ["head", "neck", -0.2]],
 }
-const DROP := 5.0             ## how far the body drops on the beat, art px
+const DROP := 6.0             ## how far the body drops on the beat, art px
 const LEGS_H := 0.32          ## the share of the figure's height the legs take (they squash)
 const HEAD_LAG := 0.025       ## seconds the head follows the body late
 const SWING_LAG := 0.04       ## ... the bells and the rope
-const SWING := 7.0            ## degrees the bells and the rope swing after the drop
+const SWING := 10.0            ## degrees the bells and the rope swing after the drop
 const SWING_HZ := 3.2         ## how fast they swing
 const SWING_DAMP := 5.0       ## how fast the swing dies away
 const SWAY := 1.2             ## art px the figure leans across a bar

@@ -29,6 +29,16 @@ def main():
     keep = cv2.GaussianBlur(keep, (0, 0), 12)[..., None]
     soft = cv2.bilateralFilter(np.ascontiguousarray(rgb), 7, 30, 5)
     mixed = (soft * keep + flat * (1.0 - keep)).astype(np.uint8)
+    # the red haze the picture puts above the flames reads as a solid red column once it is pixels:
+    # let the night sky show through it (only dim, red, above the flames)
+    hz = mixed.astype(np.float32)
+    lum = hz.mean(-1)
+    red = (hz[..., 0] > hz[..., 1] * 2.2) & (lum < 95)
+    rows = np.clip((345.0 - np.arange(hz.shape[0])[:, None]) / 50.0, 0.0, 1.0)
+    m = red.astype(np.float32) * rows
+    m = cv2.GaussianBlur(m, (0, 0), 3)[..., None]
+    sky = np.array([28, 26, 52], np.float32)
+    mixed = (hz * (1 - 0.8 * m) + sky * 0.8 * m).astype(np.uint8)
     small = px.shrink(mixed, size)
     # dither only the dark, plain sky (not the fire's glow): bands there would show
     m = px.gradient_mask(small)
