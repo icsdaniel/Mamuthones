@@ -611,7 +611,19 @@ static func draw_notes(lv: LaneView, field: Rect2) -> void:
 			Note.Kind.STEP, Note.Kind.STOMP, Note.Kind.BELL, Note.Kind.RING:
 				if not n.done:
 					items.append([y, "note", n, rects[maxi(n.lane, 0)].get_center().x, lv._haze(y, field)])
-	_hit_line(lv, field, rects, hl)
+	# the pixel look tints each lane's slot with the colour of the note coming down it, more as it nears
+	var incoming: Array = [null, null, null]
+	if pixel:
+		var reach := _lane(field) * 4.0
+		for it in items:
+			var n: Note = it[2]
+			var lane := n.lane
+			if lane < 0 or lane > 2 or str(it[1]) == "knot" or n.kind == Note.Kind.BELL:
+				continue
+			var near := clampf(1.0 - (hl - float(it[0])) / reach, 0.0, 1.0)
+			if near > 0.0 and (incoming[lane] == null or near > float(incoming[lane][1])):
+				incoming[lane] = [_kind(lv, n, str(it[1]) == "hold"), near]
+	_hit_line(lv, field, rects, hl, incoming)
 	items.sort_custom(func(p: Array, q: Array) -> bool: return p[0] < q[0])
 	for it in items:
 		var y: float = it[0]
@@ -648,7 +660,24 @@ static func _knot(lv: LaneView, field: Rect2, cx: float, y: float, alpha: float)
 ## The hit line across the road, and in each lane a slot: a pintadera's outline pressed into the
 ## road, brighter when a note is about to reach it, filling with light while its button is down,
 ## breathing with the beat.
-static func _hit_line(lv: LaneView, field: Rect2, rects: Array[Rect2], hl: float) -> void:
+## A note's glaze [light, body, dark, glow], as drawn.
+static func _kind(lv: LaneView, n: Note, hold: bool) -> Array:
+	if hold:
+		return K_HOLD
+	match n.kind:
+		Note.Kind.STOMP:
+			return [BRONZE[0], K_WOOD[1], K_WOOD[2], K_WOOD[3]]
+		Note.Kind.STEP:
+			if n.heal:
+				return K_HEAL
+			if pixel and n.call:
+				return K_CALL
+			if pixel and lv._off_beat(n):
+				return K_OFF
+	return K_STEP
+
+
+static func _hit_line(lv: LaneView, field: Rect2, rects: Array[Rect2], hl: float, incoming: Array = [null, null, null]) -> void:
 	var l := lv.project(Vector2(-field.size.x * 0.02, hl))
 	var r := lv.project(Vector2(field.size.x * 1.02, hl))
 	var env := lv.beat_env()
@@ -669,4 +698,14 @@ static func _hit_line(lv: LaneView, field: Rect2, rects: Array[Rect2], hl: float
 		var ring := sil.duplicate()
 		ring.append(sil[0])
 		lv.draw_polyline(ring, Color(OUTLINE, 0.9), 12.0 if pixel else 9.0, true)
-		lv.draw_polyline(ring, Color(CREAM, 0.75 + 0.25 * k), 5.0 if pixel else 3.5, true)
+		var rim := Color(CREAM, 0.75 + 0.25 * k)
+		if incoming[lane] != null:
+			# the slot takes the coming note's colour: which kind, and how close, before it lands
+			var kk: Array = incoming[lane][0]
+			var near: float = incoming[lane][1]
+			ci_poly(lv, sil, _a(kk[1], 0.35 * near * near))
+			rim = rim.lerp(kk[0], near)
+			var inner := _circle(top, 0.7)
+			inner.append(inner[0])
+			lv.draw_polyline(inner, _a(kk[0], 0.8 * near), 3.0, true)
+		lv.draw_polyline(ring, rim, 5.0 if pixel else 3.5, true)

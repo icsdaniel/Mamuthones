@@ -32,6 +32,7 @@ FIXED = [
     "#8a2fd0", "#d070ff",                                             # top unison purple
     "#d8b4ff", "#8a3fd8", "#461a7a", "#b070ff",                       # off-beat violet
     "#ffb0d8", "#e0408c", "#7a1446", "#ff70b0",                       # call pink
+    "#160c0a", "#4a2e1e", "#64402a", "#8a5c36", "#3a2216",            # step buttons' wood
     "#ff3b30", "#ffffff",
 ]
 

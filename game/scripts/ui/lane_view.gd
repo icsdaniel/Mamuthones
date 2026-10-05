@@ -1262,7 +1262,7 @@ func _draw_street_buttons() -> void:
 
 # ------------------------------------------------------------------ the pixel look's buttons
 
-const PX_WOOD := [Color("#120a0c"), Color("#2a1a16"), Color("#3e2a20"), Color("#5a3c26")]   ## shade, face, lit, lip
+const PX_WOOD := [Color("#160c0a"), Color("#4a2e1e"), Color("#64402a"), Color("#8a5c36")]   ## shade, face, lit, lip
 const PX_BRONZE := [Color("#4e2a0a"), Color("#b0701e"), Color("#f2c46a")]
 const PX_LIFT := 3          ## art px a button stands up from the panel (its side shows below it)
 
@@ -1341,20 +1341,22 @@ func _draw_pixel_buttons() -> void:
 		_px(o, 2, 0, cols - 4, rows, edge)
 		_px(o, 1, 1, cols - 2, rows - 2, edge)
 		_px(o, 0, 2, cols, rows - 4, edge)
-		_px(o, 2, 1, cols - 4, rows - 2, face)
-		_px(o, 1, 2, cols - 2, rows - 4, face)
-		_px(o, 2, 1, cols - 4, 1, lip)
-		_px(o, 1, 2, cols - 2, 2, lit)
-		_px(o, 1, rows - 3, cols - 2, 1, PX_WOOD[0].lerp(face, 0.4))
-		_px(o, 2, rows - 2, cols - 4, 1, PX_WOOD[0])
+		# a two-px bronze band, lit along its top
+		_px(o, 2, 0, cols - 4, 1, PX_BRONZE[0] if st != "miss" else edge)
+		_px(o, 3, 2, cols - 6, rows - 4, face)
+		_px(o, 2, 3, cols - 4, rows - 6, face)
+		_px(o, 3, 2, cols - 6, 1, lip)
+		_px(o, 2, 3, cols - 4, 2, lit)
+		_px(o, 2, rows - 4, cols - 4, 1, PX_WOOD[0].lerp(face, 0.4))
+		_px(o, 3, rows - 3, cols - 6, 1, PX_WOOD[0])
 		if st == "cued" or st == "hit":
 			draw_rect(Rect2(o - Vector2(p, p), Vector2(cols + 2, rows + 2) * p), Color(edge, 0.35), false, p)
 		# wood grain across the face
-		var gy := 6
-		while gy < rows - 4:
-			var gx := 3 + (gy * 7) % 5
-			_px(o, gx, gy, cols - gx - 4 - (gy * 3) % 4, 1, face.darkened(0.18))
-			gy += 5
+		var gy := 7
+		while gy < rows - 5:
+			var gx := 4 + (gy * 7) % 5
+			_px(o, gx, gy, cols - gx - 5 - (gy * 3) % 7, 1, face.darkened(0.28))
+			gy += 6 + gy % 3
 		# the feet burnt into it, pixel by pixel
 		var fcol := {"idle": Palette.BONE, "bright": Color("#fff6e0"), "hot": Color("#fffaf0"), "dim": Palette.BONE.darkened(0.45)}[foot] as Color
 		var feet := [-1.0, 1.0] if lane == 1 else ([-1.0] if lane == 0 else [1.0])
@@ -1384,7 +1386,7 @@ static func _foot_runs(h: int, foot: float) -> Array[Vector3i]:
 	if _foot_cache.has(key):
 		return _foot_cache[key]
 	var w := int(ceil(h * 0.3))
-	var toes := [Vector3(-0.16, -0.8, 0.14), Vector3(0.08, -0.84, 0.085), Vector3(0.26, -0.78, 0.075), Vector3(0.42, -0.68, 0.07), Vector3(0.55, -0.55, 0.065)]
+	var toes := [Vector3(-0.15, -0.7, 0.14), Vector3(0.1, -0.74, 0.08), Vector3(0.27, -0.69, 0.07), Vector3(0.42, -0.61, 0.065), Vector3(0.54, -0.5, 0.06)]
 	var inside := func(x: float, y: float) -> bool:
 		# in units of half the foot's height: y -1 the toes' tips .. 1 the heel; x across, + outward
 		var u := x / (h * 0.5) * foot
