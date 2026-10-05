@@ -1033,6 +1033,11 @@ func _off_beat(n: Note) -> bool:
 	return fr > 0.12 and fr < 0.88
 
 
+## A sixteenth: a quarter of a beat off (only Expert has them; triplet eighths are not).
+func _sixteenth(n: Note) -> bool:
+	return absf(fposmod(n.beat, 0.5) - 0.25) < 0.02
+
+
 ## Notes emerge from the fire's haze at the far end of the road.
 func _haze(y: float, field: Rect2) -> float:
 	return clampf(y / (field.size.y * 0.07), 0.0, 1.0)

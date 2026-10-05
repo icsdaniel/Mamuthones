@@ -29,6 +29,7 @@ const K_WOOD := [Color("#8a7468"), Color("#2c2226"), Color("#120c10"), Color("#f
 const K_ROPE := [Color("#f0c878"), Color("#c0842c"), Color("#5e3810"), Color("#ffc060")]
 const K_UP := [Color("#ff9c8c"), Color("#c8282a"), Color("#5e0c10"), Color("#ff5040")]
 const K_OFF := [Color("#d8b4ff"), Color("#8a3fd8"), Color("#461a7a"), Color("#b070ff")]   ## the pixel look's off-beat step
+const K_SIX := [Color("#ffffff"), Color("#d2d8e8"), Color("#6c7490"), Color("#eef2ff")]   ## ... a sixteenth (Expert): silver
 const K_CALL := [Color("#ffb0d8"), Color("#e0408c"), Color("#7a1446"), Color("#ff70b0")]  ## ... and its call
 const K_DOWN := [Color("#a4b6ff"), Color("#3450c0"), Color("#141e5e"), Color("#6080ff")]
 const DISC_R := 0.4                  ## a pintadera's radius, in lane widths
@@ -237,13 +238,14 @@ static func _pintadera(lv, top: Callable, lw: float, col: Color, alpha: float, t
 	_convex(lv, _circle(top, 0.2, 16), _a(col, alpha))
 
 
-## A tap: a pintadera in its lane at flat depth y. small: an off-beat step or a call.
-static func step(lv, field: Rect2, cx: float, y: float, alpha: float, small := false, call := false) -> void:
+## A tap: a pintadera in its lane at flat depth y. small: an off-beat step or a call. six: a
+## sixteenth (a quarter of a beat off), which the pixel look shows in silver.
+static func step(lv, field: Rect2, cx: float, y: float, alpha: float, small := false, call := false, six := false) -> void:
 	var lw: float = lv.road_scale(y) * _lane(field)
 	if pixel:
 		# the pixel look keeps every tap round and full size; the kind shows in its colour: blue on
-		# the beat, violet off it, pink for a call
-		var k: Array = K_CALL if call else (K_OFF if small else K_STEP)
+		# the beat, violet on the half-beat (or a triplet), silver on a sixteenth, pink for a call
+		var k: Array = K_CALL if call else (K_SIX if six else (K_OFF if small else K_STEP))
 		var top := disc(lv, field, cx, y, DISC_R, k, alpha)
 		_pintadera(lv, top, lw, CREAM, 0.92 * alpha)
 		_dot(lv, top, lw, k[2], alpha)
@@ -659,7 +661,7 @@ static func draw_notes(lv: LaneView, field: Rect2) -> void:
 						if n.heal:
 							heal(lv, field, cx, y, a)
 						else:
-							step(lv, field, cx, y, a, n.call or lv._off_beat(n), n.call)
+							step(lv, field, cx, y, a, n.call or lv._off_beat(n), n.call, not n.call and lv._sixteenth(n))
 					Note.Kind.STOMP:
 						stomp(lv, field, cx, y, a * (0.6 if n.thumbs > 0 else 1.0))
 					Note.Kind.BELL:
@@ -702,6 +704,8 @@ static func _stamp(lv: LaneView, field: Rect2, what: String, n: Note, cx: float,
 						key = "heal"; k = K_HEAL
 					elif n.call:
 						key = "call"; k = K_CALL
+					elif lv._sixteenth(n):
+						key = "six"; k = K_SIX
 					elif lv._off_beat(n):
 						key = "off"; k = K_OFF
 					else:
@@ -746,6 +750,8 @@ static func _kind(lv: LaneView, n: Note, hold: bool) -> Array:
 				return K_HEAL
 			if pixel and n.call:
 				return K_CALL
+			if pixel and lv._sixteenth(n):
+				return K_SIX
 			if pixel and lv._off_beat(n):
 				return K_OFF
 	return K_STEP

@@ -123,6 +123,7 @@ func _shots() -> Array:
 		{"file": "play_chord_medium", "screen": "play", "args": {"song_id": "carnival", "difficulty": "medium", "bell_set": "light", "autoplay": true}, "setup": "moment:chord", "wait": 0.05},
 		{"file": "play_chord_hard", "screen": "play", "args": {"song_id": "carnival", "difficulty": "hard", "bell_set": "light", "autoplay": true}, "setup": "moment:chord", "wait": 0.05},
 		{"file": "play_chord_expert", "screen": "play", "args": {"song_id": "shrove", "difficulty": "expert", "bell_set": "light", "autoplay": true}, "setup": "moment:chord", "wait": 0.05},
+		{"file": "play_sixteenths", "screen": "play", "args": {"song_id": "shrove", "difficulty": "expert", "bell_set": "light", "autoplay": true}, "setup": "moment:six", "wait": 0.05},
 		{"file": "play_stomp", "screen": "play", "args": {"song_id": "rope", "difficulty": "hard", "bell_set": "light", "autoplay": true}, "setup": "moment:stomp", "wait": 0.05},
 		{"file": "play_stomp_outer", "screen": "play", "args": {"song_id": "rope", "difficulty": "expert", "bell_set": "light", "autoplay": true}, "setup": "moment:stomp", "wait": 0.05},
 		{"file": "play_stomped", "screen": "play", "args": {"song_id": "rope", "difficulty": "hard", "bell_set": "light", "autoplay": true}, "setup": "moment:stomped", "wait": 0.02},
@@ -234,7 +235,7 @@ func _advance(screen: Node, share: float) -> void:
 ## seconds), "hold" (half-way through a held note), "bell" (a bell cue about to reach the line),
 ## "still" (inside a stand-still rest), "miss" (just after a note Autoplay lets go by), "stomp" (a
 ## two-thumb stomp on its way), "stomped" (just after one lands) or "chord" (the most chords coming
-## down at once: two steps on one beat).
+## down at once: two steps on one beat) or "six" (the most sixteenths coming down).
 func _moment(screen: Node, what: String) -> void:
 	var c: Conductor = screen.get("conductor")
 	var s: Session = screen.get("session")
@@ -269,6 +270,19 @@ func _moment(screen: Node, what: String) -> void:
 				if k > most:
 					most = k
 					target = t0 - 0.35
+		"six":
+			# the most sixteenths (a quarter of a beat off) coming down at once, about a second away
+			var sixes: Array[float] = []
+			for n in s.notes:
+				var fr := fposmod(n.beat, 0.5)
+				if n.kind == Note.Kind.STEP and not n.call and absf(fr - 0.25) < 0.02 and n.t > c.song_time() + 1.0:
+					sixes.append(n.t)
+			var most_six := -1
+			for t0 in sixes:
+				var k := sixes.filter(func(x: float) -> bool: return x >= t0 and x < t0 + 1.4).size()
+				if k > most_six:
+					most_six = k
+					target = t0 - 2.7   # the 120 frames of the walk there also run about 2 s of real time
 		"countin":
 			target = song_time_of(s, -2.35)
 		"ready":

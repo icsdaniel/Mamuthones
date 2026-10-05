@@ -117,7 +117,7 @@ Expert is the peak in every song and Hard sits at the difficult threshold, from 
 the story's curve only nudges them, and slow songs are capped by how many notes their music has.
 Medium is the challenge for the average player; Easy is for everyone. (Daniele, 2026-10-05.)
 
-Medium and Hard keep to beats and half-beats (triplet eighths in triplet sections); sixteenths are Expert's. On the road, blue notes sit on the beat, violet ones between beats, pink ones are the Issohadore's calls.
+Medium and Hard keep to beats and half-beats (triplet eighths in triplet sections); sixteenths are Expert's. On the road (pixel look), blue notes sit on the beat, violet ones on the half-beat (or a triplet), silver ones on a sixteenth (Expert only), pink ones are the Issohadore's calls.
 
 Charts follow simple readability rules: no more than one input per hand per eighth at Hard (per
 sixteenth at Expert; in triplet sections an eighth is a triplet eighth), bells at least half a beat apart, and nothing hidden under a hold's own lane.
