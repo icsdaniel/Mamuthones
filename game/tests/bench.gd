@@ -37,6 +37,12 @@ func _init() -> void:
 			start.to_beat = start.from_beat + 64.0
 		elif x.begins_with("style="):
 			profile.set_setting("art_style", x.substr(6))
+		elif x == "vpint":
+			root.content_scale_mode = Window.CONTENT_SCALE_MODE_VIEWPORT
+			root.content_scale_stretch = Window.CONTENT_SCALE_STRETCH_INTEGER
+			root.content_scale_size = Vector2i(540, 1080)
+		elif x == "vp":
+			root.content_scale_mode = Window.CONTENT_SCALE_MODE_VIEWPORT
 		elif x.begins_with("frames="):
 			_n = int(x.substr(7))
 	var app: Control = load("res://scenes/main.tscn").instantiate()

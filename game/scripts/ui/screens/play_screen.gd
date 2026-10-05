@@ -49,6 +49,8 @@ var lanes: LaneView
 var backdrop: StreetBackdrop     ## the street picture, the fire and the swaying portraits (songs)
 var words: JudgementWords
 var filter: PixelFilter           ## the pixel look's lens over the whole screen (art style "pixel")
+var world: SubViewportContainer   ## the pixel look: the street, lanes and HUD drawn at the base size
+var world_vp: SubViewport
 var pixel := false                ## the play screen is in the pixel look
 var cue: PiazzaCue
 var paused := false
@@ -113,6 +115,35 @@ func build() -> void:
 	# The Piazza keeps its plain black ground under the procession; songs play on the Fire Night.
 	pixel = str(Profile.get_setting("art_style")) == "pixel" and not session.piazza
 	StreetSkin.pixel = pixel
+	# The pixel look draws the street, the lanes and the HUD into their own picture at the game's base
+	# size (720 wide), where the lens turns them into pixel art, and shows that picture enlarged with
+	# hard pixel edges. A phone's screen has two to four times the pixels: drawing and filtering
+	# them all every frame made the pixel look lag, and its cells come out the same either way.
+	var host: Node = self
+	if pixel and not OS.has_environment("NO_WORLD"):
+		world = SubViewportContainer.new()
+		world.name = "World"
+		world.stretch = true
+		world.set_anchors_preset(Control.PRESET_FULL_RECT)
+		world.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
+		world_vp = SubViewport.new()
+		world_vp.name = "WorldView"
+		world_vp.disable_3d = true
+		world_vp.handle_input_locally = true
+		world_vp.canvas_item_default_texture_filter = Viewport.DEFAULT_CANVAS_ITEM_TEXTURE_FILTER_NEAREST
+		world.add_child(world_vp)
+		add_child(world)
+		host = world_vp
+	# a picture of its own does not inherit the app's theme: hand it on to what is drawn in it
+	var host_theme: Theme = null
+	if host != self:
+		var n: Node = self
+		while n != null and host_theme == null:
+			if n is Control and (n as Control).theme != null:
+				host_theme = (n as Control).theme
+			n = n.get_parent()
+		if host_theme == null:
+			host_theme = WoodcutTheme.build()
 	var bg: Control
 	if session.piazza:
 		bg = ColorRect.new()
@@ -126,7 +157,8 @@ func build() -> void:
 		bg = backdrop
 	bg.set_anchors_preset(Control.PRESET_FULL_RECT)
 	bg.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	add_child(bg)
+	bg.theme = host_theme
+	host.add_child(bg)
 	var safe := UIKit.safe_margins(self)
 	var col := VBoxContainer.new()
 	col.set_anchors_preset(Control.PRESET_FULL_RECT)
@@ -136,7 +168,8 @@ func build() -> void:
 	col.offset_right = -safe.z
 	col.add_theme_constant_override("separation", 0)
 	col.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	add_child(col)
+	col.theme = host_theme
+	host.add_child(col)
 
 	var hud_margin := MarginContainer.new()
 	hud_margin.add_theme_constant_override("margin_left", 24)
@@ -216,7 +249,7 @@ func build() -> void:
 	if pixel and not OS.has_environment("NO_LENS"):
 		filter = PixelFilter.new()
 		filter.name = "PixelFilter"
-		add_child(filter)
+		host.add_child(filter)
 
 	conductor = Conductor.new()
 	conductor.name = "Conductor"
