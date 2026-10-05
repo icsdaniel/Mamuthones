@@ -169,7 +169,7 @@ static func _lane(field: Rect2) -> float:
 
 ## A disc lying on the road centred at flat (cx, y), radius r lane widths, h thick. k: its glaze.
 ## Returns a Callable mapping (u, v) on its top (the unit circle) to the screen, for its pattern.
-static func disc(lv: LaneView, field: Rect2, cx: float, y: float, r: float, k: Array, alpha := 1.0, h := DISC_H, glow := 1.0) -> Callable:
+static func disc(lv: LaneView, field: Rect2, cx: float, y: float, r: float, k: Array, alpha := 1.0, h := DISC_H, glow := 1.0, sides := SIDES) -> Callable:
 	var lane := _lane(field)
 	var lw := lv.road_scale(y) * lane
 	var f := _frame3(lv, field, cx, y, r * lane, 2.0 * r * lw * FORE)
@@ -178,15 +178,15 @@ static func disc(lv: LaneView, field: Rect2, cx: float, y: float, r: float, k: A
 		return top
 	var verts: Array[Vector3] = []
 	for level in [0.0, h]:
-		for i in SIDES:
-			var an := TAU * (float(i) + 0.5) / SIDES
+		for i in sides:
+			var an := TAU * (float(i) + 0.5) / sides
 			verts.append(Vector3(cos(an), level, sin(an)))
 	var faces: Array = []
-	for i in SIDES:
-		faces.append([i, (i + 1) % SIDES, SIDES + (i + 1) % SIDES, SIDES + i])
+	for i in sides:
+		faces.append([i, (i + 1) % sides, sides + (i + 1) % sides, sides + i])
 	var cap: Array = []
-	for i in SIDES:
-		cap.append(SIDES + i)
+	for i in sides:
+		cap.append(sides + i)
 	faces.append(cap)
 	var c: Vector2 = f.call(Vector3.ZERO)
 	var rx := r * lw
@@ -228,7 +228,8 @@ static func _pintadera(lv: LaneView, top: Callable, lw: float, col: Color, alpha
 ## A tap: a pintadera in its lane at flat depth y. small: an off-beat step or a call.
 static func step(lv: LaneView, field: Rect2, cx: float, y: float, alpha: float, small := false) -> void:
 	var lw := lv.road_scale(y) * _lane(field)
-	var top := disc(lv, field, cx, y, OFF_R if small else DISC_R, K_STEP, alpha)
+	# the pixel look cuts the small ones hexagonal: at a few pixels across, size alone stops telling
+	var top := disc(lv, field, cx, y, (OFF_R * 1.08 if pixel else OFF_R) if small else DISC_R, K_STEP, alpha, DISC_H, 1.0, 6 if small and pixel else SIDES)
 	_pintadera(lv, top, lw * (OFF_R if small else DISC_R) / DISC_R, CREAM, 0.92 * alpha, 8 if small else 12)
 	_dot(lv, top, lw, K_STEP[2], alpha)
 
@@ -658,5 +659,5 @@ static func _hit_line(lv: LaneView, field: Rect2, rects: Array[Rect2], hl: float
 			ci_poly(lv, sil, Color(1.0, 0.97, 0.9, 0.7 * g))
 		var ring := sil.duplicate()
 		ring.append(sil[0])
-		lv.draw_polyline(ring, Color(OUTLINE, 0.9), 9.0, true)
-		lv.draw_polyline(ring, Color(CREAM, 0.75 + 0.25 * k), 3.5, true)
+		lv.draw_polyline(ring, Color(OUTLINE, 0.9), 12.0 if pixel else 9.0, true)
+		lv.draw_polyline(ring, Color(CREAM, 0.75 + 0.25 * k), 5.0 if pixel else 3.5, true)

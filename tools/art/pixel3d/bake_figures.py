@@ -125,6 +125,15 @@ def bake(name, parts, order, layers_fn, side=1, tone=(1.4, 1.0, 4)):
     for p in order:
         s = shrink_rgba(layers[p], size)
         opaque = s[..., 3] > 0
+        if p == "head" and name == "mamuthone":
+            # the black wooden mask: lift its carved planes so the face reads at this size
+            hs = s[..., :3].astype(np.float32)
+            lum = hs.mean(-1, keepdims=True)
+            hs = np.where(opaque[..., None], np.clip(lum + (hs - lum) * 0.6, 0, 255) * 1.0 + (lum - 30) * 0.9, hs)
+            s[..., :3] = np.clip(hs, 0, 255).astype(np.uint8)
+        if "bells" in p:
+            # the bronze stands out from the fleece: brighter and warmer than in the picture
+            s[..., :3] = np.clip(s[..., :3].astype(np.float32) * np.array([1.12, 1.06, 0.95]) + 4, 0, 255).astype(np.uint8)
         s[..., :3] = np.where(opaque[..., None], px.snap(s[..., :3]), 0)
         s = rim(s, side)
         small[p] = s
