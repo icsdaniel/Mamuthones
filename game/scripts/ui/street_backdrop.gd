@@ -34,7 +34,9 @@ const CLEAR_R := 0.53                ## lane widths from an outer lane's centre 
 const EDGE_PAD := 0.035
 ## The portrait frames' corners (picture px, the left one; the right mirrors it), from the play-screen
 ## reference.
+## Raised by FRAME_LIFT (Daniele, 2026-10-05) so more of the street and the notes' road shows.
 const FRAME := [Vector2(-12, 232), Vector2(226, 296), Vector2(272, 612), Vector2(-12, 748)]
+const FRAME_LIFT := Vector2(55.0, 55.0)   ## picture px the portraits' top and bottom edges are raised (as far as the HUD's words allow; the puppets keep their size)
 ## The figures' bob, from Daniele's three-pose sheets (2026-09-30). Each figure has three pictures,
 ## art/street/<figure>_bob_0/1/2.png: 0 the rest pose, 1 the drop on the beat, 2 halfway back up,
 ## all on one canvas size with the feet at the bottom centre (tools/art/street/cut_figures.py makes
@@ -523,9 +525,10 @@ func _make_frame(i: int) -> Node2D:
 
 func _frame_points(i: int) -> PackedVector2Array:
 	var pts := PackedVector2Array()
-	for p: Vector2 in FRAME:
+	for k in FRAME.size():
+		var p: Vector2 = FRAME[k]
 		var q := p if i == 0 else Vector2(IMG.x - p.x, p.y)
-		pts.append(to_local_pic(q))
+		pts.append(to_local_pic(q - Vector2(0.0, FRAME_LIFT.x if k < 2 else FRAME_LIFT.y)))
 	return pts
 
 
