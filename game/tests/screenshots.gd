@@ -118,6 +118,7 @@ func _shots() -> Array:
 		{"file": "play_early", "screen": "play", "args": {"song_id": fires_id, "difficulty": "hard", "bell_set": "light", "autoplay": true}, "setup": "moment:early", "wait": 0.08},
 		{"file": "play_late", "screen": "play", "args": {"song_id": fires_id, "difficulty": "hard", "bell_set": "light", "autoplay": true}, "setup": "moment:late", "wait": 0.08},
 		{"file": "play_still_kept", "screen": "play", "args": {"song_id": fires_id, "difficulty": "hard", "bell_set": "light", "autoplay": true}, "setup": "moment:stillkept", "wait": 0.1},
+		{"file": "play_locked", "screen": "play", "args": {"song_id": fires_id, "difficulty": "hard", "bell_set": "light", "autoplay": true}, "setup": "moment:locked", "wait": 0.05},
 		{"file": "play_wrong", "screen": "play", "args": {"song_id": fires_id, "difficulty": "hard", "bell_set": "light", "autoplay": true}, "setup": "moment:wrong", "wait": 0.05},
 		{"file": "play_stomp", "screen": "play", "args": {"song_id": "rope", "difficulty": "hard", "bell_set": "light", "autoplay": true}, "setup": "moment:stomp", "wait": 0.05},
 		{"file": "play_stomp_outer", "screen": "play", "args": {"song_id": "rope", "difficulty": "expert", "bell_set": "light", "autoplay": true}, "setup": "moment:stomp", "wait": 0.05},
@@ -260,6 +261,8 @@ func _moment(screen: Node, what: String) -> void:
 				if n.t >= from and n.kind == Note.Kind.STEP and _clear_of_rests(s, n):
 					target = n.t - _good_offset(s)
 					break
+		"locked":
+			target = s.notes[0].t + 6.0
 		"wrong":
 			for i in s.notes.size():
 				var n: Note = s.notes[i]
@@ -347,6 +350,14 @@ func _moment(screen: Node, what: String) -> void:
 			lanes.set_process(false)
 	if what == "showcase":
 		_showcase(screen, s, c.song_time())
+	if what == "locked":
+		# Mashing: three random taps lock the buttons; a press while locked rattles the middle lock.
+		var lanes: Control = screen.get("lanes")
+		for k in 3:
+			s.call("_bad_tap", c.song_time())
+		for k in 8:
+			await process_frame
+		lanes.call("locked_tap", 1)
 	if what == "wrong":
 		# The player's thumb lands on the left button while the right lane's note is due.
 		s.tap(0, c.song_time(), 7)

@@ -12,6 +12,28 @@ const CUE_TIME := 0.22          ## a button is "cued" when its next note is this
 const MARK_TIME := 0.4          ## wrong-lane and stomp marks
 const TICK_TIME := 1.6          ## timing ticks fade over this long
 const STEP_TICK_TIME := 0.3     ## the early/late tick on a step hit fades over this long
+const LOCK_IN := 0.12           ## a padlock drops onto each ring this fast when mashing locks the buttons
+const LOCK_OUT := 0.25          ## and springs open and fades this long when the lock ends
+const LOCK_SHAKE := 0.2         ## a press while locked rattles that ring's padlock this long
+## The padlock, in art px: the shackle over the body. o outline, s/S steel, b/h/d brass (face,
+## light, shade), k keyhole.
+const LOCK_SHACKLE: Array[String] = [
+	"...ooooo...",
+	"..osSSSso..",
+	".oso...oso.",
+	".oso...oso.",
+	".oso...oso.",
+]
+const LOCK_BODY: Array[String] = [
+	"ooooooooooo",
+	"ohhhhhhhhho",
+	"ohbbbbbbbdo",
+	"ohbbkkkbbdo",
+	"ohbbkkkbbdo",
+	"ohbbbkbbbdo",
+	"odddddddddo",
+	"ooooooooooo",
+]
 
 var session: Session
 var song_time := 0.0
@@ -29,6 +51,9 @@ var _first := 0                  ## first note that may still be drawn
 var _clock := 0.0                ## real seconds, for burst ages while paused
 var _offsets: Array = []         ## [offset s, time added, lane] of recent hits, for the timing ticks
 var _step_ticks: Array = []      ## [lane, side, time added]: the early/late tick of a step hit
+var _lock_on := false            ## the session's buttons are locked (mashing)
+var _lock_t0 := -9.0             ## _clock when the lock came on, or when it ended (for the fade)
+var _lock_tap: Array[float] = [-9.0, -9.0, -9.0]   ## _clock of the last press on each locked ring
 var _marks: Array = []           ## [kind, lane, time]: "wrong" X on a pressed button, "faint" ring on
                                  ## the note it was meant for, "stomp" / "stomp1" on a stomped button
 
@@ -150,6 +175,17 @@ func stomp_hit(lane: int, _judgement: String, both: bool) -> void:
 	queue_redraw()
 
 
+## A press while the buttons are locked: that ring's padlock rattles.
+func locked_tap(lane: int) -> void:
+	_lock_tap[clampi(lane, 0, 2)] = _clock
+	queue_redraw()
+
+
+## Whether padlocks are on the rings right now (fully or fading out), for tests.
+func locks_shown() -> bool:
+	return _lock_on or _clock - _lock_t0 < LOCK_OUT
+
+
 ## Marks drawn right now (kind:lane), for tests.
 func marks_shown() -> Array[String]:
 	var out: Array[String] = []
@@ -161,6 +197,10 @@ func marks_shown() -> Array[String]:
 
 func _process(delta: float) -> void:
 	_clock += delta
+	var locked := session != null and session.is_locked(song_time)
+	if locked != _lock_on:
+		_lock_on = locked
+		_lock_t0 = _clock
 	if session != null:
 		while _first < session.notes.size() and _gone(session.notes[_first], song_time):
 			_first += 1
@@ -232,6 +272,7 @@ func _draw() -> void:
 	_draw_hit_line()
 	if session != null:
 		_draw_upright()
+		_draw_locks()
 	_draw_chevrons()
 	if show_buttons:
 		_draw_buttons()
@@ -1166,6 +1207,7 @@ func _draw_street() -> void:
 		for r in rests:
 			_rest_tag(field, r[0], r[1], taken, hl)
 		_draw_street_ticks(field, hl)
+		_draw_locks()
 	for b in _bursts:
 		var q: String = b[1]
 		var side: String = b[3] if q != "early" and q != "late" else q
@@ -1521,3 +1563,69 @@ func _draw_street_marks(r: Rect2, w: float) -> void:
 			"faint":
 				var p := project(lane_center(lane))
 				draw_arc(p, 46.0 * clampf(road_scale(LaneSkin.hit_line_y(field_rect())), 0.5, 1.5), 0.0, TAU, 24, Color(BTN_BONE, 0.7), 4.0)
+
+
+# ---------------------------------------------------------------- input lock
+
+
+## While mashing has locked the step buttons: each ring at the hit line goes dark red, a brass padlock
+## drops onto it, and a red rim around the ring drains as the lock runs out. When the lock ends the
+## shackles spring open and the locks fade. Drawn in whole art px so it sits in the pixel look.
+func _draw_locks() -> void:
+	var age := _clock - _lock_t0
+	if not _lock_on and age >= LOCK_OUT:
+		return
+	var field := field_rect()
+	var hl := LaneSkin.hit_line_y(field)
+	var sc := road_scale(hl)
+	var rx: float = StreetSkin.DISC_R * sc * StreetSkin._lane(field) if street != null else 46.0 * clampf(sc, 0.5, 1.5)
+	var ry := rx * (StreetSkin.FORE if street != null else 0.45)
+	var fade_k := 1.0 if _lock_on else 1.0 - age / LOCK_OUT
+	var drop := 0.0 if not _lock_on else maxf(0.0, 1.0 - age / LOCK_IN)
+	var left := session.lock_left(song_time) / Session.LOCK_TIME if session != null and _lock_on else 0.0
+	var p := PxArt.PX
+	var k := maxf(1.0, roundf(rx * 0.75 / (LOCK_BODY[0].length() * p)))   # art px per lock px
+	for lane in 3:
+		var c := project(lane_center(lane))
+		# the ring goes dark red: nothing can land in it
+		var ell := PackedVector2Array()
+		for i in 24:
+			var a := TAU * i / 24.0
+			ell.append(c + Vector2(cos(a) * rx, sin(a) * ry))
+		draw_colored_polygon(ell, Color(PixelPalette.RED[1], 0.7 * fade_k))
+		# the time left, a red rim draining clockwise from the top
+		if left > 0.0:
+			var arc := PackedVector2Array()
+			var steps := maxi(2, int(ceil(32.0 * left)))
+			for i in steps + 1:
+				var a := -PI * 0.5 + TAU * left * i / steps
+				arc.append(c + Vector2(cos(a) * (rx + p), sin(a) * (ry + p)))
+			draw_polyline(arc, PixelPalette.K[0], p * 2.6)
+			draw_polyline(arc, PixelPalette.RED[4], p * 1.4)
+		var shake := 0.0
+		var ta := _clock - _lock_tap[lane]
+		if _lock_on and ta < LOCK_SHAKE:
+			shake = (1.0 if int(ta / 0.04) % 2 == 0 else -1.0) * k
+		var w := LOCK_BODY[0].length() * k * p
+		var h := (LOCK_SHACKLE.size() + LOCK_BODY.size()) * k * p
+		var o := PxArt.snap2(c - Vector2(w * 0.5, h * 0.62) + Vector2(shake * p, -drop * 6.0 * k * p))
+		var lift := 0.0 if _lock_on else roundf(minf(1.0, age / (LOCK_OUT * 0.4)) * 2.0) * k
+		_lock_bitmap(o + Vector2(0.0, -lift * p), LOCK_SHACKLE, k, fade_k)
+		_lock_bitmap(o + Vector2(0.0, LOCK_SHACKLE.size() * k * p), LOCK_BODY, k, fade_k)
+
+
+func _lock_bitmap(o: Vector2, rows: Array[String], k: float, alpha: float) -> void:
+	for y in rows.size():
+		var row: String = rows[y]
+		for x in row.length():
+			var col: Color
+			match row[x]:
+				"o": col = PixelPalette.K[0]
+				"s": col = PixelPalette.BONE[2]
+				"S": col = PixelPalette.BONE[4]
+				"b": col = PixelPalette.GOLD[3]
+				"h": col = PixelPalette.GOLD[5]
+				"d": col = PixelPalette.GOLD[1]
+				"k": col = PixelPalette.K[1]
+				_: continue
+			_px(o, x * k, y * k, k, k, Color(col, alpha))

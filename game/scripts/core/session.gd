@@ -32,6 +32,12 @@ extends RefCounted
 ## once; the rules keep judging, the play screen ends the run. Off (health_on false) in the Piazza,
 ## lessons and practice (from_beat/to_beat) and with options.health = false (autoplay demos).
 ##
+## Stray taps: a step button pressed with no note of any lane due (outside every window) and none of
+## its own lane within WRONG_REACH breaks the combo like a wrong step (combo and streak to 0, unison down STRAY_DROP), with no health cost. Taps
+## before the first note's window, after the last note, in the Piazza, on slam's bell buttons and a
+## late second thumb just after a stomp stay free. Mashing: LOCK_TAPS stray or wrong taps within
+## LOCK_SPAN lock the step buttons for LOCK_TIME; taps while locked judge nothing (judgement "locked").
+##
 ## Matching uses note-lock: an input goes to the EARLIEST open note whose window contains it, so a
 ## late player in a fast stream reads as late instead of drifting onto the next note.
 
@@ -47,6 +53,10 @@ signal still_kept(note: Note, points: float)
 ## A stomp was judged: both = true when two thumbs landed within STOMP_GAP, false for one thumb.
 ## judged fires for it too.
 signal stomp_landed(note: Note, judgement: String, offset: float, both: bool)
+## A tap hit nothing at all (see Stray taps above); the combo is broken.
+signal stray(lane: int)
+## Fast random tapping locked the step buttons until song time `until`.
+signal input_locked(until: float)
 ## Health went up or down by delta (health is the new value).
 signal health_changed(health: int, delta: int)
 ## Health ran out (fires once).
@@ -82,6 +92,11 @@ const WRONG_DROP := 1        ## a wrong step
 const WRONG_REACH := 2.0     ## the pressed lane's own note within 2 × Early/Late keeps a tap stray
 const SILENCE_DROP := 1
 const LET_GO_DROP := 1
+const STRAY_DROP := 1        ## a stray tap (no note due anywhere)
+const STOMP_FOLLOW := 0.200  ## a tap this soon after a stomp on its lane is a late thumb, not stray
+const LOCK_TAPS := 3         ## this many stray or wrong taps...
+const LOCK_SPAN := 0.75      ## ...within this many seconds...
+const LOCK_TIME := 0.6       ## ...lock the step buttons this long
 const SLAM_GAP := 0.080      ## Left and Right pressed within 80 ms of each other = one slam bell
 const MAX_HEALTH := 10
 const HEAL := 2              ## health a healing step restores (at Ok or better)
@@ -135,6 +150,11 @@ var _end_time := 0.0
 var _max_window := 0.0
 var _top_since := NAN
 var _top_time := 0.0
+var _locked_until := -INF
+var _bad_taps: Array[float] = []   # times of recent stray and wrong taps, for the mashing lock
+var _stomp_at: Array[float] = [-INF, -INF, -INF]   # last stomp judged per lane
+var _taps_from := NAN   # the first and last moment a lane note is due (NAN: no lane notes)
+var _taps_to := NAN
 
 
 func _init(p_song: SongData, p_difficulty: String, p_bell_set: String = "light", p_options: Dictionary = {}) -> void:
@@ -178,7 +198,7 @@ func _init(p_song: SongData, p_difficulty: String, p_bell_set: String = "light",
 		"perfect": 0, "good": 0, "early": 0, "late": 0, "miss": 0, "wrong": 0,
 		"held": 0, "let_go": 0, "silence": 0, "still_kept": 0, "early_hits": 0, "late_hits": 0,
 		"rests": 0, "holds": 0, "notes": 0, "total": 0, "max_unison": 0, "one_thumb": 0,
-		"unison_peak": 1.0, "time_at_top": 0.0,
+		"unison_peak": 1.0, "time_at_top": 0.0, "stray": 0, "locks": 0,
 	}
 	var last_end := 0.0
 	for n in notes:
@@ -189,6 +209,9 @@ func _init(p_song: SongData, p_difficulty: String, p_bell_set: String = "light",
 			stats.total += 1
 		if n.kind == Note.Kind.HOLD:
 			stats.holds += 1
+		if n.uses_lane():
+			_taps_from = n.t if is_nan(_taps_from) else minf(_taps_from, n.t)
+			_taps_to = n.end_t if is_nan(_taps_to) else maxf(_taps_to, n.end_t)
 	if is_finite(to_beat) and not notes.is_empty():
 		_end_time = maxf(last_end, song.time_of(to_beat, remix)) + 1.0
 	elif is_finite(to_beat) or is_finite(from_beat):
@@ -383,6 +406,20 @@ func window(kind: String) -> Vector3:
 	return win_touch
 
 
+## Whether the step buttons are locked at song time t (fast random tapping).
+func is_locked(t: float) -> bool:
+	return t < _locked_until
+
+
+## Seconds the buttons stay locked from t (0 when free), and the song time the lock ends.
+func lock_left(t: float) -> float:
+	return maxf(0.0, _locked_until - t)
+
+
+func locked_until() -> float:
+	return _locked_until
+
+
 ## The next bell (or full ring) still to play at or after t - its window, or null. For the big
 ## Piazza cue and the up/down arrow.
 func upcoming_bell(t: float) -> Note:
@@ -406,6 +443,9 @@ func tap(lane: int, t: float, touch_id: int = 0) -> Dictionary:
 	input_log.append([t, "tap", lane, touch_id])
 	var res := {"judgement": "", "note": null, "ring": {}, "offset": 0.0, "side": "", "stomp": ""}
 	_settle_stomps(t)
+	if is_locked(t):
+		res.judgement = "locked"
+		return res
 	# A touch id still holding a note means its release was lost: that hold was let go.
 	if _holds.has(touch_id):
 		var old: Note = _holds[touch_id]
@@ -453,12 +493,20 @@ func tap(lane: int, t: float, touch_id: int = 0) -> Dictionary:
 	elif not piazza and not (slam and lane != 1):
 		# A wrong step only when another lane's note is due AND the pressed lane has no note of its
 		# own coming soon: otherwise the tap is stray and free, and the player's note still counts.
+		# A tap with neither breaks the combo as a stray (a press a little early for the lane's own
+		# coming note is neither).
 		var other := _find_other_lane_note(lane, t)
-		if other != null and _own_note_near(lane, t) == null:
+		if _own_note_near(lane, t) != null:
+			pass
+		elif other != null:
 			_wrong(other, t, t - other.t, WRONG_DROP)
 			wrong_step.emit(lane, other, t - other.t)
 			res.judgement = "wrong"
 			res.note = other
+			_bad_tap(t)
+		elif _stray_counts(lane, t):
+			_stray(lane, t)
+			res.judgement = "stray"
 	if slam and (lane == 0 or lane == 2):
 		res.ring = _slam_bell(lane, t, touch_id, n == null)
 	if slam:
@@ -728,6 +776,7 @@ func _judge_stomp(n: Note) -> void:
 		elif g == "good":
 			g = "early" if off < 0.0 else "late"
 		_hit(n, n.step_at, g, off, POINTS)
+	_stomp_at[clampi(n.lane, 0, 2)] = n.step_at
 	stomp_landed.emit(n, g, off, n.thumbs >= 2)
 
 
@@ -764,6 +813,37 @@ func _wrong(n: Note, t: float, off: float, drop: int) -> void:
 	_set_unison(unison_level - drop, t)
 	score_timeline.append(Vector2(t, score))
 	judged.emit(n, "wrong", off)
+
+
+# Whether a tap that hit no note and no other lane's note breaks the combo (see Stray taps).
+func _stray_counts(lane: int, t: float) -> bool:
+	if piazza or (slam and lane != 1):
+		return false
+	if is_nan(_taps_from) or t < _taps_from - win_touch.z or t > _taps_to + win_touch.z:
+		return false
+	return t - _stomp_at[clampi(lane, 0, 2)] > STOMP_FOLLOW
+
+
+func _stray(lane: int, t: float) -> void:
+	stats.stray += 1
+	combo = 0
+	unison_streak = 0
+	_set_unison(unison_level - STRAY_DROP, t)
+	score_timeline.append(Vector2(t, score))
+	stray.emit(lane)
+	_bad_tap(t)
+
+
+# A stray or wrong tap: LOCK_TAPS of them within LOCK_SPAN lock the buttons for LOCK_TIME.
+func _bad_tap(t: float) -> void:
+	_bad_taps.append(t)
+	while not _bad_taps.is_empty() and t - _bad_taps[0] > LOCK_SPAN:
+		_bad_taps.pop_front()
+	if _bad_taps.size() >= LOCK_TAPS:
+		_bad_taps.clear()
+		_locked_until = t + LOCK_TIME
+		stats.locks += 1
+		input_locked.emit(_locked_until)
 
 
 func _end_hold(n: Note, t: float, kept: bool) -> void:

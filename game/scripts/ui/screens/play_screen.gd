@@ -289,6 +289,7 @@ func build() -> void:
 	session.hold_started.connect(func(lane: int) -> void: Sound.hold_start(lane))
 	session.hold_ended.connect(func(lane: int, _kept: bool) -> void: Sound.hold_stop(lane))
 	session.wrong_step.connect(_on_wrong_step)
+	session.stray.connect(_on_stray)
 	session.stomp_landed.connect(_on_stomp)
 	session.still_kept.connect(_on_still_kept)
 	session.failed.connect(_on_failed)
@@ -553,8 +554,18 @@ func _count_in(t: float) -> void:
 
 
 func _on_stepped(lane: int) -> void:
-	# A stomp's second thumb already sounded the stomp (_on_stomp); every other touch knocks its step.
-	if not _stomp_sounded:
+	var j := str(router.last_tap.get("judgement", "")) if router != null else ""
+	if j == "locked":
+		# Mashing locked the buttons: the press does nothing; the lock on the rings shakes.
+		lanes.locked_tap(lane)
+		_tap_hit = false
+		_tap_quality = ""
+		return
+	# A stomp's second thumb already sounded the stomp (_on_stomp); a wrong or stray tap sounds the
+	# miss; every other touch knocks its step.
+	if j == "wrong" or j == "stray":
+		Sound.miss()
+	elif not _stomp_sounded:
 		play_step(lane, _tap_quality if _tap_hit else "")
 	lanes.press(lane)
 	_stomp_sounded = false
@@ -644,6 +655,8 @@ func _on_judged(note: Note, judgement: String, offset: float) -> void:
 		UIKit.vibrate(30 if note != null and note.is_bell() else 14)
 	elif judgement in ["miss", "silence"]:
 		scene.jolt("miss")
+	if judgement == "miss" or judgement == "let_go":
+		Sound.miss()
 
 
 ## A stomp judged (both thumbs, or one when the second never came): its sound and the prints on the
@@ -704,6 +717,13 @@ static func hit_side(judgement: String, offset: float) -> String:
 func _on_wrong_step(lane: int, note: Note, _offset: float) -> void:
 	lanes.mark_wrong(lane, note.lane if note != null else -1)
 	words.show_word(tr("judge_wrong"), "", lanes.word_spot(lane), "wrong")
+
+
+## A tap with nothing to hit: the combo breaks (Session), a red mark on the pressed button, the row
+## stumbles. Its miss sound is played by _on_stepped.
+func _on_stray(lane: int) -> void:
+	lanes.mark_wrong(lane)
+	scene.jolt("miss")
 
 
 ## A stand-still kept to its end: the row settles as one, and the moment is named over the procession.
