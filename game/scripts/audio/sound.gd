@@ -235,16 +235,20 @@ func bell(set_id: String, up: bool, quality: String, strength := 0.5) -> void:
 	_update_jangle(load_id, q, quality)
 
 
-## A miss: a note gone by unplayed, a step on the wrong lane, or a tap with nothing to hit. A bell
-## caught dead in the hand (dull, clashing, sagging in pitch) over a thud, and the music steps back
-## for a moment as for a ring. Misses within MISS_GAP of each other sound once.
+## A miss: a note gone by unplayed, a step on the wrong lane, or a tap with nothing to hit. A cracked
+## bell's rasping buzz groaning down a fourth over a dry clack, on the Bells bus (as loud as a ring,
+## not 7 dB under like the steps); the music steps back for twice a ring's dip and the load's jangle
+## is choked. Misses within MISS_GAP of each other sound once.
 func miss() -> void:
 	var now := Time.get_ticks_msec() * 0.001
 	if _last_miss >= 0.0 and now - _last_miss < MISS_GAP:
 		return
 	_last_miss = now
-	_play(_miss_pool, 5, _pick(_misses, 303), randf_range(-1.5, 0.0), randf_range(0.97, 1.02))
-	_duck_hold = DUCK_HOLD
+	_play(_miss_pool, 5, _pick(_misses, 303), randf_range(-1.0, 0.0), randf_range(0.98, 1.02))
+	_duck_hold = DUCK_HOLD * 2.0
+	_streak = 0
+	if _jangle_player.playing:
+		_jangle_choking = true
 
 
 ## Unison level 0..5 (Session.unison_level): how much of the row rings with your bells.
@@ -687,7 +691,7 @@ func _make_players() -> void:
 	_fill(_foot_pool, 4, "Sfx")
 	_fill(_tone_pool, 4, "Sfx")
 	_fill(_sfx_pool, 6, "Sfx")
-	_fill(_miss_pool, 3, "Sfx")
+	_fill(_miss_pool, 3, "Bells")
 	_fill(_hold_players, LANES, "Sfx")
 	_fill(_amb_players, AMBIENCES.size(), "Ambience")
 	for i in AMBIENCES.size():

@@ -292,29 +292,32 @@ def wind_loop(seconds=52.0, xf=2.0) -> np.ndarray:
 # ----------------------------------------------------------------------------- miss
 
 def miss(take: int) -> np.ndarray:
-    """A missed note: a bell caught dead in the hand. Two clashing iron partials (a tritone
-    apart) sag in pitch and are choked within ~0.15 s, over a low thud and a dry scuff, so
-    it reads at once as "wrong" and never as a ring."""
-    rng = np.random.default_rng([211, take])
-    dur = 0.32
+    """A missed note, made to be unmistakable on a phone speaker: a cracked bell's buzz (two
+    saturated tones a tritone apart, 330 and 466 Hz) that slides down a fourth like a groan,
+    opened by a dry wooden clack and a short metal rattle. All of it sits at 0.5-4 kHz, where a
+    phone plays loud, and nothing in it is tuned to the song, so it never reads as a hit."""
+    rng = np.random.default_rng([223, take])
+    dur = 0.34
     n = int(dur * SR)
     t = np.arange(n) / SR
-    f0 = 233.0 * (1 + 0.03 * (take - 1))
-    sag = 1 - 0.22 * (1 - np.exp(-t / 0.07))          # the pitch falls away: deflated
-    out = np.zeros(n)
-    for r, a, d in ((1.0, 1.0, 0.07), (1.414, 0.8, 0.05), (2.76, 0.35, 0.025), (4.1, 0.2, 0.012)):
-        ph = 2 * np.pi * np.cumsum(f0 * r * rng.uniform(0.995, 1.005) * sag) / SR
-        out += a * np.sin(ph) * np.exp(-t / d)
-    # a buzz on the clash, like a cracked bell rattling against the hand
-    out = np.tanh(out * 1.8) * 0.8
-    out = lowpass(out, 2600, 2)
-    thud = body_thump(rng, 0.9, 70.0, 0.22)
-    out[: len(thud)] += thud
-    m = int(0.06 * SR)
-    scuff = bandpass(rng.standard_normal(m), 300, 1800, 2) * np.exp(-np.arange(m) / (0.012 * SR)) * 0.35
-    out[:m] += scuff
-    out *= np.clip(t / 0.0008, 0, 1)
-    return fade(out, 0.0004, 0.06)
+    f0 = 330.0 * (1 + 0.025 * (take - 1))
+    slide = 2 ** (-5 / 12 * np.clip(t / 0.22, 0, 1) ** 0.8)   # down a fourth
+    env = np.exp(-t / 0.11) * np.clip(t / 0.004, 0, 1)
+    buzz = np.zeros(n)
+    for r, a in ((1.0, 1.0), (1.414, 0.85)):
+        ph = 2 * np.pi * np.cumsum(f0 * r * slide) / SR
+        # a square-ish wave with a little wobble: a reed-like, rasping buzz
+        buzz += a * np.tanh(4.0 * np.sin(ph + 0.3 * np.sin(2 * np.pi * 31 * t)))
+    buzz = bandpass(buzz * env, 280, 4200, 2)
+    buzz = np.tanh(buzz * 1.6)
+    clack = wood_knock(rng, 1250, 1.0, 0.12, 0.2)
+    m = int(0.09 * SR)
+    noise = rng.standard_normal(m) * np.exp(-np.arange(m) / (0.018 * SR))
+    rattle = resonator(noise, 2150, 12) + 0.7 * resonator(noise, 3350, 14)
+    out = buzz * 0.9
+    out[: len(clack)] += clack * 0.7
+    out[:m] += rattle * 0.25
+    return fade(out, 0.0004, 0.05)
 
 
 # ----------------------------------------------------------------------------- main
@@ -380,7 +383,7 @@ def write_misses() -> None:
     misses = [miss(k) for k in range(3)]
     pk = max(np.max(np.abs(x)) for x in misses)
     for k, x in enumerate(misses):
-        write_wav(f"fx/miss_{k + 1}.wav", x * db(-3) / pk)
+        write_wav(f"fx/miss_{k + 1}.wav", x * db(-1.5) / pk)
 
 
 if __name__ == "__main__":
