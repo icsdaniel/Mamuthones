@@ -457,6 +457,9 @@ func _make_frame(i: int) -> Node2D:
 	panel.clip_children = CanvasItem.CLIP_CHILDREN_AND_DRAW
 	panel.color = Color.WHITE
 	panel.vertex_colors = PackedColorArray([Color("#1a0f10"), Color("#1a0f10"), Color("#3a1a0e"), Color("#3a1a0e")])
+	if pixel:
+		# warmer firelight behind the pixel figures, so the Mamuthone's dark fleece stands out of it
+		panel.vertex_colors = PackedColorArray([Color("#2a1a1c"), Color("#2a1a1c"), Color("#6a3416"), Color("#6a3416")])
 	root.add_child(panel)
 	if pixel:
 		var pup := PixelFigure.new("issohadore" if i == 0 else "mamuthone")
