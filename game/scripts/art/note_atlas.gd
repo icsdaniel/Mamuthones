@@ -22,6 +22,7 @@ var _rows: Array[Rect2] = []          ## each row's cell (sheet pixels): its siz
 var _key := Vector4.ZERO              ## the layout the sheet was painted for
 var _ready_frame := -1
 var _n := 0                           ## rows
+var _copied := false                  ## the painted sheet has been copied (or tried)
 var _tex: Texture2D                   ## the sheet: the painting viewport's, then a kept copy
 
 ## The last sheet painted, kept for the next song with the same layout (painting takes a moment).
@@ -65,8 +66,10 @@ func ready_for(lv: LaneView) -> bool:
 func is_ready() -> bool:
 	if _ready_frame < 0 or Engine.get_process_frames() <= _ready_frame:
 		return false
-	if _tex == _vp.get_texture():
-		# keep a copy, so the next song starts without painting it again
+	if _tex == _vp.get_texture() and not _copied:
+		# keep a copy, so the next song starts without painting it again (tried once: a renderer
+		# that cannot read it back, like the headless one, keeps the viewport's)
+		_copied = true
 		var img := _tex.get_image()
 		if img != null and not img.is_empty():
 			_tex = ImageTexture.create_from_image(img)
@@ -110,6 +113,7 @@ func _layout(lv: LaneView) -> void:
 	_painter.queue_redraw()
 	_vp.render_target_update_mode = SubViewport.UPDATE_ONCE
 	_tex = _vp.get_texture()
+	_copied = false
 	_ready_frame = Engine.get_process_frames() + 1
 
 

@@ -7,6 +7,9 @@ var _t0 := 0
 var _last := 0
 var _last_song := NAN
 var _conductor: Node
+var _gap_max := 0.0
+var _gap_sum := 0.0
+var _gap_n := 0
 
 
 func _init() -> void:
@@ -35,6 +38,14 @@ func _tick() -> void:
 	var st := NAN
 	if _conductor != null and _conductor.has_method("song_time"):
 		st = _conductor.call("song_time")
+	# how far the time the notes are drawn at strays from the song's clock (PlayScreen._visual_time)
+	var play := root.find_child("Play", true, false)
+	var lv := root.find_child("Lanes", true, false)
+	if play != null and lv != null and not is_nan(st) and st > 5.0:
+		var g := absf(float(lv.get("song_time")) - float(play.get("_song_t"))) * 1000.0
+		_gap_max = maxf(_gap_max, g)
+		_gap_sum += g
+		_gap_n += 1
 	var dt := (now - _last) / 1000.0
 	var ds := (st - _last_song) * 1000.0 if not is_nan(_last_song) else 0.0
 	if dt > 25.0 or absf(ds - dt) > 20.0:
@@ -42,5 +53,5 @@ func _tick() -> void:
 	_last = now
 	_last_song = st
 	if now - _t0 > 14_000_000:
-		print("END")
+		print("END shown time vs song clock: mean %.2f ms, worst %.2f ms" % [_gap_sum / maxf(_gap_n, 1), _gap_max])
 		quit()

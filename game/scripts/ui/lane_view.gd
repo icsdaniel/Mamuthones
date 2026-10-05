@@ -221,6 +221,7 @@ static var draw_count := 0
 
 func _draw() -> void:
 	if street != null:
+		_street_map(true)
 		var t0 := Time.get_ticks_usec()
 		_draw_street()
 		draw_usec += Time.get_ticks_usec() - t0
@@ -522,7 +523,12 @@ func _fit_road() -> void:
 ## the near width.
 func road_scale(flat_y: float) -> float:
 	if street != null:
-		return street.lane_px(flat_y) * _street_scale() * 3.0 / maxf(field_rect().size.x, 1.0)
+		_street_map()
+		var c := _sm
+		var y := StreetBackdrop.VANISH_Y + 1.0 / maxf(c[0] + (c[1] - c[0]) * flat_y / c[2], 0.00005)
+		var r1: Vector2 = StreetBackdrop.RAILS[1]
+		var r2: Vector2 = StreetBackdrop.RAILS[2]
+		return (r2.x - r1.x + (r2.y - r1.y) * y) * c[5] * _sm_scale * 3.0 / c[3]
 	if not _road_on():
 		return 1.0
 	var v := flat_y / maxf(field_rect().size.y, 1.0)
@@ -531,9 +537,19 @@ func road_scale(flat_y: float) -> float:
 
 ## Where a point of the flat field shows on screen (this control's coordinates).
 func project(p: Vector2) -> Vector2:
-	var f := field_rect()
 	if street != null:
-		return _from_street(street.flat_to_local(p))
+		# street.flat_to_local(p) through _from_street(), from numbers kept for the frame
+		_street_map()
+		var c := _sm
+		var y := StreetBackdrop.VANISH_Y + 1.0 / maxf(c[0] + (c[1] - c[0]) * p.y / c[2], 0.00005)
+		var u := p.x / c[3] * 3.0
+		var i := clampi(int(floorf(u)), 0, 2)
+		var ra: Vector2 = StreetBackdrop.RAILS[i]
+		var rb: Vector2 = StreetBackdrop.RAILS[i + 1]
+		var x := lerpf(ra.x + ra.y * y, rb.x + rb.y * y, u - float(i))
+		var ys := y if y <= StreetBackdrop.STRETCH_FROM else StreetBackdrop.STRETCH_FROM + (y - StreetBackdrop.STRETCH_FROM) * c[6]
+		return _sm_xf * Vector2(c[4] + x * c[5], ys * c[5])
+	var f := field_rect()
 	if not _road_on():
 		return p
 	var w := road_scale(p.y)
@@ -604,6 +620,8 @@ class _Layer extends Control:
 		set_anchors_preset(Control.PRESET_FULL_RECT)
 
 	func _draw() -> void:
+		if view.street != null:
+			view._street_map(true)
 		view.call(method, self)
 
 
@@ -1065,6 +1083,31 @@ func _cued(lane: int) -> bool:
 # ------------------------------------------------------------------ over the low-poly street
 
 ## A point in the street's coordinates, in this control's.
+## The street's mapping, kept for a frame: project() and road_scale() run hundreds of times a frame
+## (every corner of every note) and working it out from the nodes each time was most of their cost.
+## Worked out again on the first call of each frame and at the first drawing of each frame, after
+## everything has moved (the screen's shake).
+var _sm := PackedFloat32Array()
+var _sm_xf := Transform2D.IDENTITY     ## the street's coordinates to this control's
+var _sm_scale := 1.0
+var _sm_frame := -1
+var _sm_drawn := -1
+
+
+func _street_map(drawing := false) -> void:
+	var f := Engine.get_process_frames()
+	if f == _sm_frame and (not drawing or f == _sm_drawn):
+		return
+	_sm_frame = f
+	if drawing:
+		_sm_drawn = f
+	_sm = street.flat_consts()
+	_sm_xf = Transform2D.IDENTITY
+	if is_inside_tree() and street.is_inside_tree():
+		_sm_xf = get_global_transform().affine_inverse() * street.get_global_transform()
+	_sm_scale = _sm_xf.get_scale().x
+
+
 func _from_street(v: Vector2) -> Vector2:
 	if not is_inside_tree() or not street.is_inside_tree():
 		return v

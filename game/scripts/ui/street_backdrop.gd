@@ -231,6 +231,19 @@ func _pic_y(fy: float) -> float:
 	return VANISH_Y + 1.0 / maxf(inv, 0.00005)
 
 
+## The numbers flat_to_local() works from, for LaneView, which maps many points a frame and keeps
+## them for the frame: [a, b, the hit line's flat depth, the field's width, pic_off, pic_scale,
+## stretch] (a and b: 1 / (row - horizon) at the road's far end and at the hit line).
+func flat_consts() -> PackedFloat32Array:
+	var fr := lanes.field_rect()
+	_solve()
+	var yh := _hit_line_local() / pic_scale
+	if yh > STRETCH_FROM:
+		yh = STRETCH_FROM + (yh - STRETCH_FROM) / stretch
+	return PackedFloat32Array([1.0 / (FAR_Y - VANISH_Y), 1.0 / (yh - VANISH_Y), maxf(LaneSkin.hit_line_y(fr), 1.0),
+		maxf(fr.size.x, 1.0), pic_off, pic_scale, stretch])
+
+
 ## Where a point of LaneView's flat field lies on screen (this control's coordinates): across the
 ## lanes between the painted lines, down the road in perspective.
 func flat_to_local(p: Vector2) -> Vector2:

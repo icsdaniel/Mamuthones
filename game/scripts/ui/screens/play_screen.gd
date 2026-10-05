@@ -28,6 +28,8 @@ const BANNER_SHARE := 0.4         ## the count-in and the stand-still moment use
 const FAIL_MENU_DELAY := 0.5      ## seconds from running out of health to the fail menu
 const LEAD_MIN := 4.5             ## a song starts at least this many seconds (and two bars) before its first note
 const SETTLE_MAX := 3.0           ## at most this many seconds of first frames before the song starts
+const VIS_SNAP := 0.1             ## seconds the shown time may be off the song's clock before it jumps to it
+const VIS_PULL := 0.1             ## share of the gap to the song's clock the shown time closes each frame
 const INTRO_FADE := 0.4           ## seconds the music fades in when it starts inside its intro
 const END_FADE := 1.2             ## seconds the music fades out after the last note before the results
 const FIELD_MAX_W := 900.0        ## lanes and buttons stay thumb-sized on a tablet
@@ -37,6 +39,8 @@ const JUDGE_WORDS := {
 	"silence": "judge_silence",
 }
 
+var _vis_t := NAN                 ## the song time the screen shows (_visual_time)
+var _song_t := 0.0                ## ... and the song's clock that frame (tests/start_profile.gd compares them)
 var song: SongData
 var session: Session
 var conductor: Conductor
@@ -448,20 +452,35 @@ func _process(delta: float) -> void:
 		autoplay.update(t)
 	else:
 		session.update(t)
-	lanes.song_time = t
-	var beat := (t - song.offset_for(session.remix)) / _spb
+	_song_t = t
+	var tv := _visual_time(t, delta)
+	lanes.song_time = tv
+	var beat := (tv - song.offset_for(session.remix)) / _spb
 	lanes.beat_pulse = 1.0 - fposmod(beat, 1.0) if beat >= 0.0 else 0.0
 	_set_beat(beat)
 	hud.tick(t, delta)
 	_tick_health(delta)
 	if cue != null:
-		cue.song_time = t
+		cue.song_time = tv
 	_schedule(t)
 	_count_in(t)
 	if ghost != null:
 		scene.set_ghost_delta(ghost.lead_seconds(session.score, t))
 	if session.is_over(t) and _finish_at < 0.0:
 		_end_fade()
+
+
+## The song time the screen shows. The song's clock is read when the frame is worked out, which
+## wanders by a few ms from frame to frame, and notes moved by those uneven steps judder; so this
+## moves by the frame's own step (Godot smooths it to the display's refresh) and is pulled gently
+## toward the song's clock. A jump (a seek, a long stall) is followed at once. Hits are still judged
+## on the song's clock.
+func _visual_time(t: float, delta: float) -> float:
+	if is_nan(_vis_t) or absf(t - _vis_t) > VIS_SNAP:
+		_vis_t = t
+	else:
+		_vis_t = maxf(_vis_t, _vis_t + delta + (t - _vis_t - delta) * VIS_PULL)
+	return _vis_t
 
 
 ## The beat now, for everything that moves with it: the rows' jumps, the beads on the rails, the fire.

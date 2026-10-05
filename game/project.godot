@@ -40,6 +40,7 @@ driver/output_latency=15
 [rendering]
 
 renderer/rendering_method="mobile"
+renderer/rendering_method.mobile="gl_compatibility"
 textures/vram_compression/import_etc2_astc=true
 environment/defaults/default_clear_color=Color(0.0275, 0.0235, 0.0549, 1)
 textures/canvas_textures/default_texture_filter=0
