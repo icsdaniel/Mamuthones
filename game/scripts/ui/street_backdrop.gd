@@ -32,10 +32,14 @@ const LANTERNS := [Vector2(104, 256), Vector2(855, 276), Vector2(320, 382)]
 ## with its outline) stay on screen: their edge keeps EDGE_PAD of the width off the screen's edge.
 const CLEAR_R := 0.53                ## lane widths from an outer lane's centre that must show
 const EDGE_PAD := 0.035
+## The picture is shown this much bigger than it takes to cover the screen (top aligned, centred
+## across), so the road's far end and the notes there are bigger (Daniele, 2026-10-05).
+const ZOOM := 1.2
 ## The portrait frames' corners (picture px, the left one; the right mirrors it), from the play-screen
 ## reference.
 ## Raised by FRAME_LIFT (Daniele, 2026-10-05) so more of the street and the notes' road shows.
 const FRAME := [Vector2(-12, 232), Vector2(226, 296), Vector2(272, 612), Vector2(-12, 748)]
+const FRAME_GROW := 140.0 / 118.0   ## the portraits grew with the pixel figures (bake_figures.py H, 118 -> 140)
 const FRAME_LIFT := Vector2(55.0, 55.0)   ## picture px the portraits' top and bottom edges are raised (as far as the HUD's words allow; the puppets keep their size)
 ## The figures' bob, from Daniele's three-pose sheets (2026-09-30). Each figure has three pictures,
 ## art/street/<figure>_bob_0/1/2.png: 0 the rest pose, 1 the drop on the beat, 2 halfway back up,
@@ -169,7 +173,7 @@ func _solve() -> void:
 	if key == _layout or size.x < 2.0:
 		return
 	_layout = key
-	pic_scale = maxf(size.x / IMG.x, size.y / IMG.y)
+	pic_scale = maxf(size.x / IMG.x, size.y / IMG.y) * ZOOM
 	pic_off = (size.x - IMG.x * pic_scale) * 0.5
 	var margin := size.x * EDGE_PAD
 	var x_min := (margin - pic_off) / pic_scale
@@ -525,10 +529,16 @@ func _make_frame(i: int) -> Node2D:
 
 func _frame_points(i: int) -> PackedVector2Array:
 	var pts := PackedVector2Array()
+	# placed on the screen as on the picture before ZOOM (the zoom is for the road), and grown by
+	# FRAME_GROW from the outer top corner, so the bigger figures fit and stay clear of the HUD
+	var bs := pic_scale / ZOOM
+	var bo := (size.x - IMG.x * bs) * 0.5
+	var anchor: Vector2 = FRAME[0] - Vector2(0.0, FRAME_LIFT.x)
 	for k in FRAME.size():
-		var p: Vector2 = FRAME[k]
+		var p: Vector2 = FRAME[k] - Vector2(0.0, FRAME_LIFT.x if k < 2 else FRAME_LIFT.y)
+		p = anchor + (p - anchor) * FRAME_GROW
 		var q := p if i == 0 else Vector2(IMG.x - p.x, p.y)
-		pts.append(to_local_pic(q - Vector2(0.0, FRAME_LIFT.x if k < 2 else FRAME_LIFT.y)))
+		pts.append(Vector2(bo + q.x * bs, q.y * bs))
 	return pts
 
 
