@@ -22,7 +22,7 @@ import pixelate as px
 
 SRC = os.path.join(px.GAME, "art/street")
 OUT = os.path.join(px.GAME, "art/pixel")
-H = 140   # cells tall (the figure in its portrait on the base screen; 118 until Daniele asked for bigger figures, 2026-10-05)
+H = 172   # cells tall (the figure in its portrait on the base screen; 118, then 140, until Daniele asked for figures that fill their portraits, 2026-10-05)
 
 HSV_GOLD = ((12, 31), (110, 256), (100, 256))
 

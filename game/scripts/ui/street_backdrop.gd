@@ -39,6 +39,7 @@ const ZOOM := 1.2
 ## reference.
 ## Raised by FRAME_LIFT (Daniele, 2026-10-05) so more of the street and the notes' road shows.
 const FRAME := [Vector2(-12, 232), Vector2(226, 296), Vector2(272, 612), Vector2(-12, 748)]
+const FIGURE_FILL := 1.12          ## a painted figure's height, as a share of its portrait's
 const FRAME_GROW := 140.0 / 118.0   ## the portraits grew with the pixel figures (bake_figures.py H, 118 -> 140)
 const FRAME_LIFT := Vector2(55.0, 55.0)   ## picture px the portraits' top and bottom edges are raised (as far as the HUD's words allow; the puppets keep their size)
 ## The figures' bob, from Daniele's three-pose sheets (2026-09-30). Each figure has three pictures,
@@ -557,7 +558,8 @@ func _place_frames() -> void:
 		# the figure's feet a little below the frame's lower edge, its head near the top
 		var top := (pts[0].y + pts[1].y) * 0.5
 		var bottom := (pts[2].y + pts[3].y) * 0.5
-		var h := (bottom - top) * (0.98 if i == 0 else 0.9)
+		# the figure fills its portrait and breaks out of it a little (Daniele, 2026-10-05)
+		var h := (bottom - top) * FIGURE_FILL
 		var sc := h / ts.y
 		var cx := lerpf(pts[0].x, pts[1].x, 0.5) if i == 0 else lerpf(pts[0].x, pts[1].x, 0.5)
 		cx = (pts[0].x + pts[1].x + pts[2].x + pts[3].x) * 0.25 + (34.0 if i == 0 else 14.0) * pic_scale
