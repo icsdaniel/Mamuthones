@@ -14,6 +14,8 @@ var _n := 300
 var _last := 0
 var _times: Array[float] = []
 var _script := 0.0
+var _t0 := 0
+var _warm_ms := 5000     ## real time before measuring: the count-in is over and notes are coming
 
 
 func _init() -> void:
@@ -49,6 +51,7 @@ func _init() -> void:
 	app.set("start_screen", "play")
 	app.set("start_args", start)
 	root.add_child(app)
+	_t0 = Time.get_ticks_msec()
 	process_frame.connect(_tick)
 	for x in a:
 		# hide=<Name>: hides every node of that name, to see what it costs
@@ -63,10 +66,15 @@ func _init() -> void:
 func _tick() -> void:
 	var now := Time.get_ticks_usec()
 	_frames += 1
-	if _frames > WARMUP:
+	if Time.get_ticks_msec() - _t0 > _warm_ms:
 		_times.append((now - _last) / 1000.0)
 		_script += Performance.get_monitor(Performance.TIME_PROCESS) * 1000.0
 	_last = now
+	if _times.size() == 1:
+		# reset the lanes' draw timing to the measured window
+		var LV0: Script = load("res://scripts/ui/lane_view.gd")
+		LV0.set("draw_usec", 0)
+		LV0.set("draw_count", 0)
 	if _times.size() >= _n:
 		var sorted := _times.duplicate()
 		sorted.sort()
@@ -74,6 +82,12 @@ func _tick() -> void:
 		for t in _times:
 			avg += t
 		avg /= _times.size()
+		var lv: Object = root.find_child("Lanes", true, false)
+		var shown := 0
+		if lv != null:
+			shown = (lv.call("_notes_shown", lv.call("field_rect")) as Array).size()
+		var LV: Script = load("res://scripts/ui/lane_view.gd")
+		print("LANES draw=%.2fms per draw over %d draws, notes on screen now=%d" % [LV.get("draw_usec") / 1000.0 / maxf(1.0, LV.get("draw_count")), LV.get("draw_count"), shown])
 		print("BENCH frames=%d avg=%.2fms p95=%.2fms worst=%.2fms script=%.2fms objects=%d" % [_times.size(), avg,
 			sorted[int(sorted.size() * 0.95)], sorted[-1], _script / _times.size(),
 			Performance.get_monitor(Performance.OBJECT_COUNT)])

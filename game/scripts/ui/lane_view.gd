@@ -215,9 +215,16 @@ func event_y(field: Rect2, t: float, pps: float) -> float:
 
 ## Screen drawing on top of the road: the hit line and its receptors, then everything standing on the
 ## road (gems, rings, badges, the rope, labels), then the buttons.
+static var draw_usec := 0         ## time spent drawing the street lanes, summed (for tests/bench.gd)
+static var draw_count := 0
+
+
 func _draw() -> void:
 	if street != null:
+		var t0 := Time.get_ticks_usec()
 		_draw_street()
+		draw_usec += Time.get_ticks_usec() - t0
+		draw_count += 1
 		return
 	if not _road_on():
 		_draw_field(self)
@@ -443,6 +450,11 @@ var _fx: Control                 ## additive, over the notes: hit bursts
 func _ready() -> void:
 	if street != null:
 		perspective = false
+	if street != null and pixel and not OS.has_environment("NO_ATLAS"):
+		# the notes are painted once into a sheet and stamped from it: drawing them each frame was the lag
+		var at := NoteAtlas.new(self)
+		add_child(at)
+		StreetSkin.atlas = at
 	_surface = _Layer.new(self, "_draw_surface")
 	_surface.name = "Surface"
 	_surface.show_behind_parent = true
@@ -1076,6 +1088,11 @@ static func ui_font() -> Font:
 	if _font == null:
 		_font = load("res://fonts/AlegreyaSans-ExtraBold.ttf")
 	return _font
+
+
+func _exit_tree() -> void:
+	if StreetSkin.atlas != null and StreetSkin.atlas.lanes == self:
+		StreetSkin.atlas = null
 
 
 ## Over the street picture: the stand-still bands, the hit line, the notes (far to near), the

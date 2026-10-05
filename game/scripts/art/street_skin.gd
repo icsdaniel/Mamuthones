@@ -56,7 +56,7 @@ static func ci_poly(ci: CanvasItem, pts: PackedVector2Array, col: Color) -> void
 ## A note's frame on the road: centre flat x, flat depth y, half width hw (flat px), and the flat
 ## half depth that shows `px_d` screen px deep. Returns a Callable mapping (u, h, v) to the screen:
 ## u across (-1..1), v along the road (-1 far .. 1 near), h up from the road in lane widths.
-static func _frame3(lv: LaneView, field: Rect2, cx: float, y: float, hw: float, px_d: float) -> Callable:
+static func _frame3(lv, field: Rect2, cx: float, y: float, hw: float, px_d: float) -> Callable:
 	var dsdy := maxf(0.05, (lv.project(Vector2(cx, y + 1.0)).y - lv.project(Vector2(cx, y - 1.0)).y) * 0.5)
 	var hd := px_d * 0.5 / dsdy
 	var lane := field.size.x / 3.0
@@ -68,7 +68,7 @@ static func _frame3(lv: LaneView, field: Rect2, cx: float, y: float, hw: float, 
 ## Draws a convex solid: verts in (u, h, v) through frame f, faces as vertex index loops, metric the
 ## model's scale in lane widths (for the normals). Faces turned away are skipped; the rest are
 ## flat-shaded from k [light, body, dark, glow], inside a dark outline of width ow.
-static func solid(lv: LaneView, f: Callable, verts: Array[Vector3], faces: Array, metric: Vector3, k: Array, alpha: float, ow: float, flash := 0.0) -> void:
+static func solid(lv, f: Callable, verts: Array[Vector3], faces: Array, metric: Vector3, k: Array, alpha: float, ow: float, flash := 0.0) -> void:
 	var scr := PackedVector2Array()
 	for v in verts:
 		scr.append(f.call(v))
@@ -169,11 +169,23 @@ static func _lane(field: Rect2) -> float:
 	return field.size.x / 3.0
 
 
+## false while NoteAtlas paints its sprites: a note's glow is drawn live under its sprite instead.
+static var paint_glow := true
+## The note sheet the pixel look stamps its notes from (set up by LaneView).
+static var atlas: NoteAtlas
+
+
+## The shadow and the coloured glow under a disc centred at c on screen, rx its radius in px.
+static func disc_glow(ci: CanvasItem, c: Vector2, rx: float, k: Array, alpha: float, glow := 1.0) -> void:
+	_glow(ci, c + Vector2(0.0, rx * FORE * 0.5), Vector2(rx * 1.25, rx * FORE * 1.6), Color(0.0, 0.0, 0.03, 0.6 * alpha))
+	_glow(ci, c, Vector2(rx * 1.5, rx * FORE * 2.6) * (1.0 + 0.4 * _near), _a(k[3], (0.3 + 0.45 * _near) * alpha * glow))
+
+
 ## A disc lying on the road centred at flat (cx, y), radius r lane widths, h thick. k: its glaze.
 ## Returns a Callable mapping (u, v) on its top (the unit circle) to the screen, for its pattern.
-static func disc(lv: LaneView, field: Rect2, cx: float, y: float, r: float, k: Array, alpha := 1.0, h := DISC_H, glow := 1.0, sides := SIDES) -> Callable:
+static func disc(lv, field: Rect2, cx: float, y: float, r: float, k: Array, alpha := 1.0, h := DISC_H, glow := 1.0, sides := SIDES) -> Callable:
 	var lane := _lane(field)
-	var lw := lv.road_scale(y) * lane
+	var lw: float = lv.road_scale(y) * lane
 	var f := _frame3(lv, field, cx, y, r * lane, 2.0 * r * lw * FORE)
 	var top := func(p: Vector2) -> Vector2: return f.call(Vector3(p.x, h, p.y))
 	if alpha <= 0.01 or lw < 2.0:
@@ -190,10 +202,8 @@ static func disc(lv: LaneView, field: Rect2, cx: float, y: float, r: float, k: A
 	for i in sides:
 		cap.append(sides + i)
 	faces.append(cap)
-	var c: Vector2 = f.call(Vector3.ZERO)
-	var rx := r * lw
-	_glow(lv, c + Vector2(0.0, rx * FORE * 0.5), Vector2(rx * 1.25, rx * FORE * 1.6), Color(0.0, 0.0, 0.03, 0.6 * alpha))
-	_glow(lv, c, Vector2(rx * 1.5, rx * FORE * 2.6) * (1.0 + 0.4 * _near), _a(k[3], (0.3 + 0.45 * _near) * alpha * glow))
+	if paint_glow:
+		disc_glow(lv, f.call(Vector3.ZERO), r * lw, k, alpha, glow)
 	solid(lv, f, verts, faces, Vector3(r, 1.0, r), k, alpha, maxf(PxArt.PX * 0.75 if pixel else 2.0, lw * 0.02), -0.4)
 	return top
 
@@ -209,7 +219,7 @@ static func _circle(top: Callable, rr: float, n := 28) -> PackedVector2Array:
 
 ## The pintadera's pattern pressed into a disc's top: a rim, a ring of sawteeth, an inner ring and
 ## a boss in the middle, in col, with a lit edge that flares on the beat.
-static func _pintadera(lv: LaneView, top: Callable, lw: float, col: Color, alpha: float, teeth := 12) -> void:
+static func _pintadera(lv, top: Callable, lw: float, col: Color, alpha: float, teeth := 12) -> void:
 	if lw < 6.0 or alpha <= 0.01:
 		return
 	var w := maxf(1.5, lw * 0.028)
@@ -228,8 +238,8 @@ static func _pintadera(lv: LaneView, top: Callable, lw: float, col: Color, alpha
 
 
 ## A tap: a pintadera in its lane at flat depth y. small: an off-beat step or a call.
-static func step(lv: LaneView, field: Rect2, cx: float, y: float, alpha: float, small := false, call := false) -> void:
-	var lw := lv.road_scale(y) * _lane(field)
+static func step(lv, field: Rect2, cx: float, y: float, alpha: float, small := false, call := false) -> void:
+	var lw: float = lv.road_scale(y) * _lane(field)
 	if pixel:
 		# the pixel look keeps every tap round and full size; the kind shows in its colour: blue on
 		# the beat, violet off it, pink for a call
@@ -243,43 +253,43 @@ static func step(lv: LaneView, field: Rect2, cx: float, y: float, alpha: float, 
 	_dot(lv, top, lw, K_STEP[2], alpha)
 
 
-static func _dot(lv: LaneView, top: Callable, lw: float, col: Color, alpha: float) -> void:
+static func _dot(lv, top: Callable, lw: float, col: Color, alpha: float) -> void:
 	if lw >= 6.0:
 		_convex(lv, _circle(top, 0.09, 10), _a(col, alpha))
 
 
 ## A heal: a green pintadera with su coccu, the black charm bead set in silver, at its heart.
-static func heal(lv: LaneView, field: Rect2, cx: float, y: float, alpha: float) -> void:
-	var lw := lv.road_scale(y) * _lane(field)
+static func heal(lv, field: Rect2, cx: float, y: float, alpha: float) -> void:
+	var lw: float = lv.road_scale(y) * _lane(field)
 	var top := disc(lv, field, cx, y, DISC_R, K_HEAL, alpha)
 	_pintadera(lv, top, lw, CREAM, alpha)
 	if lw < 6.0:
 		return
 	var c: Vector2 = top.call(Vector2.ZERO)
-	var r := lw * DISC_R * 0.2
+	var r: float = lw * DISC_R * 0.2
 	lv.draw_circle(c, r * 1.25, _a(Color("#e6ecf2"), alpha))
 	lv.draw_circle(c + Vector2(0, -r * 0.1), r * 0.9, _a(Color("#0c0a10"), alpha))
 	lv.draw_circle(c + Vector2(-r * 0.3, -r * 0.4), r * 0.25, _a(RIM, 0.9 * alpha))
 
 
 ## A hold's head: a gold pintadera.
-static func hold_head(lv: LaneView, field: Rect2, cx: float, y: float, alpha: float, lit: bool) -> void:
-	var lw := lv.road_scale(y) * _lane(field)
+static func hold_head(lv, field: Rect2, cx: float, y: float, alpha: float, lit: bool) -> void:
+	var lw: float = lv.road_scale(y) * _lane(field)
 	var top := disc(lv, field, cx, y, DISC_R, K_HOLD, alpha, DISC_H, 1.6 if lit else 1.0)
 	_pintadera(lv, top, lw, CREAM, alpha)
 	_dot(lv, top, lw, K_HOLD[2], alpha)
 
 
 ## A stomp: a big disc of black mask wood with a bronze rim and two bare feet, thicker than a step.
-static func stomp(lv: LaneView, field: Rect2, cx: float, y: float, alpha: float) -> void:
-	var lw := lv.road_scale(y) * _lane(field)
+static func stomp(lv, field: Rect2, cx: float, y: float, alpha: float) -> void:
+	var lw: float = lv.road_scale(y) * _lane(field)
 	var top := disc(lv, field, cx, y, STOMP_R, K_WOOD, alpha, DISC_H * 1.6, 1.4)
 	if lw < 6.0 or alpha <= 0.01:
 		return
 	var rim := _circle(top, 0.9)
 	rim.append(rim[0])
 	lv.draw_polyline(rim, _a(BRONZE[0], alpha), maxf(2.0, lw * 0.045), true)
-	var sz := lw * 0.17
+	var sz: float = lw * 0.17
 	for foot: float in [-1.0, 1.0]:
 		var c: Vector2 = top.call(Vector2(foot * 0.34, 0.15))
 		_foot(lv, c, sz + 2.5, foot, _a(OUTLINE, alpha))
@@ -339,7 +349,7 @@ static func rope(lv: LaneView, field: Rect2, cx: float, ya: float, yb: float, li
 		lv.draw_line(f.call(Vector3(-0.3, h, -1)), f.call(Vector3(-0.3, h, 1)), _a(RIM, 0.6 * alpha), 2.0, true)
 		# sparks fly off the rope where it runs into the slot while it is held
 		var at: Vector2 = f.call(Vector3(0, h, 1))
-		var lw := lv.road_scale(yb) * lane
+		var lw: float = lv.road_scale(yb) * lane
 		for i in 3:
 			var age := fposmod(lv._clock + float(i) * 0.11, 0.33)
 			if pixel:
@@ -352,7 +362,7 @@ static func rope(lv: LaneView, field: Rect2, cx: float, ya: float, yb: float, li
 ## cowbell standing on it at each lane divider, and a big arrow in each lane the way to tilt.
 static func bell(lv: LaneView, field: Rect2, y: float, up: bool, alpha := 1.0) -> void:
 	var lane := _lane(field)
-	var lw := lv.road_scale(y) * lane
+	var lw: float = lv.road_scale(y) * lane
 	var k: Array = K_UP if up else K_DOWN
 	var x0 := -field.size.x * 0.02
 	var x1 := field.size.x * 1.02
@@ -383,7 +393,7 @@ static func bell(lv: LaneView, field: Rect2, y: float, up: bool, alpha := 1.0) -
 		_cowbell(lv, at, lw * 0.3, alpha)
 	var d := -1.0 if up else 1.0
 	for i in 3:
-		var c := lv.project(Vector2(lane * (float(i) + 0.5), y)) - Vector2(0.0, h * lw)
+		var c: Vector2 = lv.project(Vector2(lane * (float(i) + 0.5), y)) - Vector2(0.0, h * lw)
 		var a := lw * 0.2
 		var hh := lw * 0.14
 		var m := c + Vector2(0.0, -hh * 0.6)
@@ -464,7 +474,7 @@ static func burst(ci: CanvasItem, at: Vector2, quality: String, age: float, sc: 
 		PackedColorArray([Color(col, 0.65 * a), Color(col, 0.65 * a), Color(col, 0.0), Color(col, 0.0)]))
 	_glow(ci, at, Vector2(lw * (0.7 + 0.4 * e), lw * (0.35 + 0.2 * e)) * big, Color(col, 0.9 * a))
 	# the stamp: the pintadera's rim and teeth pressed into the road, spreading a little as it fades
-	var r := lw * DISC_R * (1.0 + 0.25 * e) * big
+	var r: float = lw * DISC_R * (1.0 + 0.25 * e) * big
 	var top := func(p: Vector2) -> Vector2: return at + Vector2(p.x * r, p.y * r * FORE)
 	var sa := a * a
 	_ring(ci, at, Vector2(r, r * FORE) * 0.86, maxf(2.0, lw * 0.03), Color(col, sa))
@@ -499,7 +509,7 @@ static func _burst_px(ci: CanvasItem, at: Vector2, quality: String, age: float, 
 		"late": Color("#ff9a3a"), "heal": Color("#8affb8"), "held": Color("#ffe27a"), "stomp": Color("#ffc060"),
 	}.get(quality, Color("#ffd35a"))
 	var big := 1.6 if quality == "stomp" else (1.25 if quality == "perfect" else 1.0)
-	var r := lw * DISC_R * (1.0 + 0.25 * e) * big
+	var r: float = lw * DISC_R * (1.0 + 0.25 * e) * big
 	# the flash: the whole stamp lit white for the first instant
 	if age < 0.05:
 		_ellipse(ci, at, Vector2(r, r * FORE) * 1.05, Color.WHITE)
@@ -631,6 +641,8 @@ static func draw_notes(lv: LaneView, field: Rect2) -> void:
 		var cx: float = it[3]
 		var a: float = it[4]
 		_near = clampf(1.0 - (hl - y) / (_lane(field) * 2.5), 0.0, 1.0)
+		if pixel and atlas != null and atlas.ready_for(lv) and _stamp(lv, field, str(it[1]), n, cx, y, a):
+			continue
 		match str(it[1]):
 			"knot":
 				_knot(lv, field, cx, y, a)
@@ -652,8 +664,48 @@ static func draw_notes(lv: LaneView, field: Rect2) -> void:
 						step(lv, field, cx, y, a, true)
 
 
+## Stamps a note from the pixel look's sheet, with its glow drawn live under it. False when the
+## note is not one the sheet holds (a bell strap): it is then drawn in full.
+static func _stamp(lv: LaneView, field: Rect2, what: String, n: Note, cx: float, y: float, a: float) -> bool:
+	var key := ""
+	var k: Array = K_STEP
+	var r := DISC_R
+	var glow := 1.0
+	match what:
+		"knot":
+			key = "knot"; k = K_ROPE; r = ROPE_W * 0.85; glow = 0.6
+		"hold":
+			key = "hold"; k = K_HOLD; glow = 1.6 if n.holding else 1.0
+		_:
+			match n.kind:
+				Note.Kind.STEP:
+					if n.heal:
+						key = "heal"; k = K_HEAL
+					elif n.call:
+						key = "call"; k = K_CALL
+					elif lv._off_beat(n):
+						key = "off"; k = K_OFF
+					else:
+						key = "step"
+				Note.Kind.STOMP:
+					key = "stomp"; k = K_WOOD; r = STOMP_R; glow = 1.4
+					a *= 0.6 if n.thumbs > 0 else 1.0
+				Note.Kind.RING:
+					bell(lv, field, y, n.up, a)
+					key = "off"; k = K_OFF
+				_:
+					return false
+	var lw: float = lv.road_scale(y) * _lane(field)
+	if lw < 2.0 or a <= 0.01:
+		return true
+	var c: Vector2 = lv.project(Vector2(cx, y))
+	disc_glow(lv, c, r * lw, k, a, glow)
+	atlas.stamp(lv, key, c, lw, a)
+	return true
+
+
 ## The rope's far end: a small knot of hemp.
-static func _knot(lv: LaneView, field: Rect2, cx: float, y: float, alpha: float) -> void:
+static func _knot(lv, field: Rect2, cx: float, y: float, alpha: float) -> void:
 	disc(lv, field, cx, y, ROPE_W * 0.85, K_ROPE, alpha, ROPE_W * 0.6, 0.6)
 
 
@@ -679,9 +731,9 @@ static func _kind(lv: LaneView, n: Note, hold: bool) -> Array:
 
 static func _hit_line(lv: LaneView, field: Rect2, rects: Array[Rect2], hl: float, incoming: Array = [null, null, null]) -> void:
 	var l := lv.project(Vector2(-field.size.x * 0.02, hl))
-	var r := lv.project(Vector2(field.size.x * 1.02, hl))
+	var r: Vector2 = lv.project(Vector2(field.size.x * 1.02, hl))
 	var env := lv.beat_env()
-	var lw := lv.road_scale(hl) * _lane(field)
+	var lw: float = lv.road_scale(hl) * _lane(field)
 	lv.draw_line(l, r, Color(OUTLINE, 0.75), 10.0, true)
 	lv.draw_line(l, r, Color(1.0, 0.95, 0.85, 0.75 + 0.25 * env), 3.0, true)
 	for lane in 3:
