@@ -52,7 +52,7 @@ RULES = {
     "easy_peak_nps": 1.5,            # easy stays beginner friendly
     "peak_window_s": 4.0,
     # first difficulty (index into DIFFS) where each extra may appear in a story song
-    "min_level": {"hold": 1, "stomp": 1, "call": 2, "ring": 2, "triple": 3},
+    "min_level": {"hold": 1, "stomp": 1, "chord": 1, "call": 2, "ring": 2, "triple": 3},
 }
 
 
@@ -256,7 +256,15 @@ def mechanics_of(notes):
                   if any(x["k"] == "ring" for x in lst) and sum(1 for x in lst if x["k"] in ("step", "ring")) >= 2)
     if triples:
         m["triple"] = triples
+    chords = sum(1 for lst in beats.values() if is_chord(lst))
+    if chords:
+        m["chord"] = chords
     return m
+
+
+def is_chord(lst) -> bool:
+    """Two plain steps on one beat, on different buttons: one per thumb."""
+    return len(lst) == 2 and all(x["k"] == "step" for x in lst) and lst[0]["lane"] != lst[1]["lane"]
 
 
 # ------------------------------------------------------------------ chart check
@@ -337,7 +345,10 @@ def check_chart(song: dict, name: str, notes: list, audio_len: float | None):
         if len(lst) > 1:
             kinds = sorted(n["k"] for n in lst)
             triple = kinds == ["ring", "step"]
-            if not triple:
+            if is_chord(lst):
+                if level < RULES["min_level"]["chord"] and not tutorial:
+                    errs.append(f"{name}: chord below medium at b={b}")
+            elif not triple:
                 errs.append(f"{name}: {kinds} together at b={b}")
             elif level < RULES["min_level"]["triple"] and not tutorial:
                 errs.append(f"{name}: triple ring below expert at b={b}")
@@ -495,7 +506,7 @@ def check_song(song: dict, audio_len: float | None = None):
 
 
 def fmt_mech(m):
-    order = ["step", "hold", "bell", "ring", "triple", "stomp", "call", "rest"]
+    order = ["step", "chord", "hold", "bell", "ring", "triple", "stomp", "call", "rest"]
     return " ".join(f"{k}:{m[k]}" for k in order if m.get(k))
 
 

@@ -917,6 +917,21 @@ func _notes_shown(field: Rect2) -> Array:
 	return out
 
 
+## Chords still to play among the shown notes: two steps on one beat. Each is [flat depth, low lane,
+## high lane]; a cord is drawn between the two so the pair reads as one press with both thumbs.
+func chords_shown(shown: Array) -> Array:
+	var out := []
+	var prev: Note = null
+	for e in shown:
+		var n: Note = e[0]
+		if n.kind != Note.Kind.STEP or n.done:
+			continue
+		if prev != null and absf(prev.t - n.t) < 0.001 and prev.lane != n.lane:
+			out.append([float(e[1]), mini(prev.lane, n.lane), maxi(prev.lane, n.lane)])
+		prev = n
+	return out
+
+
 ## What lies flat on the road: hold sashes, bell bars, stand-still bands.
 func _draw_flat_notes(ci: CanvasItem, field: Rect2) -> void:
 	var lanes := LaneSkin.lane_rects(field)
@@ -948,6 +963,9 @@ func _draw_upright() -> void:
 		var n: Note = e[0]
 		if n.kind != Note.Kind.REST and not n.done:
 			taken.append(float(e[1]))
+	for c in chords_shown(shown):
+		var cy: float = c[0]
+		FireSkin.draw_cord(self, project(Vector2(lanes[c[1]].get_center().x, cy)), project(Vector2(lanes[c[2]].get_center().x, cy)), upright_scale(cy), _haze(cy, field))
 	for e in shown:
 		var n: Note = e[0]
 		var y: float = e[1]

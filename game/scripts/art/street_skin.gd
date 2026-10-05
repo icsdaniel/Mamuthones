@@ -637,6 +637,8 @@ static func draw_notes(lv: LaneView, field: Rect2) -> void:
 			if near > 0.0 and (incoming[lane] == null or near > float(incoming[lane][1])):
 				incoming[lane] = [_kind(lv, n, str(it[1]) == "hold"), near]
 	_hit_line(lv, field, rects, hl, incoming)
+	for c in lv.chords_shown(shown):
+		cord(lv, field, rects[c[1]].get_center().x, rects[c[2]].get_center().x, float(c[0]), lv._haze(c[0], field))
 	items.sort_custom(func(p: Array, q: Array) -> bool: return p[0] < q[0])
 	for it in items:
 		var y: float = it[0]
@@ -665,6 +667,20 @@ static func draw_notes(lv: LaneView, field: Rect2) -> void:
 					Note.Kind.RING:
 						bell(lv, field, y, n.up, a)
 						step(lv, field, cx, y, a, true)
+
+
+## A chord: two notes on one beat, joined by a bar in the steps' blue lying across the road between their centres, so
+## the pair reads as one press with both thumbs. Drawn under the notes.
+static func cord(lv: LaneView, field: Rect2, x0: float, x1: float, y: float, alpha: float) -> void:
+	var lw: float = lv.road_scale(y) * _lane(field)
+	if lw < 2.0 or alpha <= 0.01:
+		return
+	var a: Vector2 = lv.project(Vector2(x0, y))
+	var b: Vector2 = lv.project(Vector2(x1, y))
+	var w := maxf(2.0, lw * 0.11)
+	lv.draw_line(a, b, _a(K_STEP[2], alpha), w + maxf(2.0, lw * 0.05))
+	lv.draw_line(a, b, _a(K_STEP[1], alpha), w)
+	lv.draw_line(a + Vector2(0, -w * 0.22), b + Vector2(0, -w * 0.22), _a(K_STEP[0], alpha * 0.8), maxf(1.0, w * 0.3))
 
 
 ## Stamps a note from the pixel look's sheet, with its glow drawn live under it. False when the

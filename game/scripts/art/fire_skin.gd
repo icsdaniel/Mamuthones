@@ -205,6 +205,14 @@ static func draw_hold_ring(ci: CanvasItem, at: Vector2, sc: float, alpha := 1.0)
 
 ## The two-thumb stomp: a fire-hot plate, wider and twice as thick as a step, with two bone thumb
 ## prints on its face (press with both thumbs at once).
+## A chord's cord: a twisted red rope between two gems on one beat (both thumbs at once).
+static func draw_cord(ci: CanvasItem, a: Vector2, b: Vector2, sc: float, alpha := 1.0) -> void:
+	var w := maxf(3.0, 7.0 * sc)
+	ci.draw_line(a, b, Color(0.12, 0.04, 0.03, 0.85 * alpha), w + 4.0)
+	ci.draw_line(a, b, Color(0.78, 0.2, 0.14, alpha), w)
+	ci.draw_line(a + Vector2(0, -w * 0.2), b + Vector2(0, -w * 0.2), Color(1.0, 0.62, 0.45, 0.6 * alpha), maxf(1.0, w * 0.3))
+
+
 static func draw_stomp_note(ci: CanvasItem, at: Vector2, sc: float, alpha := 1.0) -> void:
 	sprite(ci, "note_stomp_%d" % note_rx(sc), at, alpha)
 

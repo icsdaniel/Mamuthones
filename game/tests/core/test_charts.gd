@@ -126,6 +126,18 @@ func test_real_songs() -> void:
 			var s := Session.new(song, diff, "full", opts)
 			check(s.stats.total > 0, "%s/%s has notes" % [song.id, diff])
 			_play_all(s)
+			if song.kind == "story":
+				# chords (two steps on one beat, one per thumb): never on Easy, always on Hard and Expert
+				var chords := 0
+				for i in range(1, s.notes.size()):
+					var a := s.notes[i - 1]
+					var b := s.notes[i]
+					if a.kind == Note.Kind.STEP and b.kind == Note.Kind.STEP and absf(a.t - b.t) < 0.001 and a.lane != b.lane:
+						chords += 1
+				if diff == "easy":
+					check_eq(chords, 0, "%s/easy has no chords" % song.id)
+				elif diff == "hard" or diff == "expert":
+					check(chords > 0, "%s/%s has chords" % [song.id, diff])
 			if song.kind == "story" and diff == "hard":
 				var bd := s.score_breakdown()
 				shares.append(bd.stills / maxf(bd.total, 1.0))
@@ -145,11 +157,12 @@ func test_real_songs() -> void:
 				var r := Session.new(song, diff, "light", {"remix": true})
 				_play_all(r)
 				check_near(r.accuracy(), 1.0, 1e-9, "%s/%s remix: autoplay 100 %%" % [song.id, diff])
-	# Stillness is worth chasing: about 8-12 % of a perfect run on a typical story song at Hard.
+	# Stillness is worth chasing: about 7-12 % of a perfect run on a typical story song at Hard (7, not
+	# 8, since Hard sits at the difficult threshold from the first stop: more notes share the score).
 	if not shares.is_empty():
 		shares.sort()
 		var med := shares[shares.size() >> 1]
-		check(med >= 0.08 and med <= 0.12, "stillness is %.1f %% of a typical Hard run (median of %d songs, %.1f..%.1f %%)" % [med * 100.0, shares.size(), shares[0] * 100.0, shares[-1] * 100.0])
+		check(med >= 0.07 and med <= 0.12, "stillness is %.1f %% of a typical Hard run (median of %d songs, %.1f..%.1f %%)" % [med * 100.0, shares.size(), shares[0] * 100.0, shares[-1] * 100.0])
 		print("  stillness share at Hard: " + ", ".join(shares.map(func(x): return "%.1f%%" % (x * 100.0))))
 	var story := SongLibrary.story()
 	for i in story.size():
