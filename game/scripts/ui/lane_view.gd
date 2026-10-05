@@ -44,6 +44,9 @@ var beat_pulse := 0.0
 
 var _bursts: Array = []          ## [pos: Vector2, quality: String, t0: float]
 var _stomps: Array = []          ## stomp hits in flight: [lane, both, t0]
+var _strikes: Array = []         ## bells rung on time, in flight: [up, quality, chain, t0]
+var _pulses: Array = []          ## light running up a lane's rails from an on-time hit: [lane, colour, t0, strength]
+const PULSE_TIME := 0.5
 var _flash: Array[float] = [-9.0, -9.0, -9.0]
 var _flash_kind: Array[String] = ["hit", "hit", "hit"]
 var _auto_pressed: Array[float] = [-9.0, -9.0, -9.0]
@@ -96,6 +99,8 @@ func reset() -> void:
 	_first = 0
 	_bursts.clear()
 	_stomps.clear()
+	_strikes.clear()
+	_pulses.clear()
 	_step_ticks.clear()
 
 
@@ -173,6 +178,72 @@ func stomp_hit(lane: int, _judgement: String, both: bool) -> void:
 		var at := street.flat_to_local(Vector2(lane_center(clampi(lane, 0, 2)).x, LaneSkin.hit_line_y(field_rect())))
 		street.flash(at, 1.8 if both else 0.9)
 	queue_redraw()
+
+
+## A bell rung on time (Perfect or Good): the strap at the hit line strikes (StreetSkin.bell_strike)
+## and the street lights up under all three lanes. chain = on-time bells in a row, for its size.
+func bell_hit(up: bool, quality: String, chain := 1) -> void:
+	_strikes.append([up, quality, chain, _clock])
+	if _strikes.size() > 4:
+		_strikes.pop_front()
+	if street != null:
+		var hl := LaneSkin.hit_line_y(field_rect())
+		for lane in 3:
+			street.flash(street.flat_to_local(Vector2(lane_center(lane).x, hl)), (1.1 if quality == "perfect" else 0.7))
+	queue_redraw()
+
+
+## A note hit on time sends light up its lane: a bright stretch runs along both of the lane's rails
+## from the hit line to the fire, in the note's colour (strength 1 a Perfect, less a Good; a held hold's
+## finish runs brighter and longer).
+func lane_pulse(lane: int, col: Color, strength := 1.0) -> void:
+	_pulses.append([clampi(lane, 0, 2), col, _clock, strength])
+	if _pulses.size() > 8:
+		_pulses.pop_front()
+
+
+## Lanes with light running up them right now, for tests.
+func pulses_shown() -> Array[int]:
+	var out: Array[int] = []
+	for p in _pulses:
+		if _clock - float(p[2]) < PULSE_TIME:
+			out.append(int(p[0]))
+	return out
+
+
+func _draw_pulses(field: Rect2) -> void:
+	var hl := LaneSkin.hit_line_y(field)
+	var w := field.size.x / 3.0
+	var i := 0
+	while i < _pulses.size():
+		var p: Array = _pulses[i]
+		var k := (_clock - float(p[2])) / (PULSE_TIME * (1.0 + 0.3 * (float(p[3]) - 1.0)))
+		if k >= 1.0:
+			_pulses.remove_at(i)
+			continue
+		i += 1
+		if k < 0.0:
+			continue
+		var g := 1.0 - pow(1.0 - k, 1.6)
+		var head := hl * (1.0 - g)
+		var tail := minf(hl, head + hl * 0.22 * (1.0 - k * 0.5))
+		var col: Color = p[1]
+		var c := Color.WHITE.lerp(col, clampf(k * 6.0, 0.0, 1.0))
+		c.a = clampf((1.0 - k) * 1.4, 0.0, 1.0) * clampf(float(p[3]), 0.3, 1.0)
+		var lane := int(p[0])
+		for x in [w * float(lane) + w * 0.04, w * float(lane + 1) - w * 0.04]:
+			var a := project(Vector2(x, tail))
+			var b := project(Vector2(x, head))
+			draw_line(a, b, c, maxf(PxArt.PX, PxArt.PX * 3.0 * road_scale(tail) * (1.0 - 0.6 * k)))
+
+
+## Bell strikes showing right now ("up"/"down":quality), for tests.
+func strikes_shown() -> Array[String]:
+	var out: Array[String] = []
+	for st in _strikes:
+		if _clock - float(st[3]) < StreetSkin.STRIKE_TIME:
+			out.append("%s:%s" % ["up" if bool(st[0]) else "down", st[1]])
+	return out
 
 
 ## A press while the buttons are locked: that ring's padlock rattles.
@@ -699,6 +770,10 @@ func _draw_fx(ci: CanvasItem) -> void:
 			_bursts.pop_front()
 		while not _stomps.is_empty() and _clock - float(_stomps[0][2]) > 1.0:
 			_stomps.pop_front()
+		while not _strikes.is_empty() and _clock - float(_strikes[0][3]) > StreetSkin.STRIKE_TIME:
+			_strikes.pop_front()
+		while not _pulses.is_empty() and _clock - float(_pulses[0][2]) > PULSE_TIME * 1.5:
+			_pulses.pop_front()
 		return
 	if show_buttons:
 		var r := buttons_rect()
@@ -1216,6 +1291,9 @@ func _draw_street() -> void:
 	for st in _stomps:
 		var at := project(Vector2(lane_center(int(st[0])).x, LaneSkin.hit_line_y(field)))
 		StreetSkin.burst(self, at, "stomp" if bool(st[1]) else "ok", _clock - float(st[2]), road_scale(LaneSkin.hit_line_y(field)) * (1.6 if bool(st[1]) else 1.0))
+	_draw_pulses(field)
+	for sk in _strikes:
+		StreetSkin.bell_strike(self, field, bool(sk[0]), str(sk[1]), int(sk[2]), _clock - float(sk[3]))
 	if session != null:
 		var hl := LaneSkin.hit_line_y(field)
 		var taken: Array[float] = []

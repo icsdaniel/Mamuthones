@@ -603,10 +603,31 @@ func _on_rang(result: Dictionary) -> void:
 		q = str(result.side)
 	var strength := float(result.get("strength", 0.5))
 	# Strength is how hard the flick was; harder flicks ring heavier.
-	Sound.bell(_bell_set, bool(result.get("up", true)), q, strength)
+	var up := bool(result.get("up", true))
+	Sound.bell(_bell_set, up, q, strength)
 	scene.jolt("bell")
+	if q == "perfect" or q == "good":
+		# On time: the bell strikes. The accent grows along a chain of on-time bells.
+		_bell_chain += 1
+		Sound.bell_accent(up, q, _bell_chain)
+		_bell_strike(up, q)
+	elif q != "free":
+		_bell_chain = 0
 	if q == "free" or q == "silence":
 		UIKit.vibrate(12)
+
+
+## A bell rung on time, the tilt's reward (stomp-sized, but the tilt's own): the strap strikes across
+## the road, the street lights under every lane, the whole screen is knocked the way the phone was
+## tilted, the bonfire flares and the Mamuthone's load swings.
+func _bell_strike(up: bool, quality: String) -> void:
+	var perfect := quality == "perfect"
+	lanes.bell_hit(up, quality, _bell_chain)
+	knock(Vector2(0.0, -1.0 if up else 1.0) * (BELL_KNOCK if perfect else BELL_KNOCK * 0.6))
+	if backdrop != null:
+		backdrop.kick(0.7 if perfect else 0.4)
+	if scene.has_method("bell_strike"):
+		scene.bell_strike(up)
 
 
 func _on_judged(note: Note, judgement: String, offset: float) -> void:
@@ -640,6 +661,10 @@ func _on_judged(note: Note, judgement: String, offset: float) -> void:
 		# readable at a glance without the word; the spray is a plain Good.
 		lanes.burst(pos, "good" if soft else quality)
 		lanes.step_tick(lane, side)
+		if good:
+			_on_time_step(note, judgement)
+	elif note != null and note.is_bell() and judgement in ["perfect", "good"]:
+		pass   # the bell strike (_bell_strike) is its burst
 	else:
 		lanes.burst(pos, quality, side)
 	var word_key: String = JUDGE_WORDS.get(judgement, "")
@@ -658,8 +683,43 @@ func _on_judged(note: Note, judgement: String, offset: float) -> void:
 		UIKit.vibrate(30 if note != null and note.is_bell() else 14)
 	elif judgement in ["miss", "silence"]:
 		scene.jolt("miss")
+		if note != null and note.is_bell():
+			_bell_chain = 0
 	if judgement == "miss" or judgement == "let_go":
 		Sound.miss()
+
+
+## A step, call or hold hit on time (Perfect, Good, or a hold kept to its end): light runs up its
+## lane to the procession in the note's colour; a call hit on time makes the Issohadore crack his rope;
+## a hold kept to its end rings a small bell at the lane's pitch, knocks the screen and flares the fire.
+func _on_time_step(note: Note, judgement: String) -> void:
+	if judgement == "held":
+		lanes.lane_pulse(note.lane, StreetSkin.K_HOLD[3], 1.6)
+		Sound.hold_done(note.lane)
+		knock(Vector2(0.0, 3.0))
+		if backdrop != null:
+			backdrop.kick(0.5)
+		return
+	lanes.lane_pulse(note.lane, note_colour(note), 1.0 if judgement == "perfect" else 0.6)
+	if note.call and scene.has_method("rope_crack"):
+		scene.rope_crack()
+
+
+## A note's colour in the pixel look (StreetSkin's kinds): heal green, call pink, hold gold, an Expert
+## sixteenth silver, an off-beat violet, a step blue.
+func note_colour(note: Note) -> Color:
+	if note.heal:
+		return StreetSkin.K_HEAL[3]
+	if note.call:
+		return StreetSkin.K_CALL[3]
+	if note.kind == Note.Kind.HOLD:
+		return StreetSkin.K_HOLD[3]
+	if lanes._sixteenth(note):
+		return StreetSkin.K_SIX[3]
+	var fr := fposmod(note.beat, 1.0)
+	if fr > 0.12 and fr < 0.88:
+		return StreetSkin.K_OFF[3]
+	return StreetSkin.K_STEP[3]
 
 
 ## A stomp judged (both thumbs, or one when the second never came): its sound and the prints on the
@@ -686,6 +746,19 @@ func _on_stomp(note: Note, judgement: String, _offset: float, both: bool) -> voi
 
 var _last_unison := 0
 var _shake := 0.0
+var _bell_chain := 0             ## bells rung on time in a row (Perfect or Good)
+var _knock := Vector2.ZERO       ## the screen's knock: direction * px at its strongest
+var _knock_t := 9.0              ## seconds since the knock
+const BELL_KNOCK := 6.0          ## px the screen is knocked by a Perfect bell
+const KNOCK_TIME := 0.18
+
+
+## Knocks the whole screen once along `v` (px) and springs it back: a bell's tilt, felt in the
+## picture. None with reduced motion.
+func knock(v: Vector2) -> void:
+	if not UIKit.reduced_motion():
+		_knock = v
+		_knock_t = 0.0
 
 
 ## A short jolt of the whole screen, `px` at its strongest (none with reduced motion).
@@ -695,12 +768,18 @@ func shake(px: float) -> void:
 
 
 func _tick_shake(delta: float) -> void:
+	_knock_t += delta
+	var kn := Vector2.ZERO
+	if _knock_t < KNOCK_TIME:
+		# out at once, back with one small overshoot
+		var k := _knock_t / KNOCK_TIME
+		kn = (_knock * cos(k * PI * 1.5) * (1.0 - k)).round()
 	if _shake <= 0.05:
-		if position != Vector2.ZERO:
-			position = Vector2.ZERO
+		if position != kn:
+			position = kn
 		_shake = 0.0
 		return
-	position = Vector2(sin(_clock * 71.0), cos(_clock * 53.0)) * _shake
+	position = Vector2(sin(_clock * 71.0), cos(_clock * 53.0)) * _shake + kn
 	_shake = move_toward(_shake, 0.0, delta * 30.0)
 
 

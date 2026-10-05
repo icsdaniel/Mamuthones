@@ -97,6 +97,9 @@ var _flashes: Array = []             ## [local pos, t0, strength]
 var _clock := 0.0
 var _kick := 0.0
 var _jolt_kind := ""
+var _bell_at := -9.0                  ## _clock of the last bell rung on time
+var _bell_up := true
+var _rope_at := -9.0                  ## _clock of the last call answered on time
 var _jolt_at := -9.0
 var _surge_at := -9.0
 const SURGE_TIME := 0.5
@@ -321,6 +324,18 @@ func stomp() -> void:
 	kick(1.0)
 
 
+## A bell rung on time: the Mamuthone's load (and the Issohadore's rope) is thrown and swings hard,
+## on top of the bob (PixelFigure.pose's ring); the painted figures rock.
+func bell_strike(up: bool) -> void:
+	_bell_at = _clock
+	_bell_up = up
+
+
+## A call answered on time: the Issohadore cracks his rope (it swings like the load on a bell).
+func rope_crack() -> void:
+	_rope_at = _clock
+
+
 func kick(amount := 1.0) -> void:
 	_kick = maxf(_kick, amount)
 
@@ -428,9 +443,13 @@ func _bob_figures() -> void:
 			bar = fposmod(beat, 4.0)
 		if _jolt_kind == "stomp" and age < 0.3:
 			t = minf(t, age)
+		var ring := _clock - _bell_at
 		for p in _puppets:
 			p.reduced_motion = reduced_motion
-			p.pose(t, bar, still)
+			var r := ring
+			if p.figure == "issohadore" and _clock - _rope_at < ring:
+				r = _clock - _rope_at
+			p.pose(t, bar, still, r, _bell_up or r != ring)
 			var at: Vector2 = p.get_meta("base_pos", p.position)
 			p.position = at + Vector2(shake * 0.02 * float(p.get_meta("frame_h", 0.0)), 0.0) * m
 		return
@@ -443,7 +462,8 @@ func _bob_figures() -> void:
 		# the poses carry part of the drop themselves: a smaller sink, no squash
 		s.position = at + Vector2(shake * 0.02 * h, down * BOB * (POSE_BOB if posed else 1.0) * h) * m
 		# a slight lean toward the road with the drop (the left portrait's road is to its right)
-		s.rotation = deg_to_rad(BOB_LEAN) * down * m * (1.0 if i == 0 else -1.0)
+		var rock := PixelFigure.ring_swing(_clock - _bell_at) * 0.25
+		s.rotation = deg_to_rad(BOB_LEAN * down + rock) * m * (1.0 if i == 0 else -1.0)
 		var q := 0.0 if posed else BOB_SQUASH * down * m
 		s.scale = base * Vector2(1.0 + q * 0.6, 1.0 - q)
 
