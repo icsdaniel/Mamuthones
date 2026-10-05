@@ -89,6 +89,13 @@ def on_third(b) -> bool:
     return any(abs(f - x) < 0.01 for x in (1 / 3, 2 / 3, 1 / 6, 5 / 6))
 
 
+def on_eighth(b) -> bool:
+    """On the beat, the half-beat or a triplet eighth: Medium and Hard never go finer (sixteenths and
+    triplet sixteenths are Expert's), so a purple off-beat note there is always a half-beat."""
+    f = b % 1
+    return any(abs(f - x) < 0.01 for x in (0.0, 0.5, 1 / 3, 2 / 3, 1.0))
+
+
 def is_third_grid(notes) -> bool:
     """True when the notes use triplet positions (compound meter or triplet passages)."""
     return any(on_third(n["b"]) for n in notes)
@@ -354,6 +361,12 @@ def check_chart(song: dict, name: str, notes: list, audio_len: float | None):
                 errs.append(f"{name}: triple ring below expert at b={b}")
         if any(n["k"] == "rest" for n in lst) and len(lst) > 1:
             errs.append(f"{name}: a rest shares its beat with a note at b={b}")
+
+    # Medium and Hard stay on the eighth grid (beats, half-beats, triplet eighths)
+    if name in ("medium", "hard") and not tutorial:
+        for n in notes:
+            if n["k"] != "rest" and not on_eighth(n["b"]):
+                errs.append(f"{name}: note at b={n['b']} is finer than an eighth (sixteenths are Expert's)")
 
     # overall spacing between distinct beats
     beats = sorted(b for b, lst in groups.items() if any(n["k"] != "rest" for n in lst))

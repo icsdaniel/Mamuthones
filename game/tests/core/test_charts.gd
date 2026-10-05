@@ -17,13 +17,21 @@ func test_fixtures_pass() -> void:
 		check_eq(ChartRules.check_song(s), [] as Array[String], "%s is clean" % f)
 
 
+# Leaves out the eighth-grid problem (Medium and Hard keep to beats and half-beats), for checks about
+# something else that use finer positions.
+func _not_grid(p: String) -> bool:
+	return not "sixteenths are Expert" in p
+
+
 func test_rules_catch_problems() -> void:
+	check(_problems([{"b": 0, "k": "step", "lane": 0}, {"b": 0.75, "k": "step", "lane": 2}]).any(func(p): return "sixteenths are Expert" in p), "no sixteenths at hard")
+	check(_problems([{"b": 0, "k": "step", "lane": 0}, {"b": 0.75, "k": "step", "lane": 2}], "story", "expert").is_empty(), "sixteenths at expert")
 	check(_problems([{"b": 0, "k": "bell"}, {"b": 0.25, "k": "bell"}]).any(func(p): return "half a beat" in p), "bells too close")
 	check(_problems([{"b": 0, "k": "bell"}, {"b": 0.5, "k": "bell"}]).is_empty(), "bells half a beat apart are fine")
 	check(_problems([{"b": 0, "k": "step", "lane": 0}, {"b": 0, "k": "step", "lane": 1}, {"b": 0, "k": "step", "lane": 2}]).any(func(p): return "thumbs" in p), "three steps at once")
 	check(_problems([{"b": 0, "k": "step", "lane": 0}, {"b": 0.25, "k": "step", "lane": 0}]).any(func(p): return "thumb too fast" in p), "one thumb twice in an eighth at hard")
 	check(_problems([{"b": 0, "k": "step", "lane": 0}, {"b": 0.25, "k": "step", "lane": 0}], "story", "expert").is_empty(), "sixteenths are fine at expert")
-	check(_problems([{"b": 0, "k": "step", "lane": 0}, {"b": 0.25, "k": "step", "lane": 1}, {"b": 0.5, "k": "step", "lane": 0}]).is_empty(), "lane 1 goes to the free thumb")
+	check(_problems([{"b": 0, "k": "step", "lane": 0}, {"b": 0.25, "k": "step", "lane": 1}, {"b": 0.5, "k": "step", "lane": 0}]).filter(_not_grid).is_empty(), "lane 1 goes to the free thumb")
 	check(_problems([{"b": 0, "k": "hold", "lane": 1, "len": 2}, {"b": 1, "k": "step", "lane": 1}]).any(func(p): return "under a hold" in p), "note under a hold")
 	check(_problems([{"b": 0, "k": "hold", "lane": 0, "len": 2}, {"b": 1, "k": "step", "lane": 0}, {"b": 1, "k": "step", "lane": 2}]).size() > 0, "a hold keeps its thumb busy")
 	check(_problems([{"b": 0, "k": "rest", "len": 4}, {"b": 2, "k": "bell"}]).any(func(p): return "stand-still" in p), "bell in a stand-still")
@@ -42,7 +50,7 @@ func test_rules_catch_problems() -> void:
 	check(_problems([{"b": 0, "k": "step", "lane": 1, "call": true}], "story", "medium").any(func(p): return "calls" in p), "no calls before hard")
 	check(_problems([{"b": 0, "k": "step", "lane": 1}], "piazza", "piazza").any(func(p): return "piazza" in p), "piazza is bells only")
 	check(_problems([{"b": 0, "k": "stomp", "lane": 1}], "tutorial", "easy").is_empty(), "the tutorial may teach anything at any level")
-	check(_problems([{"b": 12.3333, "k": "bell"}, {"b": 12.8333, "k": "bell"}]).is_empty(), "thirds rounded to 4 decimals are half a beat apart")
+	check(_problems([{"b": 12.3333, "k": "bell"}, {"b": 12.8333, "k": "bell"}]).filter(_not_grid).is_empty(), "thirds rounded to 4 decimals are half a beat apart")
 
 
 func _sectioned(chart: Array, diff: String, sections: Array, bpm := 120.0) -> Array[String]:
@@ -75,7 +83,7 @@ func test_triplet_feel_per_section() -> void:
 	var mixed := jack.duplicate()
 	mixed.push_front({"b": 1.35, "k": "step", "lane": 0})
 	mixed.push_front({"b": 1.0, "k": "step", "lane": 0})
-	var mp := _sectioned(mixed, "hard", secs)
+	var mp := _sectioned(mixed, "hard", secs).filter(_not_grid)
 	check(mp.any(func(p): return "b=1.35" in p), "the straight verse keeps its half-beat rule")
 	check_eq(mp.size(), 1, "while the triplet climax passes (%s)" % [mp])
 	# Without sections the whole chart shares one feel: any note on a third makes it triplet.

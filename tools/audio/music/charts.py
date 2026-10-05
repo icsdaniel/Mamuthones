@@ -193,6 +193,8 @@ class Charter:
             inside = [c for c in s.cands if lo - 1e-6 <= c.b < hi - 1e-6 and self.audible(c)]
             steps = dict(sp.get("steps", []))
             for c in inside:
+                if diff in ("medium", "hard") and s.kind != "tutorial" and not V.on_eighth(c.b):
+                    continue    # sixteenths are Expert's: Medium and Hard keep to beats and half-beats
                 # Medium's answer bars (the second of each two-bar phrase) may take the tune's
                 # half-beats: "beat and some half-beats", and the answer gets its own rhythm
                 bonus = 1 if (diff == "medium" and c.role == "mel" and int((c.b + 1e-6) // s.bpb) % 2 == 1) else 0
