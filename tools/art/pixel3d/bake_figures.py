@@ -27,7 +27,7 @@ H = 118   # cells tall (the figure in its portrait on the base screen)
 HSV_GOLD = ((12, 31), (110, 256), (100, 256))
 
 
-def gold(a, box, largest=False):
+def gold(a, box):
     hsv = cv2.cvtColor(np.ascontiguousarray(a[..., :3]), cv2.COLOR_RGB2HSV)
     m = (a[..., 3] > 128)
     for c, (lo, hi) in enumerate(HSV_GOLD):
@@ -43,9 +43,6 @@ def gold(a, box, largest=False):
         return m
     sizes = ndimage.sum(m, lab, range(1, n + 1))
     keep = [i + 1 for i, s in enumerate(sizes) if s > 600]
-    if largest:
-        # one strap of bells only: a stray patch of bronze elsewhere stays on the body, still
-        keep = [int(np.argmax(sizes)) + 1]
     m = np.isin(lab, keep)
     m = cv2.dilate(m.astype(np.uint8), np.ones((5, 5), np.uint8)) > 0
     return m & (a[..., 3] > 60)
@@ -153,7 +150,7 @@ def bake(name, parts, order, layers_fn, side=1, tone=(1.4, 1.0, 4)):
 
 
 def mamuthone_layers(a, parts):
-    back = gold(a, (225, 0, 470, 300), largest=True)
+    back = gold(a, (225, 0, 470, 300))
     front = gold(a, (40, 320, 270, 490))
     head = region(a, None, [(85, 0), (240, 0), (250, 60), (230, 175), (150, 185), (90, 150)]) & ~back
     legs = region(a, (0, 560, a.shape[1], a.shape[0]))

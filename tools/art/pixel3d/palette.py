@@ -30,6 +30,8 @@ FIXED = [
     "#f2c46a", "#b0701e", "#4e2a0a",                                  # bronze
     "#ff9a32", "#ffd27a", "#ffd35a", "#7a2e06",                       # hud edge, gold ink
     "#8a2fd0", "#d070ff",                                             # top unison purple
+    "#d8b4ff", "#8a3fd8", "#461a7a", "#b070ff",                       # off-beat violet
+    "#ffb0d8", "#e0408c", "#7a1446", "#ff70b0",                       # call pink
     "#ff3b30", "#ffffff",
 ]
 

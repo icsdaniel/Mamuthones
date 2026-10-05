@@ -28,6 +28,8 @@ const K_HOLD := [Color("#ffe9a8"), Color("#e8a820"), Color("#7e5006"), Color("#f
 const K_WOOD := [Color("#8a7468"), Color("#2c2226"), Color("#120c10"), Color("#ffae40")]
 const K_ROPE := [Color("#f0c878"), Color("#c0842c"), Color("#5e3810"), Color("#ffc060")]
 const K_UP := [Color("#ff9c8c"), Color("#c8282a"), Color("#5e0c10"), Color("#ff5040")]
+const K_OFF := [Color("#d8b4ff"), Color("#8a3fd8"), Color("#461a7a"), Color("#b070ff")]   ## the pixel look's off-beat step
+const K_CALL := [Color("#ffb0d8"), Color("#e0408c"), Color("#7a1446"), Color("#ff70b0")]  ## ... and its call
 const K_DOWN := [Color("#a4b6ff"), Color("#3450c0"), Color("#141e5e"), Color("#6080ff")]
 const DISC_R := 0.4                  ## a pintadera's radius, in lane widths
 const OFF_R := 0.3                   ## ... an off-beat step's or a call's
@@ -169,7 +171,7 @@ static func _lane(field: Rect2) -> float:
 
 ## A disc lying on the road centred at flat (cx, y), radius r lane widths, h thick. k: its glaze.
 ## Returns a Callable mapping (u, v) on its top (the unit circle) to the screen, for its pattern.
-static func disc(lv: LaneView, field: Rect2, cx: float, y: float, r: float, k: Array, alpha := 1.0, h := DISC_H, glow := 1.0, sides := SIDES, shape := PackedVector2Array()) -> Callable:
+static func disc(lv: LaneView, field: Rect2, cx: float, y: float, r: float, k: Array, alpha := 1.0, h := DISC_H, glow := 1.0, sides := SIDES) -> Callable:
 	var lane := _lane(field)
 	var lw := lv.road_scale(y) * lane
 	var f := _frame3(lv, field, cx, y, r * lane, 2.0 * r * lw * FORE)
@@ -177,15 +179,10 @@ static func disc(lv: LaneView, field: Rect2, cx: float, y: float, r: float, k: A
 	if alpha <= 0.01 or lw < 2.0:
 		return top
 	var verts: Array[Vector3] = []
-	if not shape.is_empty():
-		sides = shape.size()
 	for level in [0.0, h]:
 		for i in sides:
-			if shape.is_empty():
-				var an := TAU * (float(i) + 0.5) / sides
-				verts.append(Vector3(cos(an), level, sin(an)))
-			else:
-				verts.append(Vector3(shape[i].x, level, shape[i].y))
+			var an := TAU * (float(i) + 0.5) / sides
+			verts.append(Vector3(cos(an), level, sin(an)))
 	var faces: Array = []
 	for i in sides:
 		faces.append([i, (i + 1) % sides, sides + (i + 1) % sides, sides + i])
@@ -234,44 +231,16 @@ static func _pintadera(lv: LaneView, top: Callable, lw: float, col: Color, alpha
 static func step(lv: LaneView, field: Rect2, cx: float, y: float, alpha: float, small := false, call := false) -> void:
 	var lw := lv.road_scale(y) * _lane(field)
 	if pixel:
-		# the pixel look gives every kind its own outline, so they tell apart at a glance even a
-		# few pixels across: a round step, a diamond off-beat, a triangle call
-		var shape := TRIANGLE if call else (DIAMOND if small else PackedVector2Array())
-		var r := DISC_R * (1.08 if call else 1.0)
-		var top := disc(lv, field, cx, y, r, K_STEP, alpha, DISC_H, 1.0, SIDES, shape)
-		if shape.is_empty():
-			_pintadera(lv, top, lw, CREAM, 0.92 * alpha)
-			_dot(lv, top, lw, K_STEP[2], alpha)
-		else:
-			_inlay(lv, top, lw, shape, CREAM, 0.92 * alpha)
+		# the pixel look keeps every tap round and full size; the kind shows in its colour: blue on
+		# the beat, violet off it, pink for a call
+		var k: Array = K_CALL if call else (K_OFF if small else K_STEP)
+		var top := disc(lv, field, cx, y, DISC_R, k, alpha)
+		_pintadera(lv, top, lw, CREAM, 0.92 * alpha)
+		_dot(lv, top, lw, k[2], alpha)
 		return
 	var top := disc(lv, field, cx, y, OFF_R if small else DISC_R, K_STEP, alpha)
 	_pintadera(lv, top, lw * (OFF_R if small else DISC_R) / DISC_R, CREAM, 0.92 * alpha, 8 if small else 12)
 	_dot(lv, top, lw, K_STEP[2], alpha)
-
-
-## The pixel look's outlines, on a note's top (u across, v along the road: -1 far, 1 near), in order
-## round the note.
-static var DIAMOND := PackedVector2Array([Vector2(1.0, 0.0), Vector2(0.0, 1.0), Vector2(-1.0, 0.0), Vector2(0.0, -1.0)])
-static var TRIANGLE := PackedVector2Array([Vector2(0.95, 0.62), Vector2(-0.95, 0.62), Vector2(0.0, -1.0)])
-static var SQUARE := PackedVector2Array([Vector2(0.8, -0.8), Vector2(0.8, 0.8), Vector2(-0.8, 0.8), Vector2(-0.8, -0.8)])
-static var HEXAGON := PackedVector2Array([Vector2(1.0, 0.0), Vector2(0.5, 0.87), Vector2(-0.5, 0.87), Vector2(-1.0, 0.0), Vector2(-0.5, -0.87), Vector2(0.5, -0.87)])
-static var BAR := PackedVector2Array([Vector2(1.0, -0.3), Vector2(1.0, 0.3), Vector2(0.8, 0.55), Vector2(-0.8, 0.55), Vector2(-1.0, 0.3), Vector2(-1.0, -0.3), Vector2(-0.8, -0.55), Vector2(0.8, -0.55)])
-
-
-## A shaped note's pattern: its outline again inside its top, and a small one of it in the middle.
-static func _inlay(lv: LaneView, top: Callable, lw: float, shape: PackedVector2Array, col: Color, alpha: float) -> void:
-	if lw < 6.0 or alpha <= 0.01:
-		return
-	var w := maxf(1.5, lw * 0.03)
-	var ring := PackedVector2Array()
-	var core := PackedVector2Array()
-	for q in shape:
-		ring.append(top.call(q * 0.66))
-		core.append(top.call(q * 0.26))
-	ring.append(ring[0])
-	lv.draw_polyline(ring, _a(col, alpha), w, true)
-	_convex(lv, core, _a(col, alpha))
 
 
 static func _dot(lv: LaneView, top: Callable, lw: float, col: Color, alpha: float) -> void:
@@ -282,11 +251,8 @@ static func _dot(lv: LaneView, top: Callable, lw: float, col: Color, alpha: floa
 ## A heal: a green pintadera with su coccu, the black charm bead set in silver, at its heart.
 static func heal(lv: LaneView, field: Rect2, cx: float, y: float, alpha: float) -> void:
 	var lw := lv.road_scale(y) * _lane(field)
-	var top := disc(lv, field, cx, y, DISC_R * (1.05 if pixel else 1.0), K_HEAL, alpha, DISC_H, 1.0, SIDES, HEXAGON if pixel else PackedVector2Array())
-	if pixel:
-		_inlay(lv, top, lw, HEXAGON, CREAM, alpha)
-	else:
-		_pintadera(lv, top, lw, CREAM, alpha)
+	var top := disc(lv, field, cx, y, DISC_R, K_HEAL, alpha)
+	_pintadera(lv, top, lw, CREAM, alpha)
 	if lw < 6.0:
 		return
 	var c: Vector2 = top.call(Vector2.ZERO)
@@ -299,10 +265,7 @@ static func heal(lv: LaneView, field: Rect2, cx: float, y: float, alpha: float) 
 ## A hold's head: a gold pintadera.
 static func hold_head(lv: LaneView, field: Rect2, cx: float, y: float, alpha: float, lit: bool) -> void:
 	var lw := lv.road_scale(y) * _lane(field)
-	var top := disc(lv, field, cx, y, DISC_R, K_HOLD, alpha, DISC_H, 1.6 if lit else 1.0, SIDES, SQUARE if pixel else PackedVector2Array())
-	if pixel:
-		_inlay(lv, top, lw, SQUARE, CREAM, alpha)
-		return
+	var top := disc(lv, field, cx, y, DISC_R, K_HOLD, alpha, DISC_H, 1.6 if lit else 1.0)
 	_pintadera(lv, top, lw, CREAM, alpha)
 	_dot(lv, top, lw, K_HOLD[2], alpha)
 
@@ -310,14 +273,10 @@ static func hold_head(lv: LaneView, field: Rect2, cx: float, y: float, alpha: fl
 ## A stomp: a big disc of black mask wood with a bronze rim and two bare feet, thicker than a step.
 static func stomp(lv: LaneView, field: Rect2, cx: float, y: float, alpha: float) -> void:
 	var lw := lv.road_scale(y) * _lane(field)
-	var top := disc(lv, field, cx, y, STOMP_R, K_WOOD, alpha, DISC_H * 1.6, 1.4, SIDES, BAR if pixel else PackedVector2Array())
+	var top := disc(lv, field, cx, y, STOMP_R, K_WOOD, alpha, DISC_H * 1.6, 1.4)
 	if lw < 6.0 or alpha <= 0.01:
 		return
 	var rim := _circle(top, 0.9)
-	if pixel:
-		rim = PackedVector2Array()
-		for q: Vector2 in BAR:
-			rim.append(top.call(q * Vector2(0.92, 0.82)))
 	rim.append(rim[0])
 	lv.draw_polyline(rim, _a(BRONZE[0], alpha), maxf(2.0, lw * 0.045), true)
 	var sz := lw * 0.17
