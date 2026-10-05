@@ -9,17 +9,23 @@ extends Node
 ## sheet row per size covers the road; the nearest size is stretched by a few percent to fit.
 
 const KINDS := ["step", "off", "call", "heal", "hold", "stomp", "knot"]
-const SIZES := 40               ## rows: sizes from the far end of the road to past the hit line
-const CELL := 1.15              ## a cell's side in lane widths at its size (a stomp's disc fits)
+const STEP := 3.0               ## sheet px a cell grows by from one row to the next (a note is stretched by under 1 px)
+const CELL := Vector2(1.08, 0.78)  ## a cell's size in lane widths at its size (a stomp's disc fits)
+const REACH := 1.3             ## the sheet's biggest note: this times a note's size on the hit line
 
 var lanes: LaneView
 var _vp: SubViewport
 var _painter: _Painter
 var _ys: PackedFloat32Array = []      ## each row's depth on the road
 var _lws: PackedFloat32Array = []     ## ... its lane width on screen
-var _rows: Array[Rect2] = []          ## each row's band in the sheet (sheet pixels): y and height
+var _rows: Array[Rect2] = []          ## each row's cell (sheet pixels): its size, and y of its row
 var _key := Vector4.ZERO              ## the layout the sheet was painted for
 var _ready_frame := -1
+var _n := 0                           ## rows
+var _tex: Texture2D                   ## the sheet: the painting viewport's, then a kept copy
+
+## The last sheet painted, kept for the next song with the same layout (painting takes a moment).
+static var _kept := {}
 
 
 func _init(p_lanes: LaneView) -> void:
@@ -46,9 +52,26 @@ func ready_for(lv: LaneView) -> bool:
 	var key := Vector4(f.size.x, f.size.y, LaneSkin.hit_line_y(Rect2(Vector2.ZERO, f.size)), lv.project(Vector2.ZERO).y)
 	if key != _key:
 		_key = key
+		if _kept.get("key") == key:
+			_ys = _kept.ys; _lws = _kept.lws; _rows = _kept.rows; _n = _kept.n; _tex = _kept.tex
+			_ready_frame = 0
+			return true
 		_layout(lv)
 		return false
-	return _ready_frame >= 0 and Engine.get_process_frames() > _ready_frame
+	return is_ready()
+
+
+## True once the sheet has been painted (it takes a frame after a layout).
+func is_ready() -> bool:
+	if _ready_frame < 0 or Engine.get_process_frames() <= _ready_frame:
+		return false
+	if _tex == _vp.get_texture():
+		# keep a copy, so the next song starts without painting it again
+		var img := _tex.get_image()
+		if img != null and not img.is_empty():
+			_tex = ImageTexture.create_from_image(img)
+			_kept = {"key": _key, "ys": _ys, "lws": _lws, "rows": _rows, "n": _n, "tex": _tex}
+	return true
 
 
 func _layout(lv: LaneView) -> void:
@@ -57,31 +80,36 @@ func _layout(lv: LaneView) -> void:
 	var lane := field.size.x / 3.0
 	var hl := LaneSkin.hit_line_y(field)
 	var y0 := 0.0
-	var y1 := hl + lane * 0.6
+	# past the hit line the road widens fast: a note there is a missed one fading out, drawn in full
 	var lw0 := maxf(2.0, lv.road_scale(y0) * lane)
-	var lw1 := maxf(lw0 + 1.0, lv.road_scale(y1) * lane)
-	_ys.clear()
-	_lws.clear()
-	_rows.clear()
+	var lw1 := maxf(lw0 + 1.0, lv.road_scale(hl) * lane * REACH)
+	var y1 := hl + lane
+	_ys = PackedFloat32Array()   # fresh: the kept sheet may hold the old ones
+	_lws = PackedFloat32Array()
+	_rows = []
 	var px := PxArt.PX
 	var top := 0.0
 	var width := 0.0
-	for i in SIZES:
+	# just enough rows that the nearest is never more than STEP / 2 sheet px off: few, as the road
+	# narrows little, so the sheet is small and quick to paint
+	_n = clampi(ceili((lw1 - lw0) * CELL.x / px / STEP) + 1, 2, 64)
+	for i in _n:
 		# sizes in equal ratios: the far notes change little, the near ones a lot
-		var lw := lw0 * pow(lw1 / lw0, float(i) / (SIZES - 1))
+		var lw := lw0 * pow(lw1 / lw0, float(i) / (_n - 1))
 		var y := _depth_for(lv, lane, lw, y0, y1)
-		var side := ceilf(lw * CELL / px) + 4.0
+		var cell := (lw * CELL / px).ceil() + Vector2(4.0, 4.0)
 		_ys.append(y)
 		_lws.append(lw)
-		_rows.append(Rect2(0.0, top, side, side))
-		top += side
-		width = maxf(width, side * KINDS.size())
+		_rows.append(Rect2(Vector2(0.0, top), cell))
+		top += cell.y
+		width = maxf(width, cell.x * KINDS.size())
 	_vp.size = Vector2i(ceili(width), ceili(top))
 	_vp.canvas_transform = Transform2D().scaled(Vector2.ONE / px)
 	_painter.view = lv
 	_painter.field = field
 	_painter.queue_redraw()
 	_vp.render_target_update_mode = SubViewport.UPDATE_ONCE
+	_tex = _vp.get_texture()
 	_ready_frame = Engine.get_process_frames() + 1
 
 
@@ -96,17 +124,22 @@ func _depth_for(lv: LaneView, lane: float, lw: float, a: float, b: float) -> flo
 	return (a + b) * 0.5
 
 
+## Whether the sheet holds notes as big as lw (else the note is drawn in full).
+func covers(lw: float) -> bool:
+	return _n > 0 and lw <= _lws[_n - 1] * 1.02
+
+
 ## Draws the note `key` centred at c on lv, lw its lane width there, at opacity a.
 func stamp(lv: LaneView, key: String, c: Vector2, lw: float, a: float) -> void:
 	var col := KINDS.find(key)
 	if col < 0:
 		return
-	var i := clampi(int(roundf(log(lw / _lws[0]) / log(_lws[SIZES - 1] / _lws[0]) * (SIZES - 1))), 0, SIZES - 1)
+	var i := clampi(int(roundf(log(lw / _lws[0]) / log(_lws[_n - 1] / _lws[0]) * (_n - 1))), 0, _n - 1)
 	var row := _rows[i]
 	var src := Rect2(row.size.x * col, row.position.y, row.size.x, row.size.y)
 	var s := lw / _lws[i] * PxArt.PX
 	var dst := Rect2(c - row.size * 0.5 * s, row.size * s)
-	lv.draw_texture_rect_region(_vp.get_texture(), dst, src, Color(1.0, 1.0, 1.0, a))
+	lv.draw_texture_rect_region(_tex, dst, src, Color(1.0, 1.0, 1.0, a))
 
 
 ## Paints every kind at every size, each centred in its cell, through StreetSkin's own drawing.

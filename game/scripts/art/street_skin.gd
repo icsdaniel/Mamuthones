@@ -691,13 +691,16 @@ static func _stamp(lv: LaneView, field: Rect2, what: String, n: Note, cx: float,
 					key = "stomp"; k = K_WOOD; r = STOMP_R; glow = 1.4
 					a *= 0.6 if n.thumbs > 0 else 1.0
 				Note.Kind.RING:
-					bell(lv, field, y, n.up, a)
 					key = "off"; k = K_OFF
 				_:
 					return false
 	var lw: float = lv.road_scale(y) * _lane(field)
 	if lw < 2.0 or a <= 0.01:
 		return true
+	if not atlas.covers(lw):
+		return false
+	if n.kind == Note.Kind.RING and what != "hold" and what != "knot":
+		bell(lv, field, y, n.up, a)
 	var c: Vector2 = lv.project(Vector2(cx, y))
 	disc_glow(lv, c, r * lw, k, a, glow)
 	atlas.stamp(lv, key, c, lw, a)
@@ -729,6 +732,29 @@ static func _kind(lv: LaneView, n: Note, hold: bool) -> Array:
 	return K_STEP
 
 
+## The hit line's three slots, worked out once per layout (it never moves): for each lane its
+## centre, its outline, that outline closed, and the inner ring closed.
+static var _slot_key := []
+static var _slot_cache := []
+
+static func _slots(lv: LaneView, field: Rect2, rects: Array[Rect2], hl: float, lw: float) -> Array:
+	var key := [lv.get_instance_id(), field.size, hl, lv.project(Vector2.ZERO), lv.project(Vector2(field.size.x, hl))]
+	if key == _slot_key:
+		return _slot_cache
+	_slot_key = key
+	_slot_cache = []
+	for lane in 3:
+		var f := _frame3(lv, field, rects[lane].get_center().x, hl, DISC_R * _lane(field), 2.0 * DISC_R * lw * FORE)
+		var top := func(p: Vector2) -> Vector2: return f.call(Vector3(p.x, 0.0, p.y))
+		var sil := _circle(top, 1.0)
+		var ring := sil.duplicate()
+		ring.append(sil[0])
+		var inner := _circle(top, 0.7)
+		inner.append(inner[0])
+		_slot_cache.append([f.call(Vector3.ZERO), sil, ring, inner])
+	return _slot_cache
+
+
 static func _hit_line(lv: LaneView, field: Rect2, rects: Array[Rect2], hl: float, incoming: Array = [null, null, null]) -> void:
 	var l := lv.project(Vector2(-field.size.x * 0.02, hl))
 	var r: Vector2 = lv.project(Vector2(field.size.x * 1.02, hl))
@@ -736,19 +762,18 @@ static func _hit_line(lv: LaneView, field: Rect2, rects: Array[Rect2], hl: float
 	var lw: float = lv.road_scale(hl) * _lane(field)
 	lv.draw_line(l, r, Color(OUTLINE, 0.75), 10.0, true)
 	lv.draw_line(l, r, Color(1.0, 0.95, 0.85, 0.75 + 0.25 * env), 3.0, true)
+	var slots := _slots(lv, field, rects, hl, lw)
 	for lane in 3:
 		var g := lv._lane_glow(lane)
 		var cue := 1.0 if lv._cued(lane) else 0.0
 		var k := clampf(0.6 + 0.15 * env + 0.25 * cue + g, 0.0, 1.0)
-		var f := _frame3(lv, field, rects[lane].get_center().x, hl, DISC_R * _lane(field), 2.0 * DISC_R * lw * FORE)
-		var top := func(p: Vector2) -> Vector2: return f.call(Vector3(p.x, 0.0, p.y))
-		var sil := _circle(top, 1.0)
-		_glow(lv, f.call(Vector3.ZERO), Vector2(lw * 0.6, lw * 0.28), Color(1.0, 0.85, 0.55, 0.25 * cue + 0.6 * g))
+		var slot: Array = slots[lane]
+		var sil: PackedVector2Array = slot[1]
+		var ring: PackedVector2Array = slot[2]
+		_glow(lv, slot[0], Vector2(lw * 0.6, lw * 0.28), Color(1.0, 0.85, 0.55, 0.25 * cue + 0.6 * g))
 		ci_poly(lv, sil, Color(0.04, 0.03, 0.08, 0.6))
 		if g > 0.01:
 			ci_poly(lv, sil, Color(1.0, 0.97, 0.9, 0.7 * g))
-		var ring := sil.duplicate()
-		ring.append(sil[0])
 		lv.draw_polyline(ring, Color(OUTLINE, 0.9), 12.0 if pixel else 9.0, true)
 		var rim := Color(CREAM, 0.75 + 0.25 * k)
 		if incoming[lane] != null:
@@ -757,7 +782,5 @@ static func _hit_line(lv: LaneView, field: Rect2, rects: Array[Rect2], hl: float
 			var near: float = incoming[lane][1]
 			ci_poly(lv, sil, _a(kk[1], 0.35 * near * near))
 			rim = rim.lerp(kk[0], near)
-			var inner := _circle(top, 0.7)
-			inner.append(inner[0])
-			lv.draw_polyline(inner, _a(kk[0], 0.8 * near), 3.0, true)
+			lv.draw_polyline(slot[3], _a(kk[0], 0.8 * near), 3.0, true)
 		lv.draw_polyline(ring, rim, 5.0 if pixel else 3.5, true)

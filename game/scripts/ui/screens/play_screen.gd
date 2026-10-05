@@ -27,6 +27,7 @@ const GUTTER := 0.0               ## the road fills the width; the Mamuthones st
 const BANNER_SHARE := 0.4         ## the count-in and the stand-still moment use this top share of the lanes
 const FAIL_MENU_DELAY := 0.5      ## seconds from running out of health to the fail menu
 const LEAD_MIN := 4.5             ## a song starts at least this many seconds (and two bars) before its first note
+const SETTLE_MAX := 3.0           ## at most this many seconds of first frames before the song starts
 const INTRO_FADE := 0.4           ## seconds the music fades in when it starts inside its intro
 const END_FADE := 1.2             ## seconds the music fades out after the last note before the results
 const FIELD_MAX_W := 900.0        ## lanes and buttons stay thumb-sized on a tablet
@@ -317,6 +318,9 @@ func build() -> void:
 
 
 func _start() -> void:
+	await _settle()
+	if not is_inside_tree():
+		return
 	_layout_router()
 	if args.has("lead_in"):
 		conductor.play(song, session.remix, _first_t - float(args.lead_in))
@@ -344,6 +348,26 @@ func _start() -> void:
 		conductor.player.volume_db = -30.0
 		create_tween().tween_property(conductor.player, "volume_db", 0.0, INTRO_FADE)
 	_played = true
+
+
+## Lets the screen draw its first frames before the song's clock starts: loading pictures, building
+## shaders and painting the note sheet can hold a frame for a second on a phone, and the song clock
+## runs on real time, so starting it first made the opening notes jump forward together.
+## Returns once three frames in a row came quickly and the note sheet is painted (at most SETTLE_MAX s).
+func _settle() -> void:
+	if DisplayServer.get_name() == "headless":
+		return   # nothing is drawn, so nothing holds a frame (and tests expect the song at once)
+	var until := Time.get_ticks_msec() + int(SETTLE_MAX * 1000.0)
+	var steady := 0
+	var last := Time.get_ticks_usec()
+	while Time.get_ticks_msec() < until:
+		await get_tree().process_frame
+		var now := Time.get_ticks_usec()
+		steady = steady + 1 if now - last < 50_000 else 0
+		last = now
+		var sheet_ok := StreetSkin.atlas == null or StreetSkin.atlas.is_ready()
+		if steady >= 3 and sheet_ok:
+			return
 
 
 ## Whether the soft bell cue plays: the "bell_cue" setting (on unless turned off), Easy and Medium only.

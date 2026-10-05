@@ -1099,6 +1099,8 @@ func _exit_tree() -> void:
 ## bursts, the stand-still label, the early/late marks and the buttons.
 func _draw_street() -> void:
 	var field := field_rect()
+	if StreetSkin.atlas != null and StreetSkin.atlas.lanes == self:
+		StreetSkin.atlas.ready_for(self)   # painted with the first frame, before any note shows
 	if session != null:
 		StreetSkin.draw_notes(self, field)
 	for b in _bursts:
