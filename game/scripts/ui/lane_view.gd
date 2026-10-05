@@ -1368,7 +1368,23 @@ func _draw_pixel_buttons() -> void:
 ## A bare footprint in whole art px: centre c (art px from o), h art px tall, left (-1) or right (1)
 ## foot, filled in col with a one-px shadow below its edge.
 func _pixel_foot(o: Vector2, c: Vector2, h: int, foot: float, col: Color, shade: Color) -> void:
+	var runs := _foot_runs(h, foot)
+	for pass_ in 2:
+		var dy := 1 if pass_ == 0 else 0
+		for run: Vector3i in runs:
+			_px(o, c.x + run.x, c.y + run.y + dy, run.z, 1, shade if pass_ == 0 else col)
+
+
+## The footprint's shape as runs of art px (x, y, length) from its centre, worked out once per size
+## and foot: the buttons are drawn every frame and testing every pixel each time was most of a frame.
+static var _foot_cache := {}
+
+static func _foot_runs(h: int, foot: float) -> Array[Vector3i]:
+	var key := Vector2i(h, int(foot))
+	if _foot_cache.has(key):
+		return _foot_cache[key]
 	var w := int(ceil(h * 0.3))
+	var toes := [Vector3(-0.16, -0.8, 0.14), Vector3(0.08, -0.84, 0.085), Vector3(0.26, -0.78, 0.075), Vector3(0.42, -0.68, 0.07), Vector3(0.55, -0.55, 0.065)]
 	var inside := func(x: float, y: float) -> bool:
 		# in units of half the foot's height: y -1 the toes' tips .. 1 the heel; x across, + outward
 		var u := x / (h * 0.5) * foot
@@ -1387,17 +1403,24 @@ func _pixel_foot(o: Vector2, c: Vector2, h: int, foot: float, col: Color, shade:
 				return u >= -inner * r and u <= half * r
 			return u >= lo and u <= half
 		# the toes: the big one on the inside, the rest smaller, stepping down outward
-		var toes := [Vector3(-0.16, -0.8, 0.14), Vector3(0.08, -0.84, 0.085), Vector3(0.26, -0.78, 0.075), Vector3(0.42, -0.68, 0.07), Vector3(0.55, -0.55, 0.065)]
 		for t: Vector3 in toes:
 			if (u - t.x) * (u - t.x) + (v - t.y) * (v - t.y) <= t.z * t.z:
 				return true
 		return false
-	for pass_ in 2:
-		for yy in range(-h / 2 - 2, h / 2 + 2):
-			for xx in range(-w, w + 1):
-				if inside.call(float(xx) + 0.5, float(yy) + 0.5):
-					var dy := 1 if pass_ == 0 else 0
-					_px(o, c.x + xx, c.y + yy + dy, 1, 1, shade if pass_ == 0 else col)
+	var runs: Array[Vector3i] = []
+	for yy in range(-h / 2 - 2, h / 2 + 2):
+		var start := 0
+		var open := false
+		for xx in range(-w, w + 2):
+			var on: bool = xx <= w and inside.call(float(xx) + 0.5, float(yy) + 0.5)
+			if on and not open:
+				start = xx
+				open = true
+			elif not on and open:
+				runs.append(Vector3i(start, yy, xx - start))
+				open = false
+	_foot_cache[key] = runs
+	return runs
 
 
 ## A bare footprint (left foot for -1, right for 1): the sole and five toes.

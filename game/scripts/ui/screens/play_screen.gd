@@ -213,6 +213,10 @@ func build() -> void:
 		cue.mouse_filter = Control.MOUSE_FILTER_IGNORE
 		_field_box.add_child(cue)
 
+	if pixel:
+		# the pixel look is drawn at the base size and scaled up whole: a phone's screen has two to
+		# four times the pixels, which the lens would only fold back into the same cells
+		get_window().content_scale_mode = Window.CONTENT_SCALE_MODE_VIEWPORT
 	if pixel and not OS.has_environment("NO_LENS"):
 		filter = PixelFilter.new()
 		filter.name = "PixelFilter"
@@ -839,6 +843,8 @@ func _finish() -> void:
 
 
 func _exit_tree() -> void:
+	if pixel:
+		get_window().content_scale_mode = Window.CONTENT_SCALE_MODE_CANVAS_ITEMS
 	if conductor != null:
 		conductor.pause()
 	_end_sound()

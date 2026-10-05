@@ -345,8 +345,8 @@ func _process(delta: float) -> void:
 	_glow.queue_redraw()
 
 
-## The pixel look's road moves with the notes: its cobbles travel toward the player at the notes'
-## speed, so a note rides the road like a stone set in it (still with reduced motion).
+## The pixel look's cobbled road, laid in the street's perspective. It stays still: Daniele found the
+## travelling road too much on his phone (2026-10-05), so only the notes move.
 func _move_road() -> void:
 	if _mat == null or lanes == null or not lanes.is_inside_tree():
 		return
@@ -366,8 +366,7 @@ func _move_road() -> void:
 	_mat.set_shader_parameter("inv_far", 1.0 / (FAR_Y - VANISH_Y))
 	_mat.set_shader_parameter("inv_hit", 1.0 / maxf(yh - VANISH_Y, 1.0))
 	_mat.set_shader_parameter("depth", hl / lane)
-	var sc := 0.0 if reduced_motion else lanes.song_time * lanes._px_per_s() / lane
-	_mat.set_shader_parameter("scroll", fposmod(sc, 4096.0))
+	_mat.set_shader_parameter("scroll", 0.0)
 
 
 ## The figures bob on every beat, after the character in Daniele's recording: on the beat each drops
