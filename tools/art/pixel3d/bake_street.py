@@ -15,20 +15,16 @@ import pixelate as px
 SRC = os.path.join(px.GAME, "art/street/street.png")
 OUT = os.path.join(px.GAME, "art/pixel/street.png")
 CELL = 3.0 / max(720.0 / 941.0, 1440.0 / 1672.0)   # picture px per cell on the base screen
+K = 56   # colours in the street's own palette
 
 
 def main():
     rgb = np.asarray(Image.open(SRC).convert("RGB"))
     h, w = rgb.shape[:2]
     size = (int(round(w / CELL)), int(round(h / CELL)))
-    # the cobbles and walls flattened into areas; the fire and the sky kept as they are (mean shift
-    # would melt the flames and their sparks into one red smear)
-    flat = px.flatten(rgb, 4, 12)
-    keep = np.zeros(rgb.shape[:2], np.float32)
-    keep[:470] = 1.0
-    keep = cv2.GaussianBlur(keep, (0, 0), 12)[..., None]
-    soft = cv2.bilateralFilter(np.ascontiguousarray(rgb), 7, 30, 5)
-    mixed = (soft * keep + flat * (1.0 - keep)).astype(np.uint8)
+    # an edge-keeping smooth over the whole picture: the stones' texture goes, the flames, walls
+    # and lines keep their edges
+    mixed = px.smooth(rgb, 9, 20, 7)
     # the red haze the picture puts above the flames reads as a solid red column once it is pixels:
     # let the night sky show through it (only dim, red, above the flames)
     hz = mixed.astype(np.float32)
@@ -39,12 +35,13 @@ def main():
     m = cv2.GaussianBlur(m, (0, 0), 3)[..., None]
     sky = np.array([28, 26, 52], np.float32)
     mixed = (hz * (1 - 0.8 * m) + sky * 0.8 * m).astype(np.uint8)
-    small = px.shrink(mixed, size)
-    # dither only the dark, plain sky (not the fire's glow): bands there would show
-    m = px.gradient_mask(small)
-    lum = small.astype(np.float32).mean(-1)
-    m *= (lum < 60).astype(np.float32)
-    out = px.snap(small, dither=m, amount=6.0)
+    small = px.sharpen(px.shrink(mixed, size), 0.6)
+    # the street's own colours; the bright fire counted four times over, so its yellows and whites
+    # each get a colour instead of all snapping to one red
+    flat = small.reshape(-1, 3)
+    pal = px.kpalette(np.concatenate([flat, np.repeat(flat[flat.mean(-1) > 150], 3, 0)]), K)
+    idx = px.despeckle(px.nearest(small, pal), np.ones(small.shape[:2], bool), pal, 2, 22.0)
+    out = pal[idx]
     Image.fromarray(out.astype(np.uint8)).save(OUT)
     print("street", size)
 
