@@ -9,7 +9,7 @@
 Every part is a picture of the same size (the whole figure's canvas, feet at the bottom centre), so
 they line up when none has moved. What a part covers is painted into the parts under it (fleece
 under the bells, a dark shadow under the head), so nothing shows a hole when a part slides. Each
-part is shrunk to the play screen's grid, snapped to the figure's own palette and outlined (see bake).
+part is shrunk to the play screen's grid, snapped to the palette and outlined in ink.
 
 Writes game/art/pixel/<figure>_<part>.png and prints the pivots for PixelFigure.PARTS.
 """
@@ -24,10 +24,7 @@ SRC = os.path.join(px.GAME, "art/street")
 OUT = os.path.join(px.GAME, "art/pixel")
 H = 172   # cells tall (the figure in its portrait on the base screen; 118, then 140, until Daniele asked for figures that fill their portraits, 2026-10-05)
 
-K = 40          # colours in each figure's own palette
-SHARPEN = 0.7   # unsharp amount on the grid
-
-HSV_GOLD =((12, 31), (110, 256), (100, 256))
+HSV_GOLD = ((12, 31), (110, 256), (100, 256))
 
 
 def gold(a, box):
@@ -84,45 +81,66 @@ def shrink_rgba(a, size):
     return out
 
 
-def tone(rgb, alpha, contrast=1.15, sat=1.25):
-    """In the game the figures stand in warm firelight that washes them a little: a touch more value
-    contrast and colour than the picture (a straight stretch, not the old local CLAHE that turned
-    the fleece to noise)."""
-    lab = cv2.cvtColor(np.ascontiguousarray(rgb), cv2.COLOR_RGB2LAB).astype(np.float32)
-    m = lab[..., 0][alpha > 0].mean() if (alpha > 0).any() else 128.0
-    lab[..., 0] = (lab[..., 0] - m) * contrast + m
-    lab[..., 1:] = (lab[..., 1:] - 128.0) * sat + 128.0
-    out = cv2.cvtColor(np.clip(lab, 0, 255).astype(np.uint8), cv2.COLOR_LAB2RGB)
+def punch(rgb, alpha, clip=1.4, gain=1.0, lift=4):
+    """Pixel art reads by value: lift the dark figure's local contrast and colour a little."""
+    lab = cv2.cvtColor(np.ascontiguousarray(rgb), cv2.COLOR_RGB2LAB)
+    L = lab[..., 0]
+    if clip > 0:
+        L = cv2.createCLAHE(clipLimit=clip, tileGridSize=(4, 4)).apply(L)
+    lab[..., 0] = np.clip(L.astype(np.float32) * gain + lift, 0, 255).astype(np.uint8)
+    out = cv2.cvtColor(lab, cv2.COLOR_LAB2RGB).astype(np.float32)
+    g = out.mean(-1, keepdims=True)
+    out = np.clip(g + (out - g) * 1.2, 0, 255).astype(np.uint8)
     return np.where(alpha[..., None] > 0, out, rgb)
 
 
-def bake(name, parts, order, layers_fn, contrast=1.15):
-    """Second pass (2026-10-05): the figure's own look kept. Each part is smoothed (edges kept),
-    shrunk by area, sharpened a little, snapped to the figure's OWN K colours (taken from the whole
-    figure at this size, so the parts match), cleared of lone stray cells and outlined in a dark
-    shade of the colour beside it. No more contrast push, firelit rim or lifted mask: the picture
-    already has its firelight, and the push made the fleece noisy and the black mask pale."""
+def rim(s, side, col=(255, 200, 120)):
+    """A warm rim of firelight on the side of the figure facing the bonfire (side +1: its right)."""
+    a = s[..., 3] > 0
+    nb = np.roll(a, -side, axis=1)
+    if side > 0:
+        nb[:, -1] = False
+    else:
+        nb[:, 0] = False
+    edge = a & ~nb
+    out = s.copy().astype(np.float32)
+    out[edge, :3] = out[edge, :3] * 0.35 + np.array(col) * 0.65
+    out = out.astype(np.uint8)
+    out[edge, :3] = px.snap(out[edge, :3].reshape(-1, 1, 3)).reshape(-1, 3)
+    return out
+
+
+def bake(name, parts, order, layers_fn, side=1, tone=(1.4, 1.0, 4)):
     a = np.asarray(Image.open(os.path.join(SRC, name + "_bob_0.png")).convert("RGBA")).copy()
     a[..., 3] = np.where(a[..., 3] > 100, 255, 0)
     h, w = a.shape[:2]
     k = H / h
     size = (int(round(w * k)), H)
-    soft = a.copy()
-    soft[..., :3] = px.smooth(a[..., :3])
-    whole = shrink_rgba(soft, size)
-    pal = px.kpalette(tone(px.sharpen(whole[..., :3], SHARPEN), whole[..., 3], contrast)[whole[..., 3] > 0], K)
-    layers = layers_fn(soft, parts)
+    flat = a.copy()
+    flat[..., :3] = px.flatten(np.ascontiguousarray(a[..., :3]), 4, 12)
+    flat[..., :3] = punch(flat[..., :3], flat[..., 3], *tone)
+    layers = layers_fn(flat, parts)
     union = np.zeros((H, size[0]), bool)
     small = {}
     for p in order:
         s = shrink_rgba(layers[p], size)
         opaque = s[..., 3] > 0
-        idx = px.despeckle(px.nearest(tone(px.sharpen(s[..., :3], SHARPEN), s[..., 3], contrast), pal), opaque, pal)
-        s[..., :3] = np.where(opaque[..., None], pal[idx], 0)
+        if p == "head" and name == "mamuthone":
+            # the black wooden mask: lift its carved planes so the face reads at this size
+            hs = s[..., :3].astype(np.float32)
+            lum = hs.mean(-1, keepdims=True)
+            hs = np.where(opaque[..., None], np.clip(lum + (hs - lum) * 0.6, 0, 255) * 1.0 + (lum - 30) * 0.9, hs)
+            s[..., :3] = np.clip(hs, 0, 255).astype(np.uint8)
+        if "bells" in p:
+            # the bronze stands out from the fleece: brighter and warmer than in the picture
+            s[..., :3] = np.clip(s[..., :3].astype(np.float32) * np.array([1.12, 1.06, 0.95]) + 4, 0, 255).astype(np.uint8)
+        s[..., :3] = np.where(opaque[..., None], px.snap(s[..., :3]), 0)
+        s = rim(s, side)
         small[p] = s
         union |= opaque
+    pivots = {}
     for p in order:
-        s = px.selout(small[p], 0.15)
+        s = px.outline(small[p])
         # no ink inside the figure's own silhouette for the big base parts: only round its outside
         if p in ("body", "legs"):
             ring = (s[..., 3] > 0) & (small[p][..., 3] == 0)
@@ -174,8 +192,8 @@ def issohadore_layers(a, parts):
 
 def main():
     os.makedirs(OUT, exist_ok=True)
-    bake("mamuthone", None, ["legs", "body", "back_bells", "front_bells", "head"], mamuthone_layers)
-    bake("issohadore", None, ["legs", "body", "rope", "head"], issohadore_layers)
+    bake("mamuthone", None, ["legs", "body", "back_bells", "front_bells", "head"], mamuthone_layers, -1, (0, 0.95, 0))
+    bake("issohadore", None, ["legs", "body", "rope", "head"], issohadore_layers, 1)
 
 
 if __name__ == "__main__":

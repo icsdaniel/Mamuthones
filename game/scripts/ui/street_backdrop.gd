@@ -157,10 +157,6 @@ func _ready() -> void:
 	add.blend_mode = CanvasItemMaterial.BLEND_MODE_ADD
 	_glow.material = add
 	add_child(_glow)
-	if pixel:
-		# the pixel look's light stays on the street, under the portraits: added over them it washed
-		# the figures' few colours out (the Mamuthone's dark fleece turned tan)
-		move_child(_glow, _frames[0].get_index())
 	_sparks = _make_sparks()
 	add_child(_sparks)
 	resized.connect(_fit)
@@ -674,7 +670,7 @@ func _draw_glow(ci: CanvasItem) -> void:
 		var f := 0.75 + 0.25 * sin(_clock * (8.0 + i * 1.7) + i * 2.0) * sin(_clock * 13.0 + i)
 		var r := 46.0 * pic_scale / 0.86 * (1.0 + 0.1 * f)
 		# (the pixel look keeps the lanterns' light off the portraits: it washes their few colours out)
-		var la := 0.34 if not pixel else (0.04 if i < 2 else 0.3)
+		var la := 0.34 if not pixel else (0.12 if i < 2 else 0.3)
 		ci.draw_texture_rect(_glow_tex, Rect2(p - Vector2(r, r), Vector2(r, r) * 2.0), false, Color(1.0, 0.62, 0.25, la * f * (1.0 - 0.5 * dim)))
 	# the fire's own breath, and its flare on the beat
 	var fp := to_local_pic(FIRE + Vector2(0, 40))

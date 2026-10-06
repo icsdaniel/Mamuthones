@@ -1,12 +1,9 @@
 """Shared steps for turning Daniele's pictures into pixel art on the play screen's grid.
 
-The second pass (Daniele, 2026-10-05: "do a better job with the pixel artification") keeps each
-picture's own look: an edge-keeping smooth (bilateral, not mean shift: that melted the flames and
-the fleece), a shrink by area, a light sharpen on the grid, then a palette of the picture's OWN
-colours (k-means in Lab: kpalette) instead of one shared palette, nearest colour in Lab, no dither,
-lone stray cells merged into their neighbours (despeckle), and an outline in a dark shade of the
-colour next to it (selout) rather than flat ink. The older shared palette (palette.png, snap) is
-kept for PixelFilter, which only runs without the World viewport.
+pixelate(rgb, size, ...) flattens the picture's texture into areas first (mean shift, so the cells
+take clean colours instead of noise), shrinks it to `size` by area, then snaps every cell to the
+palette (game/art/pixel/palette.png), nearest in Lab, with a light ordered dither only where the
+picture is a smooth gradient (the sky), so flat areas stay flat.
 """
 import os
 import numpy as np
@@ -67,75 +64,4 @@ def outline(rgba, ink=(7, 6, 10)):
     out = rgba.copy()
     out[..., 3] = np.where(a, 255, 0)
     out[ring] = (*ink, 255)
-    return out
-
-
-# ------------------------------------------------------------------ second pass
-
-
-def rgb_of_lab(L):
-    sh = L.shape
-    return cv2.cvtColor(np.clip(L, 0, 255).astype(np.uint8).reshape(-1, 1, 3), cv2.COLOR_LAB2RGB).reshape(sh)
-
-
-def kpalette(pixels, k, seed=7):
-    """The picture's own k colours (k-means in Lab over `pixels`, any shape ending in 3)."""
-    L = lab(np.asarray(pixels, np.uint8).reshape(-1, 1, 3)).reshape(-1, 3)
-    crit = (cv2.TERM_CRITERIA_EPS + cv2.TERM_CRITERIA_MAX_ITER, 80, 0.3)
-    cv2.setRNGSeed(seed)
-    _, _, c = cv2.kmeans(L.astype(np.float32), k, None, crit, 5, cv2.KMEANS_PP_CENTERS)
-    return rgb_of_lab(c.reshape(-1, 3))
-
-
-def nearest(rgb, pal):
-    """Index of the palette colour nearest in Lab, per pixel."""
-    L = lab(rgb)
-    P = lab(pal.reshape(-1, 1, 3)).reshape(-1, 3)
-    return np.argmin(((L[..., None, :] - P) ** 2).sum(-1), -1)
-
-
-def smooth(rgb, d=7, sc=24, ss=5):
-    """Edge-keeping smooth before the shrink: the texture goes, the shapes' edges stay."""
-    return cv2.bilateralFilter(np.ascontiguousarray(rgb), d, sc, ss)
-
-
-def sharpen(rgb, amount=0.7):
-    f = rgb.astype(np.float32)
-    return np.clip(f + (f - cv2.GaussianBlur(f, (0, 0), 0.8)) * amount, 0, 255).astype(np.uint8)
-
-
-def despeckle(idx, mask, pal, passes=2, max_d=28.0):
-    """A cell unlike all four neighbours, three of which agree on a close colour, takes theirs."""
-    P = lab(pal.reshape(-1, 1, 3)).reshape(-1, 3)
-    h, w = idx.shape
-    for _ in range(passes):
-        out = idx.copy()
-        pad = np.pad(idx, 1, mode="edge")
-        pm = np.pad(mask, 1)
-        nb = [pad[0:h, 1:w + 1], pad[2:h + 2, 1:w + 1], pad[1:h + 1, 0:w], pad[1:h + 1, 2:w + 2]]
-        nm = [pm[0:h, 1:w + 1], pm[2:h + 2, 1:w + 1], pm[1:h + 1, 0:w], pm[1:h + 1, 2:w + 2]]
-        same = sum(((n == idx) & m) for n, m in zip(nb, nm))
-        for y, x in zip(*np.nonzero((same == 0) & mask)):
-            vals = [int(nb[k][y, x]) for k in range(4) if nm[k][y, x]]
-            if len(vals) < 3:
-                continue
-            u, c = np.unique(vals, return_counts=True)
-            j = u[np.argmax(c)]
-            if c.max() >= 3 and np.linalg.norm(P[j] - P[idx[y, x]]) < max_d:
-                out[y, x] = j
-        idx = out
-    return idx
-
-
-def selout(rgba, keep=0.25, ink=(10, 7, 12)):
-    """A one-cell outline round the opaque part, each cell a dark shade of the colour beside it."""
-    a = rgba[..., 3] > 0
-    ker = np.array([[0, 1, 0], [1, 1, 1], [0, 1, 0]], np.uint8)
-    ring = (cv2.dilate(a.astype(np.uint8), ker) > 0) & ~a
-    f = rgba[..., :3].astype(np.float32) * a[..., None]
-    near = cv2.blur(f, (3, 3)) / np.maximum(cv2.blur(a.astype(np.float32), (3, 3))[..., None], 1e-3)
-    out = rgba.copy()
-    out[..., 3] = np.where(a, 255, 0)
-    out[ring, :3] = (near * keep + np.array(ink, np.float32) * (1.0 - keep))[ring].astype(np.uint8)
-    out[ring, 3] = 255
     return out
