@@ -26,6 +26,12 @@ const SCENE_SHARE := 0.27         ## Piazza: share of the screen height given to
 const GUTTER := 0.0               ## the road fills the width; the Mamuthones stand beside its far end
 const BANNER_SHARE := 0.4         ## the count-in and the stand-still moment use this top share of the lanes
 const FAIL_MENU_DELAY := 0.5      ## seconds from running out of health to the fail menu
+const LEAD_MIN := 4.5             ## a song starts at least this many seconds (and two bars) before its first note
+const SETTLE_MAX := 3.0           ## at most this many seconds of first frames before the song starts
+const VIS_SNAP := 0.1             ## seconds the shown time may be off the song's clock before it jumps to it
+const VIS_PULL := 0.1             ## share of the gap to the song's clock the shown time closes each frame
+const INTRO_FADE := 0.4           ## seconds the music fades in when it starts inside its intro
+const END_FADE := 1.2             ## seconds the music fades out after the last note before the results
 const FIELD_MAX_W := 900.0        ## lanes and buttons stay thumb-sized on a tablet
 const JUDGE_WORDS := {
 	"perfect": "judge_perfect", "good": "judge_good", "early": "judge_ok", "late": "judge_ok",
@@ -33,6 +39,8 @@ const JUDGE_WORDS := {
 	"silence": "judge_silence",
 }
 
+var _vis_t := NAN                 ## the song time the screen shows (_visual_time)
+var _song_t := 0.0                ## ... and the song's clock that frame (tests/start_profile.gd compares them)
 var song: SongData
 var session: Session
 var conductor: Conductor
@@ -43,8 +51,12 @@ var hud: Hud
 var scene                         ## SideRows (songs) or ProcessionScene (Piazza): the same calls
 var banner: Control               ## over the top of the lanes: count-in and stand-still moment
 var lanes: LaneView
-var backdrop: FireBackdrop        ## the night, the bonfire and the square behind the road (songs)
+var backdrop: StreetBackdrop     ## the street picture, the fire and the swaying portraits (songs)
 var words: JudgementWords
+var filter: PixelFilter           ## the pixel look's lens over the whole screen (art style "pixel")
+var world: SubViewportContainer   ## the pixel look: the street, lanes and HUD drawn at the base size
+var world_vp: SubViewport
+var pixel := false                ## the play screen is in the pixel look
 var cue: PiazzaCue
 var paused := false
 var done := false
@@ -64,6 +76,7 @@ var _count_from := 0.0           ## real time the first count-in stick is heard
 var _count_music_t := 0.0        ## song time the music starts from after the count-in
 var _played := false             ## the music has run since the last count-in
 var _audio_count := false        ## the song started at its own count-in (sticks in the music)
+var _bar_count := false          ## the song started inside its intro: 4-3-2-1 over the bar before the first note's
 var _tap_hit := false            ## the tap being handled judged a note (set by _on_judged)
 var _tap_quality := ""           ## how well it hit: perfect, good, ok (Sound.step's quality)
 var _clock := 0.0
@@ -72,6 +85,7 @@ var _still := false
 var _fail_panel: Control
 var failed := false               ## health ran out: the run is over and records nothing
 var _fail_at := -1.0              ## _clock when the fail menu comes up (-1: not pending)
+var _finish_at := -1.0            ## _clock when the end fade is over and the results come (-1: not pending)
 var _dim := 0.0                   ## how far the bonfire is dimmed for low health (0..1)
 
 
@@ -104,17 +118,57 @@ func build() -> void:
 		ghost = Ghost.from_dict(gd)
 
 	# The Piazza keeps its plain black ground under the procession; songs play on the Fire Night.
+	pixel = str(Profile.get_setting("art_style")) == "pixel" and not session.piazza
+	StreetSkin.pixel = pixel
+	# The pixel look draws the street, the lanes and the HUD straight into one small picture, one
+	# pixel per art pixel (a third of the base size each way), and shows it enlarged with hard edges.
+	# That is the pixel art itself: no filter reads the screen back and no other picture is drawn,
+	# so a phone does far less work per frame than for the painted look at full resolution.
+	var host: Node = self
+	if pixel and not OS.has_environment("NO_WORLD"):
+		world = SubViewportContainer.new()
+		world.name = "World"
+		world.stretch = true
+		world.stretch_shrink = int(PxArt.PX)
+		world.set_anchors_preset(Control.PRESET_FULL_RECT)
+		world.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
+		world_vp = SubViewport.new()
+		world_vp.name = "WorldView"
+		world_vp.disable_3d = true
+		world_vp.handle_input_locally = true
+		world_vp.size_2d_override_stretch = true
+		world_vp.canvas_item_default_texture_filter = Viewport.DEFAULT_CANVAS_ITEM_TEXTURE_FILTER_NEAREST
+		world.add_child(world_vp)
+		add_child(world)
+		world.resized.connect(func() -> void: world_vp.size_2d_override = Vector2i(world.size.round()))
+		world_vp.size_2d_override = Vector2i(world.size.round())
+		host = world_vp
+	# a picture of its own does not inherit the app's theme: hand it on to what is drawn in it
+	var host_theme: Theme = null
+	if host != self:
+		var n: Node = self
+		while n != null and host_theme == null:
+			if n is Control and (n as Control).theme != null:
+				host_theme = (n as Control).theme
+			n = n.get_parent()
+		if host_theme == null:
+			host_theme = WoodcutTheme.build()
 	var bg: Control
 	if session.piazza:
 		bg = ColorRect.new()
 		(bg as ColorRect).color = Palette.BLACK
 	else:
-		backdrop = FireBackdrop.new()
+		backdrop = StreetBackdrop.new()
+		PxType.smooth = not bool(args.get("embedded", false)) and not pixel
 		backdrop.name = "Backdrop"
+		backdrop.pixel = pixel
+		backdrop.own_cells = world == null
+		backdrop.bell_set = str(args.get("bell_set", "village"))
 		bg = backdrop
 	bg.set_anchors_preset(Control.PRESET_FULL_RECT)
 	bg.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	add_child(bg)
+	bg.theme = host_theme
+	host.add_child(bg)
 	var safe := UIKit.safe_margins(self)
 	var col := VBoxContainer.new()
 	col.set_anchors_preset(Control.PRESET_FULL_RECT)
@@ -124,7 +178,8 @@ func build() -> void:
 	col.offset_right = -safe.z
 	col.add_theme_constant_override("separation", 0)
 	col.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	add_child(col)
+	col.theme = host_theme
+	host.add_child(col)
 
 	var hud_margin := MarginContainer.new()
 	hud_margin.add_theme_constant_override("margin_left", 24)
@@ -133,6 +188,7 @@ func build() -> void:
 	col.add_child(hud_margin)
 	hud = Hud.new()
 	hud.name = "Hud"
+	hud.pixel = pixel
 	hud_margin.add_child(hud)
 	hud.setup(session, ghost)
 	hud.pause_pressed.connect(pause)
@@ -152,18 +208,13 @@ func build() -> void:
 		scene = procession
 		col.add_child(_field_box)
 	else:
-		# The stage: the files of Mamuthones behind, the lanes between them.
+		# The stage: the lanes over the street; the street itself (with its swaying figures) is the backdrop.
 		var stage := Control.new()
 		stage.name = "Stage"
 		stage.size_flags_vertical = Control.SIZE_EXPAND_FILL
 		stage.mouse_filter = Control.MOUSE_FILTER_IGNORE
 		col.add_child(stage)
-		var rows := SideRows.new()
-		rows.name = "SideRows"
-		rows.set_anchors_preset(Control.PRESET_FULL_RECT)
-		rows.bell_set = str(args.get("bell_set", "village"))
-		stage.add_child(rows)
-		scene = rows
+		scene = backdrop
 		var gut := MarginContainer.new()
 		gut.set_anchors_preset(Control.PRESET_FULL_RECT)
 		gut.mouse_filter = Control.MOUSE_FILTER_IGNORE
@@ -185,11 +236,14 @@ func build() -> void:
 	lanes.visible = not session.piazza
 	lanes.spb = _spb
 	if not session.piazza:
-		scene.lanes = lanes
 		backdrop.lanes = lanes
+		lanes.street = backdrop
+		lanes.pixel = pixel
 	_field_box.add_child(lanes)
 	words = JudgementWords.new()
 	words.set_anchors_preset(Control.PRESET_FULL_RECT)
+	if pixel:
+		words.z_index = PixelFilter.Z_OVER
 	lanes.add_child(words)
 
 	if session.piazza:
@@ -201,6 +255,11 @@ func build() -> void:
 			cue.player = str((round.players as Array)[int(round.turn)])
 		cue.mouse_filter = Control.MOUSE_FILTER_IGNORE
 		_field_box.add_child(cue)
+
+	if pixel and world == null and not OS.has_environment("NO_LENS"):
+		filter = PixelFilter.new()
+		filter.name = "PixelFilter"
+		host.add_child(filter)
 
 	conductor = Conductor.new()
 	conductor.name = "Conductor"
@@ -230,6 +289,7 @@ func build() -> void:
 	session.hold_started.connect(func(lane: int) -> void: Sound.hold_start(lane))
 	session.hold_ended.connect(func(lane: int, _kept: bool) -> void: Sound.hold_stop(lane))
 	session.wrong_step.connect(_on_wrong_step)
+	session.stray.connect(_on_stray)
 	session.stomp_landed.connect(_on_stomp)
 	session.still_kept.connect(_on_still_kept)
 	session.failed.connect(_on_failed)
@@ -245,6 +305,8 @@ func build() -> void:
 		banner.anchor_right = 1.0
 		banner.anchor_bottom = BANNER_SHARE
 		lanes.add_child(banner)
+	if pixel:
+		banner.z_index = PixelFilter.Z_OVER
 	count_view = CountInView.new()
 	count_view.name = "CountIn"
 	banner.add_child(count_view)
@@ -261,6 +323,9 @@ func build() -> void:
 
 
 func _start() -> void:
+	await _settle()
+	if not is_inside_tree():
+		return
 	_layout_router()
 	if args.has("lead_in"):
 		conductor.play(song, session.remix, _first_t - float(args.lead_in))
@@ -279,15 +344,57 @@ func _start() -> void:
 	var start := 0.0
 	if _first_t < 4.0 * _spb + 0.5:
 		start = _first_t - (4.0 * _spb + 0.5)
+	else:
+		start = intro_start_time()
 	_audio_count = start <= song.time_of(-4.0, session.remix) + 0.01
 	conductor.play(song, session.remix, start)
+	if start > 0.0:
+		_bar_count = true
+		conductor.player.volume_db = -30.0
+		create_tween().tween_property(conductor.player, "volume_db", 0.0, INTRO_FADE)
 	_played = true
+
+
+## Lets the screen draw its first frames before the song's clock starts: loading pictures, building
+## shaders and painting the note sheet can hold a frame for a second on a phone, and the song clock
+## runs on real time, so starting it first made the opening notes jump forward together.
+## Returns once three frames in a row came quickly and the note sheet is painted (at most SETTLE_MAX s).
+func _settle() -> void:
+	if DisplayServer.get_name() == "headless":
+		return   # nothing is drawn, so nothing holds a frame (and tests expect the song at once)
+	var until := Time.get_ticks_msec() + int(SETTLE_MAX * 1000.0)
+	var steady := 0
+	var last := Time.get_ticks_usec()
+	while Time.get_ticks_msec() < until:
+		await get_tree().process_frame
+		var now := Time.get_ticks_usec()
+		steady = steady + 1 if now - last < 50_000 else 0
+		last = now
+		var sheet_ok := StreetSkin.atlas == null or StreetSkin.atlas.is_ready()
+		if steady >= 3 and sheet_ok:
+			return
 
 
 ## Whether the soft bell cue plays: the "bell_cue" setting (on unless turned off), Easy and Medium only.
 static func bell_cue_on(difficulty: String) -> bool:
 	var v: Variant = Profile.get_setting("bell_cue")
 	return (v == null or bool(v)) and difficulty in ["easy", "medium"]
+
+
+## Song time the music starts from: the latest bar line that leaves at least two bars and LEAD_MIN
+## seconds before the first note, so nobody waits through a whole intro (0: the song's very start,
+## with its own count-in sticks, when the intro is that short already).
+func intro_start_time() -> float:
+	var b := first_bar() - 8.0
+	while b > -4.0 and _first_t - song.time_of(b, session.remix) < LEAD_MIN:
+		b -= 4.0
+	return song.time_of(b, session.remix) if b > -4.0 else 0.0
+
+
+## Beat of the bar line the first note falls in (a note on a bar line is in that bar, whatever the
+## rounding of its time).
+func first_bar() -> float:
+	return floorf(song.beat_at(_first_t, session.remix) / 4.0 + 0.001) * 4.0
 
 
 ## Song time of the bar line one bar before the bar of the first note (bars of four beats from beat 0).
@@ -326,9 +433,13 @@ func _layout_router() -> void:
 
 func _process(delta: float) -> void:
 	_clock += delta
+	_tick_shake(delta)
 	if _fail_at >= 0.0 and _clock >= _fail_at:
 		_fail_at = -1.0
 		_open_fail_menu()
+	if _finish_at >= 0.0 and _clock >= _finish_at:
+		_finish_at = -1.0
+		_finish()
 	if done or session == null or conductor == null:
 		return
 	_tap_hit = false
@@ -342,25 +453,44 @@ func _process(delta: float) -> void:
 		autoplay.update(t)
 	else:
 		session.update(t)
-	lanes.song_time = t
-	var beat := (t - song.offset_for(session.remix)) / _spb
+	_song_t = t
+	var tv := _visual_time(t, delta)
+	lanes.song_time = tv
+	var beat := (tv - song.offset_for(session.remix)) / _spb
 	lanes.beat_pulse = 1.0 - fposmod(beat, 1.0) if beat >= 0.0 else 0.0
 	_set_beat(beat)
 	hud.tick(t, delta)
 	_tick_health(delta)
+	if backdrop != null:
+		var hb := hud.get_global_transform() * Vector2(0.0, hud.frames_bottom())
+		backdrop.set_hud_bottom((backdrop.get_global_transform().affine_inverse() * hb).y)
 	if cue != null:
-		cue.song_time = t
+		cue.song_time = tv
 	_schedule(t)
 	_count_in(t)
 	if ghost != null:
 		scene.set_ghost_delta(ghost.lead_seconds(session.score, t))
-	if session.is_over(t):
-		_finish()
+	if session.is_over(t) and _finish_at < 0.0:
+		_end_fade()
+
+
+## The song time the screen shows. The song's clock is read when the frame is worked out, which
+## wanders by a few ms from frame to frame, and notes moved by those uneven steps judder; so this
+## moves by the frame's own step (Godot smooths it to the display's refresh) and is pulled gently
+## toward the song's clock. A jump (a seek, a long stall) is followed at once. Hits are still judged
+## on the song's clock.
+func _visual_time(t: float, delta: float) -> float:
+	if is_nan(_vis_t) or absf(t - _vis_t) > VIS_SNAP:
+		_vis_t = t
+	else:
+		_vis_t = maxf(_vis_t, _vis_t + delta + (t - _vis_t - delta) * VIS_PULL)
+	return _vis_t
 
 
 ## The beat now, for everything that moves with it: the rows' jumps, the beads on the rails, the fire.
 func _set_beat(beat: float) -> void:
 	lanes.beat = beat
+	hud.beat = beat
 	if scene is SideRows:
 		scene.beat = beat
 	if backdrop != null:
@@ -407,11 +537,15 @@ func _schedule(t: float) -> void:
 
 
 ## Song start: "4 3 2 1" on the music's own count-in sticks (beats -4..-1), then "Get ready" with the
-## bars left until the first note.
+## bars left until the first note. A song started inside its intro counts "4 3 2 1" over the music's
+## bar just before the first note's bar instead.
 func _count_in(t: float) -> void:
 	var b := song.beat_at(t, session.remix)
+	var cb := first_bar() - 4.0
 	if _audio_count and b >= -4.0 and b < 0.0:
 		count_view.show_digit(int(-floorf(b)), fposmod(b, 1.0))
+	elif _bar_count and b >= cb and b < cb + 4.0 and t < _first_t - 0.05:
+		count_view.show_digit(int(cb + 4.0 - floorf(b)), fposmod(b, 1.0))
 	elif t < _first_t - 0.05 and b >= -4.0:
 		var bf := song.beat_at(_first_t, session.remix)
 		count_view.show_ready(maxi(ceili((bf - b) / 4.0), 1), fposmod(b, 1.0))
@@ -423,8 +557,18 @@ func _count_in(t: float) -> void:
 
 
 func _on_stepped(lane: int) -> void:
-	# A stomp's second thumb already sounded the stomp (_on_stomp); every other touch knocks its step.
-	if not _stomp_sounded:
+	var j := str(router.last_tap.get("judgement", "")) if router != null else ""
+	if j == "locked":
+		# Mashing locked the buttons: the press does nothing; the lock on the rings shakes.
+		lanes.locked_tap(lane)
+		_tap_hit = false
+		_tap_quality = ""
+		return
+	# A stomp's second thumb already sounded the stomp (_on_stomp); a wrong or stray tap sounds the
+	# miss; every other touch knocks its step.
+	if j == "wrong" or j == "stray":
+		Sound.miss()
+	elif not _stomp_sounded:
 		play_step(lane, _tap_quality if _tap_hit else "")
 	lanes.press(lane)
 	_stomp_sounded = false
@@ -459,10 +603,31 @@ func _on_rang(result: Dictionary) -> void:
 		q = str(result.side)
 	var strength := float(result.get("strength", 0.5))
 	# Strength is how hard the flick was; harder flicks ring heavier.
-	Sound.bell(_bell_set, bool(result.get("up", true)), q, strength)
+	var up := bool(result.get("up", true))
+	Sound.bell(_bell_set, up, q, strength)
 	scene.jolt("bell")
+	if q == "perfect" or q == "good":
+		# On time: the bell strikes. The accent grows along a chain of on-time bells.
+		_bell_chain += 1
+		Sound.bell_accent(up, q, _bell_chain)
+		_bell_strike(up, q)
+	elif q != "free":
+		_bell_chain = 0
 	if q == "free" or q == "silence":
 		UIKit.vibrate(12)
+
+
+## A bell rung on time, the tilt's reward (stomp-sized, but the tilt's own): the strap strikes across
+## the road, the street lights under every lane, the whole screen is knocked the way the phone was
+## tilted, the bonfire flares and the Mamuthone's load swings.
+func _bell_strike(up: bool, quality: String) -> void:
+	var perfect := quality == "perfect"
+	lanes.bell_hit(up, quality, _bell_chain)
+	knock(Vector2(0.0, -1.0 if up else 1.0) * (BELL_KNOCK if perfect else BELL_KNOCK * 0.6))
+	if backdrop != null:
+		backdrop.kick(0.7 if perfect else 0.4)
+	if scene.has_method("bell_strike"):
+		scene.bell_strike(up)
 
 
 func _on_judged(note: Note, judgement: String, offset: float) -> void:
@@ -496,6 +661,10 @@ func _on_judged(note: Note, judgement: String, offset: float) -> void:
 		# readable at a glance without the word; the spray is a plain Good.
 		lanes.burst(pos, "good" if soft else quality)
 		lanes.step_tick(lane, side)
+		if good:
+			_on_time_step(note, judgement)
+	elif note != null and note.is_bell() and judgement in ["perfect", "good"]:
+		pass   # the bell strike (_bell_strike) is its burst
 	else:
 		lanes.burst(pos, quality, side)
 	var word_key: String = JUDGE_WORDS.get(judgement, "")
@@ -514,6 +683,43 @@ func _on_judged(note: Note, judgement: String, offset: float) -> void:
 		UIKit.vibrate(30 if note != null and note.is_bell() else 14)
 	elif judgement in ["miss", "silence"]:
 		scene.jolt("miss")
+		if note != null and note.is_bell():
+			_bell_chain = 0
+	if judgement == "miss" or judgement == "let_go":
+		Sound.miss()
+
+
+## A step, call or hold hit on time (Perfect, Good, or a hold kept to its end): light runs up its
+## lane to the procession in the note's colour; a call hit on time makes the Issohadore crack his rope;
+## a hold kept to its end rings a small bell at the lane's pitch, knocks the screen and flares the fire.
+func _on_time_step(note: Note, judgement: String) -> void:
+	if judgement == "held":
+		lanes.lane_pulse(note.lane, StreetSkin.K_HOLD[3], 1.6)
+		Sound.hold_done(note.lane)
+		knock(Vector2(0.0, 3.0))
+		if backdrop != null:
+			backdrop.kick(0.5)
+		return
+	lanes.lane_pulse(note.lane, note_colour(note), 1.0 if judgement == "perfect" else 0.6)
+	if note.call and scene.has_method("rope_crack"):
+		scene.rope_crack()
+
+
+## A note's colour in the pixel look (StreetSkin's kinds): heal green, call pink, hold gold, an Expert
+## sixteenth silver, an off-beat violet, a step blue.
+func note_colour(note: Note) -> Color:
+	if note.heal:
+		return StreetSkin.K_HEAL[3]
+	if note.call:
+		return StreetSkin.K_CALL[3]
+	if note.kind == Note.Kind.HOLD:
+		return StreetSkin.K_HOLD[3]
+	if lanes._sixteenth(note):
+		return StreetSkin.K_SIX[3]
+	var fr := fposmod(note.beat, 1.0)
+	if fr > 0.12 and fr < 0.88:
+		return StreetSkin.K_OFF[3]
+	return StreetSkin.K_STEP[3]
 
 
 ## A stomp judged (both thumbs, or one when the second never came): its sound and the prints on the
@@ -523,12 +729,58 @@ func _on_stomp(note: Note, judgement: String, _offset: float, both: bool) -> voi
 	if both:
 		Sound.stomp(note.lane, step_quality(judgement))
 		_stomp_sounded = true
-		scene.jolt("ring")
+		if scene.has_method("stomp"):
+			scene.stomp()
+		else:
+			scene.jolt("ring")
 		UIKit.vibrate(40)
 	else:
 		Sound.stomp_half(note.lane)
 		words.show_word(tr("judge_one_thumb"), "", lanes.word_spot(note.lane), "early")
 	lanes.stomp_hit(note.lane, judgement, both)
+	if both:
+		shake(7.0)
+	if backdrop != null:
+		backdrop.kick(1.0 if both else 0.4)
+
+
+var _last_unison := 0
+var _shake := 0.0
+var _bell_chain := 0             ## bells rung on time in a row (Perfect or Good)
+var _knock := Vector2.ZERO       ## the screen's knock: direction * px at its strongest
+var _knock_t := 9.0              ## seconds since the knock
+const BELL_KNOCK := 6.0          ## px the screen is knocked by a Perfect bell
+const KNOCK_TIME := 0.18
+
+
+## Knocks the whole screen once along `v` (px) and springs it back: a bell's tilt, felt in the
+## picture. None with reduced motion.
+func knock(v: Vector2) -> void:
+	if not UIKit.reduced_motion():
+		_knock = v
+		_knock_t = 0.0
+
+
+## A short jolt of the whole screen, `px` at its strongest (none with reduced motion).
+func shake(px: float) -> void:
+	if not UIKit.reduced_motion():
+		_shake = maxf(_shake, px)
+
+
+func _tick_shake(delta: float) -> void:
+	_knock_t += delta
+	var kn := Vector2.ZERO
+	if _knock_t < KNOCK_TIME:
+		# out at once, back with one small overshoot
+		var k := _knock_t / KNOCK_TIME
+		kn = (_knock * cos(k * PI * 1.5) * (1.0 - k)).round()
+	if _shake <= 0.05:
+		if position != kn:
+			position = kn
+		_shake = 0.0
+		return
+	position = Vector2(sin(_clock * 71.0), cos(_clock * 53.0)) * _shake + kn
+	_shake = move_toward(_shake, 0.0, delta * 30.0)
 
 
 ## The side shown for a judgement: none on Perfect, the offset's side on Good, the band's own side on
@@ -549,6 +801,13 @@ func _on_wrong_step(lane: int, note: Note, _offset: float) -> void:
 	words.show_word(tr("judge_wrong"), "", lanes.word_spot(lane), "wrong")
 
 
+## A tap with nothing to hit: the combo breaks (Session), a red mark on the pressed button, the row
+## stumbles. Its miss sound is played by _on_stepped.
+func _on_stray(lane: int) -> void:
+	lanes.mark_wrong(lane)
+	scene.jolt("miss")
+
+
 ## A stand-still kept to its end: the row settles as one, and the moment is named over the procession.
 func _on_still_kept(_note: Note, points: float) -> void:
 	var at := lanes.word_spot(1)
@@ -563,6 +822,10 @@ func _on_still_kept(_note: Note, points: float) -> void:
 
 
 func _on_unison(level: int) -> void:
+	if level > _last_unison and backdrop != null:
+		backdrop.surge()
+		shake(4.0)
+	_last_unison = level
 	Sound.row_bells(level)
 	hud.set_unison(level)
 	scene.set_unison(level)
@@ -578,6 +841,7 @@ func _tick_health(delta: float) -> void:
 	var want := 1.0 if session.health <= HealthPips.LOW else 0.0
 	_dim = move_toward(_dim, want, delta * 1.5)
 	backdrop.dim = _dim
+	lanes.fire_dim = _dim
 
 
 ## Where a lane note's burst goes (its lane at the hit line).
@@ -601,6 +865,7 @@ func _on_failed() -> void:
 	scene.set_still(true)
 	if backdrop != null:
 		backdrop.dim = 1.0
+		lanes.fire_dim = 1.0
 	var fade := create_tween()
 	fade.tween_property(conductor.player, "volume_db", -40.0, 0.6)
 	fade.tween_callback(conductor.player.stop)   # the clock runs on silently; nothing reads it now
@@ -612,6 +877,8 @@ func _open_fail_menu() -> void:
 	if _fail_panel != null or not is_inside_tree():
 		return
 	_fail_panel = FailMenu.new()
+	if pixel:
+		_fail_panel.z_index = PixelFilter.Z_OVER + 10
 	_fail_panel.name = "FailMenu"
 	add_child(_fail_panel)
 	(_fail_panel as FailMenu).chosen.connect(_on_pause_choice)
@@ -644,6 +911,8 @@ func _open_pause_menu() -> void:
 	paused = true
 	Sound.ui("tap")
 	_pause_panel = PauseMenu.new()
+	if pixel:
+		_pause_panel.z_index = PixelFilter.Z_OVER + 10
 	_pause_panel.name = "PauseMenu"
 	add_child(_pause_panel)
 	(_pause_panel as PauseMenu).chosen.connect(_on_pause_choice)
@@ -718,6 +987,18 @@ func _notification(what: int) -> void:
 func _on_music_finished() -> void:
 	# The chart can end after the audio (a lesson's last rest); session.is_over decides.
 	pass
+
+
+## The last note is behind: the music fades out over END_FADE, then the results (a lesson inside the
+## tutorial hands back at once).
+func _end_fade() -> void:
+	if bool(args.get("embedded", false)):
+		_finish()
+		return
+	router.release_all()
+	router.enabled = false
+	create_tween().tween_property(conductor.player, "volume_db", -40.0, END_FADE)
+	_finish_at = _clock + END_FADE
 
 
 func _finish() -> void:

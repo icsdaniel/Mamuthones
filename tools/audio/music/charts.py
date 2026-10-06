@@ -40,32 +40,34 @@ DEFAULTS = {
     "medium": {
         0: dict(steps=[("pulse", 2), ("mel", 2)], bells="bar", holds=2),
         1: dict(steps=[("pulse", 3), ("mel", 3), ("chorus", 2)], bells="bar", holds=3),
-        2: dict(steps=[("pulse", 3), ("mel", 3), ("chorus", 3)], bells="bar", holds=3),
-        3: dict(steps=[("pulse", 3), ("mel", 4), ("chorus", 3)], bells="bar", holds=3),
+        2: dict(steps=[("pulse", 3), ("mel", 3), ("chorus", 3), ("perc", 2)], bells="bar", holds=3),
+        3: dict(steps=[("pulse", 3), ("mel", 4), ("chorus", 3), ("perc", 3)], bells="bar", holds=3),
     },
     "hard": {
-        0: dict(steps=[("pulse", 3), ("mel", 3)], bells="bar", holds=3),
-        1: dict(steps=[("pulse", 3), ("mel", 4), ("chorus", 3)], bells="accent", holds=4),
-        2: dict(steps=[("pulse", 4), ("mel", 4), ("chorus", 4), ("perc", 3)], bells="accent", holds=4),
-        3: dict(steps=[("pulse", 4), ("mel", 4), ("chorus", 4), ("perc", 4)], bells="accent", holds=4),
+        0: dict(steps=[("pulse", 3), ("mel", 4), ("chorus", 3)], bells="bar", holds=3),
+        1: dict(steps=[("pulse", 4), ("mel", 4), ("chorus", 4), ("perc", 3)], bells="accent", holds=4),
+        2: dict(steps=[("pulse", 4), ("mel", 5), ("chorus", 4), ("perc", 4)], bells="accent", holds=4),
+        3: dict(steps=[("pulse", 5), ("mel", 5), ("chorus", 5), ("perc", 4), ("fast", 3)], bells="accent", holds=4),
     },
     "expert": {
-        0: dict(steps=[("pulse", 3), ("mel", 4), ("chorus", 3)], bells="accent", holds=4),
-        1: dict(steps=[("pulse", 4), ("mel", 5), ("chorus", 4), ("perc", 4)], bells="all", holds=5),
-        2: dict(steps=[("pulse", 4), ("mel", 5), ("chorus", 5), ("perc", 4), ("fast", 4)], bells="all", holds=5),
+        0: dict(steps=[("pulse", 4), ("mel", 5), ("chorus", 4), ("perc", 3)], bells="accent", holds=4),
+        1: dict(steps=[("pulse", 5), ("mel", 5), ("chorus", 5), ("perc", 5), ("fast", 4)], bells="all", holds=5),
+        2: dict(steps=[("pulse", 5), ("mel", 5), ("chorus", 5), ("perc", 5), ("fast", 5)], bells="all", holds=5),
         3: dict(steps=[("pulse", 5), ("mel", 5), ("chorus", 5), ("perc", 5), ("fast", 5)], bells="all", holds=5),
     },
 }
 
-# Average notes per second per stop and difficulty: the curve across the story.
+# Average notes per second per stop and difficulty. Expert is the peak in every song and Hard sits
+# at the difficult threshold, from the first stop on: the story's curve only nudges them, and the
+# music caps the slow songs. Medium is the challenge for the average player.
 TARGET = {
     1: {"easy": 0.6, "medium": 0.7, "hard": 0.9, "expert": 1.0},
-    2: {"easy": 0.62, "medium": 0.95, "hard": 1.3, "expert": 2.0},
-    3: {"easy": 0.8, "medium": 1.2, "hard": 1.7, "expert": 2.6},
-    4: {"easy": 0.85, "medium": 1.35, "hard": 2.0, "expert": 3.0},
-    5: {"easy": 0.9, "medium": 1.45, "hard": 2.3, "expert": 3.4},
-    6: {"easy": 0.95, "medium": 1.6, "hard": 2.7, "expert": 4.0},
-    7: {"easy": 1.0, "medium": 1.85, "hard": 3.1, "expert": 4.4},
+    2: {"easy": 0.62, "medium": 1.3, "hard": 2.2, "expert": 3.4},
+    3: {"easy": 0.8, "medium": 1.4, "hard": 2.3, "expert": 3.6},
+    4: {"easy": 0.85, "medium": 1.45, "hard": 2.45, "expert": 3.8},
+    5: {"easy": 0.9, "medium": 1.5, "hard": 2.6, "expert": 4.0},
+    6: {"easy": 0.95, "medium": 1.6, "hard": 2.8, "expert": 4.2},
+    7: {"easy": 1.0, "medium": 1.75, "hard": 3.0, "expert": 4.4},
 }
 # how a section's density follows the song's shape (energy 0 calm .. 3 climax)
 ENERGY_FACTOR = {0: 0.6, 1: 0.85, 2: 1.05, 3: 1.4}
@@ -73,6 +75,16 @@ ENERGY_FACTOR = {0: 0.6, 1: 0.85, 2: 1.05, 3: 1.4}
 # lower to leave the climaxes room to rise
 ENERGY_FACTOR_EASY = {0: 0.5, 1: 0.7, 2: 0.8, 3: 1.4}
 EXPERT_PEAK = 4.3   # expert climaxes reach at least this (notes per second) when the music allows
+
+# Chords: two step buttons at once, one per thumb, where two layers of the music strike together
+# on an accent. max_rank: how strong both layers must be; every: the fewest beats between chords;
+# energy: the calmest section that has them; grid: where in the beat they may sit; clear: beats kept
+# free of bells, holds and stomps around a chord.
+CHORDS = {
+    "medium": dict(max_rank=1, every=8.0, energy=3, grid="bar", clear=1.0),
+    "hard": dict(max_rank=2, every=4.0, energy=1, grid="beat", clear=1.0),
+    "expert": dict(max_rank=3, every=2.0, energy=1, grid="half", clear=0.5),
+}
 
 PRIO = {"rest": 0, "stomp": 1, "ring": 2, "bell": 3, "hold": 4, "call": 5, "step": 6}
 ROLE_PRIO = {"mel": 0, "fast": 1, "pulse": 2, "chorus": 3, "perc": 4}
@@ -171,6 +183,7 @@ class Charter:
     def build(self, diff):
         s = self.s
         notes: list[N] = []
+        self._layers = {}   # beat -> the chosen layers' candidates struck on it (for chords)
         for sec in s.sections:
             sp = self.spec(sec, diff)
             if sp is None:
@@ -180,11 +193,14 @@ class Charter:
             inside = [c for c in s.cands if lo - 1e-6 <= c.b < hi - 1e-6 and self.audible(c)]
             steps = dict(sp.get("steps", []))
             for c in inside:
+                if diff in ("medium", "hard") and s.kind != "tutorial" and not V.on_eighth(c.b):
+                    continue    # sixteenths are Expert's: Medium and Hard keep to beats and half-beats
                 # Medium's answer bars (the second of each two-bar phrase) may take the tune's
                 # half-beats: "beat and some half-beats", and the answer gets its own rhythm
                 bonus = 1 if (diff == "medium" and c.role == "mel" and int((c.b + 1e-6) // s.bpb) % 2 == 1) else 0
                 if c.role in steps and (c.rank <= steps[c.role] + bonus or (c.sig is not None and diff != "easy")):
                     notes.append(N(c.b, "step", c.rank, c.role, c.pitch, c.stem, sig=c.sig, src=c))
+                    self._layers.setdefault(round(c.b, 4), []).append(c)
                 elif c.sig is not None and diff in ("hard", "expert") and c.role in ("mel", "fast", "chorus"):
                     notes.append(N(c.b, "step", c.rank, c.role, c.pitch, c.stem, sig=c.sig, src=c))
             # bells
@@ -391,6 +407,8 @@ class Charter:
         notes.sort(key=lambda n: (n.b, PRIO[n.k]))
         # bells alternate automatically; make sure no bell pair is too close
         notes = self.bell_spacing(notes)
+        if diff in CHORDS and not tutorial:
+            notes = self.chords(notes, diff)
         # the design's easy density cap, enforced by dropping the weakest steps in dense windows
         if diff == "easy" and not tutorial:
             notes = self.cap_density(notes, V.RULES["easy_peak_nps"])
@@ -764,6 +782,87 @@ class Charter:
                                      (((n.b - sec.b) % span) * 7.31) % 1))
             drop = set(id(n) for n in pool[:excess])
             notes = [n for n in notes if id(n) not in drop]
+        return notes
+
+    def chords(self, notes, diff):
+        """Two buttons at once where the music doubles up: on an accent where two of the chart's
+        layers strike together (the tune and the drum, the voice and the bass), a second step joins
+        the first, one per thumb. Both thumbs must be free and rested around it, so a chord only goes
+        where nothing else sits within a thumb's eighth, no bell, hold, stomp or stand-still is near,
+        and the jack rules still hold. The first chord of a chart stands two beats clear of the
+        other extras, like every first."""
+        s = self.s
+        cfg = CHORDS[diff]
+        meta = {"bpm": s.bpm, "kind": s.kind, "stop": s.stop_no,
+                "sections": [{"name": x.name, "b": x.b, "len": x.len} for x in s.sections]}
+        notes.sort(key=lambda n: (n.b, PRIO[n.k]))
+        last_chord = -1e9
+        first = True
+        for n in list(notes):
+            if n.k != "step" or n.call or n.lane is None or n.tag in ("triple_step", "fixed"):
+                continue
+            if n.b - last_chord < cfg["every"] - 1e-6:
+                continue
+            sec = s.section_at(n.b)
+            if sec is None or sec.energy < cfg["energy"]:
+                continue
+            frac = (n.b - sec.b) % (s.bpb if cfg["grid"] == "bar" else 1.0)
+            if cfg["grid"] == "half":
+                frac = (n.b + 1e-6) % 0.5
+            if frac > 1e-6 and abs(frac - (s.bpb if cfg["grid"] == "bar" else 0.5)) > 1e-6:
+                continue
+            if cfg["grid"] == "bar" and int(round((n.b - sec.b) / s.bpb)) % 2 == 1:
+                continue    # Medium: on the phrase's downbeat only
+            layers = self._layers.get(round(n.b, 4), [])
+            strong = [c for c in layers if c.rank <= cfg["max_rank"]]
+            if len({c.role for c in strong}) < 2 or n.rank > cfg["max_rank"]:
+                continue
+            mate = next((c for c in strong if c.role != n.role), None)
+            if mate is None:
+                continue
+            hand = V.rule_fns(meta, diff, [x.json() for x in notes])[1](n.b)
+            reach = 2.0 if first else hand
+            busy = False
+            for o in notes:
+                if o is n:
+                    continue
+                if o.k == "hold" and o.b - 1e-6 <= n.b <= o.b + o.len + 1e-6:
+                    busy = True
+                elif o.k == "rest" and o.b - 1e-6 <= n.b < o.b + o.len + 1.0:
+                    busy = True
+                elif o.k in ("bell", "ring", "stomp", "hold") and abs(o.b - n.b) < max(cfg["clear"], reach) - 1e-6:
+                    busy = True
+                elif o.k == "step" and 1e-6 < abs(o.b - n.b) < hand - V.EPS:
+                    busy = True
+                elif first and o.call and abs(o.b - n.b) < reach - 1e-6:
+                    busy = True
+                if busy:
+                    break
+            if busy:
+                continue
+            # the second note goes to the other side: from an outer button to the other outer one,
+            # from the middle towards the second voice's pitch (a drum, with no pitch, sits low)
+            if n.lane == 0:
+                lanes = [2, 1]
+            elif n.lane == 2:
+                lanes = [0, 1]
+            else:
+                low = mate.pitch is None or (n.pitch is not None and mate.pitch < n.pitch)
+                lanes = [0, 2] if low else [2, 0]
+            added = None
+            for lane in lanes:
+                m = N(n.b, "step", mate.rank, mate.role, mate.pitch, mate.stem, lane=lane, tag="chord", src=mate)
+                trial = sorted(notes + [m], key=lambda x: (x.b, PRIO[x.k]))
+                d = [x.json() for x in trial]
+                _, hfn, cfn = V.rule_fns(meta, diff, d)
+                if not V.assign_hands(d, hfn, cfn) and not V.jacks(d, s.spb):
+                    added = trial
+                    break
+            if added is None:
+                continue
+            notes = added
+            last_chord = n.b
+            first = False
         return notes
 
     def bell_spacing(self, notes):

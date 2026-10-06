@@ -7,18 +7,11 @@ extends Control
 var digit := 0            ## 4..1 while counting in, 0 when not
 var ready_bars := 0       ## bars left to the first note after the count ("Get ready"), 0 when not
 var beat_phase := 0.0     ## 0..1 through the current beat, for the pulse
-var _font: Font
-var _small: Font
 
 
 func _init() -> void:
 	mouse_filter = Control.MOUSE_FILTER_IGNORE
 	set_anchors_preset(Control.PRESET_FULL_RECT)
-
-
-func _ready() -> void:
-	_font = get_theme_font("font", "BigNumberLabel")
-	_small = get_theme_font("font", UIKit.HUD)
 
 
 func show_digit(n: int, phase: float) -> void:
@@ -49,40 +42,32 @@ func is_showing() -> bool:
 
 
 func _draw() -> void:
-	if not is_showing() or _font == null:
+	if not is_showing():
 		return
-	var c := size * 0.5
-	# A dark wash so the digits read over the fire.
-	draw_rect(Rect2(Vector2.ZERO, size), Color(Palette.INK, 0.45))
+	var P := PxArt.PX
+	var c := (size * 0.5 / P).floor() * P
 	var pulse := 1.0 - clampf(beat_phase, 0.0, 1.0)
 	if UIKit.reduced_motion():
-		pulse = 0.0
+		pulse *= 0.35
+	# the count lands on its beat: a pixel or two up just after it, then settles
+	var hop := roundf(2.0 * pulse * pulse) * P
 	if digit > 0:
-		var fs := int(clampf(size.y * 0.62, 96.0, 260.0) * (1.0 + 0.18 * pulse * pulse))
 		var txt := str(digit)
-		var w := _font.get_string_size(txt, HORIZONTAL_ALIGNMENT_LEFT, -1, fs)
-		var pos := Vector2(c.x - w.x * 0.5, c.y + fs * 0.36)
-		draw_string_outline(_font, pos, txt, HORIZONTAL_ALIGNMENT_LEFT, -1, fs, 14, Palette.INK)
-		draw_string(_font, pos, txt, HORIZONTAL_ALIGNMENT_LEFT, -1, fs, Palette.EMBER_HOT.lerp(Palette.BONE, 1.0 - pulse))
-		# Four pips under it: the count so far.
-		var pr := 12.0
-		var gap := 40.0
+		var k := 2 if size.y > PxType.line_height("count") * 2.4 else 1
+		var lh := PxType.line_height("count", k)
+		var top := c.y - lh * 0.5 - hop
+		# the hot flash of the beat: the figure burns white-gold for its first moment
+		var col := Color.WHITE if pulse < 0.7 else Color(1.25, 1.2, 1.1)
+		PxType.draw(self, "count", Vector2(c.x, top), txt, col, k, 0)
+		# four gold pips under it: the count so far
+		var y := minf(top + lh + 3.0 * P, size.y - 6.0 * P)
 		for i in 4:
-			var x := c.x + (float(i) - 1.5) * gap
-			var y := minf(c.y + fs * 0.5 + 18.0, size.y - pr - 6.0)
+			var x := c.x + (float(i) - 1.5) * 9.0 * P
 			var lit := i < 5 - digit
-			draw_circle(Vector2(x, y), pr, Palette.EMBER if lit else Color(Palette.BONE_FAINT, 0.8))
+			FireSkin.sprite(self, "diamond_hot" if lit and i == 4 - digit else ("diamond_bright" if lit else "diamond_dim"), Vector2(x, y), 1.0, 2)
 	else:
 		var head := tr("count_ready")
-		var fs := int(clampf(size.y * 0.2, 44.0, 84.0) * (1.0 + 0.08 * pulse))
-		var w := _font.get_string_size(head, HORIZONTAL_ALIGNMENT_LEFT, -1, fs).x
-		var pos := Vector2(c.x - w * 0.5, c.y)
-		draw_string_outline(_font, pos, head, HORIZONTAL_ALIGNMENT_LEFT, -1, fs, 12, Palette.INK)
-		draw_string(_font, pos, head, HORIZONTAL_ALIGNMENT_LEFT, -1, fs, Palette.BONE)
-		if _small != null:
-			var sub := tr("count_bar_one") if ready_bars == 1 else tr("count_bars") % ready_bars
-			var sfs := 32
-			var sw := _small.get_string_size(sub, HORIZONTAL_ALIGNMENT_LEFT, -1, sfs).x
-			var sp := Vector2(c.x - sw * 0.5, c.y + sfs + 18.0)
-			draw_string_outline(_small, sp, sub, HORIZONTAL_ALIGNMENT_LEFT, -1, sfs, 8, Palette.INK)
-			draw_string(_small, sp, sub, HORIZONTAL_ALIGNMENT_LEFT, -1, sfs, Palette.EMBER)
+		var lh := PxType.line_height("big_gold")
+		PxType.draw(self, "big_gold", Vector2(c.x, c.y - lh - hop), head, Color.WHITE, 1, 0)
+		var sub := tr("count_bar_one") if ready_bars == 1 else tr("count_bars") % ready_bars
+		PxType.draw(self, "caps", Vector2(c.x, c.y + 2.0 * P), sub, PixelPalette.FIRE[5], 1, 0)

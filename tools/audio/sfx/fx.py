@@ -6,7 +6,7 @@ from __future__ import annotations
 
 import numpy as np
 
-from bells import Bell, make_load, render_ring, render_row, strike_response
+from bells import Bell, body_thump, make_load, render_ring, render_row, strike_response
 from dsp import (SR, add_at, bandpass, convolve_ir, limit, db, fade, highpass, loop_crossfade,
                  lowpass, make_ir, pan, periodic_lfo, resonator, shaped_noise, trim_tail,
                  write_ogg, write_wav)
@@ -289,6 +289,88 @@ def wind_loop(seconds=52.0, xf=2.0) -> np.ndarray:
     return loop_crossfade(out[: L + X], L, X)
 
 
+# ----------------------------------------------------------------------------- miss
+
+def miss(take: int) -> np.ndarray:
+    """A missed note, made to be unmistakable on a phone speaker: a cracked bell's buzz (two
+    saturated tones a tritone apart, 330 and 466 Hz) that slides down a fourth like a groan,
+    opened by a dry wooden clack and a short metal rattle. All of it sits at 0.5-4 kHz, where a
+    phone plays loud, and nothing in it is tuned to the song, so it never reads as a hit."""
+    rng = np.random.default_rng([223, take])
+    dur = 0.34
+    n = int(dur * SR)
+    t = np.arange(n) / SR
+    f0 = 330.0 * (1 + 0.025 * (take - 1))
+    slide = 2 ** (-5 / 12 * np.clip(t / 0.22, 0, 1) ** 0.8)   # down a fourth
+    env = np.exp(-t / 0.11) * np.clip(t / 0.004, 0, 1)
+    buzz = np.zeros(n)
+    for r, a in ((1.0, 1.0), (1.414, 0.85)):
+        ph = 2 * np.pi * np.cumsum(f0 * r * slide) / SR
+        # a square-ish wave with a little wobble: a reed-like, rasping buzz
+        buzz += a * np.tanh(4.0 * np.sin(ph + 0.3 * np.sin(2 * np.pi * 31 * t)))
+    buzz = bandpass(buzz * env, 280, 4200, 2)
+    buzz = np.tanh(buzz * 1.6)
+    clack = wood_knock(rng, 1250, 1.0, 0.12, 0.2)
+    m = int(0.09 * SR)
+    noise = rng.standard_normal(m) * np.exp(-np.arange(m) / (0.018 * SR))
+    rattle = resonator(noise, 2150, 12) + 0.7 * resonator(noise, 3350, 14)
+    out = buzz * 0.9
+    out[: len(clack)] += clack * 0.7
+    out[:m] += rattle * 0.25
+    return fade(out, 0.0004, 0.05)
+
+
+# ----------------------------------------------------------------------------- on-time bell accent
+
+def bell_thump(take: int, up: bool) -> np.ndarray:
+    """The weight under an on-time bell: the whole load landing as one, a deep frame-drum dum with
+    the beater's slap on top (the slap is what a phone speaker plays). A tilt down lands lower and
+    heavier than a tilt up, so the two directions are told apart by ear too."""
+    rng = np.random.default_rng([241, take, int(up)])
+    f0 = 74.0 if up else 58.0
+    dum = frame_drum(rng, f0 * (1 + 0.02 * (take - 1)), 1.0, 0.95, 0.42, 0.9)
+    thud = body_thump(rng, 0.8, 110.0 if up else 90.0, 0.16)
+    out = dum
+    out[: len(thud)] += thud
+    # the iron of the load closing up: a short band of noise at the top of the phone's range
+    m = int(0.05 * SR)
+    clank = bandpass(rng.standard_normal(m), 1800, 6500, 2) * np.exp(-np.arange(m) / (0.007 * SR))
+    out[:m] += clank * 0.35
+    return fade(out, 0.0004, 0.05)
+
+
+def chime(take: int) -> np.ndarray:
+    """A small tuned bell struck clean, at C6 (Sound.bell_accent resamples it to the song's key):
+    near-harmonic partials so it sits in the music, a glassy fifth-and-octave shimmer on top, and
+    a bright tick of the clapper. Short, so a run of them reads as a melody, not a wash."""
+    rng = np.random.default_rng([251, take])
+    dur = 0.7
+    n = int(dur * SR)
+    t = np.arange(n) / SR
+    f0 = 1046.5
+    out = np.zeros(n)
+    for r, a, d in ((1.0, 1.0, 0.32), (2.0, 0.42, 0.16), (3.0, 0.2, 0.09), (4.07, 0.14, 0.05), (5.4, 0.07, 0.03)):
+        beat = 1 + 0.18 * np.sin(2 * np.pi * rng.uniform(2.5, 4.0) * t)   # a slow shimmer on each partial
+        out += a * beat * np.sin(2 * np.pi * f0 * r * rng.uniform(0.999, 1.001) * t + rng.uniform(0, 6.28)) * np.exp(-t / d)
+    out *= np.clip(t / 0.0015, 0, 1)
+    m = int(0.012 * SR)
+    out[:m] += highpass(rng.standard_normal(m), 4000, 2) * np.exp(-np.arange(m) / (0.0015 * SR)) * 0.4
+    ir = make_ir(0.6, 0.7, np.random.default_rng(5), stereo=False, early=[(0.009, 0.3), (0.017, 0.2)], bright=7000)
+    out = out + convolve_ir(out, ir)[:n] * db(-14)
+    return fade(out, 0.0003, 0.08)
+
+
+def write_bell_accents() -> None:
+    thumps = {(up, k): bell_thump(k, up) for up in (True, False) for k in range(2)}
+    pk = max(np.max(np.abs(x)) for x in thumps.values())
+    for (up, k), x in thumps.items():
+        write_wav(f"fx/bell_thump_{'up' if up else 'down'}_{k + 1}.wav", x * db(-1.5) / pk)
+    chimes = [chime(k) for k in range(2)]
+    pk = max(np.max(np.abs(x)) for x in chimes)
+    for k, x in enumerate(chimes):
+        write_wav(f"fx/chime_{k + 1}.wav", x * db(-1.5) / pk)
+
+
 # ----------------------------------------------------------------------------- main
 
 def level(x, rms_db, ceiling_db=-3.0):
@@ -344,7 +426,16 @@ def main() -> None:
     write_ogg("ambience/fire.ogg", level(fire, -27), 0.3)
     wind = wind_loop()
     write_ogg("ambience/wind.ogg", level(wind, -28), 0.2)
+    write_misses()
+    write_bell_accents()
     print("wrote fx, ui, ambience")
+
+
+def write_misses() -> None:
+    misses = [miss(k) for k in range(3)]
+    pk = max(np.max(np.abs(x)) for x in misses)
+    for k, x in enumerate(misses):
+        write_wav(f"fx/miss_{k + 1}.wav", x * db(-1.5) / pk)
 
 
 if __name__ == "__main__":

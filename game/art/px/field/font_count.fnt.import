@@ -1,0 +1,17 @@
+[remap]
+
+importer="font_data_bmfont"
+type="FontFile"
+uid="uid://cvfje21o2urlb"
+path="res://.godot/imported/font_count.fnt-785e543ca15fbda794ec28f05ed6a8fc.fontdata"
+
+[deps]
+
+source_file="res://art/px/field/font_count.fnt"
+dest_files=["res://.godot/imported/font_count.fnt-785e543ca15fbda794ec28f05ed6a8fc.fontdata"]
+
+[params]
+
+fallbacks=[]
+compress=true
+scaling_mode=2

@@ -160,6 +160,37 @@ func test_pause_resume_counts_back_in_from_a_bar_line() -> void:
 	UIHarness.restore_profile()
 
 
+## No song makes the player sit through its whole intro or outro: the music starts on a bar line
+## (so the beat grid is untouched) between 4.5 s (the play screen's LEAD_MIN) and about eight seconds before the first note,
+## and a whole run ends a couple of seconds after its last note.
+func test_short_intros_and_outros() -> void:
+	UIHarness.fresh_profile()
+	var ids: Array = []
+	for sd in SongLibrary.story():
+		ids.append(sd.id)
+	for sd in SongLibrary.piazza():
+		ids.append(sd.id)
+	for id in ids:
+		var diff := "piazza" if SongLibrary.get_song(id).kind == "piazza" else "hard"
+		var app := UIHarness.make_app(tree, "play", {"song_id": id, "difficulty": diff, "bell_set": "light"})
+		await UIHarness.frames(tree, 3)
+		var play := app.current()
+		var s: Session = play.get("session")
+		var sd: SongData = play.get("song")
+		var first: float = s.notes[0].t
+		var start: float = play.call("intro_start_time")
+		var lead := first - start
+		check(lead >= 4.5 - 0.001 and lead < 8.0, "%s: %.1f s from the music's start to the first note" % [id, lead])
+		var sb := sd.beat_at(start)
+		check(start == 0.0 or absf(sb - roundf(sb / 4.0) * 4.0) < 0.001, "%s: starts on a bar line (beat %.2f)" % [id, sb])
+		var last := 0.0
+		for n in s.notes:
+			last = maxf(last, n.end_t)
+		check(s.end_time() - last <= Session.END_PAD + 0.001, "%s: ends %.1f s after the last note" % [id, s.end_time() - last])
+		UIHarness.free_app(app)
+	UIHarness.restore_profile()
+
+
 ## The first played note comes well under a minute after launch: seven taps (language, headphones,
 ## buttons-or-tilt, skip delay, try), and the only waits the game itself adds are the screen
 ## transitions and the tutorial's one-bar lead-in. Reading time is the player's; this checks the
@@ -210,21 +241,22 @@ func test_two_taps_to_a_song_and_lanes_dominate() -> void:
 		var play := app.current()
 		check_eq(play.screen_name(), "play_screen", "two taps reach the song")
 		var lanes: LaneView = play.get("lanes")
-		var rows: SideRows = play.get("scene")
+		var street: StreetBackdrop = play.get("scene")
 		var h := play.size.y
 		print("  %s: lanes %.0f%% of height, %.0f%% of width" % [sz, lanes.size.y / h * 100.0, lanes.size.x / play.size.x * 100.0])
 		check(lanes.size.y >= h * 0.8, "%s: the lanes are the stage (%.0f%% of the height)" % [sz, lanes.size.y / h * 100.0])
 		check(lanes.size.x >= minf(play.size.x * 0.95, 890.0), "%s: the road's near end fills the width (%.0f px)" % [sz, lanes.size.x])
-		check(float(rows.slot(0, 0)[1]) >= 70.0, "%s: the nearest Mamuthone is big enough to read (%.0f px)" % [sz, float(rows.slot(0, 0)[1])])
-		check(float(rows.slot(0, 0)[1]) > float(rows.slot(0, SideRows.MAX_PER_SIDE - 1)[1]), "%s: the file recedes with the road" % sz)
+		for fig in street._figures:
+			var fh := fig.texture.get_size().y * fig.scale.y
+			check(fh >= 160.0, "%s: the portrait figure %s is big enough to read (%.0f px)" % [sz, fig.texture.resource_path.get_file(), fh])
 		UIHarness.free_app(app)
 		UIHarness.restore_profile()
 
 
-## No side figure stands on the road: at every store size, each Issohadore and Mamuthone sprite box
-## (standing, as SideRows places it) stays at least 12 px outside the road edge at the box's own height,
-## and on the screen.
-func test_side_figures_stay_off_the_road() -> void:
+## The portraits never hide a note: at every store size, the middle of each outer lane, from the fire
+## down to the hit line, stays outside its portrait's frame; and at the hit line an outer lane's note is
+## well on the screen (the street picture is stretched below the fire when needed).
+func test_portraits_stay_off_the_lanes() -> void:
 	for sz in [Vector2i(720, 1440), Vector2i(720, 1280), Vector2i(720, 1600), Vector2i(1080, 1920), Vector2i(1536, 2048)]:
 		UIHarness.fresh_profile()
 		var app := UIHarness.make_app(tree, "", {}, sz)
@@ -235,23 +267,21 @@ func test_side_figures_stay_off_the_road() -> void:
 		await UIHarness.settle(tree)
 		var play := app.current()
 		var lanes: LaneView = play.get("lanes")
-		var rows: SideRows = play.get("scene")
-		var inv := lanes.get_global_transform().affine_inverse() * rows.get_global_transform()
+		var street: StreetBackdrop = play.get("scene")
+		var f := lanes.field_rect()
+		var hl := LaneSkin.hit_line_y(f)
+		var to_street := street.get_global_transform().affine_inverse() * lanes.get_global_transform()
 		var nearest := INF
-		# Every side figure (the Issohadore, k = 0, and the Mamuthones behind him) keeps its whole
-		# sprite box at least 12 px off the road at its own height (the road widens downward, so the
-		# box's bottom is where it comes nearest), and on the screen.
 		for s in 2:
-			for k in SideRows.MAX_PER_SIDE + 1:
-				var box: Rect2 = rows.figure_box(s, k)
-				var a: Vector2 = inv * box.position
-				var e: Vector2 = inv * box.end
-				var edges: Vector2 = lanes.road_edges(e.y)
-				var gap := edges.x - e.x if s == 0 else a.x - edges.y
-				nearest = minf(nearest, gap)
-				check(gap >= 12.0, "%s: side figure %d/%d stays 12 px clear of the road (%.1f px)" % [sz, s, k, gap])
-				check(box.position.x >= 0.0 and box.end.x <= rows.size.x, "%s: side figure %d/%d is on the screen" % [sz, s, k])
-		print("  %s: side figures at least %.0f px off the road" % [sz, nearest])
-		check(float(rows.leader(0)[1]) > float(rows.slot(0, 0)[1]) * 0.6, "%s: the Issohadore reads at hit-line depth" % sz)
+			var frame := street._frame_points(s)
+			var cx := lanes.lane_center(0 if s == 0 else 2).x
+			for k in 21:
+				var p: Vector2 = to_street * lanes.project(Vector2(cx, hl * float(k) / 20.0))
+				check(not Geometry2D.is_point_in_polygon(p, frame), "%s: lane %d's middle at depth %d/20 is clear of the portrait" % [sz, s * 2, k])
+			var at: Vector2 = to_street * lanes.project(Vector2(cx, hl))
+			var gap := at.x if s == 0 else street.size.x - at.x
+			nearest = minf(nearest, gap)
+			check(gap >= street.size.x * 0.1, "%s: an outer note at the hit line is well on the screen (%.0f px)" % [sz, gap])
+		print("  %s: outer notes at least %.0f px in from the edge at the hit line" % [sz, nearest])
 		UIHarness.free_app(app)
 		UIHarness.restore_profile()

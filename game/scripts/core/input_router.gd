@@ -13,7 +13,7 @@ extends Control
 ## bell, Esc pause.
 ##
 ## Additions beyond the architecture doc: conductor, time_source, enabled, read_motion, motion,
-## detector, motion_log, feed_motion(), release_all(), is_pressed(lane), lane_at(x), signals
+## detector, motion_log, feed_motion(), release_all(), is_pressed(lane), lane_at(x), last_tap, signals
 ## lifted(lane) and pause_requested.
 
 signal stepped(lane: int)
@@ -38,6 +38,9 @@ var _last_motion_t := -INF
 var detector: BellDetector
 ## Set to a MotionLog to record readings, touches and rings (for checking detection on real phones).
 var motion_log: MotionLog
+
+## Session.tap's result for the latest press, read by stepped's handlers ({} before any).
+var last_tap: Dictionary = {}
 
 var _touches: Dictionary = {}   # touch index -> {lane}
 var _pressed := [0, 0, 0]
@@ -192,6 +195,7 @@ func _press(lane: int, t: float, id: int) -> void:
 		motion_log.add_touch(t)
 	_pressed[lane] += 1
 	var r: Dictionary = session.tap(lane, t, id) if session != null else {}
+	last_tap = r
 	stepped.emit(lane)
 	if not r.get("ring", {}).is_empty():
 		rang.emit(r.ring)

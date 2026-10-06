@@ -111,18 +111,18 @@ func test_the_count_in_is_seen_on_the_audio_sticks() -> void:
 	var s: Session = play.get("session")
 	var song: SongData = s.song
 	var cv: CountInView = play.get("count_view")
-	check(bool(play.get("_audio_count")), "a song from the start counts in with its own sticks")
-	# The music's sticks are on beats -4..-1: the digits land on them.
-	for pair in [[-3.95, 4], [-3.05, 4], [-2.95, 3], [-1.5, 2], [-0.05, 1]]:
-		await _to_time(c, song.time_of(pair[0]))
-		await tree.process_frame
-		check_eq(cv.digit, int(pair[1]), "beat %.2f shows %d" % [pair[0], pair[1]])
-	check(cv.beat_phase > 0.9, "the digit pulses with the beat (phase %.2f late in the beat)" % cv.beat_phase)
-	# After the count, "Get ready" with the bars left, until the first note.
-	await _to_time(c, song.time_of(0.2))
+	# Carnival's intro is long, so the music starts inside it: "Get ready" first, then "4 3 2 1" on the
+	# music's beats over the bar just before the first note's bar.
+	check(not bool(play.get("_audio_count")) and bool(play.get("_bar_count")), "a long intro is joined partway, counted on its own bar")
+	var cb: float = float(play.call("first_bar")) - 4.0
+	await _to_time(c, song.time_of(cb - 1.5))
 	await tree.process_frame
-	if s.notes[0].t > song.time_of(0.3):
-		check(cv.digit == 0 and cv.ready_bars >= 1, "then get ready, %d bars to go" % cv.ready_bars)
+	check(cv.digit == 0 and cv.ready_bars >= 1, "get ready first, %d bars to go" % cv.ready_bars)
+	for pair in [[0.05, 4], [0.95, 4], [1.05, 3], [2.5, 2], [3.88, 1]]:
+		await _to_time(c, song.time_of(cb + pair[0]))
+		await tree.process_frame
+		check_eq(cv.digit, int(pair[1]), "beat %.2f shows %d" % [cb + pair[0], pair[1]])
+	check(cv.beat_phase > 0.85, "the digit pulses with the beat (phase %.2f late in the beat)" % cv.beat_phase)
 	await _to_time(c, s.notes[0].t + 0.01)
 	await tree.process_frame
 	check(not cv.is_showing(), "nothing is shown once the notes arrive")
@@ -136,7 +136,7 @@ func test_the_count_in_is_seen_on_the_audio_sticks() -> void:
 
 func test_wrong_lane_marks_the_pressed_button() -> void:
 	# Health off: the run skips every note before the target, which would otherwise run health out.
-	var r: Array = await _open({"song_id": "carnival", "difficulty": "hard", "bell_set": "light", "health": false})
+	var r: Array = await _open({"song_id": "carnival", "difficulty": "medium", "bell_set": "light", "health": false})
 	var app: App = r[0]
 	var play: Node = r[1]
 	var c: Conductor = r[2]
@@ -252,3 +252,83 @@ func test_bell_cue_is_on_for_easy_and_medium_by_default() -> void:
 	check(not script.bell_cue_on("easy"), "Settings can turn it off")
 	UIHarness.restore_profile()
 
+
+
+func test_words_of_two_lanes_never_print_over_each_other() -> void:
+	var w := JudgementWords.new()
+	w.size = Vector2(720, 1440)
+	tree.root.add_child(w)
+	await tree.process_frame
+	w.show_word("Perfect", "", Vector2(120, 1100), "perfect")
+	w.show_word("Perfect", "", Vector2(360, 1100), "perfect")
+	await tree.process_frame
+	check_eq(w.shown().size(), 1, "a chord of the same word is written once (%s)" % str(w.shown()))
+	var r: Array[Rect2] = w.shown_rects()
+	check(r.size() == 1 and absf(r[0].get_center().x - 240.0) <= 6.0, "between its two lanes (%s)" % str(r))
+	w.show_word("Good", "", Vector2(600, 1100), "good")
+	w.show_word("Perfect", "", Vector2(360, 1100), "perfect")
+	await tree.process_frame
+	r = w.shown_rects()
+	var apart := true
+	for i in r.size():
+		for j in range(i + 1, r.size()):
+			if r[i].intersects(r[j]):
+				apart = false
+	check(r.size() >= 2 and apart, "different words side by side do not overlap (%s)" % str(r))
+	w.queue_free()
+
+
+## Notes slide smoothly down the road (Daniele: stepping on the beat felt bad): a note on this moment
+## is on the hit line, and every note keeps moving closer as time runs.
+func test_notes_slide_smoothly() -> void:
+	var lv := LaneView.new()
+	lv.perspective = false
+	lv.size = Vector2(540, 1100)
+	lv.spb = 0.5
+	lv.song_time = 5.0
+	var f := lv.field_rect()
+	var hl := LaneSkin.hit_line_y(f)
+	var pps := lv._px_per_s()
+	check_near(lv.event_y(f, lv.song_time, pps), hl, 0.5, "a note due now is on the hit line")
+	var prev := lv.event_y(f, 7.0, pps)
+	for i in 20:
+		lv.song_time += 0.02
+		var y := lv.event_y(f, 7.0, pps)
+		check(y > prev, "the note keeps sliding closer at every moment")
+		prev = y
+	lv.free()
+
+
+## The figures' bob follows the clock, never the pictures: whichever pictures a figure has, the drop
+## shows just after the beat, halfway back up next, and the rest pose for the rest of the beat. Each
+## figure has all three pictures, one size, so a swap never shifts or rescales it.
+func test_figure_poses_follow_the_beat() -> void:
+	check_eq(StreetBackdrop.pose_at(0.0), StreetBackdrop.DROP, "on the beat: the drop")
+	check_eq(StreetBackdrop.pose_at(StreetBackdrop.DROP_TIME - 0.001), StreetBackdrop.DROP, "still down just before DROP_TIME")
+	check_eq(StreetBackdrop.pose_at(StreetBackdrop.DROP_TIME + 0.001), StreetBackdrop.HALF, "then halfway back up")
+	check_eq(StreetBackdrop.pose_at(StreetBackdrop.HALF_TIME + 0.001), StreetBackdrop.STAND, "then resting")
+	check_eq(StreetBackdrop.pose_at(0.4), StreetBackdrop.STAND, "resting until the next beat")
+	check_eq(StreetBackdrop.pose_at(0.09, true), StreetBackdrop.STAND, "reduced motion skips the halfway pose")
+	check(StreetBackdrop.HALF_TIME - StreetBackdrop.DROP_TIME >= 1.0 / 30.0, "the halfway pose lasts at least a frame at 30 fps")
+	for fig in ["issohadore", "mamuthone"]:
+		var size := Vector2.ZERO
+		for k in 3:
+			var path := "res://art/street/%s_bob_%d.png" % [fig, k]
+			check(ResourceLoader.exists(path), "%s has picture %d" % [fig, k])
+			if not ResourceLoader.exists(path):
+				continue
+			var s: Vector2 = (load(path) as Texture2D).get_size()
+			if k == 0:
+				size = s
+			check_eq(s, size, "%s picture %d is the same size as its rest pose" % [fig, k])
+	var b := StreetBackdrop.new()
+	b.size = Vector2(720, 1440)
+	tree.root.add_child(b)
+	b.set_process(false)
+	for t in [0.02, 0.1, 0.3]:
+		b.beat = 8.0 + t / 0.5
+		b._bob_figures()
+		var want := StreetBackdrop.pose_at(t)
+		for i in b._figures.size():
+			check(b._figures[i].texture == b._poses[i][want], "figure %d shows pose %d at %.2f s after the beat" % [i, want, t])
+	b.queue_free()

@@ -96,6 +96,8 @@ static func check(song: SongData, difficulty: String) -> Array[String]:
 			for r in rests:
 				if b > r[0] - TOL and b < r[1] - TOL:
 					out.append("%s: bell inside a stand-still" % at)
+		if song.kind == "story" and difficulty in ["medium", "hard"] and k != "rest" and not on_eighth(b):
+			out.append("%s: finer than an eighth (sixteenths are Expert's)" % at)
 		notes.append({"b": b, "k": k, "lane": lane, "len": length})
 		for h in holds:
 			if lane == h[0] and b > h[1] + TOL and b < h[2] - TOL and k in ["step", "hold", "ring", "stomp"]:
@@ -120,6 +122,15 @@ static func check(song: SongData, difficulty: String) -> Array[String]:
 			seen[p] = true
 			unique.append(p)
 	return unique
+
+
+## On the beat, the half-beat or a triplet eighth: where Medium and Hard notes sit.
+static func on_eighth(b: float) -> bool:
+	var f := fposmod(b, 1.0)
+	for x in [0.0, 0.5, 1.0 / 3.0, 2.0 / 3.0, 1.0]:
+		if absf(f - x) < 0.01:
+			return true
+	return false
 
 
 static func on_third(b: float) -> bool:

@@ -1,7 +1,10 @@
 class_name UnisonMeter
 extends Control
-## Six bells for the six unison levels (×1 … ×4), lit gold up to the current level, and under them a
-## thin line filling with the streak toward the next level (12 good hits).
+## Six bells for the six unison levels (×1 … ×4), gold up to the current level and dark iron beyond
+## it, standing on a gold rule that fills with the streak toward the next level (12 good hits). A
+## level gained flares the new bell white-hot for a moment. Pixel art (field sprites hud_bell_*).
+
+const FLARE_TIME := 0.35
 
 var level := 0:
 	set(v):
@@ -13,50 +16,44 @@ var fill := 0.0:
 			fill = v
 			queue_redraw()
 
+var _flare_at := -9.0
+var _clock := 0.0
+
 
 func _init() -> void:
 	mouse_filter = Control.MOUSE_FILTER_IGNORE
 
 
+## The current level's bell flares (called when a level is gained).
+func flare() -> void:
+	_flare_at = _clock
+	queue_redraw()
+
+
+func _process(delta: float) -> void:
+	_clock += delta
+	if _clock - _flare_at < FLARE_TIME + 0.1:
+		queue_redraw()
+
+
 func _draw() -> void:
+	var P := PxArt.PX
 	var n := Session.UNISON_MULTS.size()
-	var step := size.x / float(n)
-	var r := minf(step * 0.36, (size.y - 10.0) * 0.5)
-	var cy := r + 3.0
+	var step := floorf(size.x / float(n) / P) * P
+	var hot := _clock - _flare_at < FLARE_TIME
 	for i in n:
-		var c := Vector2(step * (i + 0.5), cy)
-		var lit := i <= level
-		if lit:
-			draw_texture_rect(FireSkin.glow(), Rect2(c - Vector2(r, r) * 1.8, Vector2(r, r) * 3.6), false, Color(1.0, 0.7, 0.3, 0.45))
-		_bell(c, r, lit)
-	var y := cy + r + 5.0
-	var bar := Rect2(step * 0.2, y, size.x - step * 0.4, 2.0)
-	draw_rect(bar, Color(0.05, 0.02, 0.06, 0.8))
-	draw_rect(Rect2(bar.position, Vector2(bar.size.x * clampf(fill, 0.0, 1.0), bar.size.y)), Color("#ffd98a"))
-
-
-## A cowbell, mouth down: gold and lit, or dark.
-func _bell(c: Vector2, r: float, lit: bool) -> void:
-	var pts := PackedVector2Array()
-	var n := 14
-	for i in n + 1:
-		var t := float(i) / float(n)
-		# Quadratic curves up to the crown and down again, as the mockup's bell.
-		var a := Vector2(-r * 0.9, r * 0.7)
-		var ctl := Vector2(-r * 0.85, -r) if t < 0.5 else Vector2(r * 0.85, -r)
-		var tt := t * 2.0 if t < 0.5 else t * 2.0 - 1.0
-		var p0 := a if t < 0.5 else Vector2(0, -r)
-		var p1 := Vector2(0, -r) if t < 0.5 else Vector2(r * 0.9, r * 0.7)
-		pts.append(c + p0.lerp(ctl, tt).lerp(ctl.lerp(p1, tt), tt))
-	var cols := PackedColorArray()
-	for p in pts:
-		var k := clampf((p.y - (c.y - r)) / (r * 1.7), 0.0, 1.0)
-		if lit:
-			cols.append(Color("#fff1c0").lerp(Color("#ffbe45"), minf(k * 2.0, 1.0)).lerp(Color("#c46a18"), maxf(k * 2.0 - 1.0, 0.0)))
-		else:
-			cols.append(Color("#3a2a36"))
-	draw_polygon(pts, cols)
-	draw_polyline(pts, Color(0.07, 0.02, 0.04, 0.9), 1.5, true)
-	draw_set_transform(c + Vector2(0, r * 0.8), 0.0, Vector2(1.0, 0.8))
-	draw_circle(Vector2.ZERO, r * 0.25, Color("#5a2a08") if lit else Color("#1a1018"))
-	draw_set_transform(Vector2.ZERO)
+		var c := Vector2(step * (float(i) + 0.5), 6.0 * P)
+		c = Vector2(roundf(c.x / P) * P, c.y)
+		var st := "lit" if i <= level else "dark"
+		if hot and i == level:
+			st = "hot"
+		FireSkin.sprite(self, "hud_bell_" + st, c)
+	# the rule under the bells: dark, filling gold with the streak
+	var y := 13.0 * P
+	var x0 := step * 0.25
+	var w := floorf((step * float(n) - step * 0.5) / P) * P
+	draw_rect(Rect2(x0 - P, y - P, w + 2.0 * P, 3.0 * P), PixelPalette.K[0])
+	draw_rect(Rect2(x0, y, w, P), PixelPalette.GOLD[1])
+	var fw := floorf(w * clampf(fill, 0.0, 1.0) / P) * P
+	if fw > 0.0:
+		draw_rect(Rect2(x0, y, fw, P), PixelPalette.GOLD[4])

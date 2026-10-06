@@ -190,12 +190,90 @@ func test_wrong_step_drops_one_level() -> void:
 	check_eq(s.stats.wrong, 1, "counted")
 	check_eq(marks, [[2, 0]], "wrong_step names the pressed lane (and the note it was against)")
 	check_eq(s.tap(0, _bt(24), 0).judgement, "perfect", "the note can still be hit")
-	check_eq(s.tap(2, _bt(25) + 0.25, 0).judgement, "", "a stray tap between notes costs nothing")
+	check_eq(s.tap(2, _bt(25) + 0.25, 0).judgement, "stray", "a tap between notes with nothing due is a stray")
+	check_eq(s.unison_level, 0, "a stray drops one level, like a wrong step")
+	check_eq(s.combo, 0, "and breaks the combo")
+
+
+func test_stray_tap_breaks_the_combo() -> void:
+	var s := Session.new(make(steps(30, 1)), "easy")
+	var strays := []
+	s.stray.connect(func(lane): strays.append(lane))
+	check_eq(s.tap(1, _bt(0) - 0.6, 0).judgement, "", "a tap before the first note's window is free")
+	for i in 14:
+		s.tap(1, _bt(i), 0)
+	check_eq(s.unison_level, 1, "one level up")
+	check_eq(s.combo, 14, "14 in a row")
+	var r := s.tap(0, _bt(14) - 0.25, 0)   # a quarter second before the next note, on an empty lane
+	check_eq(r.judgement, "stray", "a tap with nothing near is a stray")
+	check_eq(s.combo, 0, "the combo is broken")
+	check_eq(s.unison_streak, 0, "so is the streak")
+	check_eq(s.unison_level, 0, "and the multiplier drops a level")
+	check_eq(s.stats.stray, 1, "counted")
+	check_eq(s.health, Session.MAX_HEALTH, "a stray costs no health")
+	check_eq(strays, [0], "stray names the lane")
+	check_eq(s.tap(1, _bt(14), 0).judgement, "perfect", "the next note still counts")
+	check_eq(s.tap(1, _bt(30) + 1.0, 0).judgement, "", "a tap after the last note is free")
+
+
+func test_mashing_locks_the_buttons() -> void:
+	var s := Session.new(make(steps(30, 1)), "easy")
+	var locks := []
+	s.input_locked.connect(func(until): locks.append(until))
+	var t0 := _bt(4) + 0.25   # between beats 4 and 5, nothing due
+	check_eq(s.tap(0, t0, 0).judgement, "stray", "first random tap")
+	check_eq(s.tap(2, t0 + 0.05, 1).judgement, "stray", "second")
+	check(not s.is_locked(t0 + 0.06), "not locked yet")
+	check_eq(s.tap(0, t0 + 0.1, 2).judgement, "stray", "third, within the span")
+	check(s.is_locked(t0 + 0.11), "now the buttons are locked")
+	check_eq(locks.size(), 1, "input_locked fired once")
+	check_near(s.lock_left(t0 + 0.1), Session.LOCK_TIME, 1e-6, "for LOCK_TIME")
+	check_eq(s.stats.locks, 1, "counted")
+	var due := s.notes[5]
+	check(due.t < t0 + 0.1 + Session.LOCK_TIME, "a note comes during the lock")
+	check_eq(s.tap(1, due.t, 3).judgement, "locked", "a press on time while locked judges nothing")
+	check(not due.done, "the note is still open")
+	s.update(due.t + 0.2)
+	check_eq(due.judgement, "miss", "and is missed")
+	var after := t0 + 0.1 + Session.LOCK_TIME + 0.01
+	check(not s.is_locked(after), "the lock ends")
+	var n := s.notes[6]
+	check_eq(s.tap(1, n.t, 4).judgement, "perfect", "and taps count again")
+	# Slow random taps never lock.
+	var q := Session.new(make(steps(30, 1)), "easy")
+	for i in 6:
+		q.tap(0, _bt(4 + i) + 0.25, i)
+	check_eq(q.stats.stray, 6, "six strays")
+	check_eq(q.stats.locks, 0, "a stray a beat apart never locks")
+	# Wrong steps count toward the lock too.
+	var w := Session.new(make([{"b": 0, "k": "step", "lane": 0}, {"b": 0.25, "k": "step", "lane": 0}, {"b": 0.5, "k": "step", "lane": 0}, {"b": 8, "k": "step", "lane": 0}]), "easy")
+	w.tap(2, _bt(0), 0)
+	w.tap(2, _bt(0.25), 1)
+	w.tap(2, _bt(0.5), 2)
+	check_eq(w.stats.wrong, 3, "three wrong steps")
+	check(w.is_locked(_bt(0.5) + 0.01), "lock the buttons too")
+
+
+func test_stray_exemptions() -> void:
+	# A stomp's second thumb landing late is not a stray.
+	var s := Session.new(make([{"b": 0, "k": "step", "lane": 1}, {"b": 4, "k": "stomp", "lane": 1}, {"b": 8, "k": "step", "lane": 1}]), "easy")
+	var st: Note = s.notes[1]
+	s.tap(1, st.t, 0)
+	s.update(st.t + Session.STOMP_GAP + 0.01)
+	check(st.done, "one-thumb stomp judged")
+	check_eq(s.tap(1, st.t + 0.15, 1).judgement, "", "a late second thumb is free")
+	# The Piazza takes no taps at all.
+	var p := Session.new(make(steps(8, 1)), "easy", "light", {"piazza": true})
+	check_eq(p.tap(1, _bt(2) + 0.25, 0).judgement, "", "no strays in the Piazza")
+	# Slam: the outer buttons ring the bell; only the middle can stray.
+	var sl := Session.new(make([{"b": 0, "k": "step", "lane": 1}, {"b": 4, "k": "step", "lane": 1}, {"b": 8, "k": "step", "lane": 1}]), "easy", "light", {"slam": true})
+	check_eq(sl.tap(0, _bt(2) + 0.25, 0).judgement, "", "an outer press in slam is a bell press")
+	check_eq(sl.tap(1, _bt(2) + 0.25, 1).judgement, "stray", "the middle can stray")
 
 
 func test_tap_with_own_note_coming_is_stray() -> void:
 	# Lane 0 due at 1.0 s, lane 2 due at 1.25 s: pressing lane 2 at 1.0 s is inside lane 0's window,
-	# but lane 2's own note is 250 ms away (within 2 × 140 ms), so the tap is a stray and free.
+	# but lane 2's own note is 250 ms away (within 2 × 140 ms), so the tap is free (not even a stray).
 	var s := Session.new(make([{"b": 0, "k": "step", "lane": 0}, {"b": 0.5, "k": "step", "lane": 2}]), "easy")
 	var marks := []
 	s.wrong_step.connect(func(lane, _n, _o): marks.append(lane))

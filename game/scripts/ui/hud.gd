@@ -1,15 +1,36 @@
 class_name Hud
 extends Control
-## The strip at the top of the play screen: score, unison (level, multiplier and the streak toward the
-## next level), progress through the song's sections, the ghost (ahead or behind your best) and
-## health (HealthPips).
-## A pause button sits at the right. Text uses the theme's HUD styles so it reads over the scene.
+## The top of the play screen, after Daniele's play-screen picture (mockups/lowpoly/
+## play_screen_hud_target.png): a thin progress line across the top between two diamonds, then three
+## carved frames with glowing orange edges - health as hearts on the left, the unison multiplier in
+## a big hexagonal badge in the middle (its lower rim fills with the streak toward the next level),
+## the score on the right. The ghost line (ahead or behind your best) and the song's section are
+## kept but not shown. A small pause button sits at the top right.
+## Node names (Score, Ghost, Health, Unison, Pause, Progress) are what the tests look for.
 
 signal pause_pressed
 
 const HEIGHT := 176.0
+const EDGE := Color("#ff9a32")
+const EDGE_HOT := Color("#ffd27a")
+const EDGE_DARK := Color("#7a2e06")
+const SIDE := Color("#5a2408")      ## the frames' sides, below their faces
+const LIGHT := Vector2(-0.45, -0.89)  ## where the HUD's light comes from (top left)
+const DEPTH := 7.0                  ## how far the frames stand out of the screen, px
+const BEVEL := 7.0                  ## the width of their bevelled rim, px
+const PANEL := Color(0.07, 0.04, 0.05, 0.9)
+const INK := Color("#fff1d6")
+const GOLD_INK := Color("#ffd35a")
+const SCORE_INK := Color("#ffe6a0")
+const OUTLINE := Color("#0a0608")
+const PANEL_Y := 34.0            ## the frames' top
+const PANEL_H := 64.0
+const BADGE := Vector2(122.0, 112.0)
 
 var session: Session
+## The pixel look: the HUD's words and figures are the pixel type (PxType), set over PixelFilter's
+## lens so they stay crisp; the frames under it come out as pixel art through the lens.
+var pixel := false
 var ghost: Ghost
 var _score: Label
 var _unison: Label
@@ -19,8 +40,17 @@ var _meter: UnisonMeter
 var _bar: SectionBar
 var _shown_score := 0.0
 var _pause: Button
-var _ribbon: Control
 var _health: HealthPips
+var _frames: Control
+var _flare_at := -9.0
+var _clock := 0.0
+var _progress := 0.0
+var _streak := 0.0
+var _laid := Vector2(-1, -1)
+var _punch := 0.0
+var beat := -1000.0          ## the song's beat now, for the badge's bounce
+var _bounce := 0.0           ## 1 on the beat, falling away
+var _punched := 0
 
 
 func _init() -> void:
@@ -28,39 +58,78 @@ func _init() -> void:
 	mouse_filter = Control.MOUSE_FILTER_IGNORE
 
 
+static func font(bold := true) -> Font:
+	return load("res://fonts/AlegreyaSans-ExtraBold.ttf" if bold else "res://fonts/AlegreyaSC-Bold.ttf")
+
+
+## In the pixel look: the bitmap face that stands in for a smooth font size, over the lens.
+func pstyle(l: Label, size: int, color: Color, bold := true, outline := 6) -> void:
+	if not pixel:
+		style(l, size, color, bold, outline)
+		return
+	var face := "caps"
+	if size >= 56:
+		face = "big"
+	elif size >= 40:
+		face = "score"
+	PxType.label(l, face, color)
+	l.z_index = PixelFilter.Z_OVER
+
+
+static func style(l: Label, size: int, color: Color, bold := true, outline := 6) -> void:
+	l.add_theme_font_override("font", font(bold))
+	l.add_theme_font_size_override("font_size", size)
+	l.add_theme_color_override("font_color", color)
+	l.add_theme_color_override("font_outline_color", OUTLINE)
+	l.add_theme_constant_override("outline_size", outline)
+	# the letters stand out in relief: a bronze side below each one
+	l.add_theme_constant_override("shadow_outline_size", outline)
+	l.add_theme_color_override("font_shadow_color", Color("#9a4410"))
+	l.add_theme_constant_override("shadow_offset_x", 0)
+	l.add_theme_constant_override("shadow_offset_y", maxi(2, size / 12))
+	l.material = null
+
+
 func setup(p_session: Session, p_ghost: Ghost) -> void:
 	session = p_session
 	ghost = p_ghost
-	# Everything sits in the top ~110 px, the centre left open for the fire: the score top-left in the
-	# carved serif with the ghost under it; unison, its bells, the pause button and the section tag
-	# top-right; the song's progress a thin line along the screen's very top edge.
-	_score = UIKit.label("0", "BigNumberLabel", false)
+	_frames = Control.new()
+	_frames.name = "Frames"
+	_frames.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_frames.draw.connect(_draw_frames)
+	add_child(_frames)
+	_score = Label.new()
 	_score.name = "Score"
-	FireSkin.carve_label(_score, 50, Color.WHITE, Color(1.0, 0.84, 0.55, 0.5), 8, 0.45)
-	_gradient(_score, FireSkin.text_gradient(Color("#fff6e2"), Color("#f0dcb2"), Color("#d4a45a")))
-	_score.position = Vector2(-4.0, -8.0)
+	_score.text = "0"
+	pstyle(_score, 42, SCORE_INK)
+	_score.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	_score.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	_score.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	add_child(_score)
-	_ghost = UIKit.label("", UIKit.HUD, false)
+	_ghost = Label.new()
 	_ghost.name = "Ghost"
-	FireSkin.carve_label(_ghost, 24, Color("#d9a24a"), Color(0, 0, 0, 0), 6)
-	_ghost.position = Vector2(-2.0, 50.0)
+	pstyle(_ghost, 24, INK, false, 5)
+	_ghost.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
+	_ghost.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	add_child(_ghost)
-	# Health: ten flames under the ghost line (hidden where health is off: Piazza, lessons, autoplay).
+	# Health: five hearts, two points each (hidden where health is off: Piazza, lessons, autoplay).
 	_health = HealthPips.new()
 	_health.name = "Health"
 	_health.session = session
 	_health.reduced_motion = UIKit.reduced_motion()
-	_health.position = Vector2(0.0, 82.0)
 	_health.size = _health.custom_minimum_size
 	_health.visible = session.health_on
 	add_child(_health)
-	_unison = UIKit.label("", UIKit.HUD, false, HORIZONTAL_ALIGNMENT_RIGHT)
+	_unison = Label.new()
 	_unison.name = "Unison"
-	FireSkin.carve_label(_unison, 32, Color.WHITE, Color(0, 0, 0, 0), 6, 0.3)
-	_gradient(_unison, FireSkin.text_gradient(Color("#fff6e0"), Color("#efe2c6"), Color("#e0a040")))
+	pstyle(_unison, 60, GOLD_INK, true, 8)
+	_unison.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	_unison.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	_unison.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	add_child(_unison)
 	_meter = UnisonMeter.new()
 	_meter.name = "Meter"
+	_meter.visible = false
 	add_child(_meter)
 	_pause = UIKit.button("", func() -> void: pause_pressed.emit(), UIKit.QUIET)
 	_pause.custom_minimum_size = Vector2(UIKit.TOUCH, UIKit.TOUCH)
@@ -71,83 +140,315 @@ func setup(p_session: Session, p_ghost: Ghost) -> void:
 		_pause.add_theme_stylebox_override(st, StyleBoxEmpty.new())
 	_pause.draw.connect(_draw_pause)
 	add_child(_pause)
-	# The section: gold small caps after a hairline and a diamond, right under the pause button.
-	var tag := Control.new()
-	tag.name = "SectionTag"
-	tag.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	tag.draw.connect(_draw_tag.bind(tag))
-	add_child(tag)
-	_section = UIKit.label("", UIKit.CAPTION, false, HORIZONTAL_ALIGNMENT_RIGHT)
+	_section = Label.new()
 	_section.name = "Section"
-	FireSkin.carve_label(_section, 24, Color("#e8c070"), Color(0, 0, 0, 0), 5)
-	_section.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
-	_section.set_anchors_preset(Control.PRESET_FULL_RECT)
-	tag.add_child(_section)
-	_ribbon = tag
-	# The progress line runs across the whole screen at its top edge, outside the HUD's margins.
+	pstyle(_section, 24, GOLD_INK, false, 5)
+	_section.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	add_child(_section)
+	# The song's progress: kept for its sections; the line itself is drawn with the frames.
 	_bar = SectionBar.new()
 	_bar.name = "Progress"
-	_bar.top_level = true
+	_bar.visible = false
 	_bar.setup(session)
 	add_child(_bar)
+	# No words under the frames (Daniele, 2026-10-05): the song's section and the line against your
+	# best run are hidden, so the figures' heads have the space under the HUD to themselves. They
+	# are still kept up to date (tests read them).
+	_section.visible = false
+	_ghost.visible = false
 	resized.connect(_layout)
 	_layout()
 	set_unison(session.unison_level, false)
 
 
+## The screen's width and this HUD's left edge on it (the HUD sits inside margins).
+func _screen() -> Vector2:
+	if not is_inside_tree():
+		return Vector2(size.x, 0.0)
+	var vr := get_viewport_rect().size.x
+	return Vector2(vr, get_global_transform().affine_inverse().origin.x)
+
+
+## [hearts panel, badge, score panel, progress line (x0, x1, y)] in this HUD's coordinates.
+func _boxes() -> Array:
+	var sc := _screen()
+	var W := sc.x
+	var x0 := sc.y
+	var cx := x0 + W * 0.5
+	var pad := W * 0.035
+	var half := BADGE.x * 0.5
+	var left := Rect2(x0 + pad + 30.0, PANEL_Y, cx - half - 14.0 - (x0 + pad + 30.0), PANEL_H)
+	var right_end := x0 + W - pad - 30.0
+	var right := Rect2(cx + half + 14.0, PANEL_Y, right_end - (cx + half + 14.0), PANEL_H)
+	var badge := Rect2(cx - half, PANEL_Y + PANEL_H * 0.5 - BADGE.y * 0.5 + 6.0, BADGE.x, BADGE.y)
+	return [left, badge, right, Vector3(x0 + pad, x0 + W - pad - 56.0, 12.0)]
+
+
 func _layout() -> void:
-	var w := size.x
-	_unison.position = Vector2(w - 330.0, 6.0)
-	_unison.size = Vector2(262.0, 40.0)
-	_meter.position = Vector2(w - 236.0, 44.0)
-	_meter.size = Vector2(172.0, 34.0)
-	# The disc sits 24 px in from the HUD's right edge; its touch target runs off to the screen edge.
-	_pause.position = Vector2(w - 80.0, -8.0)
-	_ribbon.position = Vector2(w - 330.0, 80.0)
-	_ribbon.size = Vector2(330.0, 32.0)
-	_place_bar()
-
-
-func _place_bar() -> void:
-	if _bar == null or not is_inside_tree():
+	if _score == null:
 		return
-	var vp := get_viewport_rect().size
-	var top := maxf(global_position.y - 8.0, 0.0)
-	_bar.global_position = Vector2(0.0, top)
-	_bar.size = Vector2(vp.x, 12.0)
+	var b := _boxes()
+	var left: Rect2 = b[0]
+	var badge: Rect2 = b[1]
+	var right: Rect2 = b[2]
+	var line: Vector3 = b[3]
+	_score.position = right.position + Vector2(18.0, 0.0)
+	_score.size = right.size - Vector2(36.0, 0.0)
+	_ghost.position = Vector2(right.position.x, right.end.y + 8.0)
+	_ghost.size = Vector2(right.size.x - 10.0, 30.0)
+	if pixel:
+		# the pixel type runs wider: the line wraps onto two, right-aligned under the score
+		_ghost.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+		_ghost.size.y = 54.0
+	_health.position = left.get_center() - _health.size * 0.5
+	_section.position = Vector2(left.position.x + 12.0, left.end.y + 8.0)
+	_section.size = Vector2(left.size.x, 30.0)
+	_unison.position = badge.position
+	_unison.size = badge.size
+	_pause.position = Vector2(line.y + 34.0, line.z + 16.0) - _pause.size * 0.5
+	_frames.position = Vector2.ZERO
+	_frames.size = size
+	_frames.queue_redraw()
+	_laid = _screen()
 
 
-## Gives a label a gradient fill that follows its height.
-static func _gradient(l: Label, m: ShaderMaterial) -> void:
-	l.material = m
-	l.resized.connect(func() -> void: m.set_shader_parameter("height", maxf(l.size.y, 1.0)))
+func _process(delta: float) -> void:
+	_clock += delta
+	# The margins place this HUD after it is built, so lay out again once its place on screen is known.
+	if _score != null and _screen() != _laid:
+		_layout()
+	if _frames != null:
+		_frames.queue_redraw()
 
 
-## The round pause button: a dark disc with a bronze rim and two bars, near the top-right corner.
+func _to_frames(p: Vector2) -> Vector2:
+	return p
+
+
+## A carved frame: a dark panel with pointed ends, an orange edge glowing outward, a thin inner line,
+## and a small diamond at each point.
+func _panel(ci: CanvasItem, r: Rect2, glow := 1.0) -> void:
+	var t := r.size.y * 0.5
+	var pts := PackedVector2Array([r.position + Vector2(t * 0.6, 0), Vector2(r.end.x - t * 0.6, r.position.y), Vector2(r.end.x, r.get_center().y),
+		r.end - Vector2(t * 0.6, 0), Vector2(r.position.x + t * 0.6, r.end.y), Vector2(r.position.x, r.get_center().y)])
+	_shape(ci, pts, glow)
+	for p in [pts[5], pts[2]]:
+		_diamond(ci, p, 9.0)
+
+
+## A frame in relief: a thick slab standing out of the screen (its lower sides show below it), a
+## bevelled orange rim lit from the top left (the light faces bright, the shaded ones deep bronze) and
+## a dark panel sunk inside it, with the glow round the outside.
+func _shape(ci: CanvasItem, pts: PackedVector2Array, glow: float, pal: Array = []) -> void:
+	if pal.is_empty():
+		pal = [EDGE, EDGE_HOT, EDGE_DARK, SIDE, Color(1.0, 0.5, 0.1)]
+	var edge: Color = pal[0]
+	var hot: Color = pal[1]
+	var dark: Color = pal[2]
+	var side: Color = pal[3]
+	var halo: Color = pal[4]
+	var g := PackedVector2Array()
+	for p in pts:
+		g.append(_to_frames(p))
+	var closed := g.duplicate()
+	closed.append(g[0])
+	for k in 3:
+		ci.draw_polyline(closed, Color(halo, 0.12 * glow), 18.0 - k * 5.0, true)
+	var n := g.size()
+	# the slab's sides, below it
+	var down := Vector2(0.0, DEPTH)
+	var hull := Geometry2D.convex_hull(PackedVector2Array(Array(g) + Array(_moved(g, down))))
+	ci.draw_polyline(hull, OUTLINE, 5.0, true)
+	ci.draw_colored_polygon(hull, OUTLINE)
+	for i in n:
+		var p0 := g[i]
+		var p1 := g[(i + 1) % n]
+		var nn := _normal(p0, p1)
+		if nn.y > 0.05:
+			_quad(ci, [p0, p1, p1 + down, p0 + down], side.lerp(side.darkened(0.5), clampf(0.5 + nn.x * 0.5, 0.0, 1.0)))
+	# the bevelled rim
+	var inner := _inset(g, BEVEL)
+	for i in n:
+		var p0 := g[i]
+		var p1 := g[(i + 1) % n]
+		var lit := _normal(p0, p1).dot(LIGHT)
+		var col := edge.lerp(hot, clampf(lit, 0.0, 1.0)) if lit >= 0.0 else edge.lerp(dark, clampf(-lit, 0.0, 1.0))
+		_quad(ci, [p0, p1, inner[(i + 1) % n], inner[i]], col)
+	# the sunk panel: darker at its top, where the rim shades it
+	ci.draw_colored_polygon(inner, PANEL)
+	var top_y := INF
+	var bot_y := -INF
+	for p in inner:
+		top_y = minf(top_y, p.y)
+		bot_y = maxf(bot_y, p.y)
+	var shade := PackedVector2Array()
+	for p in inner:
+		shade.append(Vector2(p.x, minf(p.y, top_y + (bot_y - top_y) * 0.35)))
+	var sh := Geometry2D.convex_hull(shade)
+	if sh.size() >= 4:
+		ci.draw_colored_polygon(sh, Color(0, 0, 0, 0.35))
+	var ring := inner.duplicate()
+	ring.append(inner[0])
+	ci.draw_polyline(ring, OUTLINE, 2.0, true)
+	ci.draw_polyline(closed, Color(hot, 0.9), 1.5, true)
+
+
+static func _moved(pts: PackedVector2Array, d: Vector2) -> PackedVector2Array:
+	var out := PackedVector2Array()
+	for p in pts:
+		out.append(p + d)
+	return out
+
+
+## The outward normal of the edge p0 -> p1 of a polygon wound clockwise on screen.
+static func _normal(p0: Vector2, p1: Vector2) -> Vector2:
+	var e := (p1 - p0).normalized()
+	return Vector2(e.y, -e.x)
+
+
+## A convex polygon moved in by d along each edge (corners mitred).
+static func _inset(pts: PackedVector2Array, d: float) -> PackedVector2Array:
+	var n := pts.size()
+	var out := PackedVector2Array()
+	for i in n:
+		var a := _normal(pts[(i - 1 + n) % n], pts[i])
+		var b := _normal(pts[i], pts[(i + 1) % n])
+		var m := (a + b).normalized()
+		out.append(pts[i] - m * d / maxf(m.dot(b), 0.3))
+	return out
+
+
+static func _quad(ci: CanvasItem, q: Array, col: Color) -> void:
+	var pts := PackedVector2Array(q)
+	ci.draw_primitive(PackedVector2Array([pts[0], pts[1], pts[2]]), PackedColorArray([col, col, col]), PackedVector2Array())
+	ci.draw_primitive(PackedVector2Array([pts[0], pts[2], pts[3]]), PackedColorArray([col, col, col]), PackedVector2Array())
+
+
+## A cut diamond stud: four facets lit from the top left, on a dark base that shows below it.
+func _diamond(ci: CanvasItem, at: Vector2, r: float, col := EDGE_HOT) -> void:
+	var p := _to_frames(at)
+	var t := p + Vector2(0, -r)
+	var rt := p + Vector2(r, 0)
+	var bt := p + Vector2(0, r)
+	var lf := p + Vector2(-r, 0)
+	var d := Vector2(0, 3.0)
+	ci.draw_colored_polygon(PackedVector2Array([t + Vector2(0, -2), rt + Vector2(2, 0), rt + d + Vector2(2, 0), bt + d + Vector2(0, 2), lf + d + Vector2(-2, 0), lf + Vector2(-2, 0)]), OUTLINE)
+	_quad(ci, [lf, bt, bt + d, lf + d], SIDE)
+	_quad(ci, [bt, rt, rt + d, bt + d], SIDE.darkened(0.4))
+	var c := p + Vector2(-r * 0.12, -r * 0.12)
+	ci.draw_colored_polygon(PackedVector2Array([t, c, lf]), col.lightened(0.35))
+	ci.draw_colored_polygon(PackedVector2Array([t, rt, c]), col)
+	ci.draw_colored_polygon(PackedVector2Array([lf, c, bt]), EDGE)
+	ci.draw_colored_polygon(PackedVector2Array([c, rt, bt]), EDGE_DARK)
+
+
+func _draw_frames() -> void:
+	if session == null:
+		return
+	var ci := _frames
+	var b := _boxes()
+	var line: Vector3 = b[3]
+	# the progress line between two diamonds
+	var a := _to_frames(Vector2(line.x + 14.0, line.z))
+	var e := _to_frames(Vector2(line.y - 14.0, line.z))
+	# a groove for the progress, lit along its lower lip; the filled part a round glowing rod in it
+	ci.draw_line(a, e, OUTLINE, 11.0)
+	ci.draw_line(a, e, Color(0.1, 0.05, 0.04, 0.95), 8.0)
+	ci.draw_line(a + Vector2(0, 3.5), e + Vector2(0, 3.5), Color(EDGE_DARK, 0.9), 1.5)
+	var fx := a.lerp(e, clampf(_progress, 0.0, 1.0))
+	if fx.x > a.x + 1.0:
+		ci.draw_line(a, fx, Color(1.0, 0.5, 0.1, 0.25), 14.0)
+		ci.draw_line(a, fx, EDGE_DARK, 7.0)
+		ci.draw_line(a + Vector2(0, -0.5), fx + Vector2(0, -0.5), EDGE, 5.0)
+		ci.draw_line(a + Vector2(0, -1.5), fx + Vector2(0, -1.5), EDGE_HOT, 2.0)
+	for p in [Vector2(line.x + 8.0, line.z), Vector2(line.y - 8.0, line.z)]:
+		_diamond(ci, p, 8.0)
+	if session.health_on:
+		_panel(ci, b[0])
+	_panel(ci, b[2])
+	# the badge: a tall hexagon, flaring when a level is gained; its lower rim fills with the streak.
+	# It bounces on every beat, and grows and burns hotter in colour as the multiplier rises.
+	var r: Rect2 = b[1]
+	var lvl := session.unison_level
+	var pal := _tier(lvl)
+	var fl := clampf(1.0 - (_clock - _flare_at) / 0.4, 0.0, 1.0)
+	var sc := badge_scale()
+	var ctr := r.get_center()
+	# light rays turning behind it from the third level up, in its colours
+	if lvl >= 3:
+		var n := 12
+		var ray_r := r.size.y * (0.75 + 0.12 * float(lvl - 3)) * sc
+		for i in n:
+			var an := TAU * float(i) / n + _clock * 0.6
+			var w := 0.09
+			var col: Color = pal[1] if i % 2 == 0 else pal[0]
+			if lvl >= 5:
+				col = Color.from_hsv(fposmod(float(i) / n + _clock * 0.25, 1.0), 0.75, 1.0)
+			ci.draw_polygon(PackedVector2Array([ctr, ctr + Vector2(cos(an - w), sin(an - w)) * ray_r, ctr + Vector2(cos(an + w), sin(an + w)) * ray_r]),
+				PackedColorArray([Color(col, 0.55), Color(col, 0.0), Color(col, 0.0)]))
+	var hx := PackedVector2Array()
+	for q in [Vector2(0.0, -0.5), Vector2(0.5, -0.24), Vector2(0.5, 0.24), Vector2(0.0, 0.5), Vector2(-0.5, 0.24), Vector2(-0.5, -0.24)]:
+		hx.append(ctr + q * r.size * sc)
+	_shape(ci, hx, 1.0 + 0.8 * float(lvl) + 2.0 * fl + 1.5 * _bounce, pal)
+	if _streak > 0.0:
+		var p0 := _to_frames(hx[4])
+		var p1 := _to_frames(hx[3])
+		var p2 := _to_frames(hx[2])
+		var k := clampf(_streak, 0.0, 1.0) * 2.0
+		var q := p0.lerp(p1, minf(k, 1.0))
+		ci.draw_line(p0, q, pal[1], 5.0)
+		if k > 1.0:
+			ci.draw_line(p1, p1.lerp(p2, k - 1.0), pal[1], 5.0)
+	for p in [hx[0], hx[3]]:
+		_diamond(ci, p, 8.0 * sc, Color.WHITE.lerp(pal[1], 1.0 - fl))
+	for sx: float in [-1.0, 1.0]:
+		var c := _to_frames(Vector2(ctr.x + sx * (r.size.x * 0.5 * sc + 10.0), ctr.y + r.size.y * 0.5 * sc - 8.0))
+		ci.draw_colored_polygon(PackedVector2Array([c + Vector2(-sx * 10.0, -8.0), c + Vector2(sx * 6.0, 8.0), c + Vector2(-sx * 14.0, 8.0)]), pal[0])
+
+
+## The badge's colours by unison level: [rim, lit rim, shaded rim, side, glow, number]. It heats up
+## from a dull ember through orange and gold to fire red and violet, and the top level shifts
+## through every colour.
+func _tier(level: int) -> Array:
+	var tiers := [
+		[Color("#b8641e"), Color("#e8a050"), Color("#5a2a08"), Color("#3e1c06"), Color(0.9, 0.4, 0.1), Color("#e8c890")],
+		[Color("#ff9a32"), Color("#ffd27a"), Color("#7a2e06"), Color("#5a2408"), Color(1.0, 0.5, 0.1), Color("#ffd35a")],
+		[Color("#ffc42a"), Color("#fff0a0"), Color("#8a5200"), Color("#5e3a04"), Color(1.0, 0.75, 0.1), Color("#fff2a8")],
+		[Color("#ff4a24"), Color("#ffb070"), Color("#7a0e06"), Color("#4e0a04"), Color(1.0, 0.3, 0.1), Color("#ffe0b0")],
+		[Color("#d23cff"), Color("#ffa8ff"), Color("#5a0a7a"), Color("#3a0650"), Color(0.8, 0.3, 1.0), Color("#ffe0ff")],
+		[Color("#40c8ff"), Color("#e0ffff"), Color("#0a3a7a"), Color("#062650"), Color(0.3, 0.8, 1.0), Color("#ffffff")],
+	]
+	var t: Array = tiers[clampi(level, 0, tiers.size() - 1)].duplicate()
+	if level >= 5:
+		var hue := fposmod(_clock * 0.25, 1.0)
+		t[0] = Color.from_hsv(hue, 0.8, 1.0)
+		t[1] = Color.from_hsv(hue, 0.3, 1.0)
+		t[2] = Color.from_hsv(hue, 0.9, 0.45)
+		t[4] = Color.from_hsv(hue, 0.7, 1.0)
+	return t
+
+
+## The badge's size now: bigger at each unison level, and a bounce on every beat (smaller with
+## reduced motion).
+func badge_scale() -> float:
+	var lvl := session.unison_level if session != null else 0
+	return (1.0 + 0.07 * float(lvl)) * (1.0 + (0.05 + 0.025 * float(lvl)) * _bounce)
+
+
+## The pause button: two bars in a small carved hexagon.
 func _draw_pause() -> void:
-	var c := Vector2(56.0, 40.0)
-	var r := 21.0
 	var down := _pause.button_pressed or _pause.is_hovered()
-	_pause.draw_circle(c, r, Color(0.12, 0.06, 0.16, 0.9))
-	_pause.draw_arc(c, r, 0.0, TAU, 40, Color("#ffc84a") if down else Color("#c8862e"), 2.0, true)
-	for dx in [-5.5, 5.5]:
-		_pause.draw_rect(Rect2(c.x + dx - 3.0, c.y - 10.0, 6.0, 20.0), Color("#fff3dc"))
-
-
-## A gold hairline and a diamond before the section's name.
-func _draw_tag(tag: Control) -> void:
-	if _section.text == "":
-		return
-	var font := _section.get_theme_font("font")
-	var fs := _section.get_theme_font_size("font_size")
-	var tw := font.get_string_size(_section.text, HORIZONTAL_ALIGNMENT_LEFT, -1, fs).x
-	var y := tag.size.y * 0.5 + 1.0
-	var x := tag.size.x - tw - 12.0
-	var col := Color(0.91, 0.75, 0.44, 0.75)
-	tag.draw_rect(Rect2(x - 44.0, y, 34.0, 1.0), col)
-	tag.draw_set_transform(Vector2(x - 4.0, y + 0.5), PI * 0.25)
-	tag.draw_rect(Rect2(-3.0, -3.0, 6.0, 6.0), Color("#e8c070"))
-	tag.draw_set_transform(Vector2.ZERO)
+	var c := _pause.size * 0.5 + (Vector2(0, DEPTH * 0.5) if down else Vector2.ZERO)
+	var r := 21.0
+	var pts := PackedVector2Array()
+	for i in 6:
+		var a := TAU * float(i) / 6.0
+		pts.append(c + Vector2(cos(a), sin(a)) * r)
+	_shape(_pause, pts, 0.6)
+	for sx: float in [-1.0, 1.0]:
+		var bar := Rect2(c.x + sx * 6.0 - 3.0, c.y - 9.0, 6.0, 18.0)
+		_pause.draw_rect(Rect2(bar.position + Vector2(0, 2.0), bar.size), Color("#3a1404"))
+		_pause.draw_rect(bar, INK)
 
 
 func set_pause_visible(v: bool) -> void:
@@ -161,38 +462,66 @@ func tick(t: float, delta: float) -> void:
 		return
 	# The number counts up quickly rather than jumping, so big hits read as big.
 	_shown_score = move_toward(_shown_score, session.score, maxf(40.0, absf(session.score - _shown_score) * 12.0) * delta)
-	_score.text = UIKit.fmt_score(roundi(_shown_score))
-	_meter.fill = float(session.unison_streak) / float(Session.UNISON_STEP) if session.unison_level < 5 else 1.0
+	var shown := UIKit.fmt_score(roundi(_shown_score))
+	if shown != _score.text and session.score > _punched:
+		# the number swells as points land, more for a bigger jump
+		_punch = clampf(0.06 + float(session.score - _punched) / 4000.0, 0.06, 0.2)
+		_punched = session.score
+	_score.text = shown
+	_punch = move_toward(_punch, 0.0, delta * 0.8)
+	_score.pivot_offset = _score.size * 0.5
+	_score.scale = Vector2.ONE * (1.0 + _punch)
+	_streak = float(session.unison_streak) / float(Session.UNISON_STEP) if session.unison_level < 5 else 1.0
+	# the badge bounces on the beat: a quick swell, easing back before the next one
+	_bounce = 0.0 if beat < 0.0 else pow(1.0 - fposmod(beat, 1.0), 3.0) * (0.35 if UIKit.reduced_motion() else 1.0)
+	var bs := badge_scale()
+	_unison.pivot_offset = _unison.size * 0.5
+	if not _unison_tweening():
+		_unison.scale = Vector2(bs, bs)
+	_unison.add_theme_color_override("font_color", _tier(session.unison_level)[5])
+	_meter.fill = _streak
 	_bar.progress = session.progress(t)
-	_place_bar()
-	var sec := _bar.section_name(t)
-	if sec != _section.text:
-		_section.text = sec
-		_ribbon.queue_redraw()
+	_progress = _bar.progress
+	_section.text = _bar.section_name(t)
 	if ghost != null and not ghost.is_empty() and judged_any(session):
 		# Points, not seconds: how far above or below your best run you are at this moment.
 		var d := ghost.delta_at(t, session.score)
 		_ghost.text = ghost_text(d)
-		_ghost.modulate = Color("#ff9a3a") if d > 0 else Palette.BONE_DIM
+		_ghost.modulate = Color("#ffc445") if d > 0 else Color.WHITE
 	elif ghost != null and not ghost.is_empty():
 		_ghost.text = ""
 	else:
 		_ghost.text = tr("hud_unison_hint") if session.unison_level == 0 else ""
-		_ghost.modulate = Color("#ff9a3a")
+		_ghost.modulate = Color("#ffc445")
 
 
 func set_unison(level: int, animate := true) -> void:
-	_unison.text = tr("hud_unison") % _mult_text(Session.UNISON_MULTS[level])
+	_unison.text = _mult_text(Session.UNISON_MULTS[level])
 	_meter.level = level
-	if animate and not UIKit.reduced_motion():
-		_unison.pivot_offset = _unison.size * Vector2(1.0, 0.5)
+	if animate:
+		_flare_at = _clock
 		var tw := _unison.create_tween()
-		_unison.scale = Vector2(1.35, 1.35)
-		tw.tween_property(_unison, "scale", Vector2.ONE, 0.25).set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT)
+		_unison.modulate = Color(1.4, 1.3, 1.1)
+		if not UIKit.reduced_motion():
+			_unison.pivot_offset = _unison.size * 0.5
+			_unison.scale = Vector2.ONE * badge_scale() * 1.25
+			tw.tween_property(_unison, "scale", Vector2.ONE * badge_scale(), 0.22).set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT)
+		tw.parallel().tween_property(_unison, "modulate", Color.WHITE, 0.3)
+		_meter.flare()
+
+
+func _unison_tweening() -> bool:
+	return _clock - _flare_at < 0.22
 
 
 static func _mult_text(m: float) -> String:
-	return ("×%d" % int(m)) if is_equal_approx(m, roundf(m)) else ("×%.1f" % m)
+	return ("%dx" % int(m)) if is_equal_approx(m, roundf(m)) else ("%.1fx" % m)
+
+
+## The lower edge of the side frames (hearts and score), in this HUD's coordinates: the street keeps
+## the figures' heads under it.
+func frames_bottom() -> float:
+	return PANEL_Y + PANEL_H + DEPTH
 
 
 ## Whether any note has been judged yet (the ghost line waits for it).

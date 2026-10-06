@@ -30,7 +30,7 @@ func build() -> void:
 	else:
 		UIKit.header(box, tr("lat_title"), on_back)
 	box.add_child(UIKit.label(tr("lat_title"), UIKit.HEADER, true, HORIZONTAL_ALIGNMENT_CENTER))
-	_status = UIKit.label(tr("lat_intro"), UIKit.SUB, true, HORIZONTAL_ALIGNMENT_CENTER)
+	_status = UIKit.label(tr("lat_intro"), UIKit.LEAD, true, HORIZONTAL_ALIGNMENT_CENTER)
 	_status.name = "Status"
 	box.add_child(_status)
 	_pad = Button.new()

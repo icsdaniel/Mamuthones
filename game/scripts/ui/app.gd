@@ -1,7 +1,7 @@
 class_name App
 extends Control
-## Root of the game (scenes/main.tscn). Applies the woodcut theme, loads the strings, and keeps a stack
-## of screens: open() pushes, back() pops, replace() swaps the top, reset() clears to one screen.
+## Root of the game (scenes/main.tscn). Applies the pixel theme, loads the strings, puts the shared
+## stone backdrop (MenuBackdrop) behind every menu-type screen, and keeps a stack of screens: open() pushes, back() pops, replace() swaps the top, reset() clears to one screen.
 ## Screens are named so tests, screenshots and the recorder can open any of them directly.
 
 signal screen_changed(screen: Screen)
@@ -31,7 +31,11 @@ const SCREENS := {
 var start_screen := ""
 var start_args: Dictionary = {}
 
+## Screens that paint their whole picture themselves: the backdrop is hidden under them.
+const OWN_BACKDROP := ["play_screen", "tutorial_screen"]
+
 var stack: Array[Screen] = []
+var backdrop: MenuBackdrop
 var _layer: Control
 var _overlay: Control
 
@@ -39,6 +43,10 @@ var _overlay: Control
 func _ready() -> void:
 	set_anchors_preset(Control.PRESET_FULL_RECT)
 	UIKit.apply_root(self)
+	backdrop = MenuBackdrop.new()
+	backdrop.reduced_motion = UIKit.reduced_motion()
+	add_child(backdrop)
+	screen_changed.connect(_on_screen_changed)
 	_layer = Control.new()
 	_layer.name = "Screens"
 	_layer.set_anchors_preset(Control.PRESET_FULL_RECT)
@@ -68,6 +76,7 @@ func open(name: String, args: Dictionary = {}) -> Screen:
 	var prev := current()
 	stack.append(screen)
 	_layer.add_child(screen)
+	PxType.smooth = false
 	screen.build()
 	if prev != null:
 		prev.hide()
@@ -84,6 +93,7 @@ func replace(name: String, args: Dictionary = {}) -> Screen:
 	var screen := _make(name, args)
 	stack.append(screen)
 	_layer.add_child(screen)
+	PxType.smooth = false
 	screen.build()
 	_enter(screen, 1.0)
 	screen_changed.emit(screen)
@@ -107,6 +117,7 @@ func back() -> void:
 	var top: Screen = stack.pop_back()
 	top.queue_free()
 	var prev := current()
+	PxType.smooth = prev.screen_name() == "play_screen" and prev.get("backdrop") != null and not bool(prev.get("pixel"))
 	prev.show()
 	prev.on_resume()
 	_enter(prev, -1.0)
@@ -120,7 +131,13 @@ func rebuild_all() -> void:
 		for c in s.get_children():
 			s.remove_child(c)
 			c.queue_free()
+		PxType.smooth = false
 		s.build()
+
+
+func _on_screen_changed(screen: Screen) -> void:
+	backdrop.visible = screen == null or not screen.screen_name() in OWN_BACKDROP
+	backdrop.reduced_motion = UIKit.reduced_motion()
 
 
 func overlay() -> Control:
@@ -137,7 +154,8 @@ func _make(name: String, args: Dictionary) -> Screen:
 	return screen
 
 
-## Short slide and fade in; skipped with reduced motion.
+## Short slide and fade in over the fixed stone backdrop, in whole art pixels; skipped with reduced
+## motion.
 func _enter(screen: Screen, direction: float) -> void:
 	if UIKit.reduced_motion():
 		screen.modulate.a = 1.0
@@ -146,8 +164,8 @@ func _enter(screen: Screen, direction: float) -> void:
 	screen.modulate.a = 0.0
 	screen.position.x = 36.0 * direction
 	var tw := screen.create_tween().set_parallel().set_trans(Tween.TRANS_CUBIC).set_ease(Tween.EASE_OUT)
-	tw.tween_property(screen, "modulate:a", 1.0, 0.18)
-	tw.tween_property(screen, "position:x", 0.0, 0.22)
+	tw.tween_property(screen, "modulate:a", 1.0, 0.16)
+	tw.tween_method(func(x: float) -> void: screen.position.x = roundf(x / 3.0) * 3.0, 36.0 * direction, 0.0, 0.2)
 
 
 func _notification(what: int) -> void:

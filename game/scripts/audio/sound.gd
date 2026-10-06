@@ -1,5 +1,5 @@
 extends Node
-## Sound autoload: the bells, steps, hold drones, the Issohadore's call, the rope,
+## Sound autoload: the bells, steps, hold drones, the miss, the Issohadore's call, the rope,
 ## the count-in, carved-wood UI sounds and the looping ambiences.
 ##
 ## Everything is loaded once in _ready and played through fixed pools of
@@ -39,6 +39,15 @@ const STOP_AMBIENCE: Array[String] = ["", "fire+wind", "fire+crowd", "fire+crowd
 
 ## Row-bell gain per unison level (0..5): silent alone, the whole row at full unison.
 const ROW_DB: Array[float] = [-80.0, -20.0, -16.0, -12.0, -9.0, -6.0]
+## The on-time bell accent (bell_accent): the dum and the chime under a Perfect ring, both this much
+## lower on a Good, the dum up to ACCENT_CHAIN_DB louder along a chain of on-time bells, and the
+## chime doubled at the octave from ACCENT_OCTAVE_CHAIN bells in a row.
+const ACCENT_THUMP_DB := -3.0
+const ACCENT_CHIME_DB := -8.0
+const ACCENT_GOOD_DB := -4.0
+const ACCENT_CHAIN_DB := 2.0
+const ACCENT_OCTAVE_CHAIN := 4
+const ACCENT_OCTAVE_DB := -5.0
 ## After this many perfect/good rings in a row the load keeps jangling between rings.
 const JANGLE_STREAK := 4
 const HOLD_FADE_IN := 0.03
@@ -49,6 +58,8 @@ const AMBIENCE_FADE := 1.5
 const JANGLE_CHOKE := 0.12
 const COUNT_STOP_FADE := 0.03
 const SILENT_DB := -80.0
+## Misses closer together than this sound once (a burst of notes timing out together is one stumble).
+const MISS_GAP := 0.06
 const SEMITONE := 1.0594630943592953
 const BUS_BELLS := &"Bells"
 const BUS_SOFT := &"BellsSoft"
@@ -68,6 +79,9 @@ var _drones: Array = [] # [lane] -> 12 looping streams
 var _calls: Array[AudioStream] = []
 var _ropes: Array[AudioStream] = []
 var _grabs: Array[AudioStream] = []
+var _misses: Array[AudioStream] = []
+var _thumps: Array = []   # [up takes, down takes]: the weight under an on-time bell
+var _chimes: Array[AudioStream] = []
 var _ui := {}           # name -> Array[AudioStream]
 var _amb_streams: Array[AudioStream] = []
 var _count_hi: AudioStreamWAV
@@ -78,10 +92,13 @@ var _row_pool: Array[AudioStreamPlayer] = []
 var _foot_pool: Array[AudioStreamPlayer] = []
 var _tone_pool: Array[AudioStreamPlayer] = []
 var _sfx_pool: Array[AudioStreamPlayer] = []
+var _miss_pool: Array[AudioStreamPlayer] = []
+var _accent_pool: Array[AudioStreamPlayer] = []
+var _last_miss := -1.0
 var _hold_players: Array[AudioStreamPlayer] = []
 var _amb_players: Array[AudioStreamPlayer] = []
 var _jangle_player: AudioStreamPlayer
-var _next := PackedInt32Array([0, 0, 0, 0, 0])  # the player after the last one used, per pool
+var _next := PackedInt32Array([0, 0, 0, 0, 0, 0, 0])  # the player after the last one used, per pool
 
 var _key_pc := 2
 var _tone_pitch := 1.0  # odd keys play the tone a semitone below, resampled up
@@ -230,6 +247,58 @@ func bell(set_id: String, up: bool, quality: String, strength := 0.5) -> void:
 	_update_jangle(load_id, q, quality)
 
 
+## The accent on a bell rung on time (Perfect or Good; nothing for Ok, a miss or a free tilt), layered
+## over bell(): the load landing as one (a deep dum, lower for a tilt down) and a small tuned bell, the
+## song's root on a tilt down and its fifth on a tilt up, so alternating tilts play a little tune
+## with the music. `chain` is how many bells in a row were on time: from ACCENT_OCTAVE_CHAIN the
+## chime doubles at the octave, and the dum grows a little with the chain (ACCENT_CHAIN_DB).
+func bell_accent(up: bool, quality: String, chain := 1) -> void:
+	if quality != "perfect" and quality != "good":
+		return
+	var soft := 0.0 if quality == "perfect" else ACCENT_GOOD_DB
+	var grow := ACCENT_CHAIN_DB * clampf(float(chain - 1) / float(ACCENT_OCTAVE_CHAIN - 1), 0.0, 1.0)
+	var d := 0 if up else 1
+	if not _thumps.is_empty():
+		_play(_accent_pool, 6, _pick(_thumps[d], 130 + d), ACCENT_THUMP_DB + soft + grow, randf_range(0.99, 1.01))
+	var pitch := chime_pitch(_key_pc, up)
+	_play(_accent_pool, 6, _pick(_chimes, 132), ACCENT_CHIME_DB + soft, pitch)
+	if chain >= ACCENT_OCTAVE_CHAIN:
+		_play(_accent_pool, 6, _pick(_chimes, 133), ACCENT_CHIME_DB + ACCENT_OCTAVE_DB + soft, pitch * 2.0)
+
+
+## A hold kept to its end: the small bell rung once at the lane's pitch (Left the root, Middle the
+## fifth, Right the octave, like the lanes' own tones), a little louder than a bell's chime.
+func hold_done(lane: int) -> void:
+	var semi: float = [0.0, 7.0, 12.0][clampi(lane, 0, 2)]
+	var pitch := chime_pitch(_key_pc, false) * pow(2.0, semi / 12.0)
+	_play(_accent_pool, 6, _pick(_chimes, 134), ACCENT_CHIME_DB + 2.0, pitch)
+
+
+## The chime's pitch_scale for a key (its pitch class, C = 0): the root for a tilt down, the fifth
+## for a tilt up, kept within a tritone of the sample's C so the resampling stays clean.
+static func chime_pitch(key_pc: int, up: bool) -> float:
+	var semi := posmod(key_pc + (7 if up else 0), 12)
+	if semi > 6:
+		semi -= 12
+	return pow(2.0, float(semi) / 12.0)
+
+
+## A miss: a note gone by unplayed, a step on the wrong lane, or a tap with nothing to hit. A cracked
+## bell's rasping buzz groaning down a fourth over a dry clack, on the Bells bus (as loud as a ring,
+## not 7 dB under like the steps); the music steps back for twice a ring's dip and the load's jangle
+## is choked. Misses within MISS_GAP of each other sound once.
+func miss() -> void:
+	var now := Time.get_ticks_msec() * 0.001
+	if _last_miss >= 0.0 and now - _last_miss < MISS_GAP:
+		return
+	_last_miss = now
+	_play(_miss_pool, 5, _pick(_misses, 303), randf_range(-1.0, 0.0), randf_range(0.98, 1.02))
+	_duck_hold = DUCK_HOLD * 2.0
+	_streak = 0
+	if _jangle_player.playing:
+		_jangle_choking = true
+
+
 ## Unison level 0..5 (Session.unison_level): how much of the row rings with your bells.
 func row_bells(unison_level: int) -> void:
 	_unison = clampi(unison_level, 0, ROW_DB.size() - 1)
@@ -365,7 +434,7 @@ func stop_count_in() -> void:
 ## Not part of the play API: stops every sound at once (quitting, tests). The audio
 ## server needs a moment afterwards to release the streams.
 func stop_all() -> void:
-	for pool in [_bell_pool, _row_pool, _foot_pool, _tone_pool, _sfx_pool, _hold_players, _amb_players]:
+	for pool in [_bell_pool, _accent_pool, _row_pool, _foot_pool, _tone_pool, _sfx_pool, _hold_players, _amb_players]:
 		for p: AudioStreamPlayer in pool:
 			p.stop()
 	if _jangle_player:
@@ -623,6 +692,9 @@ func _load_all() -> void:
 	_calls.assign(_load_takes("voice/call_%d.wav", 4))
 	_ropes.assign(_load_takes("fx/rope_%d.wav", TAKES))
 	_grabs.assign(_load_takes("fx/grab_%d.wav", TAKES))
+	_misses.assign(_load_takes("fx/miss_%d.wav", TAKES))
+	_thumps = [_load_takes("fx/bell_thump_up_%d.wav", 2), _load_takes("fx/bell_thump_down_%d.wav", 2)]
+	_chimes.assign(_load_takes("fx/chime_%d.wav", 2))
 	_ui["cue"] = _load_takes("ui/cue_%d.wav", TAKES)
 	_ui["tap"] = _load_takes("ui/tap_%d.wav", TAKES)
 	_ui["back"] = _load_takes("ui/back_%d.wav", 1)
@@ -669,6 +741,8 @@ func _make_players() -> void:
 	_fill(_foot_pool, 4, "Sfx")
 	_fill(_tone_pool, 4, "Sfx")
 	_fill(_sfx_pool, 6, "Sfx")
+	_fill(_miss_pool, 3, "Bells")
+	_fill(_accent_pool, 4, "Bells")
 	_fill(_hold_players, LANES, "Sfx")
 	_fill(_amb_players, AMBIENCES.size(), "Ambience")
 	for i in AMBIENCES.size():

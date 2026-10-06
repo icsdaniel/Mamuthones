@@ -27,6 +27,7 @@ func _ready() -> void:
 	box.add_theme_constant_override("separation", 16)
 	panel.add_child(box)
 	box.add_child(UIKit.label(tr("pause_title"), UIKit.HEADER, false, HORIZONTAL_ALIGNMENT_CENTER))
+	box.add_child(HSeparator.new())
 	for item in [["resume", "pause_resume", UIKit.PRIMARY], ["restart", "pause_restart", ""], ["quit", "pause_quit", UIKit.QUIET]]:
 		var b := UIKit.button(tr(item[1]), func() -> void: chosen.emit(item[0]), item[2])
 		b.name = str(item[0]).capitalize()

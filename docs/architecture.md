@@ -74,6 +74,7 @@ sensor access, so headless tests can drive them.
     counting `bell` and `ring` notes together.
   - `ring` — full ring: a step on `lane` and a bell on the same beat.
   - `stomp` — both thumbs on `lane` at once (the two touches within 80 ms).
+  - Two `step`s on one beat on different lanes are a chord (Medium and up): one per thumb.
   - `rest` — stand still. Optional `len` in beats (default 1).
 - `tools/audio/validate_charts.py` and the core tests check every chart against the readability rules in
   `docs/design.md` section 4.
