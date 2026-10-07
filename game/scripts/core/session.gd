@@ -45,6 +45,8 @@ signal judged(note: Note, judgement: String, offset: float)
 signal unison_changed(level: int)
 signal hold_started(lane: int)
 signal hold_ended(lane: int, kept: bool)
+## A note was played on time (Perfect or Good) while `hold` was being held: hold and play.
+signal played_under(hold: Note, note: Note)
 ## A tap on `lane` counted as a wrong step against `note` (another lane's note); judged also fires
 ## for that note. The UI marks the pressed button with this.
 signal wrong_step(lane: int, note: Note, offset: float)
@@ -75,6 +77,9 @@ const STOMP_POINTS := {"perfect": 450, "good": 225, "early": 75, "late": 75}
 ## "together" spread over 20-60 ms; 80 ms keeps a deliberate double tap (about 150 ms) apart.
 const STOMP_GAP := 0.080
 const HOLD_BONUS := 150
+## Hold and play: each note played on time while a hold is held adds this to the hold's bonus
+## (scaled like it), paid when the hold is kept to its end.
+const TIE_BONUS := 50
 const END_PAD := 2.0        ## a whole song ends this many seconds after its last note (not at the end of the audio)
 const HOLD_GRACE := 0.120    ## a hold released up to 120 ms before its end still counts as kept
 const STILL_PENALTY := 100
@@ -771,6 +776,11 @@ func _hit(n: Note, t: float, g: String, off: float, table: Dictionary) -> void:
 	else:
 		unison_streak = 0
 	judged.emit(n, g, off)
+	if (g == "perfect" or g == "good") and n.kind != Note.Kind.HOLD:
+		for h: Note in _holds.values():
+			if h.holding and h != n:
+				h.tied += 1
+				played_under.emit(h, n)
 	if n.heal:
 		_heal()
 
@@ -872,7 +882,7 @@ func _end_hold(n: Note, t: float, kept: bool) -> void:
 	n.finished = true
 	if kept:
 		stats.held += 1
-		var v := HOLD_BONUS * unison_mult() * _weight
+		var v := (HOLD_BONUS + TIE_BONUS * n.tied) * unison_mult() * _weight
 		_raw += v
 		_breakdown.holds += v
 		_refresh_score(t)

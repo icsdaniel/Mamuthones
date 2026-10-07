@@ -596,6 +596,27 @@ func test_note_lock_in_fast_streams() -> void:
 	check_eq(e.notes[1].side, "", "5 ms is dead on")
 
 
+func test_hold_and_play_adds_to_the_hold() -> void:
+	# A hold on Left with steps on Right and a bell under it; the second hold has nothing under it.
+	var s := Session.new(make([{"b": 0, "k": "hold", "lane": 0, "len": 4}, {"b": 1, "k": "step", "lane": 2},
+			{"b": 2, "k": "bell"}, {"b": 3, "k": "step", "lane": 2}, {"b": 8, "k": "hold", "lane": 0, "len": 4}]), "easy")
+	var under := []
+	s.played_under.connect(func(h, n): under.append([h.index, n.index]))
+	s.tap(0, _bt(0), 1)
+	s.tap(2, _bt(1), 2)
+	s.release(_bt(1) + 0.1, 2)
+	s.ring(_bt(2))
+	s.tap(2, _bt(3) + 0.1, 3)    # an Ok: played, but not on time
+	check_eq(under, [[0, 1], [0, 2]], "the step and the bell played on time under the hold")
+	var before: float = s.score_breakdown().holds
+	s.update(_bt(4))
+	check_near(s.score_breakdown().holds - before, float(Session.HOLD_BONUS + 2 * Session.TIE_BONUS), 1e-6, "kept: the hold's bonus grows with what was played under it")
+	s.tap(0, _bt(8), 4)
+	before = s.score_breakdown().holds
+	s.update(_bt(12))
+	check_near(s.score_breakdown().holds - before, float(Session.HOLD_BONUS), 1e-6, "a plain hold earns the plain bonus")
+
+
 func test_reused_touch_id_ends_old_hold() -> void:
 	var s := Session.new(make([{"b": 0, "k": "hold", "lane": 0, "len": 8}, {"b": 1, "k": "hold", "lane": 2, "len": 2}]), "easy")
 	var ends := []

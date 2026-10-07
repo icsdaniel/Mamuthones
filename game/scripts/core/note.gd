@@ -36,6 +36,7 @@ var step_at := NAN       ## full rings: time of the step half; stomps: time of t
 var bell_at := NAN       ## full rings: time of the bell half
 var touch_id := -1       ## holds: the touch holding it; stomps: the first thumb's touch
 var thumbs := 0          ## stomps: thumbs that landed (0, 1 or 2)
+var tied := 0            ## holds: other notes played on time (Perfect or Good) while it was held
 
 
 func uses_lane() -> bool:

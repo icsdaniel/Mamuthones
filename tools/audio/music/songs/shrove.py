@@ -157,6 +157,8 @@ def build():
     s.ev("calls", b + 27, 0.6, None, 0.85, kind="ohi")
     s.rope(b + 28, 1)
     s.ev("crowd", b, 32, None, 0.65)
+    # the break: the whole row stops dead in the middle of the run, and comes back in on the bar
+    s.stop(b + 14, 2, tempt="call")
 
     # ---- outro: the voice alone with the theme, the bells walk away into the night
     b = s.sec("outro", 6, 0)

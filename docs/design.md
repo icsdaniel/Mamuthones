@@ -29,7 +29,9 @@ and `docs/rubric.md` says how every part is judged.
 - **Bell:** a sharp tilt of the phone (top edge toward you or away and back). Bells always alternate up,
   down, up, down, so the direction is shown but only the timing is judged. Read by the gyroscope when it
   tells directions apart better than the accelerometer; calibrated per phone.
-- **Hold:** keep a step button pressed until the hold's end (drones and long chords).
+- **Hold:** keep a step button pressed until the hold's end (drones and long chords). Hold and play: from
+  Medium the free thumb keeps playing under a hold (on the beats at Medium, eighths at Hard), and from
+  Hard a bell may ring while the note is held. (Daniele, 2026-10-07.)
 - **Two-thumb stomp (Medium and up):** two gems side by side on one button: press that button with both
   thumbs at once, on the crack of the Issohadore's rope. Medium and Hard stomp on the middle button,
   Expert follows the rope to the outer button on its side. (Replaced the rope swipe, 2026-09-28.)
@@ -72,14 +74,19 @@ row can recover. It is shown as more of the Mamuthones beside the lanes jumping 
 | Full load | ×1.5 | ×0.8 |
 
 Other rules:
-- Hold kept to its end (released no earlier than 120 ms before): +150 × multiplier.
+- Hold kept to its end (released no earlier than 120 ms before): +150 × multiplier, plus 50 × multiplier for
+  every note played on time (Perfect or Good) while it was held; each lights the held lane.
 - Full ring: judged as one note on the later of its two inputs, both must land within the Early/Late
   window, and a Perfect full ring gives 450.
 - Ringing during a stand-still: −100 for every ring (rings closer than 150 ms count once) and the unison
-  drops one level. Keeping still through a stand-still is worth chasing: 800 × unison × weight for every beat
+  drops one level. Any tilt breaks it the same way, even one far too soft to ring: over 35 % of the ring
+  threshold for 40 ms, or 20° turned slowly (from 150 ms into it, so a bell just before it can settle).
+  The bells give the Mamuthone away with a soft clank. (Daniele, 2026-10-07.) Keeping still through a stand-still is worth chasing: 800 × unison × weight for every beat
   it lasts, it counts as 2 hits per beat (up to 8) toward the next unison level, and the row visibly
   settles when it is kept. Stand-stills last at least 2 beats, sit on real halts in the music, and are
-  often tempted by a call or a bell cue just before or inside them.
+  often tempted by a call or a bell cue just before or inside them. Every story song from the second stop
+  has one break: the music stops dead in the middle of its climax, so the stand-still interrupts the
+  tensest run, and the notes run right up to it. (Daniele, 2026-10-07.)
 - Score = sum over notes of points × unison × weight, minus stand-still penalties, never below 0.
 - Smaller rules chosen while building: a Good full ring gives 225 and an Early/Late one 75. Early/Late
   keeps the unison level but restarts the run of 12. Letting go of a hold early breaks the streak and
