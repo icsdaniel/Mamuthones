@@ -1108,9 +1108,10 @@ func _off_beat(n: Note) -> bool:
 	return fr > 0.12 and fr < 0.88
 
 
-## A sixteenth: a quarter of a beat off (only Expert has them; triplet eighths are not).
+## A sixteenth: a quarter of a beat off (only Expert has them; triplet eighths are not), or the
+## half-beat note played as one quick double with a sixteenth next to it (Note.quick).
 func _sixteenth(n: Note) -> bool:
-	return absf(fposmod(n.beat, 0.5) - 0.25) < 0.02
+	return n.quick or absf(fposmod(n.beat, 0.5) - 0.25) < 0.02
 
 
 ## Notes emerge from the fire's haze at the far end of the road.

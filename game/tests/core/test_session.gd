@@ -617,6 +617,14 @@ func test_hold_and_play_adds_to_the_hold() -> void:
 	check_near(s.score_breakdown().holds - before, float(Session.HOLD_BONUS), 1e-6, "a plain hold earns the plain bonus")
 
 
+func test_half_beat_in_a_sixteenth_pair_is_quick() -> void:
+	var s := Session.new(make([{"b": 0, "k": "step", "lane": 0}, {"b": 0.5, "k": "step", "lane": 1}, {"b": 0.75, "k": "step", "lane": 2},
+			{"b": 2, "k": "step", "lane": 0}, {"b": 2.5, "k": "step", "lane": 1}, {"b": 3, "k": "step", "lane": 2}]), "easy")
+	check(s.notes[1].quick, "a half-beat followed a quarter beat later reads with the sixteenth")
+	check(not s.notes[2].quick, "the sixteenth itself is silver by its own beat")
+	check(not s.notes[4].quick, "a lone half-beat stays violet")
+
+
 func test_reused_touch_id_ends_old_hold() -> void:
 	var s := Session.new(make([{"b": 0, "k": "hold", "lane": 0, "len": 8}, {"b": 1, "k": "hold", "lane": 2, "len": 2}]), "easy")
 	var ends := []

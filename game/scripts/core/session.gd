@@ -198,6 +198,7 @@ func _init(p_song: SongData, p_difficulty: String, p_bell_set: String = "light",
 				continue
 		n.index = notes.size()
 		notes.append(n)
+	_mark_quick()
 
 	stats = {
 		"perfect": 0, "good": 0, "early": 0, "late": 0, "miss": 0, "wrong": 0,
@@ -567,6 +568,21 @@ func ring(t: float, tilt: bool = true, strength: float = 0.5) -> Dictionary:
 		return {"up": up, "quality": "silence", "judgement": "silence", "offset": 0.0, "side": "", "strength": st, "note": rest}
 	var near := _find_bell(t, 2.0 * w.z) != null
 	return {"up": up, "quality": "miss" if near else "free", "judgement": "", "offset": 0.0, "side": "", "strength": st, "note": null}
+
+
+# Half-beat steps next to a sixteenth (a lane note a quarter beat away) read as part of it.
+func _mark_quick() -> void:
+	var laned: Array[Note] = []
+	for n in notes:
+		if n.uses_lane():
+			laned.append(n)
+	for i in laned.size():
+		var n := laned[i]
+		if n.kind != Note.Kind.STEP or absf(fposmod(n.beat, 1.0) - 0.5) > 0.02:
+			continue
+		for j in [i - 1, i + 1]:
+			if j >= 0 and j < laned.size() and absf(absf(laned[j].beat - n.beat) - 0.25) < 0.02:
+				n.quick = true
 
 
 ## The phone moved (tilted, however gently) at t. Inside a stand-still that breaks it, like a ring:
