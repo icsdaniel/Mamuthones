@@ -278,6 +278,7 @@ func build() -> void:
 	add_child(router)
 	router.stepped.connect(_on_stepped)
 	router.rang.connect(_on_rang)
+	router.moved_still.connect(_on_moved_still)
 	router.pause_requested.connect(pause)
 	if auto:
 		router.enabled = false
@@ -615,6 +616,13 @@ func _on_rang(result: Dictionary) -> void:
 		_bell_chain = 0
 	if q == "free" or q == "silence":
 		UIKit.vibrate(12)
+
+
+## The phone tilted in a stand-still (gently, short of a ring): the load gives the Mamuthone away with
+## a soft clank, and the stand-still is broken (the session judged it "silence").
+func _on_moved_still(_note: Note) -> void:
+	Sound.bell(_bell_set, true, "silence", 0.2)
+	UIKit.vibrate(12)
 
 
 ## A bell rung on time, the tilt's reward (stomp-sized, but the tilt's own): the strap strikes across

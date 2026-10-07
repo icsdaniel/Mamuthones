@@ -578,3 +578,59 @@ func test_held_readings_are_stamped_earlier() -> void:
 		err_fast += (float(fast[i][0]) - (1.0 + i * 0.7)) / 10.0
 		err_held += (float(held[i]) - (1.0 + i * 0.7)) / 10.0
 	check(absf(err_held - err_fast) < 0.012, "held-sample rings land where instant ones do (%.4f vs %.4f)" % [err_held, err_fast])
+
+
+# Feeds sy into det with the stand-still watch on from `from`; returns moved_at (NAN when still).
+func _still_run(det: BellDetector, sy: Synth, from: float, t1: float) -> float:
+	det.watch_still(from)
+	for t in sy.frames(0.0, t1):
+		var s := sy.sample(t)
+		det.feed(t, s[0], s[1])
+	return det.moved_at
+
+
+func test_stand_still_any_tilt_breaks_it() -> void:
+	# A gentle tilt, far under a ring, still moves the phone.
+	for mode: String in ["gyro", "accel"]:
+		var sy := Synth.new(31)
+		sy.gyro_noise = 5.0
+		sy.acc_noise = 0.2
+		sy.flick(1.0, true, 110.0, 4.0, 0.25)    # about 60 % of the ring threshold
+		var det := _detector(120.0, mode)
+		var rings := 0
+		det.watch_still(0.5)
+		for t in sy.frames(0.0, 2.0):
+			var s := sy.sample(t)
+			if det.feed(t, s[0], s[1]):
+				rings += 1
+		check_eq(rings, 0, "%s: the soft tilt does not ring" % mode)
+		check(not is_nan(det.moved_at) and absf(det.moved_at - 1.0) < 0.1, "%s: but it breaks the stand-still (%.3f)" % [mode, det.moved_at])
+	# A slow lean (25° over a second, never fast) breaks it too, by the angle.
+	var lean := Synth.new(32)
+	lean.gyro_noise = 4.0
+	lean.lean(1.0, false, 40.0, 1.0, 0.5)
+	var at := _still_run(_detector(), lean, 0.5, 2.5)
+	check(not is_nan(at) and at > 1.2 and at < 2.0, "a slow 25° lean breaks the stand-still (%.3f)" % at)
+
+
+func test_stand_still_survives_holding_steady() -> void:
+	# Hand tremor, sensor noise, thumb taps on the screen and a slight sway: still.
+	for mode: String in ["gyro", "accel"]:
+		var sy := Synth.new(33)
+		sy.gyro_noise = 8.0
+		sy.acc_noise = 0.4
+		for i in 6:
+			sy.tap(0.7 + i * 0.37, 30.0, 0.008, 30.0)
+		sy.lean(0.6, true, 12.0, 1.5, 0.2)    # an 11° drift over 1.5 s
+		check(is_nan(_still_run(_detector(120.0, mode), sy, 0.5, 3.0)), "%s: holding the phone steady keeps the stand-still" % mode)
+	# Watching stops with end_still; nothing is reported after it.
+	var late := Synth.new(34)
+	late.flick(1.5, true, 400.0, 12.0, 0.2)
+	var det := _detector()
+	det.watch_still(0.5)
+	for t in late.frames(0.0, 2.0):
+		if t > 1.0:
+			det.end_still()
+		var s := late.sample(t)
+		det.feed(t, s[0], s[1])
+	check(is_nan(det.moved_at), "a tilt after the stand-still ended does not count")

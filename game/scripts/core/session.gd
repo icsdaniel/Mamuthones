@@ -558,22 +558,43 @@ func ring(t: float, tilt: bool = true, strength: float = 0.5) -> Dictionary:
 	_next_free_up = not up
 	var rest := _rest_at(t)
 	if rest != null:
-		# Every ring costs, but one shake that rings twice within 150 ms counts once.
-		if t - _last_silence >= SILENCE_DEBOUNCE:
-			rest.judgement = "silence"
-			rest.hit_at = t
-			stats.silence += 1
-			combo = 0
-			unison_streak = 0
-			_raw -= STILL_PENALTY
-			_breakdown.penalties += STILL_PENALTY
-			_set_unison(unison_level - SILENCE_DROP, t)
-			_refresh_score(t)
-			judged.emit(rest, "silence", t - rest.t)
-		_last_silence = t
+		_break_still(rest, t)
 		return {"up": up, "quality": "silence", "judgement": "silence", "offset": 0.0, "side": "", "strength": st, "note": rest}
 	var near := _find_bell(t, 2.0 * w.z) != null
 	return {"up": up, "quality": "miss" if near else "free", "judgement": "", "offset": 0.0, "side": "", "strength": st, "note": null}
+
+
+## The phone moved (tilted, however gently) at t. Inside a stand-still that breaks it, like a ring:
+## the Mamuthone's bells give him away. Returns the stand-still it broke, or null (no stand-still at
+## t, or this one already broken: a stand-still is broken once by moving, rings still cost).
+func moved(t: float) -> Note:
+	var rest := _rest_at(t)
+	if rest == null or rest.judgement == "silence":
+		return null
+	input_log.append([t, "moved"])
+	_break_still(rest, t)
+	return rest
+
+
+## The stand-still at t (one is running from its beat to its end), or null.
+func rest_at(t: float) -> Note:
+	return _rest_at(t)
+
+
+# Every ring costs, but one shake that rings twice within 150 ms (or moves and then rings) counts once.
+func _break_still(rest: Note, t: float) -> void:
+	if t - _last_silence >= SILENCE_DEBOUNCE:
+		rest.judgement = "silence"
+		rest.hit_at = t
+		stats.silence += 1
+		combo = 0
+		unison_streak = 0
+		_raw -= STILL_PENALTY
+		_breakdown.penalties += STILL_PENALTY
+		_set_unison(unison_level - SILENCE_DROP, t)
+		_refresh_score(t)
+		judged.emit(rest, "silence", t - rest.t)
+	_last_silence = t
 
 
 ## Call every frame with the current song time.

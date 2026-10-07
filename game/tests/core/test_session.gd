@@ -466,6 +466,21 @@ func test_stand_still() -> void:
 	check_near(s.score_breakdown().penalties, 200.0, 1e-9, "penalties in the breakdown")
 
 
+func test_moving_breaks_a_stand_still_once() -> void:
+	var s := Session.new(make(steps(4) + [{"b": 4, "k": "rest", "len": 4}]), "easy")
+	for i in 4:
+		s.tap(1, _bt(i), 0)
+	check(s.moved(_bt(3)) == null, "moving outside a stand-still is free")
+	var before := s.score
+	check(s.moved(_bt(5)) != null, "moving inside one breaks it")
+	check_eq(s.score, before - Session.STILL_PENALTY, "and costs like a ring")
+	check(s.moved(_bt(6)) == null, "a broken stand-still is broken once by moving")
+	s.ring(_bt(5) + 0.05)
+	check_eq(s.stats.silence, 1, "the ring that follows the same tilt is not charged again")
+	s.update(_bt(9))
+	check_eq(s.stats.still_kept, 0, "not kept")
+
+
 func test_score_never_shown_below_zero_but_penalty_kept() -> void:
 	# Design: score = max(0, points - penalties) over the whole run, not clamped at each step.
 	var z := Session.new(make([{"b": 0, "k": "rest"}, {"b": 4, "k": "step", "lane": 0}]), "easy")
