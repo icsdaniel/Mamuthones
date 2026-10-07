@@ -298,16 +298,18 @@ func _moment(screen: Node, what: String) -> void:
 				var k := s.notes.filter(func(m: Note) -> bool: return m.kind != Note.Kind.REST and m.t < n.t and m.t > n.t - 2.0).size()
 				if k > most:
 					most = k
-					target = n.t - 1.5 if what == "break_coming" else lerpf(n.t, n.end_t, 0.4)
+					target = n.t - (3.4 if what == "break_coming" else 1.7)   # the walk there overshoots ~2 s
 		"holdplay", "holdbell":
 			# a hold with notes (or a bell) played under it: just after the first one under it is hit
 			for h in s.notes:
 				if h.kind != Note.Kind.HOLD or h.t < from * 0.5:
 					continue
-				var under := s.notes.filter(func(m: Note) -> bool: return m != h and m.t > h.t + 0.01 and m.t <= h.end_t and m.kind != Note.Kind.REST
-						and (m.is_bell() if what == "holdbell" else m.kind == Note.Kind.STEP))
+				var under: Array[Note] = []
+				for m in s.notes:
+					if m != h and m.t > h.t + 0.01 and m.t <= h.end_t and (m.is_bell() if what == "holdbell" else m.kind == Note.Kind.STEP):
+						under.append(m)
 				if under.size() >= (1 if what == "holdbell" else 2):
-					target = (under[0] as Note).t + (0.05 if what == "holdplay" else -0.35)
+					target = under[0].t - (1.9 if what == "holdplay" else 2.4)   # the walk there overshoots ~2 s
 					break
 		"countin":
 			target = song_time_of(s, -2.35)
@@ -409,6 +411,12 @@ func _moment(screen: Node, what: String) -> void:
 		_showcase(screen, s, c.song_time())
 	if what == "moved":
 		# The player tips the phone a little in the break: the stand-still is broken.
+		for k in 240:
+			var r: Note = s.rest_at(c.song_time())
+			if r != null and c.song_time() >= r.t + 0.3:
+				break
+			c.advance(1.0 / 60.0)
+			await process_frame
 		var broke: Note = s.moved(c.song_time())
 		if broke != null:
 			screen.call("_on_moved_still", broke)
