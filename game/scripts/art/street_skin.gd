@@ -191,8 +191,8 @@ static var _ai_sized := {}
 
 static func ai_tex(key: String, size: Vector2i) -> Texture2D:
 	if not _ai.has(key):
-		# "<name>!flip": the picture upside down
-		var path := "res://art/ai/%s.png" % key.trim_suffix("!flip")
+		# "<name>!flip": the picture upside down; "<name>!mirror": left for right
+		var path := "res://art/ai/%s.png" % key.trim_suffix("!flip").trim_suffix("!mirror")
 		var img: Image = null
 		if ResourceLoader.exists(path):
 			img = (load(path) as Texture2D).get_image()
@@ -200,6 +200,8 @@ static func ai_tex(key: String, size: Vector2i) -> Texture2D:
 				img.decompress()
 				if key.ends_with("!flip"):
 					img.flip_y()
+				elif key.ends_with("!mirror"):
+					img.flip_x()
 		_ai[key] = img if img != null and not img.is_empty() else null
 	var src: Image = _ai[key]
 	if src == null:

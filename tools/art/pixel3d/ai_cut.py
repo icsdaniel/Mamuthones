@@ -27,6 +27,7 @@ SHEETS = {
     "1000145739.png": ["ring_idle", "ring_gold", "ring_red"],
     "1000145740.png": ["hud_plate", "hud_pause", "hud_bar", "hud_stud"],
     "1000145745.png": None,   # the street: opaque, copied whole
+    "1000145750.png": ["btn_idle", "btn_pressed", "foot"],
 }
 
 
@@ -76,9 +77,11 @@ def pieces(fg, n):
     return [(b[:4], lab == b[4]) for b in boxes]
 
 
-def main(src):
+def main(src, only=None):
     os.makedirs(OUT, exist_ok=True)
     for sheet, names in SHEETS.items():
+        if only and sheet not in only:
+            continue
         rgba = np.asarray(Image.open(os.path.join(src, sheet)).convert("RGBA")).copy()
         if names is None:
             Image.fromarray(rgba[..., :3]).save(os.path.join(OUT, "street.png"))
@@ -114,5 +117,5 @@ def silver(src, dst):
 
 
 if __name__ == "__main__":
-    main(sys.argv[1])
+    main(sys.argv[1], sys.argv[2:])
     silver(os.path.join(OUT, "note_step.png"), os.path.join(OUT, "note_six.png"))
