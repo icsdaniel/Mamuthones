@@ -46,6 +46,16 @@ def mask_of(rgba, holes=False):
     if holes:
         big = [i for i, n in enumerate(ndimage.sum(light, lab, range(1, lab.max() + 1)), 1) if n > 2000]
         fg &= ~np.isin(lab, big)
+    # the checkerboard also shows through closed gaps (inside a coil of rope, under an arm): grey
+    # patches with no colour at all, in two shades
+    grey = (hsv[..., 1] <= 6) & (rgb.min(-1) > 185)
+    gl, gk = ndimage.label(grey)
+    for i, n in enumerate(ndimage.sum(grey, gl, range(1, gk + 1)), 1):
+        if n < 800:
+            continue
+        v = hsv[..., 2][gl == i].astype(float)
+        if (v < 224).mean() > 0.2 and (v > 230).mean() > 0.2:
+            fg &= ~cv2.dilate((gl == i).astype(np.uint8), np.ones((5, 5), np.uint8)).astype(bool)
     fg = cv2.morphologyEx(fg.astype(np.uint8), cv2.MORPH_OPEN, np.ones((3, 3), np.uint8)) > 0
     # light specks the checkerboard leaves on a piece's edge
     near = cv2.dilate((~fg).astype(np.uint8), np.ones((9, 9), np.uint8)) > 0
@@ -77,7 +87,11 @@ def main(src):
         if len(names) == 1:
             l2, k = ndimage.label(fg)
             fg = l2 == (np.argmax(ndimage.sum(fg, l2, range(1, k + 1))) + 1)
-            fg = ndimage.binary_fill_holes(fg)
+            # fill only small holes: the big ones are the checkerboard seen through the figure
+            holes = ndimage.binary_fill_holes(fg) & ~fg
+            hl, hk = ndimage.label(holes)
+            small = [i for i, n in enumerate(ndimage.sum(holes, hl, range(1, hk + 1)), 1) if n < 600]
+            fg |= np.isin(hl, small)
         for name, ((t, l, b, r), m) in zip(names, pieces(fg, len(names))):
             out = rgba.copy()
             out[..., 3] = np.where(fg & m, 255, 0)
