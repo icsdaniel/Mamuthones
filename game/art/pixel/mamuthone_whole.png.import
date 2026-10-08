@@ -2,16 +2,16 @@
 
 importer="texture"
 type="CompressedTexture2D"
-uid="uid://ejawr1w0qlyv"
-path="res://.godot/imported/mamuthone_legs.png-7891a2e98a950aeb6a2e43a3dc4318df.ctex"
+uid="uid://b0h3a86dsqhq2"
+path="res://.godot/imported/mamuthone_whole.png-a1f63ae9ef261d5587da4fc793901057.ctex"
 metadata={
 "vram_texture": false
 }
 
 [deps]
 
-source_file="res://art/pixel/mamuthone_legs.png"
-dest_files=["res://.godot/imported/mamuthone_legs.png-7891a2e98a950aeb6a2e43a3dc4318df.ctex"]
+source_file="res://art/pixel/mamuthone_whole.png"
+dest_files=["res://.godot/imported/mamuthone_whole.png-a1f63ae9ef261d5587da4fc793901057.ctex"]
 
 [params]
 
