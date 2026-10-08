@@ -2,16 +2,16 @@
 
 importer="texture"
 type="CompressedTexture2D"
-uid="uid://bxxgy3qmagpmf"
-path="res://.godot/imported/issohadore_whole.png-2a846461e034f41f31082d82bb8597ad.ctex"
+uid="uid://bqg3vwp8xjt8i"
+path="res://.godot/imported/issohadore_head.png-d7378f6885da547fce74fc9036976429.ctex"
 metadata={
 "vram_texture": false
 }
 
 [deps]
 
-source_file="res://art/pixel/issohadore_whole.png"
-dest_files=["res://.godot/imported/issohadore_whole.png-2a846461e034f41f31082d82bb8597ad.ctex"]
+source_file="res://art/pixel/issohadore_head.png"
+dest_files=["res://.godot/imported/issohadore_head.png-d7378f6885da547fce74fc9036976429.ctex"]
 
 [params]
 
