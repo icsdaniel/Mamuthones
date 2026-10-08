@@ -39,6 +39,7 @@ const DISC_H := 0.1                  ## how thick a disc stands, in lane widths
 const FORE := 0.42                   ## how much the road's depth is foreshortened on screen
 const SIDES := 24                    ## a disc's facets round its edge
 const ROPE_W := 0.2                  ## the rope's width, in lane widths
+const ROPE_PIC_W := 18                ## cells across the rope's picture is shrunk to (the pixel look)
 const STRAP_D := 0.42                ## the bell strap's depth along the road, in lane widths
 ## The pixel look (PixelFilter over the screen): bursts and sparks are drawn as opaque pixel shapes
 ## (no soft glows or fades, which the lens would turn to mud): flashes, stamped rings and square embers.
@@ -221,7 +222,8 @@ static func ai_tex(key: String, size: Vector2i) -> Texture2D:
 static func ai_disc(lv, field: Rect2, cx: float, y: float, r: float, key: String, alpha := 1.0, h := DISC_H, glow := 1.0) -> bool:
 	if not pixel:
 		return false
-	key = "note_" + key
+	if key != "knot":
+		key = "note_" + key
 	if ai_tex(key, Vector2i.ONE) == null:
 		return false
 	var lane := _lane(field)
@@ -402,6 +404,9 @@ static func rope(lv: LaneView, field: Rect2, cx: float, ya: float, yb: float, li
 	var metric := Vector3(ROPE_W * 0.5, 1.0, maxf(yb - ya, 1.0) / lane * 0.5 / FORE)
 	if lit:
 		_glow(lv, f.call(Vector3(0, 0, 1)), Vector2(hw * 4.0, hw * 2.0), _a(K_ROPE[3], 0.6 * alpha))
+	if pixel and _rope_pic(lv, f, ya, yb, lane, lit, alpha):
+		_rope_sparks(lv, f, h, yb, lane, lit)
+		return
 	# faces are drawn back to front by hand: the cord is not closed, so it is outlined as a band
 	var band := PackedVector2Array([f.call(Vector3(-1, 0, -1)), f.call(Vector3(-1, 0, 1)), f.call(Vector3(1, 0, 1)), f.call(Vector3(1, 0, -1))])
 	var tb := PackedVector2Array([f.call(Vector3(-1, 0, -1)), f.call(Vector3(-0.3, h, -1)), f.call(Vector3(0.3, h, -1)), f.call(Vector3(1, 0, -1)), f.call(Vector3(1, 0, 1)), f.call(Vector3(0.3, h, 1)), f.call(Vector3(-0.3, h, 1)), f.call(Vector3(-1, 0, 1))])
@@ -432,6 +437,11 @@ static func rope(lv: LaneView, field: Rect2, cx: float, ya: float, yb: float, li
 		yy -= step_y
 	if lit:
 		lv.draw_line(f.call(Vector3(-0.3, h, -1)), f.call(Vector3(-0.3, h, 1)), _a(RIM, 0.6 * alpha), 2.0, true)
+	_rope_sparks(lv, f, h, yb, lane, lit)
+
+
+static func _rope_sparks(lv: LaneView, f: Callable, h: float, yb: float, lane: float, lit: bool) -> void:
+	if lit:
 		# sparks fly off the rope where it runs into the slot while it is held
 		var at: Vector2 = f.call(Vector3(0, h, 1))
 		var lw: float = lv.road_scale(yb) * lane
@@ -441,6 +451,35 @@ static func rope(lv: LaneView, field: Rect2, cx: float, ya: float, yb: float, li
 				_embers_px(lv, at, lw * 0.6, age, 4, int(lv._clock / 0.33) * 5 + i, PX_HOT, 0.8)
 			else:
 				_embers(lv, at, lw * 0.6, age, 4, int(lv._clock / 0.33) * 5 + i, K_ROPE[0], 0.8)
+
+
+## The pixel look's rope from Daniele's picture, laid along the hold through the cord's frame f: the
+## picture repeats down the road, its twist fixed to the rope's far end (the hold's end) so it travels
+## with it. False when there is no picture.
+static func _rope_pic(lv: LaneView, f: Callable, ya: float, yb: float, lane: float, lit: bool, alpha: float) -> bool:
+	var tex := ai_tex("rope", Vector2i(ROPE_PIC_W, roundi(ROPE_PIC_W * 794.0 / 143.0)))
+	if tex == null:
+		return false
+	# one picture's length along the road, flat px: its own shape, at the rope's width, foreshortened
+	var tile := lane * ROPE_W * (794.0 / 143.0) * 0.5 / FORE
+	var span := maxf(yb - ya, 1.0)
+	var mod := Color(1.0, 1.0, 1.0, alpha) if lit else Color(0.85, 0.85, 0.85, alpha)
+	# in pieces that never cross a picture's end, so each piece maps into the one picture
+	var q := tile * 0.25
+	var d := 0.0
+	var guard := 0
+	while d < span and guard < 256:
+		guard += 1
+		var e := minf(span, (floorf(d / q + 0.001) + 1.0) * q)
+		var v0 := fposmod(d, tile) / tile
+		var v1 := v0 + (e - d) / tile
+		var z0 := -1.0 + 2.0 * d / span
+		var z1 := -1.0 + 2.0 * e / span
+		var pts := PackedVector2Array([f.call(Vector3(-1, 0, z0)), f.call(Vector3(1, 0, z0)), f.call(Vector3(1, 0, z1)), f.call(Vector3(-1, 0, z1))])
+		var uvs := PackedVector2Array([Vector2(0, v0), Vector2(1, v0), Vector2(1, v1), Vector2(0, v1)])
+		lv.draw_polygon(pts, PackedColorArray([mod, mod, mod, mod]), uvs, tex)
+		d = e
+	return true
 
 
 ## A bell note: the Mamuthone's leather bell strap across the whole road at flat depth y, a bronze
@@ -815,6 +854,8 @@ static func _stamp(lv: LaneView, field: Rect2, what: String, n: Note, cx: float,
 
 ## The rope's far end: a small knot of hemp.
 static func _knot(lv, field: Rect2, cx: float, y: float, alpha: float) -> void:
+	if ai_disc(lv, field, cx, y, ROPE_W * 1.35, "knot", alpha, ROPE_W * 0.9, 0.6):
+		return
 	disc(lv, field, cx, y, ROPE_W * 0.85, K_ROPE, alpha, ROPE_W * 0.6, 0.6)
 
 
