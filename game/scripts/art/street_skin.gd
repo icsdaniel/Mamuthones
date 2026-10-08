@@ -946,9 +946,23 @@ static func _hit_line(lv: LaneView, field: Rect2, rects: Array[Rect2], hl: float
 	var r: Vector2 = lv.project(Vector2(field.size.x * 1.02, hl))
 	var env := lv.beat_env()
 	var lw: float = lv.road_scale(hl) * _lane(field)
-	lv.draw_line(l, r, Color(OUTLINE, 0.75), 10.0, true)
-	lv.draw_line(l, r, Color(1.0, 0.95, 0.85, 0.75 + 0.25 * env), 3.0, true)
 	var slots := _slots(lv, field, rects, hl, lw)
+	# the line runs between the slots, never across their hollows (the pixel look's rings are open)
+	var cuts: Array[Vector2] = [l]
+	if pixel:
+		for slot: Array in slots:
+			var sil: PackedVector2Array = slot[1]
+			var x0 := INF
+			var x1 := -INF
+			for q in sil:
+				x0 = minf(x0, q.x)
+				x1 = maxf(x1, q.x)
+			cuts.append(Vector2(x0, l.y + (r.y - l.y) * (x0 - l.x) / (r.x - l.x)))
+			cuts.append(Vector2(x1, l.y + (r.y - l.y) * (x1 - l.x) / (r.x - l.x)))
+	cuts.append(r)
+	for c in range(0, cuts.size(), 2):
+		lv.draw_line(cuts[c], cuts[c + 1], Color(OUTLINE, 0.75), 10.0, true)
+		lv.draw_line(cuts[c], cuts[c + 1], Color(1.0, 0.95, 0.85, 0.75 + 0.25 * env), 3.0, true)
 	for lane in 3:
 		var g := lv._lane_glow(lane)
 		var cue := 1.0 if lv._cued(lane) else 0.0
@@ -957,7 +971,8 @@ static func _hit_line(lv: LaneView, field: Rect2, rects: Array[Rect2], hl: float
 		var sil: PackedVector2Array = slot[1]
 		var ring: PackedVector2Array = slot[2]
 		_glow(lv, slot[0], Vector2(lw * 0.6, lw * 0.28), Color(1.0, 0.85, 0.55, 0.25 * cue + 0.6 * g))
-		ci_poly(lv, sil, Color(0.04, 0.03, 0.08, 0.6))
+		# the slot's hollow: the road under it shaded (warm in the pixel look, so it sits in the firelight)
+		ci_poly(lv, sil, Color(0.1, 0.04, 0.02, 0.55) if pixel else Color(0.04, 0.03, 0.08, 0.6))
 		if g > 0.01:
 			ci_poly(lv, sil, Color(1.0, 0.97, 0.9, 0.7 * g))
 		if pixel and ai_tex("ring_idle", Vector2i.ONE) != null:

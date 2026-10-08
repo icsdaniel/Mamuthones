@@ -498,7 +498,8 @@ func _draw_badge(ci: CanvasItem, b: Array) -> void:
 			ci.draw_line(p1, p1.lerp(p2, k - 1.0), pal[1], 5.0)
 	for p in [hx[0], hx[3]]:
 		_diamond(ci, p, 8.0 * sc, Color.WHITE.lerp(pal[1], 1.0 - fl))
-	for sx: float in [-1.0, 1.0]:
+	# the little spurs at its foot (the pixel look's badge stands on its own: they read as stray marks)
+	for sx: float in ([] if pixel else [-1.0, 1.0]):
 		var c := _to_frames(Vector2(ctr.x + sx * (r.size.x * 0.5 * sc + 10.0), ctr.y + r.size.y * 0.5 * sc - 8.0))
 		ci.draw_colored_polygon(PackedVector2Array([c + Vector2(-sx * 10.0, -8.0), c + Vector2(sx * 6.0, 8.0), c + Vector2(-sx * 14.0, 8.0)]), pal[0])
 

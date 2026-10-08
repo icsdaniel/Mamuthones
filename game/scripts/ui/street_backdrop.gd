@@ -632,6 +632,8 @@ func _place_frames() -> void:
 		var pts := _frame_points(i, drop)
 		var f := _frames[i]
 		(f.get_node("Panel") as Polygon2D).polygon = pts
+		if pixel:
+			_wall_panel(f.get_node("Panel") as Polygon2D, pts, i)
 		# everything above the frame's lower edge, out past its sides
 		var out := (pts[3] - pts[2]).normalized() * 600.0
 		var low_l := pts[3] + out
@@ -663,6 +665,79 @@ func _place_frames() -> void:
 		fig.scale = Vector2(sc, sc)
 		if i == 0:
 			fig.flip_h = false
+
+
+## The pixel look's portrait backing: a stone wall of a Mamoiada house lit by the bonfire, in whole
+## cells (one texel per lens cell), the light dithered in steps from the fire's side (Bayer 4x4)
+## and darkening into a carved inner edge under the gold frame.
+const WALL_RAMP := ["#120a0d", "#1e1116", "#2c1715", "#401f15", "#5a2a15", "#783a16", "#9a4e1a"]
+const BAYER := [0, 8, 2, 10, 12, 4, 14, 6, 3, 11, 1, 9, 15, 7, 13, 5]
+static var _wall_cache := {}
+
+func _wall_panel(panel: Polygon2D, pts: PackedVector2Array, i: int) -> void:
+	var px := PxArt.PX
+	var lo := Vector2(INF, INF)
+	var hi := -lo
+	for q in pts:
+		lo = lo.min(q)
+		hi = hi.max(q)
+	lo = (lo / px).floor() * px
+	var cells := Vector2i(((hi - lo) / px).ceil()) + Vector2i.ONE
+	var local := PackedVector2Array()
+	for q in pts:
+		local.append((q - lo) / px)
+	var key := "%d_%d_%d_%s" % [i, cells.x, cells.y, str(local)]
+	if not _wall_cache.has(key):
+		_wall_cache[key] = _wall_image(local, cells, i)
+	panel.texture = _wall_cache[key]
+	panel.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
+	panel.uv = local
+	panel.vertex_colors = PackedColorArray()
+	panel.color = Color.WHITE
+
+
+static func _wall_image(poly: PackedVector2Array, cells: Vector2i, i: int) -> ImageTexture:
+	var ramp: Array[Color] = []
+	for c in WALL_RAMP:
+		ramp.append(Color(c))
+	var img := Image.create(cells.x, cells.y, false, Image.FORMAT_RGBA8)
+	# the fire is toward the road: low on the portrait's inner side
+	var glow := Vector2(cells.x * (0.9 if i == 0 else 0.1), cells.y * 0.55)
+	var reach := maxf(cells.x, cells.y) * 1.05
+	var course := 8
+	var stone := 13
+	for y in cells.y:
+		for x in cells.x:
+			var c := Vector2(x + 0.5, y + 0.5)
+			if not Geometry2D.is_point_in_polygon(c, poly):
+				continue
+			var d := 1.0 - clampf(c.distance_to(glow) / reach, 0.0, 1.0)
+			var lvl := 1.5 + pow(d, 1.5) * 5.0
+			# stone courses: mortar lines a step darker, each stone a little lighter or darker
+			var row := y / course
+			var sx := x + (stone / 2 if row % 2 == 1 else 0)
+			var col := sx / stone
+			if y % course == 0 or sx % stone == 0:
+				lvl -= 1.0
+			else:
+				lvl += (float(hash(Vector2i(col, row)) % 7) - 3.0) * 0.12
+				# the stone's top edge catches the firelight
+				if y % course == 1:
+					lvl += 0.35
+			# the carved inner edge under the gold frame
+			var edge := INF
+			for k in poly.size():
+				var a := poly[k]
+				var b := poly[(k + 1) % poly.size()]
+				edge = minf(edge, c.distance_to(Geometry2D.get_closest_point_to_segment(c, a, b)))
+			if edge < 2.0:
+				lvl = 0.0
+			elif edge < 4.0:
+				lvl = minf(lvl, 1.2)
+			var t: float = (BAYER[(y % 4) * 4 + x % 4] + 0.5) / 16.0
+			var n := clampi(int(floor(lvl + t - 0.5)), 0, ramp.size() - 1)
+			img.set_pixel(x, y, ramp[n])
+	return ImageTexture.create_from_image(img)
 
 
 ## Where a figure stands across its portrait: in from the middle toward the road, the Issohadore
