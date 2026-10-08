@@ -39,6 +39,13 @@ const ZOOM := 1.2
 ## reference.
 ## Raised by FRAME_LIFT (Daniele, 2026-10-05) so more of the street and the notes' road shows.
 const FRAME := [Vector2(-12, 232), Vector2(226, 296), Vector2(272, 612), Vector2(-12, 748)]
+## The pixel look's portraits (Daniele, 2026-10-08): a shallower lower edge that hides the figures'
+## legs, so they stand in their frames from the knees up and the cut is level across them.
+const FRAME_PIXEL := [Vector2(-12, 226), Vector2(300, 276), Vector2(262, 560), Vector2(-12, 636)]
+## The art row (from the top of a pixel figure's 172) its portrait's lower edge cuts at: just under
+## the Issohadore's skirt, at the hem of the Mamuthone's fleece.
+const PIXEL_CUT := [124.0, 134.0]
+const BEAM := 22.0             ## base px: the depth of the beam along a pixel portrait's lower edge
 const FIGURE_IN := 24.0           ## picture px each figure stands in from its portrait's middle, toward the road (mirrored)
 const ISSO_RIGHT := 16.0          ## picture px the Issohadore (left portrait) then moves further right (Daniele, 2026-10-05)
 const FIGURE_FILL := 1.12          ## a painted figure's height, as a share of its portrait's
@@ -564,6 +571,19 @@ func _make_frame(i: int) -> Node2D:
 	halo.material = add
 	root.add_child(halo)
 	root.add_child(stand)
+	if pixel:
+		# a carved beam along the lower edge, over the figure, so the cut at its knees reads as the
+		# figure standing behind a ledge (Daniele, 2026-10-08)
+		var beam := Polygon2D.new()
+		beam.name = "Beam"
+		beam.vertex_colors = PackedColorArray([Color("#5a2e14"), Color("#5a2e14"), Color("#2a140a"), Color("#2a140a")])
+		root.add_child(beam)
+		for n in ["BeamTop", "BeamLow"]:
+			var l := Line2D.new()
+			l.name = n
+			l.width = 5.0 if n == "BeamTop" else 3.0
+			l.default_color = Color("#ffb347") if n == "BeamTop" else Color("#1a0c06")
+			root.add_child(l)
 	return root
 
 
@@ -580,9 +600,10 @@ func _frame_points(i: int, drop := 0.0) -> PackedVector2Array:
 	# FRAME_GROW from the outer top corner, so the bigger figures fit and stay clear of the HUD
 	var bs := pic_scale / ZOOM
 	var bo := (size.x - IMG.x * bs) * 0.5
-	var anchor: Vector2 = FRAME[0] - Vector2(0.0, FRAME_LIFT.x)
-	for k in FRAME.size():
-		var p: Vector2 = FRAME[k] - Vector2(0.0, FRAME_LIFT.x if k < 2 else FRAME_LIFT.y)
+	var frame: Array = FRAME_PIXEL if pixel else FRAME
+	var anchor: Vector2 = frame[0] - Vector2(0.0, FRAME_LIFT.x)
+	for k in frame.size():
+		var p: Vector2 = frame[k] - Vector2(0.0, FRAME_LIFT.x if k < 2 else FRAME_LIFT.y)
 		p = anchor + (p - anchor) * FRAME_GROW
 		var q := p if i == 0 else Vector2(IMG.x - p.x, p.y)
 		pts.append(Vector2(bo + q.x * bs, q.y * bs + drop))
@@ -596,8 +617,7 @@ func _head_top(i: int, pts: PackedVector2Array) -> float:
 	if pixel:
 		if i >= _puppets.size():
 			return top
-		var h := (bottom - top) * (0.98 if i == 0 else 0.9)
-		return bottom + h * 0.1 - _puppets[i].art_height() * PxArt.PX
+		return _puppet_feet(i, pts).y - _puppets[i].art_height() * PxArt.PX
 	var hf := (bottom - top) * FIGURE_FILL
 	return bottom + hf * 0.1 - hf
 
@@ -621,6 +641,11 @@ func _place_frames() -> void:
 		(f.get_node("Halo") as Line2D).points = pts
 		if pixel:
 			_place_puppet(i, pts)
+			var down := Vector2(0.0, BEAM)
+			var a := pts[3] - (pts[2] - pts[3]).normalized() * 40.0
+			(f.get_node("Beam") as Polygon2D).polygon = PackedVector2Array([a, pts[2], pts[2] + down, a + down])
+			(f.get_node("BeamTop") as Line2D).points = PackedVector2Array([a, pts[2]])
+			(f.get_node("BeamLow") as Line2D).points = PackedVector2Array([a + down, pts[2] + down])
 			continue
 		var fig := _figures[i]
 		var ts := fig.texture.get_size()
@@ -647,22 +672,29 @@ func _figure_x(i: int, pts: PackedVector2Array) -> float:
 	return (pts[0].x + pts[1].x + pts[2].x + pts[3].x) * 0.25 + dx * pic_scale / ZOOM
 
 
-## The pixel look's puppet in its portrait: as tall as the picture figure, feet just below the frame.
+## The pixel look's puppet in its portrait: its feet below the frame's lower edge, so the edge cuts
+## it at PIXEL_CUT and only the figure from the knees up shows.
 func _place_puppet(i: int, pts: PackedVector2Array) -> void:
 	if i >= _puppets.size():
 		return
 	var p := _puppets[i]
-	var top := (pts[0].y + pts[1].y) * 0.5
-	var bottom := (pts[2].y + pts[3].y) * 0.5
 	# one art px is one cell of the lens (PxArt.PX base px), and the feet sit on the lens's grid, so
 	# the figure comes through it crisp while it stands
-	var h := (bottom - top) * (0.98 if i == 0 else 0.9)
-	var sc := PxArt.PX
-	var cx := _figure_x(i, pts)
-	p.position = PxArt.snap2(Vector2(cx, bottom + h * 0.1))
-	p.scale = Vector2(sc, sc)
+	p.position = _puppet_feet(i, pts)
+	p.scale = Vector2(PxArt.PX, PxArt.PX)
 	p.set_meta("base_pos", p.position)
-	p.set_meta("frame_h", bottom - top)
+	p.set_meta("frame_h", (pts[2].y + pts[3].y - pts[0].y - pts[1].y) * 0.5)
+
+
+## Where figure i's feet go in a portrait at pts.
+func _puppet_feet(i: int, pts: PackedVector2Array) -> Vector2:
+	var cx := _figure_x(i, pts)
+	# the lower edge's height under the figure's middle
+	var a := pts[3]
+	var b := pts[2]
+	var edge := a.y + (b.y - a.y) * clampf((cx - a.x) / (b.x - a.x), 0.0, 1.0)
+	var art := _puppets[i].art_height()
+	return PxArt.snap2(Vector2(cx, edge + (art - PIXEL_CUT[i]) * PxArt.PX))
 
 
 # ------------------------------------------------------------------ the glow layer
