@@ -196,15 +196,37 @@ def bake(name, pieces_fn):
     # the body: the rest, with what the pieces cover painted in from around them, inside the body's
     # own outline (where a bell sticks out past the fleece, the body has nothing behind it)
     rest = opaque & ~taken
+    # bits of rope the coil's outline left on the body (a loop's end, a strand by the skirt) would
+    # stay behind as a few light pixels when the coil swings: they go with the coil
+    for k, (p, m) in enumerate(pieces):
+        if p != "rope":
+            continue
+        hsv = cv2.cvtColor(np.ascontiguousarray(s[..., :3]), cv2.COLOR_RGB2HSV)
+        tan = rest & (hsv[..., 0] >= 8) & (hsv[..., 0] < 32) & (hsv[..., 1] >= 40)
+        lab, n = ndimage.label(tan)
+        near = cv2.dilate(m.astype(np.uint8), np.ones((5, 5), np.uint8)) > 0
+        for i, z in enumerate(ndimage.sum(tan, lab, range(1, n + 1)), 1):
+            bit = lab == i
+            if z < 40 and (bit & near).any():
+                m = m | bit
+                taken |= bit
+        pieces[k] = (p, m)
+    rest = opaque & ~taken
     # specks of the body left between pieces (a fleece tip between the hood and a bell) would hang
     # in the air when the pieces move: each goes to the piece it touches most
-    lab, n = ndimage.label(rest)
-    sizes = ndimage.sum(rest, lab, range(1, n + 1))
-    for i, z in enumerate(sizes, 1):
-        if z >= 15:
+    # ... and so do small bright bits beside a piece (a glint of bronze, a strand of rope): left on
+    # the body they show as a few light pixels hanging there while the piece moves
+    hsv = cv2.cvtColor(np.ascontiguousarray(s[..., :3]), cv2.COLOR_RGB2HSV)
+    bits = []
+    for mask, most in ((rest, 15), (rest & (hsv[..., 2] > 150), 25)):
+        lab, n = ndimage.label(mask)
+        sizes = ndimage.sum(mask, lab, range(1, n + 1))
+        bits += [lab == i for i, z in enumerate(sizes, 1) if z < most]
+    for speck in bits:
+        speck = speck & ~taken
+        if not speck.any():
             continue
-        speck = lab == i
-        ring = (cv2.dilate(speck.astype(np.uint8), np.ones((3, 3), np.uint8)) > 0) & ~speck
+        ring = (cv2.dilate(speck.astype(np.uint8), np.ones((5, 5), np.uint8)) > 0) & ~speck
         touch = [int((ring & m).sum()) for _, m in pieces]
         if max(touch) > 0:
             k = int(np.argmax(touch))
