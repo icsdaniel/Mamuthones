@@ -225,9 +225,69 @@ func _to_frames(p: Vector2) -> Vector2:
 	return p
 
 
+## The pixel look's frames are Daniele's pictures (art/ai/hud_*.png, 2026-10-08), each in three
+## slices: its two ends kept to their shape at the frame's height, its middle stretched between
+## them. Made once per size at one texel per cell (the HUD is drawn one px per cell), every texel
+## wholly in or out, so they stay crisp.
+const SLICE := {"hud_plate": 240, "hud_bar": 90}   ## each picture's end width, its own px
+static var _sliced := {}
+
+
+static func sliced(key: String, cells: Vector2i) -> Texture2D:
+	cells = cells.max(Vector2i(2, 2))
+	var k := "%s_%d_%d" % [key, cells.x, cells.y]
+	if _sliced.has(k):
+		return _sliced[k]
+	var tex: Texture2D = null
+	var path := "res://art/ai/%s.png" % key
+	if ResourceLoader.exists(path):
+		var src := (load(path) as Texture2D).get_image()
+		src.decompress()
+		src.convert(Image.FORMAT_RGBA8)
+		var w := src.get_width()
+		var h := src.get_height()
+		var cap_src := int(SLICE.get(key, 0))
+		var cap := clampi(roundi(cap_src * float(cells.y) / h), 0, cells.x / 2)
+		var out := Image.create(cells.x, cells.y, false, Image.FORMAT_RGBA8)
+		var parts := [[0, cap_src, 0, cap], [cap_src, w - cap_src, cap, cells.x - cap], [w - cap_src, w, cells.x - cap, cells.x]]
+		if cap_src == 0:
+			parts = [[0, w, 0, cells.x]]
+		for part: Array in parts:
+			var dw: int = part[3] - part[2]
+			if dw <= 0:
+				continue
+			var piece := src.get_region(Rect2i(part[0], 0, part[1] - part[0], h))
+			piece.resize(dw, cells.y, Image.INTERPOLATE_LANCZOS)
+			out.blit_rect(piece, Rect2i(0, 0, dw, cells.y), Vector2i(part[2], 0))
+		for y in cells.y:
+			for x in cells.x:
+				var c := out.get_pixel(x, y)
+				c.a = 1.0 if c.a > 0.5 else 0.0
+				out.set_pixel(x, y, c)
+		tex = ImageTexture.create_from_image(out)
+	_sliced[k] = tex
+	return tex
+
+
+## Draws picture `key` over r (base px), snapped to whole cells.
+func _picture(ci: CanvasItem, key: String, r: Rect2, mod := Color.WHITE) -> void:
+	var px := PxArt.PX
+	var cells := Vector2i((r.size / px).round())
+	var tex := sliced(key, cells)
+	if tex != null:
+		ci.draw_texture_rect(tex, Rect2(PxArt.snap2(r.position), Vector2(cells) * px), false, mod)
+
+
 ## A carved frame: a dark panel with pointed ends, an orange edge glowing outward, a thin inner line,
 ## and a small diamond at each point.
 func _panel(ci: CanvasItem, r: Rect2, glow := 1.0) -> void:
+	if pixel:
+		# the plate's diamonds stand out past the frame's points, as the drawn ones did
+		var grow := r.size.y * 0.16
+		var rr := r.grow_individual(grow, grow * 0.35, grow, grow * 0.35)
+		_glow_round(ci, rr, glow)
+		_picture(ci, "hud_plate", rr)
+		return
 	var t := r.size.y * 0.5
 	var pts := PackedVector2Array([r.position + Vector2(t * 0.6, 0), Vector2(r.end.x - t * 0.6, r.position.y), Vector2(r.end.x, r.get_center().y),
 		r.end - Vector2(t * 0.6, 0), Vector2(r.position.x + t * 0.6, r.end.y), Vector2(r.position.x, r.get_center().y)])
@@ -324,8 +384,22 @@ static func _quad(ci: CanvasItem, q: Array, col: Color) -> void:
 	ci.draw_primitive(PackedVector2Array([pts[0], pts[2], pts[3]]), PackedColorArray([col, col, col]), PackedVector2Array())
 
 
+## A soft orange glow round a pixel frame, as the drawn frames have.
+func _glow_round(ci: CanvasItem, r: Rect2, glow: float) -> void:
+	var t := r.size.y * 0.5
+	var pts := PackedVector2Array([r.position + Vector2(t * 0.6, 0), Vector2(r.end.x - t * 0.6, r.position.y), Vector2(r.end.x, r.get_center().y),
+		r.end - Vector2(t * 0.6, 0), Vector2(r.position.x + t * 0.6, r.end.y), Vector2(r.position.x, r.get_center().y), r.position + Vector2(t * 0.6, 0)])
+	for k in 3:
+		ci.draw_polyline(pts, Color(1.0, 0.5, 0.1, 0.1 * glow), 16.0 - k * 5.0, true)
+
+
 ## A cut diamond stud: four facets lit from the top left, on a dark base that shows below it.
 func _diamond(ci: CanvasItem, at: Vector2, r: float, col := EDGE_HOT) -> void:
+	if pixel:
+		# Daniele's stud, tinted toward the badge's colour when it is not plain gold
+		var tint := Color.WHITE if col == EDGE_HOT else Color.WHITE.lerp(col, 0.5) * 1.2
+		_picture(ci, "hud_stud", Rect2(at - Vector2(r, r) * 1.25, Vector2(r, r) * 2.5), tint)
+		return
 	var p := _to_frames(at)
 	var t := p + Vector2(0, -r)
 	var rt := p + Vector2(r, 0)
@@ -351,6 +425,29 @@ func _draw_frames() -> void:
 	# the progress line between two diamonds
 	var a := _to_frames(Vector2(line.x + 14.0, line.z))
 	var e := _to_frames(Vector2(line.y - 14.0, line.z))
+	if pixel:
+		# Daniele's bar, its groove filling with a glowing rod as the song goes on
+		var bh := 21.0
+		var bar := Rect2(Vector2(line.x, line.z - bh * 0.5), Vector2(line.y - line.x, bh))
+		_picture(ci, "hud_bar", bar)
+		var px := PxArt.PX
+		var g0 := PxArt.snap2(Vector2(bar.position.x + bh * 0.9, line.z - px))
+		var gx1 := bar.end.x - bh * 0.9
+		var fw := roundf((lerpf(g0.x, gx1, clampf(_progress, 0.0, 1.0)) - g0.x) / px) * px
+		if fw >= px:
+			ci.draw_rect(Rect2(g0, Vector2(fw, px)), EDGE_HOT)
+			ci.draw_rect(Rect2(g0 + Vector2(0.0, px), Vector2(fw, px)), EDGE)
+	else:
+		_draw_line_frames(ci, a, e)
+	if session.health_on:
+		_panel(ci, b[0])
+	_panel(ci, b[2])
+	_draw_badge(ci, b)
+
+
+func _draw_line_frames(ci: CanvasItem, a: Vector2, e: Vector2) -> void:
+	var b := _boxes()
+	var line: Vector3 = b[3]
 	# a groove for the progress, lit along its lower lip; the filled part a round glowing rod in it
 	ci.draw_line(a, e, OUTLINE, 11.0)
 	ci.draw_line(a, e, Color(0.1, 0.05, 0.04, 0.95), 8.0)
@@ -363,9 +460,9 @@ func _draw_frames() -> void:
 		ci.draw_line(a + Vector2(0, -1.5), fx + Vector2(0, -1.5), EDGE_HOT, 2.0)
 	for p in [Vector2(line.x + 8.0, line.z), Vector2(line.y - 8.0, line.z)]:
 		_diamond(ci, p, 8.0)
-	if session.health_on:
-		_panel(ci, b[0])
-	_panel(ci, b[2])
+
+
+func _draw_badge(ci: CanvasItem, b: Array) -> void:
 	# the badge: a tall hexagon, flaring when a level is gained; its lower rim fills with the streak.
 	# It bounces on every beat, and grows and burns hotter in colour as the multiplier rises.
 	var r: Rect2 = b[1]
@@ -439,6 +536,10 @@ func badge_scale() -> float:
 func _draw_pause() -> void:
 	var down := _pause.button_pressed or _pause.is_hovered()
 	var c := _pause.size * 0.5 + (Vector2(0, DEPTH * 0.5) if down else Vector2.ZERO)
+	if pixel:
+		var sz := Vector2(48.0, 53.0)
+		_picture(_pause, "hud_pause", Rect2(c - sz * 0.5, sz), Color(0.8, 0.8, 0.8) if down else Color.WHITE)
+		return
 	var r := 21.0
 	var pts := PackedVector2Array()
 	for i in 6:
