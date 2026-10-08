@@ -182,7 +182,7 @@ static func disc_glow(ci: CanvasItem, c: Vector2, rx: float, k: Array, alpha: fl
 	_glow(ci, c, Vector2(rx * 1.5, rx * FORE * 2.6) * (1.0 + 0.4 * _near), _a(k[3], (0.3 + 0.45 * _near) * alpha * glow))
 
 
-## Daniele's pictures of the notes (game/art/ai, drawn by an outside image AI, 2026-10-08), by key,
+## Daniele's pictures of the notes and the rings (game/art/ai, drawn by an outside image AI, 2026-10-08), by key,
 ## and each shrunk to the sizes it is shown at: one picture pixel per screen cell, so it stays crisp.
 static var _ai := {}
 static var _ai_sized := {}
@@ -190,7 +190,7 @@ static var _ai_sized := {}
 
 static func ai_tex(key: String, size: Vector2i) -> Texture2D:
 	if not _ai.has(key):
-		var path := "res://art/ai/note_%s.png" % key
+		var path := "res://art/ai/%s.png" % key
 		var img: Image = null
 		if ResourceLoader.exists(path):
 			img = (load(path) as Texture2D).get_image()
@@ -221,6 +221,7 @@ static func ai_tex(key: String, size: Vector2i) -> Texture2D:
 static func ai_disc(lv, field: Rect2, cx: float, y: float, r: float, key: String, alpha := 1.0, h := DISC_H, glow := 1.0) -> bool:
 	if not pixel:
 		return false
+	key = "note_" + key
 	if ai_tex(key, Vector2i.ONE) == null:
 		return false
 	var lane := _lane(field)
@@ -237,16 +238,23 @@ static func ai_disc(lv, field: Rect2, cx: float, y: float, r: float, key: String
 			lo = lo.min(q)
 			hi = hi.max(q)
 	if paint_glow:
-		disc_glow(lv, f.call(Vector3.ZERO), r * lw, K_STEP if key == "step" else K_HOLD, alpha, glow)
-	# whole cells: the picture shrunk to the cells it covers, drawn on them one to one
+		disc_glow(lv, f.call(Vector3.ZERO), r * lw, K_STEP if key == "note_step" else K_HOLD, alpha, glow)
+	ai_draw(lv, key, lo, hi, Color(1.0, 1.0, 1.0, alpha))
+	return true
+
+
+## Picture `key` over the box lo..hi in whole cells: shrunk to the cells it covers, drawn one to one.
+static func ai_draw(ci: CanvasItem, key: String, lo: Vector2, hi: Vector2, mod := Color.WHITE) -> void:
 	var px := PxArt.PX
 	var cells := Vector2i(((hi - lo) / px).round())
 	if cells.x > 40:
 		# past the sheet's sizes (a missed note sweeping past the line): fewer sizes to shrink to
 		cells = (cells / 4) * 4
-	var at := ((lo + hi) * 0.5 - Vector2(cells) * px * 0.5)
-	lv.draw_texture_rect(ai_tex(key, cells), Rect2(at, Vector2(cells) * px), false, Color(1.0, 1.0, 1.0, alpha))
-	return true
+	var tex := ai_tex(key, cells)
+	if tex == null:
+		return
+	var at := PxArt.snap2((lo + hi) * 0.5 - Vector2(cells) * px * 0.5)
+	ci.draw_texture_rect(tex, Rect2(at, Vector2(cells) * px), false, mod)
 
 
 ## A disc lying on the road centred at flat (cx, y), radius r lane widths, h thick. k: its glaze.
@@ -874,6 +882,9 @@ static func _hit_line(lv: LaneView, field: Rect2, rects: Array[Rect2], hl: float
 		ci_poly(lv, sil, Color(0.04, 0.03, 0.08, 0.6))
 		if g > 0.01:
 			ci_poly(lv, sil, Color(1.0, 0.97, 0.9, 0.7 * g))
+		if pixel and ai_tex("ring_idle", Vector2i.ONE) != null:
+			_ring_pic(lv, sil, k, g, incoming[lane], lv.get("_lock_on") == true)
+			continue
 		lv.draw_polyline(ring, Color(OUTLINE, 0.9), 12.0 if pixel else 9.0, true)
 		var rim := Color(CREAM, 0.75 + 0.25 * k)
 		if incoming[lane] != null:
@@ -884,6 +895,33 @@ static func _hit_line(lv: LaneView, field: Rect2, rects: Array[Rect2], hl: float
 			rim = rim.lerp(kk[0], near)
 			lv.draw_polyline(slot[3], _a(kk[0], 0.8 * near), 3.0, true)
 		lv.draw_polyline(ring, rim, 5.0 if pixel else 3.5, true)
+
+
+## The pixel look's hit slot from Daniele's ring pictures, over the slot's outline sil: the grey ring
+## takes the coming note's colour as it nears, burns gold when the lane is struck, red while the
+## buttons are locked.
+static func _ring_pic(lv: LaneView, sil: PackedVector2Array, k: float, g: float, incoming, locked: bool) -> void:
+	var lo := Vector2(INF, INF)
+	var hi := -lo
+	for q in sil:
+		lo = lo.min(q)
+		hi = hi.max(q)
+	# the ring's band sits on the outline, half outside it
+	var grow := Vector2(1.0, 0.75) * PxArt.PX * 1.5
+	lo -= grow
+	hi += grow
+	var mod := Color(1.0, 1.0, 1.0).lerp(Color(1.15, 1.1, 1.0), k - 0.6)
+	if incoming != null:
+		var kk: Array = incoming[0]
+		var near: float = incoming[1]
+		ci_poly(lv, sil, _a(kk[1], 0.35 * near * near))
+		mod = mod.lerp(kk[0] * 1.25, near)
+	if locked:
+		ai_draw(lv, "ring_red", lo, hi)
+		return
+	ai_draw(lv, "ring_idle", lo, hi, mod)
+	if g > 0.05:
+		ai_draw(lv, "ring_gold", lo, hi, Color(1.0, 1.0, 1.0, clampf(g * 1.5, 0.0, 1.0)))
 
 
 # ------------------------------------------------------------------ the bell strike
