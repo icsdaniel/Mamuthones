@@ -100,6 +100,51 @@ def issohadore_pieces(a):
     return [("head", region(a, None, ISS["head"])), ("rope", coil)]
 
 
+def mirror_fill(s, src, hole, only_above=False):
+    """What lies behind `hole`, as the picture around it seen in a mirror at the hole's nearest edge:
+    a piece that moves a pixel or two up shows the fleece below it carrying on, one that moves down
+    the fleece above, with its strands and light (a smooth fill read as a dark smudge trailing the
+    piece). Up and down first, as the pieces mostly move that way; then across; else painted in.
+    only_above: for a piece that only ever moves down (the head nods): only the band its top edge
+    uncovers is filled, from what is above it; the rest of `done` is False and stays see-through
+    (a fill there showed as dark specks over the hood)."""
+    rgb = np.ascontiguousarray(np.where(src[..., None], s[..., :3], 0).astype(np.uint8))
+    out = cv2.inpaint(rgb, (~src).astype(np.uint8) * 255, 3, cv2.INPAINT_TELEA)
+    h, w = hole.shape
+    done = np.zeros_like(hole)
+    from_y = np.full(hole.shape, -1)
+
+    def runs(line):
+        idx = np.flatnonzero(line)
+        if idx.size == 0:
+            return []
+        cut = np.flatnonzero(np.diff(idx) > 1)
+        return list(zip(np.r_[idx[0], idx[cut + 1]], np.r_[idx[cut], idx[-1]] + 1))
+
+    for x in range(w):
+        for a, b in runs(hole[:, x]):
+            for y in range(a, b):
+                up, down = a - 1 - (y - a), b + (b - 1 - y)
+                order = (up,) if only_above else ((up, down) if y - a <= b - 1 - y else (down, up))
+                for sy in order:
+                    if 0 <= sy < h and src[sy, x]:
+                        out[y, x] = s[sy, x, :3]
+                        done[y, x] = True
+                        from_y[y, x] = sy
+                        break
+    if only_above:
+        return out, done, from_y
+    for y in range(h):
+        for a, b in runs(hole[y] & ~done[y]):
+            for x in range(a, b):
+                left, right = a - 1 - (x - a), b + (b - 1 - x)
+                for sx in ((left, right) if x - a <= b - 1 - x else (right, left)):
+                    if 0 <= sx < w and src[y, sx]:
+                        out[y, x] = s[y, sx, :3]
+                        break
+    return out, np.ones_like(hole), from_y
+
+
 def frame(a, name):
     """The crop and size that take the picture to the game's canvas."""
     ys, xs = np.nonzero(a[..., 3])
@@ -151,29 +196,61 @@ def bake(name, pieces_fn):
     # the body: the rest, with what the pieces cover painted in from around them, inside the body's
     # own outline (where a bell sticks out past the fleece, the body has nothing behind it)
     rest = opaque & ~taken
+    # specks of the body left between pieces (a fleece tip between the hood and a bell) would hang
+    # in the air when the pieces move: each goes to the piece it touches most
+    lab, n = ndimage.label(rest)
+    sizes = ndimage.sum(rest, lab, range(1, n + 1))
+    for i, z in enumerate(sizes, 1):
+        if z >= 15:
+            continue
+        speck = lab == i
+        ring = (cv2.dilate(speck.astype(np.uint8), np.ones((3, 3), np.uint8)) > 0) & ~speck
+        touch = [int((ring & m).sum()) for _, m in pieces]
+        if max(touch) > 0:
+            k = int(np.argmax(touch))
+            pieces[k] = (pieces[k][0], pieces[k][1] | speck)
+            taken |= speck
+    rest = opaque & ~taken
     core = cv2.morphologyEx(rest.astype(np.uint8), cv2.MORPH_CLOSE, cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (13, 13))) > 0
     core = ndimage.binary_fill_holes(core)
     # ... and a band along every edge a piece shares with the body, as wide as a piece moves
     # ... and along every edge a piece shares with the body or with another piece (the hood and the
     # top bell move apart by a pixel or two: the sky must not show between them)
-    behind = taken & (core | (cv2.dilate(rest.astype(np.uint8), np.ones((7, 7), np.uint8)) > 0))
+    behind = taken & (core | (cv2.dilate(rest.astype(np.uint8), np.ones((9, 9), np.uint8)) > 0))
     for p, m in pieces:
-        behind |= m & (cv2.dilate((taken & ~m).astype(np.uint8), np.ones((7, 7), np.uint8)) > 0)
-    # each piece's share painted in from all that lies around it, the other pieces too (between the
-    # hood and a bell it is bronze and hood that show, not the fleece further off)
+        behind |= m & (cv2.dilate((taken & ~m).astype(np.uint8), np.ones((9, 9), np.uint8)) > 0)
+    # each piece's share painted in from around it, the other pieces too (between the hood and a bell
+    # it is bronze and hood that show, not the fleece further off)
     body = np.zeros_like(s)
     body[..., :3] = np.where(rest[..., None], s[..., :3], 0)
+    extra = {}
     for p, m in pieces:
-        src = opaque & ~m
-        rgb = np.ascontiguousarray(np.where(src[..., None], s[..., :3], 0).astype(np.uint8))
-        filled = cv2.inpaint(rgb, (~src).astype(np.uint8) * 255, 3, cv2.INPAINT_TELEA)
-        body[..., :3] = np.where((m & behind)[..., None], pal[px.nearest(filled, pal)], body[..., :3])
+        fill, ok, from_y = mirror_fill(s, opaque & ~m, m, p == "head")
+        behind &= ~m | ok
+        body[..., :3] = np.where((m & behind)[..., None], fill, body[..., :3])
+        if p == "head":
+            # where the head hides part of a piece behind it (the top bell under the hood), that
+            # piece carries on under the head instead, so the head's nod never chips it
+            ys, xs = np.nonzero(m & ok)
+            for q, (other, mq) in enumerate(pieces):
+                if other == p:
+                    continue
+                hit = mq[from_y[ys, xs], xs]
+                if hit.any():
+                    grow = np.zeros_like(mq)
+                    grow[ys[hit], xs[hit]] = True
+                    extra[other] = (grow, fill)
+                    behind &= ~grow
     keep = rest | behind
     body[..., 3] = np.where(keep, 255, 0)
     body[~keep] = 0
     out = {"body": body}
     for p, m in pieces:
         out[p] = np.where(m[..., None], s, 0).astype(np.uint8)
+        if p in extra:
+            grow, fill = extra[p]
+            out[p][grow, :3] = fill[grow]
+            out[p][grow, 3] = 255
     for p, img in out.items():
         # turned to face the road
         Image.fromarray(img[:, ::-1]).save(os.path.join(OUT, "%s_%s.png" % (name, p)))
