@@ -191,12 +191,15 @@ static var _ai_sized := {}
 
 static func ai_tex(key: String, size: Vector2i) -> Texture2D:
 	if not _ai.has(key):
-		var path := "res://art/ai/%s.png" % key
+		# "<name>!flip": the picture upside down
+		var path := "res://art/ai/%s.png" % key.trim_suffix("!flip")
 		var img: Image = null
 		if ResourceLoader.exists(path):
 			img = (load(path) as Texture2D).get_image()
 			if img != null:
 				img.decompress()
+				if key.ends_with("!flip"):
+					img.flip_y()
 		_ai[key] = img if img != null and not img.is_empty() else null
 	var src: Image = _ai[key]
 	if src == null:
@@ -501,6 +504,9 @@ static func bell(lv: LaneView, field: Rect2, y: float, up: bool, alpha := 1.0, p
 	if alpha <= 0.01 or lw < 2.0:
 		return
 	_glow(lv, f.call(Vector3.ZERO), Vector2(hw * 1.1, lw * 0.35), _a(k[3], 0.3 * alpha))
+	if pixel and ai_tex("bar_up", Vector2i.ONE) != null:
+		_bell_pic(lv, f, h, lane, lw, y, up, alpha, not pal.is_empty(), cowbells)
+		return
 	solid(lv, f, verts, faces, Vector3(hw / lane, 1.0, STRAP_D * 0.5), k, alpha, maxf(2.0, lw * 0.02), -0.4)
 	if lw < 6.0:
 		return
@@ -528,9 +534,38 @@ static func bell(lv: LaneView, field: Rect2, y: float, up: bool, alpha := 1.0, p
 		_convex(lv, tri, _a(RIM, alpha))
 
 
+## The pixel look's bell note from Daniele's pictures: the red (up) or blue (down) beam across the
+## road through the strap's frame f, his bells at the lane dividers, his arrow in each lane (upside
+## down for a tilt down). hot: lit up by a strike.
+static func _bell_pic(lv: LaneView, f: Callable, h: float, lane: float, lw: float, y: float, up: bool, alpha: float, hot: bool, cowbells: bool) -> void:
+	var mod := Color(1.45, 1.4, 1.3, alpha) if hot else Color(1.0, 1.0, 1.0, alpha)
+	var quad := PackedVector2Array([f.call(Vector3(-1, h, -1)), f.call(Vector3(1, h, -1)), f.call(Vector3(1, 0, 1)), f.call(Vector3(-1, 0, 1))])
+	var w := quad[1].x - quad[0].x
+	var tall := quad[2].y - quad[1].y
+	# few sizes (a beam slides down every frame): the picture shrunk to a width in steps of 8 cells
+	var cells := Vector2i(maxi(8, roundi(w / PxArt.PX / 8.0) * 8), maxi(3, roundi(tall / PxArt.PX)))
+	var tex := ai_tex("bar_up" if up else "bar_down", cells)
+	lv.draw_polygon(quad, PackedColorArray([mod, mod, mod, mod]), PackedVector2Array([Vector2(0, 0), Vector2(1, 0), Vector2(1, 1), Vector2(0, 1)]), tex)
+	if lw < 6.0:
+		return
+	var top := (quad[0].y + quad[2].y) * 0.5 - h * lw
+	for i in (2 if cowbells else 0):
+		var at := Vector2(lv.project(Vector2(lane * float(i + 1), y)).x, top + tall * 0.25)
+		var s := lw * 0.34
+		ai_draw(lv, "bar_bell", at - Vector2(s * 0.35, s), at + Vector2(s * 0.35, 0.0), mod)
+	for i in 3:
+		var c := Vector2(lv.project(Vector2(lane * (float(i) + 0.5), y)).x, top - lw * 0.02)
+		var a := lw * 0.25
+		var hh := lw * 0.23
+		ai_draw(lv, "bar_arrow" if up else "bar_arrow!flip", c - Vector2(a, hh * 1.4), c + Vector2(a, hh * 0.4), mod)
+
+
 ## A bronze cowbell standing with its mouth on the ground at `at` (screen), s tall: a flared body,
 ## lit on the left, a dark mouth, a loop on top.
 static func _cowbell(lv: LaneView, at: Vector2, s: float, alpha: float) -> void:
+	if pixel and ai_tex("bar_bell", Vector2i.ONE) != null:
+		ai_draw(lv, "bar_bell", at - Vector2(s * 0.42, s * 1.2), at + Vector2(s * 0.42, 0.0), Color(1.0, 1.0, 1.0, alpha))
+		return
 	var body := PackedVector2Array([at + Vector2(-s * 0.42, 0.0), at + Vector2(-s * 0.3, -s * 0.85), at + Vector2(-s * 0.18, -s), at + Vector2(s * 0.18, -s),
 		at + Vector2(s * 0.3, -s * 0.85), at + Vector2(s * 0.42, 0.0)])
 	lv.draw_circle(at + Vector2(0, -s * 1.05), s * 0.14 + 2.0, _a(OUTLINE, alpha))
