@@ -19,7 +19,7 @@ extends Control
 ## play screen drives it the same way.
 
 const STREET := "res://art/street/street.png"
-const PIXEL_STREET := "res://art/pixel/street.png"   ## the same street as pixel art (tools/art/pixel3d)
+const PIXEL_STREET := "res://art/pixel/street.png"   ## the pixel look's street: Daniele's second street picture laid into this one's frame, lines painted on (tools/art/pixel3d/bake_ai_street.py)
 const IMG := Vector2(941.0, 1672.0)
 ## The painted lines, x = a + b * y in the picture's pixels: the road's edges and the lane dividers.
 const RAILS := [Vector2(609.17, -0.45827), Vector2(510.90, -0.14397), Vector2(445.17, 0.12678), Vector2(356.72, 0.43025)]
@@ -410,7 +410,9 @@ func _move_road() -> void:
 		yh = STRETCH_FROM + (yh - STRETCH_FROM) / stretch
 	var a := Vector4(RAILS[0].x, RAILS[1].x, RAILS[2].x, RAILS[3].x)
 	var b := Vector4(RAILS[0].y, RAILS[1].y, RAILS[2].y, RAILS[3].y)
-	_mat.set_shader_parameter("road", pixel)
+	# the pixel street (Daniele's second street picture, 2026-10-08) has its own cobbles: the
+	# shader's laid stones only for the first picture's painted look
+	_mat.set_shader_parameter("road", false)
 	_mat.set_shader_parameter("smooth_lanes", true)
 	_mat.set_shader_parameter("rail_a", a)
 	_mat.set_shader_parameter("rail_b", b)
