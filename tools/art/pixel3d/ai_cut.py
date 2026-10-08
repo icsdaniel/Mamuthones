@@ -100,5 +100,19 @@ def main(src):
             print(name, (r - l, b - t))
 
 
+
+
+def silver(src, dst):
+    """Expert's sixteenths have no picture of their own: the blue note in silver."""
+    a = np.asarray(Image.open(src).convert("RGBA")).astype(np.float32)
+    lum = (a[..., :3] @ np.array([0.3, 0.55, 0.15], np.float32)) / 255.0
+    lum = np.clip((lum - 0.05) * 1.6, 0, 1) ** 0.8
+    dark, light = np.array([70, 76, 96], np.float32), np.array([250, 252, 255], np.float32)
+    out = a.copy()
+    out[..., :3] = dark + (light - dark) * lum[..., None]
+    Image.fromarray(out.astype(np.uint8)).save(dst)
+
+
 if __name__ == "__main__":
     main(sys.argv[1])
+    silver(os.path.join(OUT, "note_step.png"), os.path.join(OUT, "note_six.png"))

@@ -182,6 +182,73 @@ static func disc_glow(ci: CanvasItem, c: Vector2, rx: float, k: Array, alpha: fl
 	_glow(ci, c, Vector2(rx * 1.5, rx * FORE * 2.6) * (1.0 + 0.4 * _near), _a(k[3], (0.3 + 0.45 * _near) * alpha * glow))
 
 
+## Daniele's pictures of the notes (game/art/ai, drawn by an outside image AI, 2026-10-08), by key,
+## and each shrunk to the sizes it is shown at: one picture pixel per screen cell, so it stays crisp.
+static var _ai := {}
+static var _ai_sized := {}
+
+
+static func ai_tex(key: String, size: Vector2i) -> Texture2D:
+	if not _ai.has(key):
+		var path := "res://art/ai/note_%s.png" % key
+		var img: Image = null
+		if ResourceLoader.exists(path):
+			img = (load(path) as Texture2D).get_image()
+			if img != null:
+				img.decompress()
+		_ai[key] = img if img != null and not img.is_empty() else null
+	var src: Image = _ai[key]
+	if src == null:
+		return null
+	size = size.max(Vector2i.ONE)
+	var k := "%s_%d_%d" % [key, size.x, size.y]
+	if not _ai_sized.has(k):
+		var img := src.duplicate() as Image
+		img.resize(size.x, size.y, Image.INTERPOLATE_LANCZOS)
+		# a cell is the note's or the road's, never half of each
+		for yy in size.y:
+			for xx in size.x:
+				var c := img.get_pixel(xx, yy)
+				c.a = 1.0 if c.a > 0.5 else 0.0
+				img.set_pixel(xx, yy, c)
+		_ai_sized[k] = ImageTexture.create_from_image(img)
+	return _ai_sized[k]
+
+
+## The pixel look's note from its picture: the picture stretched over the disc it stands for (r lane
+## widths across, h thick, lying on the road at flat (cx, y)), so it sits and shrinks down the road
+## exactly as the drawn disc did. False when there is no picture (the disc is drawn instead).
+static func ai_disc(lv, field: Rect2, cx: float, y: float, r: float, key: String, alpha := 1.0, h := DISC_H, glow := 1.0) -> bool:
+	if not pixel:
+		return false
+	if ai_tex(key, Vector2i.ONE) == null:
+		return false
+	var lane := _lane(field)
+	var lw: float = lv.road_scale(y) * lane
+	var f := _frame3(lv, field, cx, y, r * lane, 2.0 * r * lw * FORE)
+	if alpha <= 0.01 or lw < 2.0:
+		return true
+	var lo := Vector2(INF, INF)
+	var hi := -lo
+	for level: float in [0.0, h]:
+		for i in 16:
+			var an := TAU * float(i) / 16.0
+			var q: Vector2 = f.call(Vector3(cos(an), level, sin(an)))
+			lo = lo.min(q)
+			hi = hi.max(q)
+	if paint_glow:
+		disc_glow(lv, f.call(Vector3.ZERO), r * lw, K_STEP if key == "step" else K_HOLD, alpha, glow)
+	# whole cells: the picture shrunk to the cells it covers, drawn on them one to one
+	var px := PxArt.PX
+	var cells := Vector2i(((hi - lo) / px).round())
+	if cells.x > 40:
+		# past the sheet's sizes (a missed note sweeping past the line): fewer sizes to shrink to
+		cells = (cells / 4) * 4
+	var at := ((lo + hi) * 0.5 - Vector2(cells) * px * 0.5)
+	lv.draw_texture_rect(ai_tex(key, cells), Rect2(at, Vector2(cells) * px), false, Color(1.0, 1.0, 1.0, alpha))
+	return true
+
+
 ## A disc lying on the road centred at flat (cx, y), radius r lane widths, h thick. k: its glaze.
 ## Returns a Callable mapping (u, v) on its top (the unit circle) to the screen, for its pattern.
 static func disc(lv, field: Rect2, cx: float, y: float, r: float, k: Array, alpha := 1.0, h := DISC_H, glow := 1.0, sides := SIDES) -> Callable:
@@ -246,6 +313,8 @@ static func step(lv, field: Rect2, cx: float, y: float, alpha: float, small := f
 		# the pixel look keeps every tap round and full size; the kind shows in its colour: blue on
 		# the beat, violet on the half-beat (or a triplet), silver on a sixteenth, pink for a call
 		var k: Array = K_CALL if call else (K_SIX if six else (K_OFF if small else K_STEP))
+		if ai_disc(lv, field, cx, y, DISC_R, "call" if call else ("six" if six else ("offbeat" if small else "step")), alpha):
+			return
 		var top := disc(lv, field, cx, y, DISC_R, k, alpha)
 		_pintadera(lv, top, lw, CREAM, 0.92 * alpha)
 		_dot(lv, top, lw, k[2], alpha)
@@ -262,6 +331,8 @@ static func _dot(lv, top: Callable, lw: float, col: Color, alpha: float) -> void
 
 ## A heal: a green pintadera with su coccu, the black charm bead set in silver, at its heart.
 static func heal(lv, field: Rect2, cx: float, y: float, alpha: float) -> void:
+	if ai_disc(lv, field, cx, y, DISC_R, "heal", alpha):
+		return
 	var lw: float = lv.road_scale(y) * _lane(field)
 	var top := disc(lv, field, cx, y, DISC_R, K_HEAL, alpha)
 	_pintadera(lv, top, lw, CREAM, alpha)
@@ -276,6 +347,8 @@ static func heal(lv, field: Rect2, cx: float, y: float, alpha: float) -> void:
 
 ## A hold's head: a gold pintadera.
 static func hold_head(lv, field: Rect2, cx: float, y: float, alpha: float, lit: bool) -> void:
+	if ai_disc(lv, field, cx, y, DISC_R, "hold", alpha, DISC_H, 1.6 if lit else 1.0):
+		return
 	var lw: float = lv.road_scale(y) * _lane(field)
 	var top := disc(lv, field, cx, y, DISC_R, K_HOLD, alpha, DISC_H, 1.6 if lit else 1.0)
 	_pintadera(lv, top, lw, CREAM, alpha)
@@ -284,6 +357,8 @@ static func hold_head(lv, field: Rect2, cx: float, y: float, alpha: float, lit: 
 
 ## A stomp: a big disc of black mask wood with a bronze rim and two bare feet, thicker than a step.
 static func stomp(lv, field: Rect2, cx: float, y: float, alpha: float) -> void:
+	if ai_disc(lv, field, cx, y, STOMP_R, "stomp", alpha, DISC_H * 1.6, 1.4):
+		return
 	var lw: float = lv.road_scale(y) * _lane(field)
 	var top := disc(lv, field, cx, y, STOMP_R, K_WOOD, alpha, DISC_H * 1.6, 1.4)
 	if lw < 6.0 or alpha <= 0.01:
