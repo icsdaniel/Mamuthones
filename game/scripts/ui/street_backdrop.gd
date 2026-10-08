@@ -19,7 +19,7 @@ extends Control
 ## play screen drives it the same way.
 
 const STREET := "res://art/street/street.png"
-const PIXEL_STREET := "res://art/pixel/street.png"   ## the pixel look's street: Daniele's second street picture laid into this one's frame, lines painted on (tools/art/pixel3d/bake_ai_street.py)
+const PIXEL_STREET := "res://art/ai/street_laid.png"   ## the pixel look's street: Daniele's second street picture laid into this one's frame at full size, lines painted on (tools/art/pixel3d/bake_ai_street.py); drawn smoothed into the one-px-per-cell street, so every cell takes one even sample of it (a 270-wide copy drawn NEAREST gave cells of uneven sizes)
 const IMG := Vector2(941.0, 1672.0)
 ## The painted lines, x = a + b * y in the picture's pixels: the road's edges and the lane dividers.
 const RAILS := [Vector2(609.17, -0.45827), Vector2(510.90, -0.14397), Vector2(445.17, 0.12678), Vector2(356.72, 0.43025)]
@@ -124,7 +124,7 @@ func _ready() -> void:
 	_pic.texture = load(PIXEL_STREET if pixel else STREET)
 	_pic.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
 	_pic.stretch_mode = TextureRect.STRETCH_SCALE
-	_pic.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST if pixel else CanvasItem.TEXTURE_FILTER_LINEAR
+	_pic.texture_filter = CanvasItem.TEXTURE_FILTER_LINEAR   # the pixel look's cells come from the viewport it is drawn into
 	_pic.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	_pic.set_anchors_preset(Control.PRESET_FULL_RECT)
 	_mat = ShaderMaterial.new()
