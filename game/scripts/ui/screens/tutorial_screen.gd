@@ -224,7 +224,7 @@ func _well_done(session: Session) -> void:
 	var box := UIKit.column(_card, false, 18)
 	UIKit.spacer(box, 0, true)
 	box.add_child(UIKit.label(tr("tut_well_done"), UIKit.TITLE, true, HORIZONTAL_ALIGNMENT_CENTER))
-	var grade := GradeBadge.new(session.grade_rank(), true)
+	var grade := GradeBadge.new(session.grade_rank(), true, session.full_combo())
 	grade.name = "Grade"
 	grade.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
 	box.add_child(grade)

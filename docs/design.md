@@ -90,8 +90,8 @@ Other rules:
 - **Accuracy** = (Perfect + 0.7·Good + 0.3·Early/Late) / notes. Grades from accuracy: the row's own
   words, from "The Issohadores are waiting for you" to "The whole row rang as one", plus a letter grade
   (Daniele, 2026-10-09): F below 60 %, E ≥ 60 %, D ≥ 70 %, C ≥ 78 %, B ≥ 85 %, A ≥ 90 %, S ≥ 95 %,
-  and S+ for ≥ 98 % with a full combo (no miss, wrong step, stray tap, lost hold or bell in a
-  stand-still).
+  S+ ≥ 98 %. A full combo (no miss, wrong step, stray tap, lost hold or bell in a stand-still) is its
+  own mark beside the grade (an "FC" tab), kept with the best.
 - The bell sound itself reacts to play: Perfect rings clean and full, Good slightly softer, Early/Late
   clanks, a miss is a dull knock. High unison adds the whole row's bells behind yours.
 

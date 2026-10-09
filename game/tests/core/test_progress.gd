@@ -166,6 +166,7 @@ func test_progression_unlock_order() -> void:
 	check(not "song:s2" in kinds, "s2 was open already (%s)" % [kinds])
 	check_eq(r1.grade, Session.RANK_SPLUS, "a perfect run is graded S+")
 	check_eq(r1.carving_gained, 3, "an S+ gives three carving points")
+	check_eq(p.best("s1", "easy").get("full_combo"), true, "the full combo is kept with the best")
 	check_eq(Progression.carving_points(p), 3, "carving points")
 	check_eq(Progression.highest_stop(p), 2, "the optional tutorial does not move the story past stop 2")
 	# Clearing in order.
@@ -312,7 +313,7 @@ class FakeBackend:
 
 func test_grades_from_old_saves_and_thresholds() -> void:
 	check_eq(Progression.entry_grade({"bells": 2, "accuracy": 0.86}), Session.RANK_B, "an old best gets the grade its accuracy earns")
-	check_eq(Progression.entry_grade({"accuracy": 0.99}), Session.RANK_S, "an old best is never S+ (no full combo known)")
+	check_eq(Progression.entry_grade({"accuracy": 0.99}), Session.RANK_SPLUS, "an old 99 % best is S+")
 	check_eq(Progression.entry_grade({"grade": 7}), Session.RANK_SPLUS, "a saved grade is kept")
 	check_eq(Progression.entry_grade({}), 0, "nothing saved is F")
 	check_eq(Progression.CLEAR_GRADE, Session.GRADES.find("D"), "a D clears a stop")

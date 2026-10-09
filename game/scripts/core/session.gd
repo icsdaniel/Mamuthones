@@ -309,8 +309,9 @@ func _acc_sum() -> float:
 
 
 ## Letter grades, worst to best. A run's grade comes from its accuracy (GRADE_MIN, the least accuracy
-## for each letter); S+ also needs a full combo: no miss, wrong step, stray tap, lost hold or bell rung
-## into a stand-still. The rank is the index in GRADES (F = 0 .. S+ = 7).
+## for each letter), S+ included (Daniele, 2026-10-09: reachable without a full combo). A full combo
+## (no miss, wrong step, stray tap, lost hold or bell rung into a stand-still) is its own mark beside
+## the grade. The rank is the index in GRADES (F = 0 .. S+ = 7).
 const GRADES: Array[String] = ["F", "E", "D", "C", "B", "A", "S", "S+"]
 const GRADE_MIN: Array[float] = [0.0, 0.60, 0.70, 0.78, 0.85, 0.90, 0.95, 0.98]
 const RANK_D := 2
@@ -320,7 +321,7 @@ const RANK_SPLUS := 7
 
 
 func grade_rank() -> int:
-	return rank_for(accuracy(), full_combo())
+	return rank_for(accuracy())
 
 
 func grade() -> String:
@@ -333,9 +334,9 @@ func full_combo() -> bool:
 			and stats.let_go == 0 and stats.silence == 0
 
 
-static func rank_for(acc: float, combo := false) -> int:
+static func rank_for(acc: float) -> int:
 	for r in range(GRADES.size() - 1, 0, -1):
-		if acc >= GRADE_MIN[r] - 1e-9 and (r < RANK_SPLUS or combo):
+		if acc >= GRADE_MIN[r] - 1e-9:
 			return r
 	return 0
 

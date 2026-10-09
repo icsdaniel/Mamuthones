@@ -610,12 +610,9 @@ func test_accuracy_and_grades() -> void:
 	check_near(s.accuracy(), (6 + 1.4 + 0.3) / 10.0, 1e-9, "accuracy formula")
 	check_eq(s.grade(), "D", "77 % is a D")
 	check(not s.full_combo(), "a miss is no full combo")
-	var want := {0.0: "F", 0.59: "F", 0.60: "E", 0.69: "E", 0.70: "D", 0.78: "C", 0.85: "B", 0.90: "A", 0.95: "S", 0.99: "S", 1.0: "S"}
+	var want := {0.0: "F", 0.59: "F", 0.60: "E", 0.69: "E", 0.70: "D", 0.78: "C", 0.85: "B", 0.90: "A", 0.95: "S", 0.97: "S", 0.98: "S+", 1.0: "S+"}
 	for acc in want:
-		check_eq(Session.grade_name(Session.rank_for(acc)), want[acc], "%d %% without a full combo" % roundi(acc * 100.0))
-	check_eq(Session.grade_name(Session.rank_for(0.98, true)), "S+", "98 % with a full combo is S+")
-	check_eq(Session.grade_name(Session.rank_for(0.97, true)), "S", "97 % with a full combo is still S")
-	check_eq(Session.grade_name(Session.rank_for(0.80, true)), "C", "a full combo alone lifts nothing")
+		check_eq(Session.grade_name(Session.rank_for(acc)), want[acc], "%d %%" % roundi(acc * 100.0))
 	check_near(s.mean_offset(), (0.06 + 0.06 + 0.12) / 9.0, 1e-6, "mean offset leans late")
 	check(s.is_over(100.0), "over after the end")
 

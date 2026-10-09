@@ -41,12 +41,12 @@ static func story_order() -> Array[String]:
 
 
 ## The grade rank (0..7) of a saved best. Bests saved before grades existed carry only their
-## accuracy (and bells): they get the grade their accuracy earns (never S+, which needs a full combo).
+## accuracy (and bells): they get the grade their accuracy earns.
 static func entry_grade(e: Dictionary) -> int:
 	if e.has("grade"):
 		return clampi(int(e.grade), 0, Session.GRADES.size() - 1)
 	if e.has("accuracy"):
-		return Session.rank_for(float(e.accuracy), false)
+		return Session.rank_for(float(e.accuracy))
 	return 0
 
 

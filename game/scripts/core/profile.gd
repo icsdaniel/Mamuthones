@@ -13,7 +13,7 @@ extends Node
 ##   get_look() -> {mask: Dictionary, fleece, straps, bell_set} / set_look(part, value)
 ##   calibration() -> Dictionary ({} = not calibrated) / set_calibration(d)
 ##   audio_offset() -> float seconds (the "audio_offset" setting)
-##   best(song_key, difficulty) -> {} or {score, accuracy, grade, ghost, slam, plays}
+##   best(song_key, difficulty) -> {} or {score, accuracy, grade, full_combo, ghost, slam, plays}
 ##   all_bests() -> {"song:difficulty": entry}
 ##       (one per difficulty; with no difficulty, the best of that day at any difficulty)
 ##   record_result(session) -> {prev_best, new_best, grade, prev_grade, unlocked: [{kind, id, part?}], carving_gained}
@@ -190,6 +190,7 @@ func record_result(session: Session) -> Dictionary:
 			e.date = Time.get_date_string_from_system(true)
 		e.accuracy = maxf(float(prev.get("accuracy", 0.0)), session.accuracy())
 		e.grade = maxi(out.prev_grade, session.grade_rank())
+		e.full_combo = bool(prev.get("full_combo", false)) or session.full_combo()
 		e.erase("bells")
 		e.max_unison = maxi(int(prev.get("max_unison", 0)), int(session.stats.max_unison))
 		_bests[key] = e

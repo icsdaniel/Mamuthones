@@ -354,6 +354,17 @@ static func best_grade(song_id: String) -> int:
 	return Progression.best_grade(song_id)
 
 
+## Whether any difficulty of a song was played with a full combo.
+static func any_full_combo(song_id: String) -> bool:
+	var song := SongLibrary.get_song(song_id)
+	if song == null:
+		return false
+	for d in song.difficulties():
+		if bool(Profile.best(song_id, d).get("full_combo", false)):
+			return true
+	return false
+
+
 ## A saved best's grade rank (-1 when there is none).
 static func grade_of(best: Dictionary) -> int:
 	return Progression.entry_grade(best) if not best.is_empty() else -1

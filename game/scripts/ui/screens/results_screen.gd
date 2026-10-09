@@ -65,7 +65,7 @@ func build() -> void:
 	top.alignment = BoxContainer.ALIGNMENT_CENTER
 	top.add_theme_constant_override("separation", 24)
 	stage.add_child(top)
-	var grade := GradeBadge.new(session.grade_rank(), true)
+	var grade := GradeBadge.new(session.grade_rank(), true, session.full_combo())
 	grade.name = "Grade"
 	grade.size_flags_vertical = Control.SIZE_SHRINK_CENTER
 	top.add_child(grade)
@@ -83,10 +83,19 @@ func build() -> void:
 	score_col.add_child(score)
 	_count_up(score, session.score)
 	if session.full_combo():
-		var fc := UIKit.label(tr("res_full_combo"), UIKit.CAPTION, false, HORIZONTAL_ALIGNMENT_CENTER)
+		# The full combo is its own reward: it lands just after the grade, with a chime and a flare.
+		var fc := UIKit.label(tr("res_full_combo"), UIKit.SUB, false, HORIZONTAL_ALIGNMENT_CENTER)
 		fc.name = "FullCombo"
 		fc.add_theme_color_override("font_color", Palette.GOLD_HOT)
 		score_col.add_child(fc)
+		if not UIKit.reduced_motion():
+			fc.modulate.a = 0.0
+			var tw := fc.create_tween()
+			tw.tween_interval(0.8)
+			tw.tween_callback(func() -> void:
+				Sound.ui("unlock")
+				_flare(1.0))
+			tw.tween_property(fc, "modulate:a", 1.0, 0.15)
 	var best_line := _best_line()
 	if best_line != "":
 		var bl := UIKit.label(best_line, UIKit.SUB, true, HORIZONTAL_ALIGNMENT_CENTER)

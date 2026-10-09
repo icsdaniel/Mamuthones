@@ -308,7 +308,7 @@ S = [
 ("res_best", "Best: %s (%s to go)", "Record: %s (ne mancano %s)"),
 ("res_slam_note", "Played in slam mode: kept on this phone, not on the global ladder.",
  "Giocata in modalità colpo: resta su questo telefono, fuori dalla classifica mondiale."),
-("res_full_combo", "Full combo: nothing missed", "Combo completa: nessun errore"),
+("res_full_combo", "Full combo", "Combo completa"),
 ("tip_still", "Keep the phone steady through the grey stand-still bars: each ring there costs 100 points and a level of unison.",
  "Tieni fermo il telefono durante le barre grigie delle soste: ogni colpo lì costa 100 punti e un livello di unisono."),
 ("tip_holds", "Keep holds pressed until their end crosses the line: each hold kept is worth 150 × unison.",

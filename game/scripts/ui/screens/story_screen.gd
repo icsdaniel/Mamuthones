@@ -99,7 +99,7 @@ func _row(song: SongData, is_next: bool) -> Control:
 	status.text_overrun_behavior = TextServer.OVERRUN_TRIM_ELLIPSIS
 	status.add_theme_color_override("font_color", PixelPalette.GOLD[4] if is_next else (PixelPalette.BONE[2] if open else PixelPalette.BONE[1]))
 	text.add_child(status)
-	var grade := GradeBadge.new(UIKit.best_grade(song.id))
+	var grade := GradeBadge.new(UIKit.best_grade(song.id), false, UIKit.any_full_combo(song.id))
 	grade.name = "Grade"
 	grade.size_flags_vertical = Control.SIZE_SHRINK_CENTER
 	grade.visible = open

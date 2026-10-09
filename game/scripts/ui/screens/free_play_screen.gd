@@ -91,11 +91,11 @@ func _show_bests() -> void:
 		var b: Button = _song_buttons[id]
 		var sd := SongLibrary.get_song(id)
 		var best: Dictionary = Profile.best(UIKit.board_song_id(sd, use_remix and sd == song), difficulty)
-		_badge(b, UIKit.grade_of(best), UIKit.fmt_score(int(best.get("score", 0))) if not best.is_empty() else "")
+		_badge(b, UIKit.grade_of(best), UIKit.fmt_score(int(best.get("score", 0))) if not best.is_empty() else "", bool(best.get("full_combo", false)))
 
 
 ## The best score and grade at the right end of a song row.
-func _badge(b: Button, grade: int, score: String) -> void:
+func _badge(b: Button, grade: int, score: String, fc := false) -> void:
 	var old := b.get_node_or_null("Best")
 	if old != null:
 		b.remove_child(old)
@@ -114,7 +114,7 @@ func _badge(b: Button, grade: int, score: String) -> void:
 		l.size_flags_vertical = Control.SIZE_SHRINK_CENTER
 		l.add_theme_color_override("font_color", PixelPalette.GOLD[5])
 		row.add_child(l)
-	var badge := GradeBadge.new(grade)
+	var badge := GradeBadge.new(grade, false, fc)
 	badge.name = "Grade"
 	badge.size_flags_vertical = Control.SIZE_SHRINK_CENTER
 	row.add_child(badge)

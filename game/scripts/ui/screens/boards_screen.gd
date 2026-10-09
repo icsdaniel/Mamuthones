@@ -30,7 +30,7 @@ func build() -> void:
 			score.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 			score.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
 			grid.add_child(score)
-			grid.add_child(GradeBadge.new(UIKit.grade_of(best)))
+			grid.add_child(GradeBadge.new(UIKit.grade_of(best), false, bool(best.get("full_combo", false))))
 			any = any or not best.is_empty()
 	if not any:
 		box.add_child(UIKit.label(tr("boards_empty"), UIKit.CAPTION))
