@@ -28,7 +28,7 @@ func _boards() -> Node:
 # Plays a chart with autoplay (perfect) or with only the first `hits` notes hit.
 func _play(song_id: String, diff: String, opts := {}, hits := -1) -> Session:
 	var song := SongLibrary.get_song(song_id)
-	var s := Session.new(song, diff, "light", opts)
+	var s := Session.new(song, diff, opts)
 	var ap := Autoplay.new(s)
 	var t := -1.0
 	while not s.is_over(t):
@@ -52,7 +52,7 @@ func test_profile_save_load_roundtrip() -> void:
 	p.set_flag("tutorial_done")
 	p.set_look("fleece", "dark_brown")
 	p.set_look("fleece", "neon_pink")     # not a real fleece: refused
-	p.set_look("bell_set", "village")
+	p.set_look("bell_set", "village")    # bell sets are gone: refused
 	p.set_calibration({"mode": "gyro", "threshold": 180.0, "axis": 0, "up_sign": 1, "reliable": true})
 	check(p.save(), "saved")
 	p.free()
@@ -65,7 +65,7 @@ func test_profile_save_load_roundtrip() -> void:
 	check(q.has_flag("tutorial_done") and q.has_flag("calibrated"), "flags kept (calibration sets calibrated)")
 	check(not q.has_flag("latency_tested"), "unset flag")
 	check_eq(q.get_look().fleece, "dark_brown", "look kept")
-	check_eq(q.get_look().bell_set, "village", "bell set kept")
+	check(not q.get_look().has("bell_set"), "no bell set in the look")
 	check_eq(q.calibration().get("threshold"), 180.0, "calibration kept")
 	q.free()
 	_clean()
@@ -147,11 +147,9 @@ func test_progression_unlock_order() -> void:
 	for id in Progression.story_order():
 		check(Progression.is_unlocked(id, p), "%s open from the start" % id)
 	check_eq(Progression.highest_stop(p), 2, "the story is at stop 2")
-	check(Progression.bell_set_unlocked("light", p), "light from the start")
-	check(not Progression.bell_set_unlocked("village", p), "village locked")
 	check_eq(Progression.next_stop(p), "s2", "next stop skips the optional tutorial")
 	var goals: Array = Progression.next_goals(p)
-	check(not goals.is_empty() and goals[0].kind == "bell_set" and goals[0].id == "village", "first goal: the village bells (%s)" % [goals])
+	check(not goals.any(func(g): return g.kind == "bell_set"), "no bell set goals (%s)" % [goals])
 	# A failed run unlocks nothing.
 	var bad := _play("s1", "easy", {}, 3)
 	check(bad.grade_rank() < Progression.CLEAR_GRADE, "3 hits of 19 is below a D (%s)" % bad.grade())
@@ -171,15 +169,13 @@ func test_progression_unlock_order() -> void:
 	check_eq(Progression.highest_stop(p), 2, "the optional tutorial does not move the story past stop 2")
 	# Clearing in order.
 	var r2: Dictionary = p.record_result(_play("s2", "easy"))
-	check(r2.unlocked.any(func(u): return u.kind == "bell_set" and u.id == "village"), "village unlocks when stop 3 is reached")
-	check(Progression.bell_set_unlocked("village", p), "village open")
+	check(not r2.unlocked.any(func(u): return u.kind == "bell_set"), "no bell sets to unlock")
 	check(not Progression.remix_unlocked("s2", p), "no remix from easy")
 	var r3: Dictionary = p.record_result(_play("s2", "hard"))
 	check(r3.unlocked.any(func(u): return u.kind == "remix" and u.id == "s2_remix"), "remix unlocks at hard with a B or better")
 	check(Progression.is_unlocked("s2_remix", p), "remix id is playable")
 	for id in ["s3", "s4", "s5"]:
 		p.record_result(_play(id, "medium"))
-	check(Progression.bell_set_unlocked("full", p), "full load at stop 6")
 	check_eq(Progression.highest_stop(p), 6, "at stop 6")
 	check_eq(Progression.next_stop(p), "s6", "next stop is s6")
 	# Remix bests are their own.

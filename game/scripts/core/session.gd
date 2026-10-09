@@ -61,10 +61,11 @@ signal health_changed(health: int, delta: int)
 ## Health ran out (fires once).
 signal failed()
 
-# Timing windows for the Light set, in seconds (half-widths).
-const PERFECT := 0.045
-const GOOD := 0.090
-const OK := 0.140
+# Timing windows in seconds (half-widths). One standard for everyone: the old Village bells' timing
+# (Daniele, 2026-10-09, when the bell sets and their score multipliers were removed).
+const PERFECT := 0.0405
+const GOOD := 0.081
+const OK := 0.126
 const TILT_EXTRA := 0.015    ## tilts: +15 ms on every window (sensors are looser than touch)
 const POINTS := {"perfect": 300, "good": 150, "early": 50, "late": 50}
 const RING_POINTS := {"perfect": 450, "good": 225, "early": 75, "late": 75}
@@ -76,7 +77,7 @@ const HOLD_BONUS := 150
 const END_PAD := 2.0        ## a whole song ends this many seconds after its last note (not at the end of the audio)
 const HOLD_GRACE := 0.120    ## a hold released up to 120 ms before its end still counts as kept
 const STILL_PENALTY := 100
-## A stand-still kept to its end: STILL_BONUS × beats × unison × weight. 800 puts stillness at about
+## A stand-still kept to its end: STILL_BONUS × beats × unison. 800 puts stillness at about
 ## 10 % of a perfect run's score on a typical story song at Hard (measured by test_charts).
 const STILL_BONUS := 800
 const STILL_HITS := 2        ## and 2 hits per beat toward the next unison level...
@@ -105,7 +106,6 @@ const HEAL_DENSITY_SPAN := 4.0   ## a healing step comes right after the busiest
 
 var song: SongData
 var difficulty := ""
-var bell_set := "light"
 var options: Dictionary = {}
 var slam := false
 var remix := false
@@ -133,8 +133,7 @@ var win_touch := Vector3.ZERO   ## (perfect, good, ok) for steps, holds, stomps 
 var win_tilt := Vector3.ZERO    ## same for tilted bells
 
 var _raw := 0.0
-var _breakdown := {"base": 0.0, "unison": 0.0, "weight": 0.0, "holds": 0.0, "stills": 0.0, "penalties": 0.0}
-var _weight := 1.0
+var _breakdown := {"base": 0.0, "unison": 0.0, "holds": 0.0, "stills": 0.0, "penalties": 0.0}
 var _first_open := 0
 var _holds: Dictionary = {}        # touch_id -> Note
 var _ring_windows: Dictionary = {} # note index -> Vector3 used by that ring's bell half
@@ -153,20 +152,16 @@ var _taps_from := NAN   # the first and last moment a lane note is due (NAN: no 
 var _taps_to := NAN
 
 
-func _init(p_song: SongData, p_difficulty: String, p_bell_set: String = "light", p_options: Dictionary = {}) -> void:
+func _init(p_song: SongData, p_difficulty: String, p_options: Dictionary = {}) -> void:
 	song = p_song
 	difficulty = p_difficulty
-	bell_set = p_bell_set if BellSets.is_valid(p_bell_set) else "light"
 	options = p_options
 	slam = bool(options.get("slam", false))
 	remix = bool(options.get("remix", false)) and song.has_remix()
 	mirror = bool(options.get("mirror", false))
 	var from_beat := float(options.get("from_beat", -INF))
 	var to_beat := float(options.get("to_beat", INF))
-	_weight = BellSets.weight(bell_set)
-	var base := Vector3(PERFECT, GOOD, OK)
-	var scale := BellSets.window_scale(bell_set)
-	win_touch = base * scale
+	win_touch = Vector3(PERFECT, GOOD, OK)
 	# Slam bells are touches, so they get no sensor allowance.
 	win_tilt = win_touch if slam else win_touch + Vector3.ONE * TILT_EXTRA
 	_max_window = maxf(win_touch.z, win_tilt.z)
@@ -286,10 +281,6 @@ func unison_mult() -> float:
 	return UNISON_MULTS[unison_level]
 
 
-func weight() -> float:
-	return _weight
-
-
 ## (Perfect + 0.7 Good + 0.3 Early/Late) / all judgeable notes of the chart (unplayed count as 0).
 func accuracy() -> float:
 	if stats.total == 0:
@@ -345,9 +336,8 @@ static func grade_name(rank: int) -> String:
 	return GRADES[clampi(rank, 0, GRADES.size() - 1)]
 
 
-## Where the score came from: base points, extra from unison, extra from weight, hold bonuses,
-## kept stand-still bonuses and stand-still penalties (positive). total = base + unison + weight +
-## holds + stills - penalties; the score shown is max(0, total), rounded.
+## Where the score came from: base points, extra from unison, hold bonuses, kept stand-still
+## bonuses and stand-still penalties (positive). total = base + unison + holds + stills - penalties; the score shown is max(0, total), rounded.
 func score_breakdown() -> Dictionary:
 	var d := _breakdown.duplicate()
 	d.total = _raw
@@ -588,7 +578,7 @@ func update(t: float) -> void:
 						n.judgement = "still"
 						stats.still_kept += 1
 						var beats := still_beats(n)
-						var v := STILL_BONUS * beats * unison_mult() * _weight
+						var v := STILL_BONUS * beats * unison_mult()
 						_raw += v
 						_breakdown.stills += v
 						_refresh_score(n.end_t)
@@ -845,7 +835,7 @@ func _end_hold(n: Note, t: float, kept: bool) -> void:
 	n.finished = true
 	if kept:
 		stats.held += 1
-		var v := HOLD_BONUS * unison_mult() * _weight
+		var v := HOLD_BONUS * unison_mult()
 		_raw += v
 		_breakdown.holds += v
 		_refresh_score(t)
@@ -861,10 +851,9 @@ func _end_hold(n: Note, t: float, kept: bool) -> void:
 
 func _add_points(pts: int, t: float) -> void:
 	var m := unison_mult()
-	_raw += pts * m * _weight
+	_raw += pts * m
 	_breakdown.base += pts
 	_breakdown.unison += pts * (m - 1.0)
-	_breakdown.weight += pts * m * (_weight - 1.0)
 	_refresh_score(t)
 
 

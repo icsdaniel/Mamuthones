@@ -406,6 +406,8 @@ static func apply_volumes() -> void:
 static func show_look(scene) -> void:
 	var look: Dictionary = Profile.get_look()
 	scene.set_look(look.get("mask", MaskSpec.default()), str(look.get("fleece", "black")), str(look.get("straps", "natural")))
+	if "bell_set" in scene:
+		scene.bell_set = BellSets.STANDARD
 
 
 ## Best grade rank over every difficulty of a song (-1: never played).
@@ -469,8 +471,6 @@ static func unlock_name(u: Dictionary) -> String:
 			return song_title(SongLibrary.get_song(id))
 		"remix":
 			return tr_("name_remix") % song_title(SongLibrary.get_song(id))
-		"bell_set":
-			return tr_("name_bells") % BellSets.name(id, I18n.locale())
 		"mask":
 			return mask_option_name(str(u.get("part", "")), id)
 	return id
@@ -491,45 +491,9 @@ static func unlock_text(u: Dictionary) -> String:
 			return tr_("unlock_song") % unlock_name(u)
 		"remix":
 			return tr_("unlock_remix") % unlock_name(u)
-		"bell_set":
-			return tr_("unlock_bells") % unlock_name(u)
 		"mask":
 			return tr_("unlock_mask") % unlock_name(u)
 	return unlock_name(u)
-
-
-## The bell sets as a row of toggles (locked ones say where they unlock); picking one saves it.
-static func bell_set_picker(box: Container) -> HBoxContainer:
-	box.add_child(label(tr_("bells_title"), SUB))
-	var row := HBoxContainer.new()
-	row.add_theme_constant_override("separation", 10)
-	row.name = "BellSets"
-	box.add_child(row)
-	var current := str(Profile.get_look().get("bell_set", "light"))
-	var buttons: Array[Button] = []
-	for id in BellSets.ids():
-		var open := Progression.bell_set_unlocked(id)
-		var b := Button.new()
-		b.text = "%s\n×%s" % [BellSets.name(id, I18n.locale()), str(BellSets.weight(id))]
-		b.toggle_mode = true
-		b.disabled = not open
-		b.custom_minimum_size = Vector2(TOUCH, TOUCH * 1.2)
-		b.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-		b.focus_mode = Control.FOCUS_NONE
-		b.set_pressed_no_signal(id == current)
-		b.name = "Set_" + id
-		buttons.append(b)
-		row.add_child(b)
-	for b in buttons:
-		var id := b.name.substr(4)
-		b.pressed.connect(func() -> void:
-			Profile.set_look("bell_set", id)
-			Sound.bell(id, true, "perfect")
-			for o in buttons:
-				o.set_pressed_no_signal(o == b))
-	var note := label(tr_("bells_note"), CAPTION)
-	box.add_child(note)
-	return row
 
 
 ## A dark veil over a scene so text on top reads.

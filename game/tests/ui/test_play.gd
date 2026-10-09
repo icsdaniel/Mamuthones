@@ -5,7 +5,7 @@ extends TestCase
 func test_song_plays_to_results_under_autoplay() -> void:
 	UIHarness.fresh_profile()
 	var song := SongLibrary.story()[0]
-	var app := UIHarness.make_app(tree, "play", {"song_id": song.id, "difficulty": "easy", "bell_set": "light", "autoplay": true})
+	var app := UIHarness.make_app(tree, "play", {"song_id": song.id, "difficulty": "easy", "autoplay": true})
 	await UIHarness.frames(tree, 3)
 	var play := app.current()
 	var session: Session = play.get("session")
@@ -21,8 +21,7 @@ func test_song_plays_to_results_under_autoplay() -> void:
 	check(res.find_child("Breakdown", true, false) != null, "results break the score down")
 	check(res.find_child("Tendency", true, false) != null, "results show early/late tendency")
 	check(res.find_child("Tip", true, false) != null, "results give a tip")
-	var weight := res.find_child("WeightValue", true, false) as Label
-	check(weight != null, "weight is shown")
+	check(res.find_child("WeightValue", true, false) == null, "no weight row (bell sets are gone)")
 	var unison := res.find_child("UnisonValue", true, false) as Label
 	check(unison != null and unison.text != "+0", "unison added to the score")
 	UIHarness.free_app(app)
@@ -37,7 +36,7 @@ func test_played_run_is_recorded_and_moves_the_story_on() -> void:
 		return
 	check(Progression.is_unlocked(story[2].id), "every stop is open from the start")
 	check_eq(Progression.highest_stop(), story[1].stop, "the story is at stop 2")
-	var app := UIHarness.make_app(tree, "play", {"song_id": story[1].id, "difficulty": "easy", "bell_set": "light"})
+	var app := UIHarness.make_app(tree, "play", {"song_id": story[1].id, "difficulty": "easy"})
 	await UIHarness.frames(tree, 3)
 	var play := app.current()
 	# Drive the real play screen with Autoplay's inputs but not its "autoplay" flag, as a player would.
@@ -87,12 +86,12 @@ func test_tutorial_passes_under_autoplay() -> void:
 
 
 ## Health on the play screen: the pips show in a played song; letting every note go by runs health out,
-## the music stops, the notes freeze and the fail menu offers Restart (the same song, difficulty and
-## bell set, counted in again) and Quit; a failed run records nothing.
+## the music stops, the notes freeze and the fail menu offers Restart (the same song and difficulty,
+## counted in again) and Quit; a failed run records nothing.
 func test_health_runs_out_and_restart_replays_the_song() -> void:
 	UIHarness.fresh_profile()
 	var song := SongLibrary.story()[1]
-	var args := {"song_id": song.id, "difficulty": "hard", "bell_set": "full"}
+	var args := {"song_id": song.id, "difficulty": "hard"}
 	var app := UIHarness.make_app(tree, "play", args)
 	await UIHarness.frames(tree, 3)
 	var play := app.current()
@@ -129,7 +128,7 @@ func test_health_runs_out_and_restart_replays_the_song() -> void:
 	var again := app.current()
 	check(again != play and again.screen_name() == "play_screen", "Restart builds a new play screen")
 	var s2: Session = again.get("session")
-	check(s2 != null and s2.song.id == song.id and s2.difficulty == "hard" and s2.bell_set == "full", "the same song, difficulty and bell set")
+	check(s2 != null and s2.song.id == song.id and s2.difficulty == "hard", "the same song and difficulty")
 	check_eq(s2.health, Session.MAX_HEALTH, "with full health")
 	check(again.get("paused"), "counted in from the start")
 	UIHarness.free_app(app)
@@ -140,9 +139,9 @@ func test_health_runs_out_and_restart_replays_the_song() -> void:
 func test_exempt_modes_never_fail() -> void:
 	UIHarness.fresh_profile()
 	var story := SongLibrary.story()
-	var cases := [{"song_id": story[1].id, "difficulty": "hard", "bell_set": "light", "autoplay": true, "human": true}]
+	var cases := [{"song_id": story[1].id, "difficulty": "hard", "autoplay": true, "human": true}]
 	var r := story[0].lesson_range(1)
-	cases.append({"song_id": story[0].id, "difficulty": "easy", "bell_set": "light", "from_beat": r.x, "to_beat": r.y})
+	cases.append({"song_id": story[0].id, "difficulty": "easy", "from_beat": r.x, "to_beat": r.y})
 	for a in cases:
 		var app := UIHarness.make_app(tree, "play", a)
 		await UIHarness.frames(tree, 3)

@@ -1,7 +1,7 @@
 extends SceneTree
 ## Starts a song in Autoplay for recording with Godot's movie maker:
 ##   godot --path game --rendering-driver opengl3 --resolution 720x1440 --write-movie out.avi \
-##       --fixed-fps 60 -s res://tests/record.gd -- <song_id> <difficulty> [remix] [human] [bells=<set>]
+##       --fixed-fps 60 -s res://tests/record.gd -- <song_id> <difficulty> [remix] [human]
 ##       [from=<beat>] [style=pixel|painted]
 ## Plays the song through to the results screen, holds the results for a few seconds, then quits.
 ## Uses a throwaway profile, so the recording never changes the player's own progress.
@@ -20,10 +20,6 @@ func _init() -> void:
 	var a := OS.get_cmdline_user_args()
 	var song_id := a[0] if a.size() > 0 else "fires"
 	var diff := a[1] if a.size() > 1 else "hard"
-	var bells := "light"
-	for x in a:
-		if x.begins_with("bells="):
-			bells = x.substr(6)
 	await process_frame
 	profile = root.get_node("/root/Profile")
 	profile.load_profile(PROFILE)
@@ -36,7 +32,7 @@ func _init() -> void:
 		return
 	_app = load("res://scenes/main.tscn").instantiate()
 	_app.set("start_screen", "play")
-	var start := {"song_id": song_id, "difficulty": diff, "bell_set": bells, "remix": "remix" in a,
+	var start := {"song_id": song_id, "difficulty": diff, "remix": "remix" in a,
 		"autoplay": true, "human": "human" in a}
 	for x in a:
 		# from=<beat>: start a short way into the song (with --quit-after, a clip of the action)

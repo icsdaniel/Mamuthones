@@ -1,6 +1,6 @@
 extends Screen
 ## Results: the row's words for the run, the letter grade (F to S+), the score and where it came from (accuracy,
-## unison, weight), the early/late tendency, the best and the ghost, what was unlocked (celebrated), and
+## unison), the early/late tendency, the best and the ghost, what was unlocked (celebrated), and
 ## one concrete tip for next time.
 ## args: session, record (Profile.record_result output, empty for autoplay), play_args, ghost.
 
@@ -28,7 +28,7 @@ func build() -> void:
 	var box := cols[0]
 	var foot := cols[1]
 	UIKit.header(box, UIKit.song_title(session.song), _leave)
-	var sub := tr("diff_" + session.difficulty) + " · " + BellSets.name(session.bell_set, I18n.locale())
+	var sub := tr("diff_" + session.difficulty)
 	if session.remix:
 		sub += " · " + tr("res_remix")
 	box.add_child(UIKit.label(sub, UIKit.CAPTION, true, HORIZONTAL_ALIGNMENT_CENTER))
@@ -170,7 +170,7 @@ func _best_line() -> String:
 	return ""
 
 
-## Score = notes × unison × weight: show how much each part added, so the game's ideas read as the way
+## Score = notes × unison: show how much each part added, so the game's ideas read as the way
 ## to a high score.
 func _breakdown(box: Container) -> void:
 	var b := session.score_breakdown()
@@ -193,8 +193,6 @@ func _breakdown(box: Container) -> void:
 	_row(grid, tr("res_base"), UIKit.fmt_score(roundi(float(b.get("base", 0.0)))), "Base")
 	_row(grid, tr("res_unison") % Hud._mult_text(peak),
 		"+" + UIKit.fmt_score(roundi(float(b.get("unison", 0.0)))), "Unison")
-	_row(grid, tr("res_weight") % [BellSets.name(session.bell_set, I18n.locale()), Hud._mult_text(session.weight())],
-		"+" + UIKit.fmt_score(roundi(float(b.get("weight", 0.0)))), "Weight")
 	if float(b.get("holds", 0.0)) > 0.0:
 		_row(grid, tr("res_holds"), "+" + UIKit.fmt_score(roundi(float(b.holds))), "Holds")
 	if int(st.get("rests", 0)) > 0:
@@ -341,19 +339,6 @@ static func tip_text(s: Session) -> String:
 		if nd in Progression.REMIX_LEVELS and s.song.has_remix() and not Progression.remix_unlocked(s.song.id):
 			tip += " " + UIKit.tr_("tip_harder_remix") % [Session.grade_name(Progression.REMIX_GRADE), UIKit.tr_("diff_" + nd)]
 		return tip
-	var heavier := next_bell_set(s.bell_set) if s.grade_rank() >= Session.RANK_B else ""
-	if heavier != "":
-		return UIKit.tr_("tip_weight") % [BellSets.name(heavier, I18n.locale()), Hud._mult_text(float(BellSets.WEIGHTS[heavier]))]
-	return ""
-
-
-## The next heavier bell set the player has unlocked, or "" when there is none.
-static func next_bell_set(current: String) -> String:
-	var ids := BellSets.ids()
-	var i := ids.find(current)
-	for j in range(i + 1, ids.size()):
-		if Progression.bell_set_unlocked(ids[j]):
-			return ids[j]
 	return ""
 
 

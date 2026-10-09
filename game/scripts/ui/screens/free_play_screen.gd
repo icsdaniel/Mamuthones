@@ -30,7 +30,6 @@ func build() -> void:
 		b.custom_minimum_size.y = UIKit.TOUCH + 16
 		box.add_child(b)
 		_song_buttons[s.id] = b
-	UIKit.bell_set_picker(box)
 	_remix = CheckButton.new()
 	_remix.custom_minimum_size.y = UIKit.TOUCH
 	_remix.focus_mode = Control.FOCUS_NONE
@@ -129,6 +128,5 @@ func _play() -> void:
 	app.open("play", {
 		"song_id": song.id,
 		"difficulty": difficulty,
-		"bell_set": str(Profile.get_look().get("bell_set", "light")),
 		"remix": use_remix,
 	})

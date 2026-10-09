@@ -32,7 +32,7 @@ func _to_time(c: Conductor, t: float) -> void:
 
 
 func test_resume_goes_back_to_a_bar_line_and_counts_in() -> void:
-	var r: Array = await _open({"song_id": "carnival", "difficulty": "easy", "bell_set": "light"})
+	var r: Array = await _open({"song_id": "carnival", "difficulty": "easy"})
 	var app: App = r[0]
 	var play: Node = r[1]
 	var c: Conductor = r[2]
@@ -83,7 +83,7 @@ func test_resume_goes_back_to_a_bar_line_and_counts_in() -> void:
 
 
 func test_restart_starts_near_the_first_note() -> void:
-	var r: Array = await _open({"song_id": "carnival", "difficulty": "easy", "bell_set": "light"})
+	var r: Array = await _open({"song_id": "carnival", "difficulty": "easy"})
 	var app: App = r[0]
 	var play: Node = r[1]
 	play.call("pause")
@@ -104,7 +104,7 @@ func test_restart_starts_near_the_first_note() -> void:
 
 
 func test_the_count_in_is_seen_on_the_audio_sticks() -> void:
-	var r: Array = await _open({"song_id": "carnival", "difficulty": "easy", "bell_set": "light"})
+	var r: Array = await _open({"song_id": "carnival", "difficulty": "easy"})
 	var app: App = r[0]
 	var play: Node = r[1]
 	var c: Conductor = r[2]
@@ -136,7 +136,7 @@ func test_the_count_in_is_seen_on_the_audio_sticks() -> void:
 
 func test_wrong_lane_marks_the_pressed_button() -> void:
 	# Health off: the run skips every note before the target, which would otherwise run health out.
-	var r: Array = await _open({"song_id": "carnival", "difficulty": "medium", "bell_set": "light", "health": false})
+	var r: Array = await _open({"song_id": "carnival", "difficulty": "medium", "health": false})
 	var app: App = r[0]
 	var play: Node = r[1]
 	var c: Conductor = r[2]
@@ -184,7 +184,7 @@ func test_wrong_lane_marks_the_pressed_button() -> void:
 
 
 func test_focus_loss_during_the_count_in_pauses_again() -> void:
-	var r: Array = await _open({"song_id": "carnival", "difficulty": "easy", "bell_set": "light"})
+	var r: Array = await _open({"song_id": "carnival", "difficulty": "easy"})
 	var app: App = r[0]
 	var play: Node = r[1]
 	var c: Conductor = r[2]

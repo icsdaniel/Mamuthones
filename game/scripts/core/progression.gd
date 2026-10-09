@@ -27,7 +27,6 @@ const REMIX_GRADE := Session.RANK_B
 const CLEAR_GRADE := Session.RANK_D
 ## Carving points for each grade rank (F, E, D, C, B, A, S, S+).
 const GRADE_POINTS: Array[int] = [0, 0, 1, 1, 2, 2, 3, 3]
-const BELL_SET_STOPS := {"light": 1, "village": 3, "full": 6}
 
 static var _mask_spec: Variant = null
 static var _mask_spec_checked := false
@@ -114,12 +113,6 @@ static func highest_stop(profile: Variant = null) -> int:
 	return maxi(top, 1)
 
 
-static func bell_set_unlocked(id: String, profile: Variant = null) -> bool:
-	if not BELL_SET_STOPS.has(id):
-		return false
-	return highest_stop(profile) >= BELL_SET_STOPS[id]
-
-
 static func carving_points(profile: Variant = null) -> int:
 	var p: Variant = _profile(profile)
 	if p == null:
@@ -158,17 +151,13 @@ static func next_stop(profile: Variant = null) -> String:
 
 
 ## What the player is working towards, nearest first. Each entry:
-## {kind: "remix"|"bell_set"|"mask", id, part (mask only), need: {...}, have: {...}}.
+## {kind: "remix"|"mask", id, part (mask only), need: {...}, have: {...}}.
 ## need/have use the keys song_id, difficulty ("hard" means Hard or Expert), grade (a rank; -1 in
 ## have: never played), stop, points.
 static func next_goals(profile: Variant = null) -> Array:
 	var out := []
 	var story := story_order()
 	var stop := highest_stop(profile)
-	for id in BellSets.ids():
-		if not bell_set_unlocked(id, profile):
-			out.append({"kind": "bell_set", "id": id, "need": {"stop": BELL_SET_STOPS[id]}, "have": {"stop": stop}})
-			break
 	var remixes := []
 	for id in story:
 		var s := SongLibrary.get_song(id)
@@ -186,8 +175,8 @@ static func next_goals(profile: Variant = null) -> Array:
 	return out
 
 
-## Everything unlocked right now as a set of keys ("song:id", "remix:id", "bell_set:id",
-## "mask:part/option"), so Profile can tell what a result just unlocked.
+## Everything unlocked right now as a set of keys ("song:id", "remix:id", "mask:part/option"), so
+## Profile can tell what a result just unlocked.
 static func snapshot(profile: Variant = null) -> Dictionary:
 	var out := {}
 	for s in SongLibrary.all():
@@ -195,9 +184,6 @@ static func snapshot(profile: Variant = null) -> Dictionary:
 			out["song:" + s.id] = true
 		if s.has_remix() and remix_unlocked(s.id, profile):
 			out["remix:" + s.remix_id()] = true
-	for id in BellSets.ids():
-		if bell_set_unlocked(id, profile):
-			out["bell_set:" + id] = true
 	var spec: Variant = _spec()
 	if spec != null and (spec as Script).get_script_constant_map().has("PARTS"):
 		for part in (spec as Script).get_script_constant_map()["PARTS"]:

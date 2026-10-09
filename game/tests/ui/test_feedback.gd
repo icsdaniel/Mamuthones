@@ -8,7 +8,7 @@ func _play_screen() -> Array:
 	UIHarness.fresh_profile()
 	Profile.set_setting("vibration", true)
 	var song := SongLibrary.story()[1]
-	var app := UIHarness.make_app(tree, "play", {"song_id": song.id, "difficulty": "easy", "bell_set": "light"})
+	var app := UIHarness.make_app(tree, "play", {"song_id": song.id, "difficulty": "easy"})
 	await UIHarness.frames(tree, 3)
 	var play := app.current()
 	var c: Conductor = play.get("conductor")

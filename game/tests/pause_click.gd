@@ -16,7 +16,7 @@ func _init() -> void:
 	profile.set_setting("art_style", a[0] if a.size() > 0 else "pixel")
 	var app: Control = load("res://scenes/main.tscn").instantiate()
 	app.set("start_screen", "play")
-	app.set("start_args", {"song_id": "fires", "difficulty": "easy", "bell_set": "light"})
+	app.set("start_args", {"song_id": "fires", "difficulty": "easy"})
 	root.add_child(app)
 	for i in 90:
 		await process_frame

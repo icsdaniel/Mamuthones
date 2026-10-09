@@ -23,7 +23,7 @@ func _init() -> void:
 			profile.set_setting("art_style", x.substr(6))
 	var app: Control = load("res://scenes/main.tscn").instantiate()
 	app.set("start_screen", "play")
-	app.set("start_args", {"song_id": song_id, "difficulty": diff, "bell_set": "light", "remix": false,
+	app.set("start_args", {"song_id": song_id, "difficulty": diff, "remix": false,
 		"autoplay": true, "human": false})
 	_t0 = Time.get_ticks_usec()
 	_last = _t0

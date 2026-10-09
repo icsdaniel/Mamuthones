@@ -129,7 +129,7 @@ func test_real_songs() -> void:
 		if song.has_remix():
 			check(SongLibrary.get_song(song.remix_id()) == song, "%s remix id resolves" % song.id)
 		for diff in song.difficulties():
-			var s := Session.new(song, diff, "full")
+			var s := Session.new(song, diff)
 			check(s.stats.total > 0, "%s/%s has notes" % [song.id, diff])
 			_play_all(s)
 			if song.kind == "story":
@@ -152,14 +152,14 @@ func test_real_songs() -> void:
 			check_eq(s.stats.let_go, 0, "%s/%s: every hold kept" % [song.id, diff])
 			if song.length > 0.0:
 				check(s.notes[-1].end_t <= song.length, "%s/%s: notes end before the song does" % [song.id, diff])
-			var sl := Session.new(song, diff, "light", {"slam": true})
+			var sl := Session.new(song, diff, {"slam": true})
 			_play_all(sl)
 			check_near(sl.accuracy(), 1.0, 1e-9, "%s/%s slam: autoplay 100 %% with the buttons" % [song.id, diff])
-			var mi := Session.new(song, diff, "village", {"mirror": true})
+			var mi := Session.new(song, diff, {"mirror": true})
 			_play_all(mi)
 			check_near(mi.accuracy(), 1.0, 1e-9, "%s/%s mirrored: autoplay 100 %%" % [song.id, diff])
 			if song.has_remix():
-				var r := Session.new(song, diff, "light", {"remix": true})
+				var r := Session.new(song, diff, {"remix": true})
 				_play_all(r)
 				check_near(r.accuracy(), 1.0, 1e-9, "%s/%s remix: autoplay 100 %%" % [song.id, diff])
 	# Stillness is worth chasing: about 7-12 % of a perfect run on a typical story song at Hard (7, not
@@ -184,13 +184,13 @@ func test_health_is_fair() -> void:
 			if not diff in SongData.DIFFICULTIES:
 				continue
 			for seed_ in [3, 11]:
-				var s := Session.new(song, diff, "full")
+				var s := Session.new(song, diff)
 				var low := [Session.MAX_HEALTH]
 				s.health_changed.connect(func(h: int, _d: int) -> void: low[0] = mini(low[0], h))
 				_play_human(s, seed_, -1.0)
 				check(not s.has_failed, "%s/%s (seed %d): a human-like run does not fail (lowest %d)" % [song.id, diff, seed_, low[0]])
 			if diff == "hard":
-				var bad := Session.new(song, diff, "full")
+				var bad := Session.new(song, diff)
 				_play_human(bad, 5, 0.25)
 				check(bad.has_failed, "%s/hard: missing a quarter of the notes runs out of health" % song.id)
 

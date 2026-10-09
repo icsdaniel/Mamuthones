@@ -34,8 +34,7 @@ louder and cleaner the bells ring.
 - **Seven stops of the procession,** from the workshop the night before to the last day of Carnival,
   each with an original song in the spirit of Sardinian music: tenore-style voices, reed melodies over a
   drone, frame drums. Get a B or better on a stop at Hard or Expert to unlock its modern remix.
-- **Carve your own mask.** Every grade you earn gives carving points, up to S+. Choose your bell set: heavier bells
-  score more but demand tighter timing.
+- **Carve your own mask.** Every grade you earn gives carving points, up to S+.
 - **Four difficulties** for every song, a gentle tutorial, and a tilt calibration that takes seconds.
   Prefer not to tilt? Slam mode rings the bells with two buttons.
 
@@ -116,7 +115,7 @@ Use these, in this order:
 | # | File (per size folder) | Caption (EN) | Didascalia (IT) |
 | --- | --- | --- | --- |
 | 1 | `play_fires.png` | Ring the bells. Keep the row. | Suona i campanacci. Tieni il passo. |
-| 2 | `results.png` | Your score is your row: accuracy, unison, weight. | Il punteggio è la tua fila: precisione, unisono, peso. |
+| 2 | `results.png` | Your score is your row: accuracy and unison. | Il punteggio è la tua fila: precisione e unisono. |
 | 3 | `story.png` | Seven stops, from the fires to Shrove Tuesday. | Sette tappe, dai fuochi al Martedì grasso. |
 | 4 | `workshop.png` | Carve your own mask. Choose your bells. | Intaglia la tua maschera. Scegli i campanacci. |
 | 5 | `stop_card.png` | Every stop is a real moment of the procession. | Ogni tappa è un vero momento della processione. |

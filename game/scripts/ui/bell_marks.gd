@@ -43,7 +43,7 @@ func animate(delay := 0.3, ring := true) -> void:
 		tw.tween_interval(delay + i * 0.35)
 		tw.tween_callback(func() -> void:
 			if ring:
-				Sound.bell(Profile.get_look().get("bell_set", "light"), i % 2 == 0, "perfect")
+				Sound.bell(BellSets.STANDARD, i % 2 == 0, "perfect")
 			popped.emit(i))
 		tw.tween_method(func(v: float) -> void:
 			_pop[i] = v

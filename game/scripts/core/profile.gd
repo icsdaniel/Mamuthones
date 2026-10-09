@@ -10,7 +10,7 @@ extends Node
 ##   signal changed
 ##   get_setting(key) / set_setting(key, value)      keys in DEFAULT_SETTINGS
 ##   has_flag(name) / set_flag(name, on := true)     first-run flags, see FLAGS
-##   get_look() -> {mask: Dictionary, fleece, straps, bell_set} / set_look(part, value)
+##   get_look() -> {mask: Dictionary, fleece, straps} / set_look(part, value)
 ##   calibration() -> Dictionary ({} = not calibrated) / set_calibration(d)
 ##   audio_offset() -> float seconds (the "audio_offset" setting)
 ##   best(song_key, difficulty) -> {} or {score, accuracy, grade, full_combo, ghost, slam, plays}
@@ -128,9 +128,6 @@ func set_look(part: String, value: Variant) -> void:
 		"straps":
 			if not str(value) in STRAPS:
 				return
-		"bell_set":
-			if not BellSets.is_valid(str(value)):
-				return
 		_:
 			return
 	_look[part] = value
@@ -186,12 +183,12 @@ func record_result(session: Session) -> Dictionary:
 			e.score = session.score
 			e.ghost = Ghost.from_session(session).to_dict()
 			e.slam = session.slam
-			e.bell_set = session.bell_set
 			e.date = Time.get_date_string_from_system(true)
 		e.accuracy = maxf(float(prev.get("accuracy", 0.0)), session.accuracy())
 		e.grade = maxi(out.prev_grade, session.grade_rank())
 		e.full_combo = bool(prev.get("full_combo", false)) or session.full_combo()
 		e.erase("bells")
+		e.erase("bell_set")   # bell sets were removed (2026-10-09)
 		e.max_unison = maxi(int(prev.get("max_unison", 0)), int(session.stats.max_unison))
 		_bests[key] = e
 		if session.ladder_ok():
@@ -225,7 +222,7 @@ static func board_id(song_key: String, difficulty: String) -> String:
 func reset() -> void:
 	_settings = DEFAULT_SETTINGS.duplicate()
 	_flags = {}
-	_look = {"mask": _default_mask(), "fleece": FLEECES[0], "straps": STRAPS[0], "bell_set": "light"}
+	_look = {"mask": _default_mask(), "fleece": FLEECES[0], "straps": STRAPS[0]}
 	_calibration = {}
 	_bests = {}
 	_plays = 0
@@ -376,7 +373,7 @@ func _read(cfg: ConfigFile, version: int) -> void:
 				_flags[str(k)] = f[k]
 	var l = cfg.get_value("look", "values", {})
 	if l is Dictionary:
-		for part in ["mask", "fleece", "straps", "bell_set"]:
+		for part in ["mask", "fleece", "straps"]:
 			if l.has(part):
 				set_look(part, l[part])
 	var c = cfg.get_value("calibration", "values", {})

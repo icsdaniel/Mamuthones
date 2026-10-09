@@ -5,8 +5,8 @@ extends TestCase
 
 
 ## A whole run played by Autoplay, off screen.
-static func _auto(song_id: String, diff: String, bell_set := "light") -> Session:
-	var s := Session.new(SongLibrary.get_song(song_id), diff, bell_set, {})
+static func _auto(song_id: String, diff: String) -> Session:
+	var s := Session.new(SongLibrary.get_song(song_id), diff, {})
 	var a := Autoplay.new(s)
 	var t := -1.0
 	while not s.is_over(t) and t < 600.0:
@@ -25,7 +25,7 @@ func test_early_late_only_off_perfect() -> void:
 	check_eq(script.JUDGE_WORDS["late"], "judge_ok", "the Ok band's word is Ok, not Late")
 	# In play: a slightly early Perfect shows no hint and leaves no tick.
 	UIHarness.fresh_profile()
-	var app := UIHarness.make_app(tree, "play", {"song_id": "carnival", "difficulty": "easy", "bell_set": "light"})
+	var app := UIHarness.make_app(tree, "play", {"song_id": "carnival", "difficulty": "easy"})
 	await UIHarness.frames(tree, 3)
 	var play := app.current()
 	var s: Session = play.get("session")
@@ -50,7 +50,7 @@ func test_ghost_line_in_points_after_the_first_note() -> void:
 	check_eq(Hud.ghost_text(0), tr("hud_ghost_even"), "level reads as level")
 	UIHarness.fresh_profile()
 	var best := _auto("carnival", "easy")
-	var app := UIHarness.make_app(tree, "play", {"song_id": "carnival", "difficulty": "easy", "bell_set": "light"})
+	var app := UIHarness.make_app(tree, "play", {"song_id": "carnival", "difficulty": "easy"})
 	await UIHarness.frames(tree, 3)
 	var play := app.current()
 	var hud: Hud = play.get("hud")
@@ -74,9 +74,9 @@ func test_ghost_line_in_points_after_the_first_note() -> void:
 
 func test_results_breakdown_and_timing_above_the_fold() -> void:
 	UIHarness.fresh_profile()
-	var s := _auto("fires", "hard", "village")
+	var s := _auto("fires", "hard")
 	var args := {"session": s, "record": {"prev_best": int(s.score * 0.9), "new_best": true, "grade": s.grade_rank(), "carving_gained": 2,
-		"unlocked": [{"kind": "song", "id": "bonfires"}]}, "play_args": {"song_id": "fires", "difficulty": "hard", "bell_set": "village"}}
+		"unlocked": [{"kind": "song", "id": "bonfires"}]}, "play_args": {"song_id": "fires", "difficulty": "hard"}}
 	for loc in ["en", "it"]:
 		Profile.set_setting("language", loc)
 		for sz in [Vector2i(720, 1280), Vector2i(720, 1440), Vector2i(720, 1600), Vector2i(1290, 2796), Vector2i(1536, 2048)]:
@@ -102,25 +102,15 @@ func test_results_breakdown_and_timing_above_the_fold() -> void:
 func test_tips_are_correct_and_concrete() -> void:
 	UIHarness.fresh_profile()
 	var results: GDScript = load(App.SCREENS["results"])
-	# A clean Expert run on Village with Full load still locked: no "try Expert", no "try Village".
-	var s := _auto("fires", "expert", "village")
+	# A clean Expert run: no "try Expert", and no bell set talk (there are none).
+	var s := _auto("fires", "expert")
 	var tip: String = results.tip_text(s)
 	check(not tip.contains(tr("diff_expert")), "no \"Try Expert\" for an Expert run (%s)" % tip)
-	check(not tip.contains(BellSets.name("village", "en")), "no \"Village\" for a Village run (%s)" % tip)
-	check_eq(results.next_bell_set("village"), "", "Full load is locked at the start, so nothing heavier is suggested")
-	check_eq(results.next_bell_set("light"), "", "Village is locked at the start too")
+	check(not tip.contains("Village") and not tip.contains("Full load"), "no bell sets in the tip (%s)" % tip)
 	# A clean Hard run points at the next difficulty.
-	var h := _auto("fires", "hard", "light")
+	var h := _auto("fires", "hard")
 	var ht: String = results.tip_text(h)
 	check(ht.contains(tr("diff_expert")), "a clean Hard run suggests Expert (%s)" % ht)
-	# Once Village opens, a clean Expert Light run suggests exactly Village.
-	for stop_song in ["workshop", "fires", "bonfires"]:
-		Profile.record_result(_auto(stop_song, "easy"))
-	if Progression.bell_set_unlocked("village"):
-		var e := _auto("fires", "expert", "light")
-		var et: String = results.tip_text(e)
-		check(et.contains(BellSets.name("village", "en")) and not et.contains(BellSets.name("full", "en")),
-			"suggests the next unlocked set only (%s)" % et)
 	UIHarness.restore_profile()
 
 

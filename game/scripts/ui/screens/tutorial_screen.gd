@@ -107,7 +107,7 @@ func _start(demo: bool) -> void:
 	_play = script.new()
 	_play.app = app
 	_play.args = {
-		"song_id": song.id, "difficulty": chart, "bell_set": str(Profile.get_look().get("bell_set", "light")),
+		"song_id": song.id, "difficulty": chart,
 		"from_beat": from, "to_beat": to, "embedded": true,
 		"autoplay": demo or bool(args.get("autoplay", false)),
 	}
@@ -264,7 +264,6 @@ func _finale() -> void:
 	meter.fill = 0.5
 	box.add_child(meter)
 	box.add_child(UIKit.label(tr("tut_unison"), ""))
-	box.add_child(UIKit.label(tr("tut_weight"), ""))
 	box.add_child(UIKit.label(tr("tut_ready"), UIKit.SUB))
 	var go := UIKit.button(tr("tut_play_song"), _play_song, UIKit.PRIMARY)
 	go.name = "PlaySong"
@@ -288,8 +287,7 @@ signal finished_all
 
 func _play_song() -> void:
 	app.reset("title")
-	app.open("play", {"song_id": song.id, "difficulty": "easy",
-		"bell_set": str(Profile.get_look().get("bell_set", "light"))})
+	app.open("play", {"song_id": song.id, "difficulty": "easy"})
 
 
 func _leave() -> void:

@@ -4,7 +4,7 @@ extends Screen
 ## the Session; every hit is answered in the same frame with its sound, a button flash, a burst, a
 ## judgement word, a jolt of the row and a short vibration.
 ##
-## args: song_id, difficulty, bell_set, remix, mirror,
+## args: song_id, difficulty, remix, mirror,
 ##       autoplay (bool), human (autoplay with small errors), from_beat/to_beat (a lesson),
 ##       embedded (emit `finished` instead of opening the results), lead_in (seconds before the first
 ##       note when starting mid-song, with no count), quick (restart / retry: start a bar before the
@@ -58,7 +58,6 @@ var pixel := false                ## the play screen is in the pixel look
 var paused := false
 var done := false
 
-var _bell_set := "light"
 var _first_t := 0.0
 var _spb := 0.5
 var _stomp_sounded := false       ## a stomp sounded on this touch: no plain step knock
@@ -92,7 +91,6 @@ func build() -> void:
 		push_error("play: unknown song %s" % args.get("song_id", ""))
 		return
 	var difficulty := str(args.get("difficulty", "easy"))
-	_bell_set = str(args.get("bell_set", "light"))
 	var auto := bool(args.get("autoplay", false))
 	var options := {
 		"slam": bool(Profile.get_setting("slam")) and not auto,
@@ -103,7 +101,7 @@ func build() -> void:
 		options.from_beat = float(args.from_beat)
 		options.to_beat = float(args.to_beat)
 	options.health = bool(args.get("health", not auto))
-	session = Session.new(song, difficulty, _bell_set, options)
+	session = Session.new(song, difficulty, options)
 	_spb = 60.0 / song.bpm
 	_first_t = session.notes[0].t if not session.notes.is_empty() else song.time_of(0.0, session.remix)
 	var best: Dictionary = Profile.best(session.song_key(), difficulty)
@@ -151,7 +149,7 @@ func build() -> void:
 	backdrop.name = "Backdrop"
 	backdrop.pixel = pixel
 	backdrop.own_cells = world == null
-	backdrop.bell_set = str(args.get("bell_set", "village"))
+	backdrop.bell_set = BellSets.STANDARD
 	var bg: Control = backdrop
 	bg.set_anchors_preset(Control.PRESET_FULL_RECT)
 	bg.mouse_filter = Control.MOUSE_FILTER_IGNORE
@@ -561,7 +559,7 @@ func _on_rang(result: Dictionary) -> void:
 	var strength := float(result.get("strength", 0.5))
 	# Strength is how hard the flick was; harder flicks ring heavier.
 	var up := bool(result.get("up", true))
-	Sound.bell(_bell_set, up, q, strength)
+	Sound.bell(BellSets.STANDARD, up, q, strength)
 	scene.jolt("bell")
 	if q == "perfect" or q == "good":
 		# On time: the bell strikes. The accent grows along a chain of on-time bells.

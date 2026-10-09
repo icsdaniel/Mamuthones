@@ -31,7 +31,7 @@ func _init() -> void:
 	profile.reset()
 	for f in profile.FLAGS:
 		profile.set_flag(f, true)
-	var start := {"song_id": song_id, "difficulty": diff, "bell_set": "light", "remix": false,
+	var start := {"song_id": song_id, "difficulty": diff, "remix": false,
 		"autoplay": true, "human": false, "from_beat": 120.0, "to_beat": 184.0}
 	for x in a:
 		if x.begins_with("from="):

@@ -45,13 +45,14 @@ and `docs/rubric.md` says how every part is judged.
 
 ## 3. Timing and scoring
 
-Timing windows (normal bell set):
+Timing windows (one standard for everyone; Daniele removed the bell sets on 2026-10-09 and kept the
+old Village set's timing):
 
 | Judgement | Window | Points |
 | --- | --- | --- |
-| Perfect | ±45 ms | 300 |
-| Good | ±90 ms | 150 |
-| Early / Late | ±140 ms | 50 |
+| Perfect | ±40.5 ms | 300 |
+| Good | ±81 ms | 150 |
+| Early / Late | ±126 ms | 50 |
 | Miss | beyond | 0 |
 
 A stomp is timed from its first thumb; the second must land within 80 ms of it. Both thumbs score like
@@ -63,24 +64,19 @@ than touch.
 that are Good or better. A miss drops it **two** levels and a wrong step one (never to zero), so the
 row can recover. It is shown as more of the Mamuthones beside the lanes jumping with you, and louder.
 
-**Weight** is the bell set's multiplier. Heavier sets score more and have stricter windows:
-
-| Bell set | Weight | Windows |
-| --- | --- | --- |
-| Light (first set) | ×1.0 | as above |
-| Village | ×1.2 | ×0.9 |
-| Full load | ×1.5 | ×0.8 |
+There are no bell sets to choose and no weight multiplier: they made scoring overly complex (Daniele,
+2026-10-09). Everyone rings the same Village bells.
 
 Other rules:
 - Hold kept to its end (released no earlier than 120 ms before): +150 × multiplier.
 - Full ring: judged as one note on the later of its two inputs, both must land within the Early/Late
   window, and a Perfect full ring gives 450.
 - Ringing during a stand-still: −100 for every ring (rings closer than 150 ms count once) and the unison
-  drops one level. Keeping still through a stand-still is worth chasing: 800 × unison × weight for every beat
+  drops one level. Keeping still through a stand-still is worth chasing: 800 × unison for every beat
   it lasts, it counts as 2 hits per beat (up to 8) toward the next unison level, and the row visibly
   settles when it is kept. Stand-stills last at least 2 beats, sit on real halts in the music, and are
   often tempted by a call or a bell cue just before or inside them.
-- Score = sum over notes of points × unison × weight, minus stand-still penalties, never below 0.
+- Score = sum over notes of points × unison, minus stand-still penalties, never below 0.
 - Smaller rules chosen while building: a Good full ring gives 225 and an Early/Late one 75. Early/Late
   keeps the unison level but restarts the run of 12. Letting go of a hold early breaks the streak and
   lowers unison one level. A tap only counts as a wrong step when
@@ -127,7 +123,7 @@ sixteenth at Expert; in triplet sections an eighth is a triplet eighth), bells a
 ## 5. Modes
 
 ### Story: the procession
-Seven stops that follow the real calendar, one song each. Every stop is playable from the start; finishing one with a D or better moves the story on (bell sets and carving follow it).
+Seven stops that follow the real calendar, one song each. Every stop is playable from the start; finishing one with a D or better moves the story on (mask carving follows it).
 
 | # | Stop | Song mood |
 | --- | --- | --- |
@@ -145,8 +141,8 @@ drums and bass) as a separate playable track.
 
 ### Free play
 Every song is open from the start, at every difficulty (Daniele, 2026-10-09). The difficulties
-are browser-style tabs along the top; each song in the list shows its best score and grade at that difficulty. Any unlocked bell set;
-the remix once earned; your ghost when you have one.
+are browser-style tabs along the top; each song in the list shows its best score and grade at that difficulty.
+The remix once earned; your ghost when you have one.
 
 ## 6. Progression: your Mamuthone
 
@@ -155,8 +151,6 @@ The player builds their own Mamuthone. Nothing is bought; everything is earned b
 - **Mask** (carved in the workshop between songs): brow, eyes, nose, cheeks and mouth shapes from real
   Mamoiada forms, plus wood finish and patina. Best grades give carving points (1 for a D or C, 2 for a B or A, 3 for an S or S+); finer details unlock
   as the story advances.
-- **Bells**: Light, Village, Full load. Each has its own sound and weight (section 3). Village unlocks
-  at stop 3, Full load at stop 6.
 - **Sheepskin and straps**: fleece shade (black, dark brown), strap leather and how the bells are tied.
   Cosmetic.
 - **Ghost**: your best run on each song and difficulty is recorded on the phone. During play your ghost
@@ -167,7 +161,7 @@ The player builds their own Mamuthone. Nothing is bought; everything is earned b
 - Original music, written for the game in the spirit of Sardinian traditional music: canto a tenore
   style voices (bassu, contra, boghe, mesu boghe), launeddas style reed melodies over a drone, frame and
   bass drums. Nothing copied from real recordings or known tunes.
-- Bells are the constant: every tilt rings the player's bell set. Real field recordings of Mamoiada bells,
+- Bells are the constant: every tilt rings the player's bells. Real field recordings of Mamoiada bells,
   made or licensed with the community's consent, replace the synthesized ones before launch.
 - Songs last 1.5 to 2.5 minutes, with a count-in and an audible cue before every bell (the drum or a call).
 - Mix targets: peaks below −1 dBFS, integrated loudness about −14 LUFS for music, bells clearly on top.

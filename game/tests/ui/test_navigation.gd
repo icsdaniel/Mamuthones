@@ -156,7 +156,7 @@ func test_menus_forward_and_back() -> void:
 func test_pause_resume_counts_back_in_from_a_bar_line() -> void:
 	UIHarness.fresh_profile()
 	var song := SongLibrary.story()[0]
-	var app := UIHarness.make_app(tree, "play", {"song_id": song.id, "difficulty": "easy", "bell_set": "light"})
+	var app := UIHarness.make_app(tree, "play", {"song_id": song.id, "difficulty": "easy"})
 	await UIHarness.frames(tree, 3)
 	var play := app.current()
 	var c: Conductor = play.get("conductor")
@@ -194,7 +194,7 @@ func test_short_intros_and_outros() -> void:
 		ids.append(sd.id)
 	for id in ids:
 		var diff := "hard"
-		var app := UIHarness.make_app(tree, "play", {"song_id": id, "difficulty": diff, "bell_set": "light"})
+		var app := UIHarness.make_app(tree, "play", {"song_id": id, "difficulty": diff})
 		await UIHarness.frames(tree, 3)
 		var play := app.current()
 		var s: Session = play.get("session")

@@ -10,7 +10,7 @@ func _cases() -> Array:
 	var story := SongLibrary.story()
 	var tut := story[0].id if not story.is_empty() else ""
 	var song := story[1].id if story.size() > 1 else tut
-	var s := Session.new(SongLibrary.get_song(song), "easy", "light")
+	var s := Session.new(SongLibrary.get_song(song), "easy")
 	var auto := Autoplay.new(s, true)
 	auto.update(s.end_time())
 	return [
@@ -18,9 +18,9 @@ func _cases() -> Array:
 		["title", {}], ["story", {}], ["stop_card", {"song_id": song}], ["stop_card", {"song_id": tut}],
 		["free_play", {}], ["boards", {}],
 		["settings", {}], ["credits", {}],
-		["workshop", {"tab": "mask"}], ["workshop", {"tab": "bells"}], ["workshop", {"tab": "dress"}],
+		["workshop", {"tab": "mask"}], ["workshop", {"tab": "dress"}],
 		["tutorial", {"song_id": tut}],
-		["play", {"song_id": song, "difficulty": "easy", "bell_set": "light", "autoplay": true}],
+		["play", {"song_id": song, "difficulty": "easy", "autoplay": true}],
 		["results", {"session": s, "record": {"prev_best": 1000, "new_best": true, "unlocked": [{"kind": "song", "id": song}], "carving_gained": 1},
 			"play_args": {"song_id": song, "difficulty": "easy"}}],
 	]

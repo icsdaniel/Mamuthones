@@ -411,7 +411,7 @@ func test_router_motion_and_slam() -> void:
 	check(st > 0.5 and st <= 1.0, "a 400 °/s flick over a 150 °/s threshold rings strong (%.2f)" % st)
 	check_near(st, r.detector.last_strength, 1e-6, "the rang payload carries the detector's strength")
 	# Slam session: tilts ignored, Left + Right ring.
-	var sl := Session.new(_song([{"b": 0, "k": "bell"}]), "easy", "light", {"slam": true})
+	var sl := Session.new(_song([{"b": 0, "k": "bell"}]), "easy", {"slam": true})
 	var r2 := _router(sl)
 	var rang2 := []
 	r2.rang.connect(func(x): rang2.append(x))
@@ -472,7 +472,7 @@ func test_router_drag_and_focus_loss() -> void:
 # steps and full rings with one thumb, stomps with both thumbs on their button, bells with both outer buttons, or with the free outer button
 # while the other thumb keeps a hold. Returns [session, most buttons down at once].
 func _slam_bot(song: SongData, diff: String) -> Array:
-	var s := Session.new(song, diff, "light", {"slam": true})
+	var s := Session.new(song, diff, {"slam": true})
 	var r := _router(s)
 	var events := []   # [t, order (0 = release first), kind, lane, id]
 	var id := 0

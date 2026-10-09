@@ -76,7 +76,7 @@ design rule caps the aspect at 5.
 
 ## 8. Progression and replay
 - 6: Seven story stops in order, all playable from the start; free play; bests saved per song and difficulty.
-- 7: Mask carving, bell sets, sheepskin and straps work and show in the procession; remixes unlock.
+- 7: Mask carving, sheepskin and straps work and show in the procession; remixes unlock.
 - 8: Ghost runs work; each stop gives a new
   reason to replay (grades to raise, remix, carving points).
 - 9: A player can see at a glance what to do next and what they are close to unlocking.
@@ -84,9 +84,9 @@ design rule caps the aspect at 5.
 
 ## 9. Scoring clarity and uniqueness
 - 6: Score follows the formula in the design, tested.
-- 7: Unison and weight are shown and explained in the tutorial or results.
-- 8: The results screen breaks the score into accuracy, unison and weight, and shows early/late tendency.
-- 9: The scoring makes the game's own ideas (unison, stillness, weight) the way to a high score.
+- 7: Unison is shown and explained in the tutorial or results.
+- 8: The results screen breaks the score into accuracy and unison, and shows early/late tendency.
+- 9: The scoring makes the game's own ideas (unison, stillness) the way to a high score.
 - 10: Players talk about their unison, not their combo.
 
 ## 10. Respect and authenticity
