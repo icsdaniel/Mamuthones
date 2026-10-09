@@ -38,6 +38,8 @@ var _last_motion_t := -INF
 var detector: BellDetector
 ## Set to a MotionLog to record readings, touches and rings (for checking detection on real phones).
 var motion_log: MotionLog
+## Set to a RunLog to record every touch (inside the button zone or not) and what it did.
+var run_log: RunLog
 
 ## Session.tap's result for the latest press, read by stepped's handlers ({} before any).
 var last_tap: Dictionary = {}
@@ -91,6 +93,8 @@ func _input(event: InputEvent) -> void:
 		return
 	if event is InputEventScreenTouch:
 		var e := event as InputEventScreenTouch
+		if run_log != null:
+			_log_touch(e)
 		if e.pressed:
 			if not buttons_rect.has_point(e.position):
 				return
@@ -107,7 +111,11 @@ func _input(event: InputEvent) -> void:
 			_touches.erase(e.index)
 			get_viewport().set_input_as_handled()
 	elif event is InputEventScreenDrag:
-		if _touches.has((event as InputEventScreenDrag).index):
+		var dr := event as InputEventScreenDrag
+		if _touches.has(dr.index):
+			if run_log != null:
+				run_log.event(now(), "drag", {"id": dr.index, "x": roundi(dr.position.x), "y": roundi(dr.position.y),
+					"lane_now": lane_at(dr.position.x), "lane": _touches[dr.index].lane})
 			get_viewport().set_input_as_handled()
 	elif event is InputEventKey:
 		var k := event as InputEventKey
@@ -115,6 +123,9 @@ func _input(event: InputEvent) -> void:
 			return
 		var code := k.physical_keycode
 		var t := now()
+		if run_log != null:
+			_event_real = run_log.now()
+			run_log.event(t, "key", {"code": OS.get_keycode_string(code), "down": k.pressed})
 		if KEY_LANES.has(code):
 			var slot: int = KEY_LANES[code]
 			if k.pressed:
@@ -185,7 +196,13 @@ func feed_motion(t: float, acc: Vector3, gyro_dps: Vector3) -> void:
 	if detector.feed(t, acc, gyro_dps):
 		if motion_log != null:
 			motion_log.add_ring(detector.last_t)
-		rang.emit(session.ring(detector.last_t, true, detector.last_strength))
+		var rr := session.ring(detector.last_t, true, detector.last_strength)
+		if run_log != null:
+			var bn: Note = rr.get("note")
+			run_log.event(detector.last_t, "ring", {"tilt": true, "up": rr.get("up"), "q": rr.get("quality"),
+				"j": rr.get("judgement"), "note": bn.index if bn != null else -1, "strength": snappedf(detector.last_strength, 0.01),
+				"threshold": snappedf(detector.threshold, 0.1), "fed_at": snappedf(t, 0.0001)})
+		rang.emit(rr)
 
 
 func _press(lane: int, t: float, id: int) -> void:
@@ -196,13 +213,34 @@ func _press(lane: int, t: float, id: int) -> void:
 	_pressed[lane] += 1
 	var r: Dictionary = session.tap(lane, t, id) if session != null else {}
 	last_tap = r
+	if run_log != null:
+		var n: Note = r.get("note")
+		run_log.event(t, "press", {"id": id, "lane": lane, "j": r.get("judgement", ""),
+			"note": n.index if n != null else -1, "off": snappedf(float(r.get("offset", 0.0)), 0.0001),
+			"stomp": r.get("stomp", ""), "handled_ms": snappedf((run_log.now() - _event_real) * 1000.0, 0.01)})
 	stepped.emit(lane)
 	if not r.get("ring", {}).is_empty():
+		if run_log != null:
+			run_log.event(t, "ring", {"tilt": false, "q": r.ring.get("quality"), "j": r.ring.get("judgement")})
 		rang.emit(r.ring)
+
+
+var _event_real := 0.0
+
+
+# Every touch, before anything else: where it landed, whether it was in the button zone, and the
+# song time it was stamped with.
+func _log_touch(e: InputEventScreenTouch) -> void:
+	_event_real = run_log.now()
+	run_log.event(now(), "down" if e.pressed else "up", {"id": e.index, "x": roundi(e.position.x),
+		"y": roundi(e.position.y), "in_zone": buttons_rect.has_point(e.position), "lane": lane_at(e.position.x),
+		"canceled": e.canceled, "tracked": _touches.has(e.index)})
 
 
 func _lift(lane: int, t: float, id: int) -> void:
 	_pressed[lane] = maxi(0, _pressed[lane] - 1)
 	if session != null:
 		session.release(t, id)
+	if run_log != null:
+		run_log.event(t, "release", {"id": id, "lane": lane})
 	lifted.emit(lane)

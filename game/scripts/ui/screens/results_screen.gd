@@ -271,6 +271,21 @@ func _tendency(box: Container) -> void:
 			fix.text = tr("res_fixed")
 			fix.disabled = true)
 		c.add_child(fix)
+	var saved := str(args.get("run_saved", ""))
+	if saved != "":
+		if saved.begins_with("user://"):
+			# Downloads could not be written: the run can still leave the phone through the clipboard.
+			var copy := UIKit.button(tr("res_run_copy"), func() -> void: pass, UIKit.QUIET)
+			copy.name = "CopyRun"
+			copy.pressed.connect(func() -> void:
+				DisplayServer.clipboard_set(run_clipboard_text(saved))
+				copy.text = tr("res_run_copied")
+				copy.disabled = true)
+			c.add_child(copy)
+		else:
+			var sl := UIKit.label(tr("res_run_saved") % saved.get_file(), UIKit.CAPTION)
+			sl.name = "RunSaved"
+			c.add_child(sl)
 	var fr: Dictionary = args.get("frames", {})
 	if not fr.is_empty() and not record.is_empty():
 		var fl := UIKit.label(tr("res_frames") % [roundi(float(fr.fps)), int(fr.slow), roundi(float(fr.worst) * 1000.0)], UIKit.CAPTION)
@@ -288,6 +303,12 @@ static func timing_fix(s: Session) -> float:
 	if absf(med) < TIMING_FIX_MIN:
 		return 0.0
 	return snappedf(med, 0.005)
+
+
+## The saved run file packed for the clipboard: "MAMUTHONES-RUN-GZ:" then the gzipped JSON in base64.
+static func run_clipboard_text(path: String) -> String:
+	var bytes := FileAccess.get_file_as_bytes(path)
+	return "MAMUTHONES-RUN-GZ:" + Marshalls.raw_to_base64(bytes.compress(FileAccess.COMPRESSION_GZIP))
 
 
 const TIMING_FIX_HITS := 20

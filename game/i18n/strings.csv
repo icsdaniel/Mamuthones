@@ -132,6 +132,14 @@ set_timing,Timing,Tempo
 set_calibrate,Redo the tilt calibration,Rifai la taratura del colpo
 set_latency,Sound delay test,Test del ritardo audio
 set_offset,Delay adjustment,Correzione del ritardo
+set_visual_test,Screen delay test,Test del ritardo dello schermo
+vis_title,Screen delay,Ritardo dello schermo
+vis_intro,"Notes slide onto the ring in silence. Tap the pad the moment each one touches the ring. This measures your eyes and the screen, not the sound.","Le note scendono sull'anello in silenzio. Tocca il riquadro nell'istante in cui ognuna tocca l'anello. Così misuriamo occhi e schermo, non il suono."
+vis_watch,Watch…,Guarda…
+vis_tap_now,Now tap as each note touches the ring,Ora tocca quando ogni nota tocca l'anello
+vis_done,Notes drawn %d ms early. Saved.,Note disegnate %d ms in anticipo. Salvato.
+vis_done_body,The notes now reach the ring when you see them there.,Ora le note arrivano sull'anello quando le vedi lì.
+vis_uneven_body,"Try again and tap as the note touches the ring, not after it.","Riprova e tocca quando la nota tocca l'anello, non dopo."
 set_visual,Notes drawn early,Note disegnate in anticipo
 set_visual_note,"Makes up for the screen's own delay. Raise it if you hit late when you play by eye, lower it if you hit early.","Compensa il ritardo dello schermo. Alzalo se colpisci in ritardo giocando a vista, abbassalo se colpisci in anticipo."
 set_play,Play,Gioco
@@ -248,6 +256,9 @@ res_timing_few,Too few hits to tell.,Troppo pochi colpi per dirlo.
 res_fix_late,Fix it: show the notes %d ms earlier,Correggi: mostra le note %d ms prima
 res_fix_early,Fix it: show the notes %d ms later,Correggi: mostra le note %d ms dopo
 res_fixed,Done. Your next song uses it.,Fatto. La prossima canzone lo usa.
+res_run_saved,"This run is saved for checking: Downloads/%s (only the last run is kept).","Questa partita è salvata per il controllo: Download/%s (si tiene solo l'ultima)."
+res_run_copy,Copy this run for checking,Copia questa partita per il controllo
+res_run_copied,Copied. Paste it in your message.,Copiata. Incollala nel tuo messaggio.
 res_frames,"Smoothness: %d frames a second, %d slow ones (slowest %d ms).","Fluidità: %d fotogrammi al secondo, %d lenti (il più lento %d ms)."
 res_meter_early,early,presto
 res_meter_late,late,tardi

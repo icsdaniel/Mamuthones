@@ -11,6 +11,7 @@ const SCREENS := {
 	"headphones": "res://scripts/ui/screens/headphones_screen.gd",
 	"calibration": "res://scripts/ui/screens/calibration_screen.gd",
 	"latency": "res://scripts/ui/screens/latency_screen.gd",
+	"screen_delay": "res://scripts/ui/screens/screen_delay_screen.gd",
 	"title": "res://scripts/ui/screens/title_screen.gd",
 	"story": "res://scripts/ui/screens/story_screen.gd",
 	"stop_card": "res://scripts/ui/screens/stop_card_screen.gd",

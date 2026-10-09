@@ -43,6 +43,9 @@ var _vis_t := NAN                 ## the song time the screen shows (_visual_tim
 ## out, and a touch reaches the game some ms after the thumb lands, so without it a player who reads
 ## the notes lands every hit late by that much. 0 in autoplay and recordings.
 var _lead := 0.0
+## The last live run, recorded in full and saved over the previous one when the screen ends
+## (RunLog: sent by testers when a run felt wrong). null in autoplay.
+var run_log: RunLog
 ## Frame times while notes are coming (live play), for the results' smoothness line:
 ## [frames, seconds, frames slower than SLOW_FRAME, the slowest frame's seconds].
 var _frames := [0, 0.0, 0, 0.0]
@@ -255,8 +258,20 @@ func build() -> void:
 	else:
 		lanes.router = router
 		_lead = 0.0 if Engine.get_write_movie_path() != "" else Profile.visual_offset()
+		run_log = RunLog.new(session, {"visual_lead": _lead, "play_args": _plain_args()})
+		router.run_log = run_log
+		router.motion_log = run_log.motion
 
 	session.judged.connect(_on_judged)
+	if run_log != null:
+		var rl := run_log
+		session.judged.connect(func(n: Note, j: String, off: float) -> void: rl.judged(_song_t, n, j, off))
+		session.stray.connect(func(lane: int) -> void: rl.event(_song_t, "stray", {"lane": lane}))
+		session.wrong_step.connect(func(lane: int, n: Note, off: float) -> void:
+			rl.event(_song_t, "wrong", {"lane": lane, "note": n.index, "off": snappedf(off, 0.0001)}))
+		session.input_locked.connect(func(until: float) -> void: rl.event(_song_t, "locked", {"until": snappedf(until, 0.0001)}))
+		session.health_changed.connect(func(h: int, d: int) -> void: rl.event(_song_t, "health", {"health": h, "delta": d}))
+		session.unison_changed.connect(func(level: int) -> void: rl.event(_song_t, "unison", {"level": level}))
 	session.unison_changed.connect(_on_unison)
 	session.hold_started.connect(func(lane: int) -> void: Sound.hold_start(lane))
 	session.hold_ended.connect(func(lane: int, _kept: bool) -> void: Sound.hold_stop(lane))
@@ -426,6 +441,9 @@ func _process(delta: float) -> void:
 	_song_t = t
 	var tv := _visual_time(t, delta) + _lead
 	lanes.song_time = tv
+	if run_log != null:
+		var p := conductor.player
+		run_log.frame(t, tv, delta, p.get_playback_position() if p.playing else -1.0, AudioServer.get_time_since_last_mix(), false)
 	var beat := (tv - song.offset_for(session.remix)) / _spb
 	lanes.beat_pulse = 1.0 - fposmod(beat, 1.0) if beat >= 0.0 else 0.0
 	_set_beat(beat)
@@ -450,6 +468,25 @@ func _count_frame(t: float, delta: float) -> void:
 	if delta > SLOW_FRAME:
 		_frames[2] += 1
 	_frames[3] = maxf(_frames[3], delta)
+
+
+## Saves the run log once, when the run ends (finished) or the screen goes (left: quit, restart).
+func _save_run(how: String) -> void:
+	if run_log == null or run_log.header.has("ended"):
+		return
+	run_log.header["ended"] = how
+	run_log.header["frame_stats"] = frame_stats()
+	run_log.save()
+
+
+# The start arguments that can go in a JSON file.
+func _plain_args() -> Dictionary:
+	var out := {}
+	for k in args:
+		var v: Variant = args[k]
+		if v == null or v is bool or v is int or v is float or v is String:
+			out[k] = v
+	return out
 
 
 ## {fps, slow (frames over SLOW_FRAME), worst (s)} over the notes of this run so far ({} before any).
@@ -832,6 +869,8 @@ func pos_of(note: Note) -> Vector2:
 func _on_failed() -> void:
 	if failed or done:
 		return
+	if run_log != null:
+		run_log.event(_song_t, "failed")
 	failed = true
 	done = true
 	if _pause_panel != null:
@@ -869,6 +908,8 @@ func _open_fail_menu() -> void:
 func pause() -> void:
 	if done or failed or session == null or _pause_panel != null:
 		return
+	if run_log != null:
+		run_log.event(_song_t, "pause")
 	if _resume_at >= 0.0:
 		# Focus lost (or pause pressed) during a count-in: stop the count and ask again. The music
 		# is still waiting on its bar line, so nothing is lost.
@@ -898,6 +939,8 @@ func _open_pause_menu() -> void:
 
 
 func _on_pause_choice(what: String) -> void:
+	if run_log != null:
+		run_log.event(_song_t, "menu", {"choice": what})
 	match what:
 		"resume":
 			_pause_panel.queue_free()
@@ -983,6 +1026,7 @@ func _finish() -> void:
 		return
 	done = true
 	router.enabled = false
+	_save_run("finished")
 	if bool(args.get("embedded", false)):
 		finished.emit(session)
 		return
@@ -990,10 +1034,11 @@ func _finish() -> void:
 	if autoplay == null:
 		record = Profile.record_result(session)
 	app.replace("results", {"session": session, "record": record, "play_args": args, "ghost": ghost,
-			"frames": frame_stats()})
+			"frames": frame_stats(), "run_saved": run_log.saved_path if run_log != null else ""})
 
 
 func _exit_tree() -> void:
+	_save_run("left")
 	if conductor != null:
 		conductor.pause()
 	_end_sound()

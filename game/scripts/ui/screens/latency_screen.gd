@@ -152,7 +152,7 @@ func _on_tap() -> void:
 func _finish() -> void:
 	_clear_actions()
 	var r := test.result()
-	_meter.offsets = PackedFloat32Array(test.offsets())
+	_meter.offsets = PackedFloat32Array(Array(test.offsets()))
 	_meter.visible = true
 	if bool(r.get("ok", false)):
 		var ms := roundi(float(r.offset) * 1000.0)

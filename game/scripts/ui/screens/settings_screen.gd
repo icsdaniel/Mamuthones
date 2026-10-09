@@ -20,6 +20,9 @@ func build() -> void:
 	box.add_child(lat)
 	_slider(box, "audio_offset", tr("set_offset"), Profile.RANGES["audio_offset"].x, Profile.RANGES["audio_offset"].y, 0.005,
 		func(v: float) -> String: return tr("ms_signed") % roundi(v * 1000.0))
+	var vis := UIKit.button(tr("set_visual_test"), func() -> void: app.open("screen_delay"))
+	vis.name = "ScreenDelay"
+	box.add_child(vis)
 	_slider(box, "visual_offset", tr("set_visual"), Profile.RANGES["visual_offset"].x, Profile.RANGES["visual_offset"].y, 0.005,
 		func(v: float) -> String: return tr("ms_signed") % roundi(v * 1000.0))
 	box.add_child(UIKit.label(tr("set_visual_note"), UIKit.CAPTION))
