@@ -599,6 +599,8 @@ func _on_stepped(lane: int) -> void:
 ## The step's knock at the hit's quality (Sound: "good" a little softer, "ok" dull and short), in the
 ## same frame as the judgement; a stray tap (quality "") knocks plain.
 static func play_step(lane: int, quality: String) -> void:
+	if not bool(Profile.get_setting("step_sounds")):
+		return
 	if quality != "":
 		Sound.step(lane, quality)
 	else:

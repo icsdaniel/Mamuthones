@@ -19,7 +19,7 @@ extends RefCounted
 ##   the threshold for 50 ms (the dip between the two lobes of a slow flick is shorter than that).
 ## - Adapts during a song: if flicks get softer, the threshold follows 45 % of the recent peaks,
 ##   and repeated near-misses (clear lobes just under the threshold) lower it, never below 60 %
-##   of the calibrated value.
+##   of the calibrated value nor above it.
 
 signal rang(t: float, up: bool)
 
@@ -40,7 +40,9 @@ const TOUCH_WINDOW := 0.10    ## seconds after a touch during which accel rings 
 const PEAK_WATCH := 0.15
 const NEAR := 0.6             ## near-miss: a sustained lobe above this share of the threshold
 const ADAPT_FLOOR := 0.6
-const ADAPT_CEIL := 1.25
+## The threshold never climbs over the calibrated one: after a few hard flicks it had risen to
+## 1.2 × on Daniele's phone (2026-10-09 run log) and a normal flick that peaked under it was lost.
+const ADAPT_CEIL := 1.0
 const DEFAULTS := {"gyro": 150.0, "accel": 10.0}
 const RANGES := {"gyro": Vector2(60.0, 600.0), "accel": Vector2(4.0, 25.0)}
 
