@@ -173,39 +173,63 @@ static func header(box: Container, title: String, on_back: Callable) -> HBoxCont
 	return row
 
 
-## The two play modes as tabs along the top, like a browser's: Back, then Story and Free play side
-## by side over a gold rule. The open mode's tab is lit; the other swaps the screen in place.
-const MODES := [["story", "title_story"], ["free_play", "title_free"]]
-
-
-static func mode_tabs(screen: Screen, box: Container) -> HBoxContainer:
+## Browser-style tabs in one row: the chosen tab is lit and open at the bottom onto the page below,
+## the others sit back, darker and lower, on a gold rule. `items` are [id, label] pairs; `on_pick`
+## gets the id. Each tab is a toggle Button named "Tab_<id>".
+static func tabs(box: Container, items: Array, selected: String, on_pick: Callable) -> HBoxContainer:
 	var row := HBoxContainer.new()
-	row.name = "Modes"
-	row.add_theme_constant_override("separation", 10)
-	var back := button(tr_("ui_back"), screen.on_back, QUIET)
-	back.custom_minimum_size = Vector2(TOUCH * 1.6, TOUCH)
-	back.name = "Back"
-	row.add_child(back)
-	var here := screen.screen_name().trim_suffix("_screen")
-	for m in MODES:
-		var mode: String = m[0]
-		var b := button(tr_(m[1]), func() -> void:
-			if mode != here:
-				screen.app.replace(mode))
+	row.name = "Tabs"
+	row.add_theme_constant_override("separation", 0)
+	for it in items:
+		var id: String = it[0]
+		var b := Button.new()
+		b.text = it[1]
+		b.name = "Tab_" + id
 		b.toggle_mode = true
-		b.set_pressed_no_signal(mode == here)
-		b.name = "Tab_" + mode
+		b.focus_mode = Control.FOCUS_NONE
 		b.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-		b.custom_minimum_size.x = 0
+		b.size_flags_vertical = Control.SIZE_SHRINK_END
+		b.custom_minimum_size = Vector2(0, TOUCH)
+		b.clip_text = true
+		b.pressed.connect(func() -> void:
+			Sound.ui("tap")
+			on_pick.call(id))
+		juice(b)
 		row.add_child(b)
 	box.add_child(row)
-	var rule := ColorRect.new()
-	rule.name = "TabRule"
-	rule.color = PixelPalette.GOLD[4]
-	rule.custom_minimum_size.y = 6.0   # two art pixels
-	rule.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	box.add_child(rule)
+	select_tab(row, selected)
 	return row
+
+
+## Lights the tab `id` in a `tabs()` row.
+static func select_tab(row: HBoxContainer, id: String) -> void:
+	var kids := row.get_children()
+	for i in kids.size():
+		var b: Button = kids[i]
+		var on := b.name == "Tab_" + id
+		# Neighbours share one divider: a tab draws its left edge only when first or lit, its right
+		# edge unless the next tab is the lit one.
+		var next_on := i + 1 < kids.size() and kids[i + 1].name == "Tab_" + id
+		b.set_pressed_no_signal(on)
+		var sb := StyleBoxFlat.new()
+		sb.bg_color = PixelPalette.NAVY[3] if on else PixelPalette.NAVY[1]
+		sb.border_color = PixelPalette.GOLD[4] if on else PixelPalette.GOLD[3]
+		sb.border_width_left = 6 if on or i == 0 else 0
+		sb.border_width_right = 0 if next_on else 6
+		sb.border_width_top = 6
+		sb.border_width_bottom = 0 if on else 6
+		sb.content_margin_left = 10
+		sb.content_margin_right = 10
+		sb.content_margin_top = 8
+		sb.content_margin_bottom = 8
+		sb.anti_aliasing = false
+		for st in ["normal", "hover", "pressed", "hover_pressed", "disabled", "focus"]:
+			b.add_theme_stylebox_override(st, sb)
+		var ink: Color = PixelPalette.BONE[4] if on else PixelPalette.BONE[1]
+		for c in ["font_color", "font_hover_color", "font_pressed_color", "font_hover_pressed_color", "font_focus_color"]:
+			b.add_theme_color_override(c, ink)
+		# The open tab stands a little taller than the ones behind it.
+		b.custom_minimum_size.y = TOUCH + 12 if on else TOUCH
 
 
 static func button(text: String, on_press: Callable, variation := "") -> Button:
