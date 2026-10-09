@@ -173,6 +173,41 @@ static func header(box: Container, title: String, on_back: Callable) -> HBoxCont
 	return row
 
 
+## The two play modes as tabs along the top, like a browser's: Back, then Story and Free play side
+## by side over a gold rule. The open mode's tab is lit; the other swaps the screen in place.
+const MODES := [["story", "title_story"], ["free_play", "title_free"]]
+
+
+static func mode_tabs(screen: Screen, box: Container) -> HBoxContainer:
+	var row := HBoxContainer.new()
+	row.name = "Modes"
+	row.add_theme_constant_override("separation", 10)
+	var back := button(tr_("ui_back"), screen.on_back, QUIET)
+	back.custom_minimum_size = Vector2(TOUCH * 1.6, TOUCH)
+	back.name = "Back"
+	row.add_child(back)
+	var here := screen.screen_name().trim_suffix("_screen")
+	for m in MODES:
+		var mode: String = m[0]
+		var b := button(tr_(m[1]), func() -> void:
+			if mode != here:
+				screen.app.replace(mode))
+		b.toggle_mode = true
+		b.set_pressed_no_signal(mode == here)
+		b.name = "Tab_" + mode
+		b.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		b.custom_minimum_size.x = 0
+		row.add_child(b)
+	box.add_child(row)
+	var rule := ColorRect.new()
+	rule.name = "TabRule"
+	rule.color = PixelPalette.GOLD[4]
+	rule.custom_minimum_size.y = 6.0   # two art pixels
+	rule.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	box.add_child(rule)
+	return row
+
+
 static func button(text: String, on_press: Callable, variation := "") -> Button:
 	var b := Button.new()
 	b.text = text

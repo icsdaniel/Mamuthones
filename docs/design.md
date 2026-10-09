@@ -144,8 +144,9 @@ lore). Clearing a stop at Hard with a B or better unlocks its **remix** (the sam
 drums and bass) as a separate playable track.
 
 ### Free play
-Every song is open from the start, at every difficulty (Daniele, 2026-10-09). Pick the difficulty
-first; each song in the list shows its best score and grade at that difficulty. Any unlocked bell set;
+Story and Free play are two tabs along the top of one place, like a browser's; the other tab swaps in
+place. Every song is open from the start, at every difficulty (Daniele, 2026-10-09). Pick the difficulty
+first (one row of four, two rows where they don't fit); each song in the list shows its best score and grade at that difficulty. Any unlocked bell set;
 the remix once earned; your ghost when you have one.
 
 ## 6. Progression: your Mamuthone

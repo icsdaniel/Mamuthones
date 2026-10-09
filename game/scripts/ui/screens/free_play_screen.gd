@@ -1,5 +1,5 @@
 extends Screen
-## Free play: every song at every difficulty (all open from the start), any unlocked bell set, the
+## Free play (the second mode tab): every song at every difficulty (all open from the start), any unlocked bell set, the
 ## remix when earned. Pick the difficulty first; the song list then shows each song's best score and
 ## grade at that difficulty, so the list reads at a glance. Below, whether a ghost is there to race.
 
@@ -7,7 +7,7 @@ var song: SongData
 var difficulty := "easy"
 var use_remix := false
 var _song_buttons := {}
-var _diff_box: GridContainer
+var _diff_box: VBoxContainer
 var _info: Label
 var _remix: CheckButton
 
@@ -15,20 +15,26 @@ var _remix: CheckButton
 func build() -> void:
 	var cols := UIKit.column_with_footer(self, 14)
 	var box := cols[0]
-	UIKit.header(box, tr("free_title"), on_back)
+	UIKit.mode_tabs(self, box)
 	box.add_child(UIKit.label(tr("stop_difficulty"), UIKit.SUB))
-	_diff_box = GridContainer.new()
-	_diff_box.columns = 2
-	_diff_box.add_theme_constant_override("h_separation", 10)
-	_diff_box.add_theme_constant_override("v_separation", 10)
+	# One row of four, equal widths; two rows of two where the four don't fit (small phones, Italian).
+	_diff_box = VBoxContainer.new()
+	_diff_box.add_theme_constant_override("separation", 6)
 	box.add_child(_diff_box)
+	var diff_row := HBoxContainer.new()
+	diff_row.add_theme_constant_override("separation", 6)
+	_diff_box.add_child(diff_row)
+	_diff_box.resized.connect(_fit_diffs)
+	resized.connect(_fit_diffs)
+	diff_row.minimum_size_changed.connect(_fit_diffs, CONNECT_DEFERRED)
 	for d in SongData.DIFFICULTIES:
 		var b := UIKit.button(tr("diff_" + d), _pick_diff.bind(d))
 		b.toggle_mode = true
 		b.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		b.custom_minimum_size.x = 0
 		b.name = "Diff_" + d
 		b.clip_text = true
-		_diff_box.add_child(b)
+		diff_row.add_child(b)
 	box.add_child(UIKit.label(tr("free_song"), UIKit.SUB))
 	for s in SongLibrary.story():
 		var b := UIKit.button("%d · %s" % [s.stop, UIKit.song_title(s)], _pick_song.bind(s))
@@ -76,10 +82,30 @@ func _pick_song(s: SongData) -> void:
 	_refresh()
 
 
+## Splits the difficulty row in two when its four buttons need more than the width there is.
+func _fit_diffs() -> void:
+	var row: HBoxContainer = _diff_box.get_child(0)
+	# The column stretches to its content, so measure against the screen less its side margins
+	# and the list's scroll bar.
+	var room := minf(size.x - 2.0 * (UIKit.GUTTER + UIKit.safe_margins(self).x), UIKit.COLUMN_MAX)
+	var sc := _diff_box.get_parent().get_parent() as ScrollContainer
+	if sc != null:
+		room -= sc.get_v_scroll_bar().get_combined_minimum_size().x
+	if _diff_box.get_child_count() > 1 or room <= 0.0 or row.get_combined_minimum_size().x <= room + 0.5:
+		return
+	var second := HBoxContainer.new()
+	second.add_theme_constant_override("separation", 6)
+	_diff_box.add_child(second)
+	var half := row.get_child_count() / 2
+	for c in row.get_children().slice(half):
+		c.reparent(second)
+
+
 func _pick_diff(d: String) -> void:
 	difficulty = d
-	for c in _diff_box.get_children():
-		(c as Button).set_pressed_no_signal(c.name == "Diff_" + d)
+	for row in _diff_box.get_children():
+		for c in row.get_children():
+			(c as Button).set_pressed_no_signal(c.name == "Diff_" + d)
 	_show_bests()
 	_refresh()
 

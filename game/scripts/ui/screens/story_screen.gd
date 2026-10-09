@@ -12,7 +12,7 @@ const PATH_H := 30.0
 
 func build() -> void:
 	var box := UIKit.column(self, true, 0)
-	UIKit.header(box, tr("story_title"), on_back)
+	UIKit.mode_tabs(self, box)
 	UIKit.spacer(box, 14.0)
 	var goal := UIKit.goal_text()
 	if goal != "":
