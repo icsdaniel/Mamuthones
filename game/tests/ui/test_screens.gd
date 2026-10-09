@@ -16,7 +16,7 @@ func _cases() -> Array:
 	return [
 		["language", {}], ["headphones", {}], ["calibration", {"first_run": true}], ["latency", {"first_run": true}],
 		["title", {}], ["story", {}], ["stop_card", {"song_id": song}], ["stop_card", {"song_id": tut}],
-		["free_play", {}], ["daily", {}], ["boards", {}],
+		["free_play", {}], ["boards", {}],
 		["settings", {}], ["credits", {}],
 		["workshop", {"tab": "mask"}], ["workshop", {"tab": "bells"}], ["workshop", {"tab": "dress"}],
 		["tutorial", {"song_id": tut}],

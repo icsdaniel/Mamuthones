@@ -93,7 +93,6 @@ func _shots() -> Array:
 		{"file": "story", "screen": "story"},
 		{"file": "stop_card", "screen": "stop_card", "args": {"song_id": fires_id}},
 		{"file": "free_play", "screen": "free_play"},
-		{"file": "daily", "screen": "daily"},
 		{"file": "boards", "screen": "boards"},
 		{"file": "settings", "screen": "settings"},
 		{"file": "credits", "screen": "credits"},

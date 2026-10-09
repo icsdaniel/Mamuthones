@@ -127,7 +127,7 @@ sixteenth at Expert; in triplet sections an eighth is a triplet eighth), bells a
 ## 5. Modes
 
 ### Story: the procession
-Seven stops that follow the real calendar, one song each. Finishing a stop with a D or better unlocks the next.
+Seven stops that follow the real calendar, one song each. Every stop is playable from the start; finishing one with a D or better moves the story on (bell sets and carving follow it).
 
 | # | Stop | Song mood |
 | --- | --- | --- |
@@ -144,13 +144,9 @@ lore). Clearing a stop at Hard with a B or better unlocks its **remix** (the sam
 drums and bass) as a separate playable track.
 
 ### Free play
-Any unlocked song, any difficulty, any bell set. Shows your best score, bells, and ghost.
-
-### Daily procession (offline)
-Each day the date picks one song and whether the lanes are mirrored, so friends get the same
-procession with no server. The player picks the difficulty, and each difficulty has its own daily
-ladder when online services are available. A song from a stop the player hasn't reached plays with its
-name and picture hidden ("a procession from later in the story"), so the daily never spoils the story.
+Every song is open from the start, at every difficulty (Daniele, 2026-10-09). Pick the difficulty
+first; each song in the list shows its best score and grade at that difficulty. Any unlocked bell set;
+the remix once earned; your ghost when you have one.
 
 ## 6. Progression: your Mamuthone
 
@@ -201,8 +197,7 @@ unison grows, they stumble on a miss and stand still through a stand-still.
 
 ## 10. Online (optional, never required)
 
-Game Center and Google Play Games for friends' scores and a global ladder per song and difficulty, plus
-the daily procession. Without them, everything works and scores stay on the phone. No accounts, no
+Game Center and Google Play Games for friends' scores and a global ladder per song and difficulty. Without them, everything works and scores stay on the phone. No accounts, no
 analytics, no data collection.
 
 ## 11. Out of scope

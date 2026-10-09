@@ -108,7 +108,7 @@ func test_menus_forward_and_back() -> void:
 	check_eq(app.current().screen_name(), "title_screen", "a returning player starts on the title")
 	var routes := [
 		["StoryMap", "story_screen"], ["FreePlay", "free_play_screen"],
-		["Daily", "daily_screen"], ["Workshop", "workshop_screen"], ["Leaderboards", "boards_screen"],
+		["Workshop", "workshop_screen"], ["Leaderboards", "boards_screen"],
 		["Settings", "settings_screen"], ["Tutorial", "tutorial_screen"], ["Calibrate", "calibration_screen"],
 	]
 	for r in routes:

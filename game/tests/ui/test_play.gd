@@ -29,14 +29,14 @@ func test_song_plays_to_results_under_autoplay() -> void:
 	UIHarness.restore_profile()
 
 
-func test_played_run_is_recorded_and_unlocks_the_next_stop() -> void:
+func test_played_run_is_recorded_and_moves_the_story_on() -> void:
 	UIHarness.fresh_profile()
 	var story := SongLibrary.story()
 	if story.size() < 3:
 		check(false, "needs three story songs")
 		return
-	check(Progression.is_unlocked(story[1].id), "stop 2 is open once the tutorial is done")
-	check(not Progression.is_unlocked(story[2].id), "stop 3 starts locked")
+	check(Progression.is_unlocked(story[2].id), "every stop is open from the start")
+	check_eq(Progression.highest_stop(), story[1].stop, "the story is at stop 2")
 	var app := UIHarness.make_app(tree, "play", {"song_id": story[1].id, "difficulty": "easy", "bell_set": "light"})
 	await UIHarness.frames(tree, 3)
 	var play := app.current()
@@ -53,7 +53,7 @@ func test_played_run_is_recorded_and_unlocks_the_next_stop() -> void:
 	await UIHarness.frames(tree, 3)
 	check_eq(app.current().screen_name(), "results_screen", "results after a played run")
 	check(Profile.best(story[1].id, "easy").get("score", 0) > 0, "the best is saved")
-	check(Progression.is_unlocked(story[2].id), "stop 3 is now open")
+	check_eq(Progression.highest_stop(), story[2].stop, "the story moves on to stop 3")
 	check(app.current().find_child("Unlocked", true, false) != null, "the unlock is shown on the results")
 	check(app.current().find_child("Next", true, false) != null, "results offer the next stop")
 	UIHarness.free_app(app)

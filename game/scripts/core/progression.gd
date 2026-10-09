@@ -8,8 +8,10 @@ extends RefCounted
 ##
 ## Rules:
 ## - Grades (Session.GRADES): F, E, D, C, B, A, S, S+, kept per song and difficulty as a rank 0..7.
-## - Story stops unlock in order: stop n+1 when stop n is finished with a D or better (any level);
-##   the Workshop also counts as finished when the tutorial is done.
+## - Every song is playable from the start, at every difficulty (Daniele, 2026-10-09). The story
+##   still has an order: a stop is finished with a D or better (any level), the Workshop also when
+##   the tutorial is done, and the stop the story has reached (highest_stop) is the first one whose
+##   earlier stops are all finished. It sets the bell sets and mask carving, as before.
 ## - A stop's remix unlocks when the stop is finished at Hard or Expert with a B or better.
 ## - Bell sets: Light from the start, Village when stop 3 is reached, Full load when stop 6 is reached.
 ## - Carving points come from the best grade of every song and difficulty: 1 for a D or C, 2 for a B
@@ -83,15 +85,11 @@ static func is_unlocked(song_id: String, profile: Variant = null) -> bool:
 		return false
 	if s.id != song_id:
 		return remix_unlocked(s.id, profile)
-	var story := story_order()
-	var i := story.find(song_id)
-	if i <= 0:
-		return true
-	return opens_next(story[i - 1], profile)
+	return true
 
 
-## Whether a stop lets the next one open: finished, or the tutorial, which is optional (Daniele,
-## 2026-09-27: the tutorial and the calibration are offered from the menu, never forced).
+## Whether a stop moves the story on to the next: finished, or the tutorial, which is optional
+## (Daniele, 2026-09-27: the tutorial and the calibration are offered from the menu, never forced).
 static func opens_next(song_id: String, profile: Variant = null) -> bool:
 	var s := SongLibrary.get_song(song_id)
 	return (s != null and s.kind == "tutorial") or cleared(song_id, profile)
@@ -105,13 +103,15 @@ static func remix_unlocked(song_id: String, profile: Variant = null) -> bool:
 	return best_grade(s.id, REMIX_LEVELS, profile) >= REMIX_GRADE
 
 
-## The highest story stop number reached (unlocked).
+## The story stop reached: the furthest stop whose earlier stops are all finished.
 static func highest_stop(profile: Variant = null) -> int:
-	var top := 1
-	for s in SongLibrary.story():
-		if is_unlocked(s.id, profile):
-			top = maxi(top, s.stop)
-	return top
+	var story := SongLibrary.story()
+	var top := story[0].stop if not story.is_empty() else 1
+	for i in range(1, story.size()):
+		if not opens_next(story[i - 1].id, profile):
+			break
+		top = story[i].stop
+	return maxi(top, 1)
 
 
 static func bell_set_unlocked(id: String, profile: Variant = null) -> bool:
@@ -146,7 +146,7 @@ static func mask_option_unlocked(part: String, option: String, profile: Variant 
 	return highest_stop(profile) >= int(req.get("stop", 1)) and carving_points(profile) >= int(req.get("cost", 0))
 
 
-## The first story stop that is open but not finished yet ("" when all are finished).
+## The first story stop not finished yet ("" when all are finished).
 static func next_stop(profile: Variant = null) -> String:
 	for id in story_order():
 		var s := SongLibrary.get_song(id)
@@ -158,17 +158,12 @@ static func next_stop(profile: Variant = null) -> String:
 
 
 ## What the player is working towards, nearest first. Each entry:
-## {kind: "song"|"remix"|"bell_set"|"mask", id, part (mask only), need: {...}, have: {...}}.
+## {kind: "remix"|"bell_set"|"mask", id, part (mask only), need: {...}, have: {...}}.
 ## need/have use the keys song_id, difficulty ("hard" means Hard or Expert), grade (a rank; -1 in
 ## have: never played), stop, points.
 static func next_goals(profile: Variant = null) -> Array:
 	var out := []
 	var story := story_order()
-	var ns := next_stop(profile)
-	if ns != "":
-		var i := story.find(ns)
-		if i + 1 < story.size():
-			out.append({"kind": "song", "id": story[i + 1], "need": {"song_id": ns, "grade": CLEAR_GRADE}, "have": {"grade": best_grade(ns, [], profile)}})
 	var stop := highest_stop(profile)
 	for id in BellSets.ids():
 		if not bell_set_unlocked(id, profile):

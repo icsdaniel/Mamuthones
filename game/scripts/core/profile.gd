@@ -15,7 +15,6 @@ extends Node
 ##   audio_offset() -> float seconds (the "audio_offset" setting)
 ##   best(song_key, difficulty) -> {} or {score, accuracy, grade, ghost, slam, plays}
 ##   all_bests() -> {"song:difficulty": entry}
-##   daily_best(date_key, difficulty := "") -> {} or {score, song_id, difficulty, grade}
 ##       (one per difficulty; with no difficulty, the best of that day at any difficulty)
 ##   record_result(session) -> {prev_best, new_best, grade, prev_grade, unlocked: [{kind, id, part?}], carving_gained}
 ##   save(), load_profile(path := PATH), reset()
@@ -57,7 +56,6 @@ var _flags: Dictionary = {}
 var _look: Dictionary = {}
 var _calibration: Dictionary = {}
 var _bests: Dictionary = {}
-var _daily: Dictionary = {}
 var _plays := 0
 var _dirty := false
 ## What happened on the last load: "new", "ok", "backup", "corrupt", "future".
@@ -162,29 +160,12 @@ func all_bests() -> Dictionary:
 	return _bests
 
 
-func daily_best(date_key: String, difficulty := "") -> Dictionary:
-	if difficulty != "":
-		var e = _daily.get(date_key + "." + difficulty, {})
-		if e is Dictionary and not e.is_empty():
-			return e.duplicate()
-		# Saved before dailies were per difficulty: one entry under the bare date.
-		var old = _daily.get(date_key, {})
-		return old.duplicate() if old is Dictionary and str(old.get("difficulty", "")) == difficulty else {}
-	var top := {}
-	for k in _daily:
-		var e = _daily[k]
-		if (str(k) == date_key or str(k).begins_with(date_key + ".")) and e is Dictionary \
-				and (top.is_empty() or int(e.get("score", 0)) > int(top.get("score", 0))):
-			top = e
-	return top.duplicate()
-
-
 func plays() -> int:
 	return _plays
 
 
 ## Call once when a run ends. Keeps the best score (with its ghost), the best accuracy and grade,
-## records the daily, sends ladder scores (never slam or practice runs) and reports what the
+## sends ladder scores (never slam or practice runs) and reports what the
 ## run unlocked.
 func record_result(session: Session) -> Dictionary:
 	var out := {"prev_best": 0, "new_best": false, "grade": session.grade_rank(), "prev_grade": -1, "unlocked": [], "carving_gained": 0}
@@ -212,17 +193,10 @@ func record_result(session: Session) -> Dictionary:
 		e.erase("bells")
 		e.max_unison = maxi(int(prev.get("max_unison", 0)), int(session.stats.max_unison))
 		_bests[key] = e
-		# Only the real procession of that day counts as a daily.
-		if Daily.matches(session):
-			var d := daily_best(session.daily, session.difficulty)
-			if d.is_empty() or session.score > int(d.get("score", 0)):
-				_daily[session.daily + "." + session.difficulty] = {"score": session.score, "song_id": session.song_key(), "difficulty": session.difficulty, "grade": session.grade_rank(), "slam": session.slam}
 		if session.ladder_ok():
 			var lb := _leaderboards()
 			if lb != null:
 				lb.submit(board_id(session.song_key(), session.difficulty), session.score)
-				if Daily.matches(session):
-					lb.submit(Daily.board_for(session.daily, session.difficulty), session.score)
 	var after := Progression.snapshot(self)
 	for k in after:
 		if before.has(k):
@@ -253,7 +227,6 @@ func reset() -> void:
 	_look = {"mask": _default_mask(), "fleece": FLEECES[0], "straps": STRAPS[0], "bell_set": "light"}
 	_calibration = {}
 	_bests = {}
-	_daily = {}
 	_plays = 0
 	_dirty = false
 
@@ -302,7 +275,6 @@ func save() -> bool:
 	cfg.set_value("look", "values", _look)
 	cfg.set_value("calibration", "values", _calibration)
 	cfg.set_value("bests", "values", _bests)
-	cfg.set_value("daily", "values", _daily)
 	cfg.set_value("stats", "plays", _plays)
 	var tmp := path + ".tmp"
 	if write_sealed(cfg, tmp) != OK or _open_checked(tmp) == null:
@@ -415,11 +387,6 @@ func _read(cfg: ConfigFile, version: int) -> void:
 			var e = b[k]
 			if e is Dictionary and typeof(e.get("score", null)) in [TYPE_INT, TYPE_FLOAT]:
 				_bests[str(k)] = e
-	var d = cfg.get_value("daily", "values", {})
-	if d is Dictionary:
-		for k in d:
-			if d[k] is Dictionary:
-				_daily[str(k)] = d[k]
 	var n = cfg.get_value("stats", "plays", 0)
 	_plays = int(n) if typeof(n) in [TYPE_INT, TYPE_FLOAT] else 0
 	_dirty = false

@@ -36,7 +36,6 @@ louder and cleaner the bells ring.
   drone, frame drums. Get a B or better on a stop at Hard or Expert to unlock its modern remix.
 - **Carve your own mask.** Every grade you earn gives carving points, up to S+. Choose your bell set: heavier bells
   score more but demand tighter timing.
-- **A daily procession** that is the same for everyone on the same day, with no server.
 - **Four difficulties** for every song, a gentle tutorial, and a tilt calibration that takes seconds.
   Prefer not to tilt? Slam mode rings the bells with two buttons.
 
@@ -67,7 +66,6 @@ unita, più i campanacci suonano forti e puliti.
   moderno.
 - **Intaglia la tua maschera.** Ogni voto guadagnato dà punti d'intaglio, fino alla S+. Scegli il tuo carico:
   i campanacci più pesanti valgono di più, ma chiedono un tempo più preciso.
-- **Una processione del giorno** uguale per tutti nello stesso giorno, senza server.
 - **Quattro difficoltà** per ogni brano, un tutorial senza fretta e una calibrazione del movimento che
   richiede pochi secondi. Non vuoi inclinare il telefono? Con la modalità "colpo" i campanacci si
   suonano con due tasti.

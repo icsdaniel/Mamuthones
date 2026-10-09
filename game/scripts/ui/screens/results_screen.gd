@@ -76,13 +76,17 @@ func build() -> void:
 	var score := UIKit.label(UIKit.fmt_score(session.score), "BigNumberLabel", false, HORIZONTAL_ALIGNMENT_CENTER)
 	score.name = "Score"
 	score.add_theme_font_size_override("font_size", 72)
-	top.add_child(score)
+	var score_col := VBoxContainer.new()
+	score_col.alignment = BoxContainer.ALIGNMENT_CENTER
+	score_col.add_theme_constant_override("separation", 0)
+	top.add_child(score_col)
+	score_col.add_child(score)
 	_count_up(score, session.score)
 	if session.full_combo():
-		var fc := UIKit.label(tr("res_full_combo"), UIKit.CAPTION, true, HORIZONTAL_ALIGNMENT_CENTER)
+		var fc := UIKit.label(tr("res_full_combo"), UIKit.CAPTION, false, HORIZONTAL_ALIGNMENT_CENTER)
 		fc.name = "FullCombo"
 		fc.add_theme_color_override("font_color", Palette.GOLD_HOT)
-		box.add_child(fc)
+		score_col.add_child(fc)
 	var best_line := _best_line()
 	if best_line != "":
 		var bl := UIKit.label(best_line, UIKit.SUB, true, HORIZONTAL_ALIGNMENT_CENTER)
@@ -388,7 +392,7 @@ func _glow_rest() -> void:
 
 func _next_song() -> SongData:
 	var play_args: Dictionary = args.get("play_args", {})
-	if play_args.get("daily", "") != "" or session.grade_rank() < Progression.CLEAR_GRADE:
+	if session.grade_rank() < Progression.CLEAR_GRADE:
 		return null
 	var story := SongLibrary.story()
 	for i in story.size() - 1:

@@ -8,7 +8,7 @@ extends RefCounted
 ##
 ## Options: slam (the bell from the buttons: see _slam_bell; full rings judged on their step alone;
 ## no tilt allowance), remix (remix offset), mirror (lanes 0<->2), from_beat/to_beat (only notes in
-## [from, to), for tutorial lessons and practice), daily ("YYYY-MM-DD", recorded on the daily ladder).
+## [from, to), for tutorial lessons and practice).
 ##
 ## Additions beyond the architecture doc: tap() returns a result Dictionary; ring() takes an
 ## optional `tilt` flag and `strength` (0-1) and returns extra keys (judgement, offset, side,
@@ -110,7 +110,6 @@ var options: Dictionary = {}
 var slam := false
 var remix := false
 var mirror := false
-var daily := ""
 var notes: Array[Note] = []
 var health_on := true
 var health := MAX_HEALTH
@@ -162,7 +161,6 @@ func _init(p_song: SongData, p_difficulty: String, p_bell_set: String = "light",
 	slam = bool(options.get("slam", false))
 	remix = bool(options.get("remix", false)) and song.has_remix()
 	mirror = bool(options.get("mirror", false))
-	daily = str(options.get("daily", ""))
 	var from_beat := float(options.get("from_beat", -INF))
 	var to_beat := float(options.get("to_beat", INF))
 	_weight = BellSets.weight(bell_set)

@@ -4,7 +4,7 @@ extends Screen
 ## the Session; every hit is answered in the same frame with its sound, a button flash, a burst, a
 ## judgement word, a jolt of the row and a short vibration.
 ##
-## args: song_id, difficulty, bell_set, remix, mirror, daily,
+## args: song_id, difficulty, bell_set, remix, mirror,
 ##       autoplay (bool), human (autoplay with small errors), from_beat/to_beat (a lesson),
 ##       embedded (emit `finished` instead of opening the results), lead_in (seconds before the first
 ##       note when starting mid-song, with no count), quick (restart / retry: start a bar before the
@@ -99,8 +99,6 @@ func build() -> void:
 		"remix": bool(args.get("remix", false)),
 		"mirror": bool(args.get("mirror", false)),
 	}
-	if str(args.get("daily", "")) != "":
-		options.daily = str(args.daily)
 	if args.has("from_beat"):
 		options.from_beat = float(args.from_beat)
 		options.to_beat = float(args.to_beat)

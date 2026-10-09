@@ -75,9 +75,9 @@ design rule caps the aspect at 5.
 - 10: Verified on a real iPhone and a real Android phone (needs a person).
 
 ## 8. Progression and replay
-- 6: Seven story stops unlock in order; free play; bests saved per song and difficulty.
+- 6: Seven story stops in order, all playable from the start; free play; bests saved per song and difficulty.
 - 7: Mask carving, bell sets, sheepskin and straps work and show in the procession; remixes unlock.
-- 8: Ghost runs and the daily procession work; each stop gives a new
+- 8: Ghost runs work; each stop gives a new
   reason to replay (grades to raise, remix, carving points).
 - 9: A player can see at a glance what to do next and what they are close to unlocking.
 - 10: Players want to finish every song at every difficulty.
@@ -110,7 +110,7 @@ design rule caps the aspect at 5.
 ## 12. Scope and business fit
 - 6: Offline; no servers, ads, accounts or analytics.
 - 7: Everything is earned by play; nothing affects score that could be bought.
-- 8: Leaderboards and daily work without online services and plug in to Game Center / Play Games.
+- 8: Leaderboards work without online services and plug in to Game Center / Play Games.
 - 9: Store listing material exists: description in EN/IT, screenshots, icon, privacy statement (no data
   collected).
 - 10: Priced and positioned against Rotaeno with a clear reason to buy.

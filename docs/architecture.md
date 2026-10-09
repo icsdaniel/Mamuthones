@@ -110,7 +110,6 @@ sensor access, so headless tests can drive them.
 - `Ghost`: `from_session(session)`, `score_at(t)`, `to_dict()`, `from_dict()`.
 - `Progression`: story order, `is_unlocked(song_id)`, `remix_unlocked(song_id)`, `bell_set_unlocked(id)`,
   `carving_points()`, `mask_option_unlocked(part, option)`.
-- `Daily`: `for_date(date_dict) -> {song_id, difficulty, mirror}` from a hash of the date.
 - `Profile` (autoload): versioned `user://profile.cfg`, corrupted files fall back to a fresh profile
   without crashing. Settings, calibration, audio offset, per song+difficulty bests `{score, accuracy,
   bells, ghost}`, look (`mask`, `fleece`, `straps`, `bell_set`), first-run flags.
