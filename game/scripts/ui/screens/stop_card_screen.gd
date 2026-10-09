@@ -95,7 +95,7 @@ func _pick(d: String) -> void:
 	if best.is_empty():
 		_best.text = tr("stop_no_best")
 	else:
-		_best.text = tr("stop_best") % [UIKit.fmt_score(int(best.get("score", 0))), int(best.get("bells", 0))]
+		_best.text = tr("stop_best") % [UIKit.fmt_score(int(best.get("score", 0))), Session.grade_name(UIKit.grade_of(best))]
 
 
 func _play() -> void:

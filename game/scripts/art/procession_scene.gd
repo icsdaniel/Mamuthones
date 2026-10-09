@@ -4,8 +4,7 @@ extends Control
 ## the Issohadores with the rope, the crowd and the fire of the current story stop behind them. The
 ## world is a stop of StopBackdrops (res://art/px/stops/), drawn at a whole-number scale so the pixels
 ## stay square; the figures are the shared FigureSprites (and the dim/half variants baked from them).
-## Used by the Piazza (setup, turns, ranking, the play screen's Piazza mode), the workshop row and the
-## title. It lays itself out for any rect: extra height becomes sky, a thin band shows the row.
+## Used by the workshop row and the title. It lays itself out for any rect: extra height becomes sky, a thin band shows the row.
 ##
 ## API (docs/architecture.md "Art API"):
 ##   set_stop(n)                    1..7, the world of that story stop

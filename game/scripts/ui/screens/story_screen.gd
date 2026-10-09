@@ -26,7 +26,7 @@ func build() -> void:
 		var song: SongData = story[i]
 		box.add_child(_row(song, song.id == next_id))
 		if i + 1 < story.size():
-			box.add_child(_Path.new(UIKit.best_bells(song.id) > 0, Progression.is_unlocked(story[i + 1].id)))
+			box.add_child(_Path.new(Progression.cleared(song.id), Progression.is_unlocked(story[i + 1].id)))
 	UIKit.spacer(box, 20.0)
 
 
@@ -99,11 +99,12 @@ func _row(song: SongData, is_next: bool) -> Control:
 	status.text_overrun_behavior = TextServer.OVERRUN_TRIM_ELLIPSIS
 	status.add_theme_color_override("font_color", PixelPalette.GOLD[4] if is_next else (PixelPalette.BONE[2] if open else PixelPalette.BONE[1]))
 	text.add_child(status)
-	var bells := BellMarks.new(UIKit.best_bells(song.id), 30.0)
-	bells.size_flags_vertical = Control.SIZE_SHRINK_CENTER
-	bells.visible = open
-	row.add_child(bells)
-	for c in [row, text, num, bells, name_label, status, plate]:
+	var grade := GradeBadge.new(UIKit.best_grade(song.id))
+	grade.name = "Grade"
+	grade.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+	grade.visible = open
+	row.add_child(grade)
+	for c in [row, text, num, grade, name_label, status, plate]:
 		(c as Control).mouse_filter = Control.MOUSE_FILTER_IGNORE
 	return b
 
@@ -117,7 +118,7 @@ func _status(song: SongData, open: bool, is_next: bool) -> String:
 		parts.append(date)
 	if is_next:
 		parts.append(tr("story_next"))
-	elif UIKit.best_bells(song.id) > 0:
+	elif Progression.cleared(song.id):
 		parts.append(tr("story_cleared"))
 	if song.has_remix() and Progression.remix_unlocked(song.id):
 		parts.append(tr("story_remix_open"))

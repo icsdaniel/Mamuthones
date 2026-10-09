@@ -60,6 +60,8 @@ static func first_screen() -> String:
 		return "language"
 	if not Profile.has_flag("headphones_seen"):
 		return "headphones"
+	if not Profile.has_flag("calibrated"):
+		return "calibration"
 	return "title"
 
 
@@ -347,15 +349,14 @@ static func show_look(scene) -> void:
 	scene.set_look(look.get("mask", MaskSpec.default()), str(look.get("fleece", "black")), str(look.get("straps", "natural")))
 
 
-## Best bells over every difficulty of a song.
-static func best_bells(song_id: String) -> int:
-	var song := SongLibrary.get_song(song_id)
-	if song == null:
-		return 0
-	var out := 0
-	for d in song.difficulties():
-		out = maxi(out, int(Profile.best(song_id, d).get("bells", 0)))
-	return out
+## Best grade rank over every difficulty of a song (-1: never played).
+static func best_grade(song_id: String) -> int:
+	return Progression.best_grade(song_id)
+
+
+## A saved best's grade rank (-1 when there is none).
+static func grade_of(best: Dictionary) -> int:
+	return Progression.entry_grade(best) if not best.is_empty() else -1
 
 
 ## Bests and ghosts are kept per track: the remix is its own.
@@ -378,7 +379,8 @@ static func goal_line(g: Dictionary) -> String:
 	if need.has("song_id"):
 		var where := song_title(SongLibrary.get_song(str(need.song_id)))
 		if need.has("difficulty"):
-			return tr_("goal_hard") % [what, int(need.get("bells", 2)), where, int(have.get("bells", 0))]
+			var have_g := int(have.get("grade", -1))
+			return tr_("goal_hard") % [what, Session.grade_name(int(need.get("grade", Session.RANK_B))), where, Session.grade_name(have_g) if have_g >= 0 else "-"]
 		return tr_("goal_song") % [what, where]
 	if need.has("points"):
 		if int(have.get("stop", 1)) < int(need.get("stop", 1)):

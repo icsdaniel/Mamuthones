@@ -542,7 +542,7 @@ void fragment() {
 ## Road surface colours from the far end (by the fire) to the buttons.
 const ROAD_STOPS := [[0.0, Color("#2a1c22")], [0.25, Color("#1a1520")], [0.6, Color("#131018")], [1.0, Color("#0c0a12")]]
 
-var perspective := true          ## false: the flat lanes (the Piazza hides them anyway; tests may flatten)
+var perspective := true          ## false: the flat lanes (tests may flatten)
 ## The street picture (set before this enters the tree). With it, the road is the picture's own and
 ## the lanes follow its painted lines: project() asks the street where a flat point lies, and this
 ## control draws the notes, the hit line, the bursts and the buttons over it (_draw_street).

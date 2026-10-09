@@ -27,7 +27,7 @@ func build() -> void:
 		b.name = "Song_" + s.id
 		if open:
 			var top := _best_of(s.id)
-			_badge(b, UIKit.best_bells(s.id), UIKit.fmt_score(top) if top > 0 else "")
+			_badge(b, UIKit.best_grade(s.id), UIKit.fmt_score(top) if top > 0 else "")
 		box.add_child(b)
 		_song_buttons[s.id] = b
 	box.add_child(UIKit.label(tr("stop_difficulty"), UIKit.SUB))
@@ -74,7 +74,7 @@ func _pick_song(s: SongData) -> void:
 		b.name = "Diff_" + d
 		b.alignment = HORIZONTAL_ALIGNMENT_LEFT
 		var best: Dictionary = Profile.best(UIKit.board_song_id(s, use_remix), d)
-		_badge(b, int(best.get("bells", 0)), "")
+		_badge(b, UIKit.grade_of(best), "")
 		_diff_box.add_child(b)
 	var remix_open := s.has_remix() and Progression.remix_unlocked(s.id)
 	_remix.visible = s.has_remix()
@@ -97,7 +97,7 @@ static func _best_of(song_id: String) -> int:
 
 
 ## Bells (and a score) at the right end of a list button.
-func _badge(b: Button, bells: int, score: String) -> void:
+func _badge(b: Button, grade: int, score: String) -> void:
 	var row := HBoxContainer.new()
 	row.name = "Best"
 	row.mouse_filter = Control.MOUSE_FILTER_IGNORE
@@ -111,9 +111,10 @@ func _badge(b: Button, bells: int, score: String) -> void:
 		l.name = "Score"
 		l.size_flags_vertical = Control.SIZE_SHRINK_CENTER
 		row.add_child(l)
-	var marks := BellMarks.new(bells, 26.0)
-	marks.size_flags_vertical = Control.SIZE_SHRINK_CENTER
-	row.add_child(marks)
+	var badge := GradeBadge.new(grade)
+	badge.name = "Grade"
+	badge.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+	row.add_child(badge)
 	b.add_child(row)
 
 
@@ -131,7 +132,7 @@ func _refresh() -> void:
 	if best.is_empty():
 		_info.text = tr("stop_no_best")
 	else:
-		_info.text = tr("stop_best") % [UIKit.fmt_score(int(best.get("score", 0))), int(best.get("bells", 0))]
+		_info.text = tr("stop_best") % [UIKit.fmt_score(int(best.get("score", 0))), Session.grade_name(UIKit.grade_of(best))]
 		if not (best.get("ghost", {}) as Dictionary).is_empty():
 			_info.text += "\n" + tr("free_ghost")
 

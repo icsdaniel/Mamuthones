@@ -33,10 +33,9 @@ louder and cleaner the bells ring.
   still when the procession stands still.
 - **Seven stops of the procession,** from the workshop the night before to the last day of Carnival,
   each with an original song in the spirit of Sardinian music: tenore-style voices, reed melodies over a
-  drone, frame drums. Earn two bells on a stop at Hard or Expert to unlock its modern remix.
-- **Carve your own mask.** Every bell you earn is a carving point. Choose your bell set: heavier bells
+  drone, frame drums. Get a B or better on a stop at Hard or Expert to unlock its modern remix.
+- **Carve your own mask.** Every grade you earn gives carving points, up to S+. Choose your bell set: heavier bells
   score more but demand tighter timing.
-- **Piazza, for everyone at once.** A bells-only party mode for up to six players passing one phone.
 - **A daily procession** that is the same for everyone on the same day, with no server.
 - **Four difficulties** for every song, a gentle tutorial, and a tilt calibration that takes seconds.
   Prefer not to tilt? Slam mode rings the bells with two buttons.
@@ -64,12 +63,10 @@ unita, più i campanacci suonano forti e puliti.
   livelli, non da capo. Quando la processione si ferma, stai fermo anche tu.
 - **Sette tappe della processione,** dal laboratorio della vigilia all'ultimo giorno di Carnevale,
   ognuna con un brano originale ispirato alla musica sarda: voci a tenore, melodie di canne su un
-  bordone, tamburi. Guadagna due campanacci in una tappa a Difficile o Esperto per sbloccarne il remix
+  bordone, tamburi. Prendi almeno una B in una tappa a Difficile o Esperto per sbloccarne il remix
   moderno.
-- **Intaglia la tua maschera.** Ogni campanaccio guadagnato è un punto d'intaglio. Scegli il tuo carico:
+- **Intaglia la tua maschera.** Ogni voto guadagnato dà punti d'intaglio, fino alla S+. Scegli il tuo carico:
   i campanacci più pesanti valgono di più, ma chiedono un tempo più preciso.
-- **Piazza, tutti insieme.** Una modalità da festa, solo campanacci, fino a sei giocatori che si passano
-  lo stesso telefono.
 - **Una processione del giorno** uguale per tutti nello stesso giorno, senza server.
 - **Quattro difficoltà** per ogni brano, un tutorial senza fretta e una calibrazione del movimento che
   richiede pochi secondi. Non vuoi inclinare il telefono? Con la modalità "colpo" i campanacci si
@@ -125,8 +122,7 @@ Use these, in this order:
 | 3 | `story.png` | Seven stops, from the fires to Shrove Tuesday. | Sette tappe, dai fuochi al Martedì grasso. |
 | 4 | `workshop.png` | Carve your own mask. Choose your bells. | Intaglia la tua maschera. Scegli i campanacci. |
 | 5 | `stop_card.png` | Every stop is a real moment of the procession. | Ogni tappa è un vero momento della processione. |
-| 6 | `piazza.png` | Piazza: pass the phone, ring together. | Piazza: passa il telefono, suonate insieme. |
-| 7 | `title.png` | Offline. No ads. No purchases. | Offline. Niente pubblicità, niente acquisti. |
+| 6 | `title.png` | Offline. No ads. No purchases. | Offline. Niente pubblicità, niente acquisti. |
 
 Sizes (the folder names the script writes):
 

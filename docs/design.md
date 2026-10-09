@@ -88,8 +88,10 @@ Other rules:
   Early/Late window; stray taps are free. A wrong step drops unison one level (a miss drops two).
   In slam mode, Left + Right within 80 ms is the bell.
 - **Accuracy** = (Perfect + 0.7·Good + 0.3·Early/Late) / notes. Grades from accuracy: the row's own
-  words, from "The Issohadores are waiting for you" to "The whole row rang as one", plus a letter-free
-  1 to 3 bell rating (≥ 70 %, ≥ 85 %, ≥ 95 %). Bells are the stars of the game.
+  words, from "The Issohadores are waiting for you" to "The whole row rang as one", plus a letter grade
+  (Daniele, 2026-10-09): F below 60 %, E ≥ 60 %, D ≥ 70 %, C ≥ 78 %, B ≥ 85 %, A ≥ 90 %, S ≥ 95 %,
+  and S+ for ≥ 98 % with a full combo (no miss, wrong step, stray tap, lost hold or bell in a
+  stand-still).
 - The bell sound itself reacts to play: Perfect rings clean and full, Good slightly softer, Early/Late
   clanks, a miss is a dull knock. High unison adds the whole row's bells behind yours.
 
@@ -100,7 +102,7 @@ and 40 on Expert (none in the first 8 s) is a healing step, a bone-and-gold gem 
 picked from on-beat plain steps right after the busiest stretch; hitting it at Ok or better gives back
 2, up to 10. Health shows as ten flames under the score; at 3 or less they burn red and the bonfire
 dims. At 0 the fire goes out: the music fades, the notes stop, and the player restarts the song (or
-quits); a failed run records nothing. The Piazza, lessons, practice and autoplay have no health.
+quits); a failed run records nothing. Lessons, practice and autoplay have no health.
 
 ## 4. Difficulty
 
@@ -125,7 +127,7 @@ sixteenth at Expert; in triplet sections an eighth is a triplet eighth), bells a
 ## 5. Modes
 
 ### Story: the procession
-Seven stops that follow the real calendar, one song each. Finishing a stop with one bell unlocks the next.
+Seven stops that follow the real calendar, one song each. Finishing a stop with a D or better unlocks the next.
 
 | # | Stop | Song mood |
 | --- | --- | --- |
@@ -138,17 +140,11 @@ Seven stops that follow the real calendar, one song each. Finishing a stop with 
 | 7 | Shrove Tuesday (the last procession) | the finale, everything |
 
 Before each stop, one short illustrated card of plain facts about the moment (two sentences, no invented
-lore). Clearing a stop at Hard with 2 bells unlocks its **remix** (the same song rearranged with modern
+lore). Clearing a stop at Hard with a B or better unlocks its **remix** (the same song rearranged with modern
 drums and bass) as a separate playable track.
 
 ### Free play
 Any unlocked song, any difficulty, any bell set. Shows your best score, bells, and ghost.
-
-### Piazza
-Sound-first, whole-body, party mode. 60 to 90 second rounds of bells only, with the crowd, the fire and
-the Issohadores' calls. Only tilts count, with loose timing (±200 ms), and the screen shows one huge
-cue so it can be played while moving. Pass-and-play: up to 6 named players take turns on one phone, and
-the round ends on a ranking. Scores stay on the phone.
 
 ### Daily procession (offline)
 Each day the date picks one song and whether the lanes are mirrored, so friends get the same
@@ -161,7 +157,7 @@ name and picture hidden ("a procession from later in the story"), so the daily n
 The player builds their own Mamuthone. Nothing is bought; everything is earned by playing.
 
 - **Mask** (carved in the workshop between songs): brow, eyes, nose, cheeks and mouth shapes from real
-  Mamoiada forms, plus wood finish and patina. Each bell earned is a carving point; finer details unlock
+  Mamoiada forms, plus wood finish and patina. Best grades give carving points (1 for a D or C, 2 for a B or A, 3 for an S or S+); finer details unlock
   as the story advances.
 - **Bells**: Light, Village, Full load. Each has its own sound and weight (section 3). Village unlocks
   at stop 3, Full load at stop 6.
@@ -193,8 +189,7 @@ the road's far end, smaller with distance (Daniele, 2026-09-27: the scene on top
 the lanes to the hit line (Daniele, 2026-09-28: a tried Rift-style tile hop is rolled back). The lanes
 are a road laid back in perspective (Daniele, 2026-09-28): full width at the hit line, narrowing to 42%
 at the far end, so notes come toward the player and grow as they near. The Mamuthones jump on the beat, landing on it; more of them join as the
-unison grows, they stumble on a miss and stand still through a stand-still. The Piazza keeps the
-procession scene.
+unison grows, they stumble on a miss and stand still through a stand-still.
 
 ## 9. Setup and settings
 

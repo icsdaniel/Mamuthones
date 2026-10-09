@@ -37,7 +37,7 @@ func _init() -> void:
 	_app = load("res://scenes/main.tscn").instantiate()
 	_app.set("start_screen", "play")
 	var start := {"song_id": song_id, "difficulty": diff, "bell_set": bells, "remix": "remix" in a,
-		"autoplay": true, "human": "human" in a, "piazza": diff == "piazza"}
+		"autoplay": true, "human": "human" in a}
 	for x in a:
 		# from=<beat>: start a short way into the song (with --quit-after, a clip of the action)
 		if x.begins_with("from="):

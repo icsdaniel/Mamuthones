@@ -12,7 +12,7 @@ func _problems(chart: Array, kind := "story", diff := "hard") -> Array[String]:
 
 
 func test_fixtures_pass() -> void:
-	for f in ["res://tests/core/fixtures/story/s1.json", "res://tests/core/fixtures/story/s4.json", "res://tests/core/fixtures/story/pz.json"]:
+	for f in ["res://tests/core/fixtures/story/s1.json", "res://tests/core/fixtures/story/s4.json"]:
 		var s := SongData.load_file(f)
 		check_eq(ChartRules.check_song(s), [] as Array[String], "%s is clean" % f)
 
@@ -48,7 +48,6 @@ func test_rules_catch_problems() -> void:
 	check(_problems([{"b": 0, "k": "stomp", "lane": 1}], "story", "easy").any(func(p): return "not used at easy" in p), "no stomps at easy")
 	check(_problems([{"b": 0, "k": "stomp", "lane": 1}], "story", "medium").is_empty(), "stomps from medium")
 	check(_problems([{"b": 0, "k": "step", "lane": 1, "call": true}], "story", "medium").any(func(p): return "calls" in p), "no calls before hard")
-	check(_problems([{"b": 0, "k": "step", "lane": 1}], "piazza", "piazza").any(func(p): return "piazza" in p), "piazza is bells only")
 	check(_problems([{"b": 0, "k": "stomp", "lane": 1}], "tutorial", "easy").is_empty(), "the tutorial may teach anything at any level")
 	check(_problems([{"b": 12.3333, "k": "bell"}, {"b": 12.8333, "k": "bell"}]).filter(_not_grid).is_empty(), "thirds rounded to 4 decimals are half a beat apart")
 
@@ -130,8 +129,7 @@ func test_real_songs() -> void:
 		if song.has_remix():
 			check(SongLibrary.get_song(song.remix_id()) == song, "%s remix id resolves" % song.id)
 		for diff in song.difficulties():
-			var opts := {"piazza": true} if song.kind == "piazza" else {}
-			var s := Session.new(song, diff, "full", opts)
+			var s := Session.new(song, diff, "full")
 			check(s.stats.total > 0, "%s/%s has notes" % [song.id, diff])
 			_play_all(s)
 			if song.kind == "story":
@@ -154,13 +152,12 @@ func test_real_songs() -> void:
 			check_eq(s.stats.let_go, 0, "%s/%s: every hold kept" % [song.id, diff])
 			if song.length > 0.0:
 				check(s.notes[-1].end_t <= song.length, "%s/%s: notes end before the song does" % [song.id, diff])
-			if song.kind != "piazza":
-				var sl := Session.new(song, diff, "light", {"slam": true})
-				_play_all(sl)
-				check_near(sl.accuracy(), 1.0, 1e-9, "%s/%s slam: autoplay 100 %% with the buttons" % [song.id, diff])
-				var mi := Session.new(song, diff, "village", {"mirror": true})
-				_play_all(mi)
-				check_near(mi.accuracy(), 1.0, 1e-9, "%s/%s mirrored: autoplay 100 %%" % [song.id, diff])
+			var sl := Session.new(song, diff, "light", {"slam": true})
+			_play_all(sl)
+			check_near(sl.accuracy(), 1.0, 1e-9, "%s/%s slam: autoplay 100 %% with the buttons" % [song.id, diff])
+			var mi := Session.new(song, diff, "village", {"mirror": true})
+			_play_all(mi)
+			check_near(mi.accuracy(), 1.0, 1e-9, "%s/%s mirrored: autoplay 100 %%" % [song.id, diff])
 			if song.has_remix():
 				var r := Session.new(song, diff, "light", {"remix": true})
 				_play_all(r)
@@ -183,8 +180,6 @@ func test_real_songs() -> void:
 func test_health_is_fair() -> void:
 	SongLibrary.reset()
 	for song in SongLibrary.all():
-		if song.kind == "piazza":
-			continue
 		for diff in song.difficulties():
 			if not diff in SongData.DIFFICULTIES:
 				continue

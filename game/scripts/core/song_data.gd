@@ -11,7 +11,7 @@ const DIFFICULTIES: Array[String] = ["easy", "medium", "hard", "expert"]
 
 var id := ""
 var stop := 0
-var kind := "story"   ## story | piazza | tutorial
+var kind := "story"   ## story | tutorial
 var bpm := 120.0
 var offset := 0.0
 var audio := ""
@@ -79,7 +79,7 @@ static func from_dict(d: Dictionary) -> SongData:
 	if s.bpm <= 0.0:
 		s.errors.append("%s: bpm must be positive" % s.id)
 		s.bpm = 120.0
-	if not s.kind in ["story", "piazza", "tutorial"]:
+	if not s.kind in ["story", "tutorial"]:
 		s.errors.append("%s: unknown kind %s" % [s.id, s.kind])
 	return s
 
@@ -92,7 +92,7 @@ func title(lang := "en") -> String:
 	return id
 
 
-## Chart names in play order (easy..expert, then any others such as "piazza").
+## Chart names in play order (easy..expert, then any others).
 func difficulties() -> Array[String]:
 	var out: Array[String] = []
 	for d in DIFFICULTIES:

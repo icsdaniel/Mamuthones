@@ -7,13 +7,13 @@ extends RefCounted
 ## and all_bests()); by default it uses the Profile autoload.
 ##
 ## Rules:
-## - Story stops unlock in order: stop n+1 when stop n is finished with at least 1 bell (any level);
+## - Grades (Session.GRADES): F, E, D, C, B, A, S, S+, kept per song and difficulty as a rank 0..7.
+## - Story stops unlock in order: stop n+1 when stop n is finished with a D or better (any level);
 ##   the Workshop also counts as finished when the tutorial is done.
-## - A stop's remix unlocks when the stop is finished at Hard or Expert with at least 2 bells.
-## - Piazza tracks unlock when the Workshop (stop 1) is finished.
+## - A stop's remix unlocks when the stop is finished at Hard or Expert with a B or better.
 ## - Bell sets: Light from the start, Village when stop 3 is reached, Full load when stop 6 is reached.
-## - Carving points = every bell earned: the sum of best bells over every song and difficulty.
-##   They are a threshold, never spent.
+## - Carving points come from the best grade of every song and difficulty: 1 for a D or C, 2 for a B
+##   or A, 3 for an S or S+ (GRADE_POINTS). They are a threshold, never spent.
 ## - Mask options: MaskSpec.requirement(part, option) -> {stop, cost}: unlocked when that stop is
 ##   reached and carving_points() >= cost. Without MaskSpec only the first option of a part is open.
 ##
@@ -21,8 +21,10 @@ extends RefCounted
 ## next_goals(), snapshot().
 
 const REMIX_LEVELS: Array[String] = ["hard", "expert"]
-const REMIX_BELLS := 2
-const CLEAR_BELLS := 1
+const REMIX_GRADE := Session.RANK_B
+const CLEAR_GRADE := Session.RANK_D
+## Carving points for each grade rank (F, E, D, C, B, A, S, S+).
+const GRADE_POINTS: Array[int] = [0, 0, 1, 1, 2, 2, 3, 3]
 const BELL_SET_STOPS := {"light": 1, "village": 3, "full": 6}
 
 static var _mask_spec: Variant = null
@@ -36,8 +38,19 @@ static func story_order() -> Array[String]:
 	return out
 
 
-## Best bells on a song (base id or remix id) over the given difficulties (all when empty).
-static func best_bells(song_key: String, difficulties: Array = [], profile: Variant = null) -> int:
+## The grade rank (0..7) of a saved best. Bests saved before grades existed carry only their
+## accuracy (and bells): they get the grade their accuracy earns (never S+, which needs a full combo).
+static func entry_grade(e: Dictionary) -> int:
+	if e.has("grade"):
+		return clampi(int(e.grade), 0, Session.GRADES.size() - 1)
+	if e.has("accuracy"):
+		return Session.rank_for(float(e.accuracy), false)
+	return 0
+
+
+## Best grade rank on a song (base id or remix id) over the given difficulties (all when empty);
+## -1 when it has never been played there.
+static func best_grade(song_key: String, difficulties: Array = [], profile: Variant = null) -> int:
 	var p: Variant = _profile(profile)
 	if p == null:
 		return 0
@@ -45,14 +58,15 @@ static func best_bells(song_key: String, difficulties: Array = [], profile: Vari
 	if diffs.is_empty():
 		var s := SongLibrary.get_song(song_key)
 		diffs = s.difficulties() if s != null else SongData.DIFFICULTIES
-	var most := 0
+	var most := -1
 	for d in diffs:
 		var b: Dictionary = p.best(song_key, d)
-		most = maxi(most, int(b.get("bells", 0)))
+		if not b.is_empty():
+			most = maxi(most, entry_grade(b))
 	return most
 
 
-## A stop is finished with 1 bell at any level. The Workshop (tutorial) is also finished once
+## A stop is finished with a D or better at any level. The Workshop (tutorial) is also finished once
 ## the tutorial is done (Profile flag "tutorial_done"), since it is played lesson by lesson.
 static func cleared(song_id: String, profile: Variant = null) -> bool:
 	var s := SongLibrary.get_song(song_id)
@@ -60,7 +74,7 @@ static func cleared(song_id: String, profile: Variant = null) -> bool:
 		var p: Variant = _profile(profile)
 		if p != null and p.has_method("has_flag") and p.has_flag("tutorial_done"):
 			return true
-	return best_bells(song_id, [], profile) >= CLEAR_BELLS
+	return best_grade(song_id, [], profile) >= CLEAR_GRADE
 
 
 static func is_unlocked(song_id: String, profile: Variant = null) -> bool:
@@ -69,9 +83,6 @@ static func is_unlocked(song_id: String, profile: Variant = null) -> bool:
 		return false
 	if s.id != song_id:
 		return remix_unlocked(s.id, profile)
-	if s.kind == "piazza":
-		var order := story_order()
-		return order.is_empty() or opens_next(order[0], profile)
 	var story := story_order()
 	var i := story.find(song_id)
 	if i <= 0:
@@ -91,7 +102,7 @@ static func remix_unlocked(song_id: String, profile: Variant = null) -> bool:
 	var s := SongLibrary.get_song(song_id)
 	if s == null or not s.has_remix():
 		return false
-	return best_bells(s.id, REMIX_LEVELS, profile) >= REMIX_BELLS
+	return best_grade(s.id, REMIX_LEVELS, profile) >= REMIX_GRADE
 
 
 ## The highest story stop number reached (unlocked).
@@ -118,7 +129,7 @@ static func carving_points(profile: Variant = null) -> int:
 	for k in bests:
 		var e = bests[k]
 		if e is Dictionary:
-			total += clampi(int(e.get("bells", 0)), 0, 3)
+			total += GRADE_POINTS[entry_grade(e)]
 	return total
 
 
@@ -148,7 +159,8 @@ static func next_stop(profile: Variant = null) -> String:
 
 ## What the player is working towards, nearest first. Each entry:
 ## {kind: "song"|"remix"|"bell_set"|"mask", id, part (mask only), need: {...}, have: {...}}.
-## need/have use the keys song_id, difficulty ("hard" means Hard or Expert), bells, stop, points.
+## need/have use the keys song_id, difficulty ("hard" means Hard or Expert), grade (a rank; -1 in
+## have: never played), stop, points.
 static func next_goals(profile: Variant = null) -> Array:
 	var out := []
 	var story := story_order()
@@ -156,7 +168,7 @@ static func next_goals(profile: Variant = null) -> Array:
 	if ns != "":
 		var i := story.find(ns)
 		if i + 1 < story.size():
-			out.append({"kind": "song", "id": story[i + 1], "need": {"song_id": ns, "bells": CLEAR_BELLS}, "have": {"bells": best_bells(ns, [], profile)}})
+			out.append({"kind": "song", "id": story[i + 1], "need": {"song_id": ns, "grade": CLEAR_GRADE}, "have": {"grade": best_grade(ns, [], profile)}})
 	var stop := highest_stop(profile)
 	for id in BellSets.ids():
 		if not bell_set_unlocked(id, profile):
@@ -166,8 +178,8 @@ static func next_goals(profile: Variant = null) -> Array:
 	for id in story:
 		var s := SongLibrary.get_song(id)
 		if s.has_remix() and cleared(id, profile) and not remix_unlocked(id, profile):
-			remixes.append({"kind": "remix", "id": s.remix_id(), "need": {"song_id": id, "difficulty": "hard", "bells": REMIX_BELLS}, "have": {"bells": best_bells(id, REMIX_LEVELS, profile)}})
-	remixes.sort_custom(func(a, b): return a.have.bells > b.have.bells)
+			remixes.append({"kind": "remix", "id": s.remix_id(), "need": {"song_id": id, "difficulty": "hard", "grade": REMIX_GRADE}, "have": {"grade": best_grade(id, REMIX_LEVELS, profile)}})
+	remixes.sort_custom(func(a, b): return a.have.grade > b.have.grade)
 	out.append_array(remixes)
 	var spec: Variant = _spec()
 	if spec != null and _has_func(spec, "unlock_order"):

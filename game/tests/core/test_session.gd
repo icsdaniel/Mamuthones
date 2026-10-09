@@ -1,6 +1,6 @@
 extends TestCase
 ## Session rules: every judgement and window, unison, weight, full rings, holds, stomps,
-## stand-stills, slam, Piazza, remix and mirror (docs/design.md section 3).
+## stand-stills, slam, remix and mirror (docs/design.md section 3).
 
 const FIX := "res://tests/core/fixtures/"
 
@@ -262,9 +262,6 @@ func test_stray_exemptions() -> void:
 	s.update(st.t + Session.STOMP_GAP + 0.01)
 	check(st.done, "one-thumb stomp judged")
 	check_eq(s.tap(1, st.t + 0.15, 1).judgement, "", "a late second thumb is free")
-	# The Piazza takes no taps at all.
-	var p := Session.new(make(steps(8, 1)), "easy", "light", {"piazza": true})
-	check_eq(p.tap(1, _bt(2) + 0.25, 0).judgement, "", "no strays in the Piazza")
 	# Slam: the outer buttons ring the bell; only the middle can stray.
 	var sl := Session.new(make([{"b": 0, "k": "step", "lane": 1}, {"b": 4, "k": "step", "lane": 1}, {"b": 8, "k": "step", "lane": 1}]), "easy", "light", {"slam": true})
 	check_eq(sl.tap(0, _bt(2) + 0.25, 0).judgement, "", "an outer press in slam is a bell press")
@@ -602,7 +599,7 @@ func test_stomp_second_thumb_is_not_a_wrong_step() -> void:
 	check_eq(s.stats.wrong, 0, "no wrong")
 
 
-func test_accuracy_and_bells() -> void:
+func test_accuracy_and_grades() -> void:
 	var s := Session.new(make(steps(10)), "easy")
 	for i in 6:
 		s.tap(1, _bt(i), 0)                # 6 perfect
@@ -611,11 +608,14 @@ func test_accuracy_and_bells() -> void:
 	s.tap(1, _bt(8) + 0.12, 0)            # late
 	s.update(100)                         # miss
 	check_near(s.accuracy(), (6 + 1.4 + 0.3) / 10.0, 1e-9, "accuracy formula")
-	check_eq(s.bells(), 1, "77 % is one bell")
-	check_eq(Session.bells_for(0.69), 0, "69 % no bell")
-	check_eq(Session.bells_for(0.70), 1, "70 % one bell")
-	check_eq(Session.bells_for(0.85), 2, "85 % two bells")
-	check_eq(Session.bells_for(0.95), 3, "95 % three bells")
+	check_eq(s.grade(), "D", "77 % is a D")
+	check(not s.full_combo(), "a miss is no full combo")
+	var want := {0.0: "F", 0.59: "F", 0.60: "E", 0.69: "E", 0.70: "D", 0.78: "C", 0.85: "B", 0.90: "A", 0.95: "S", 0.99: "S", 1.0: "S"}
+	for acc in want:
+		check_eq(Session.grade_name(Session.rank_for(acc)), want[acc], "%d %% without a full combo" % roundi(acc * 100.0))
+	check_eq(Session.grade_name(Session.rank_for(0.98, true)), "S+", "98 % with a full combo is S+")
+	check_eq(Session.grade_name(Session.rank_for(0.97, true)), "S", "97 % with a full combo is still S")
+	check_eq(Session.grade_name(Session.rank_for(0.80, true)), "C", "a full combo alone lifts nothing")
 	check_near(s.mean_offset(), (0.06 + 0.06 + 0.12) / 9.0, 1e-6, "mean offset leans late")
 	check(s.is_over(100.0), "over after the end")
 
@@ -664,19 +664,6 @@ func test_slam_with_one_thumb_holding() -> void:
 	check_eq(s.stats.miss, 0, "nothing missed")
 
 
-func test_piazza_windows() -> void:
-	var d := {"id": "pz", "kind": "piazza", "bpm": 120, "offset": 1.0, "charts": {"piazza": [{"b": 0, "k": "bell"}, {"b": 2, "k": "bell"}, {"b": 4, "k": "step", "lane": 1}, {"b": 6, "k": "bell"}]}}
-	var s := Session.new(SongData.from_dict(d), "piazza", "full", {"piazza": true})
-	check_eq(s.stats.total, 3, "only bells count in the Piazza")
-	check_near(s.window("tilt").z, 0.200, 1e-6, "±200 ms whatever the bell set")
-	check_eq(s.ring(_bt(0) + 0.19).judgement, "late", "190 ms still counts")
-	check_eq(s.ring(_bt(2) - 0.06).judgement, "perfect", "60 ms is Perfect in the loose Piazza windows")
-	check_eq(s.tap(1, _bt(4), 0).judgement, "", "taps do nothing")
-	s.update(100)
-	check_eq(s.stats.miss, 1, "the unplayed bell is a miss")
-	check(not s.ladder_ok(), "Piazza scores stay on the phone")
-
-
 func test_remix_offsets() -> void:
 	var s := song()
 	var a := Session.new(s, "easy")
@@ -717,7 +704,8 @@ func test_autoplay_is_perfect() -> void:
 	check_eq(s.stats.silence, 0, "no bell in the stand-still")
 	check_eq(s.stats.still_kept, 1, "stand-still kept")
 	check_eq(rang.size(), 4, "rang for 3 bells and 1 full ring")
-	check_eq(s.bells(), 3, "three bells")
+	check_eq(s.grade(), "S+", "a perfect full combo is S+")
+	check(s.full_combo(), "full combo")
 
 
 func test_autoplay_human_is_close() -> void:
@@ -919,7 +907,7 @@ func test_health_never_on_holds_rings_calls_or_off_beats() -> void:
 func test_health_exempt_modes_never_fail() -> void:
 	var s1 := SongData.load_file(FIX + "story/s1.json")
 	var r := s1.lesson_range(1)
-	for opts in [{"piazza": true}, {"from_beat": r.x, "to_beat": r.y}, {"health": false}]:
+	for opts in [{"from_beat": r.x, "to_beat": r.y}, {"health": false}]:
 		var s := Session.new(s1, "easy", "light", opts)
 		var fails := [0]
 		s.failed.connect(func() -> void: fails[0] += 1)

@@ -112,7 +112,7 @@ func setup(p_session: Session, p_ghost: Ghost) -> void:
 	_ghost.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
 	_ghost.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	add_child(_ghost)
-	# Health: five hearts, two points each (hidden where health is off: Piazza, lessons, autoplay).
+	# Health: five hearts, two points each (hidden where health is off: lessons, autoplay).
 	_health = HealthPips.new()
 	_health.name = "Health"
 	_health.session = session

@@ -2,7 +2,7 @@ extends TestCase
 ## Every string key used by the UI exists in English and Italian, and no Italian cell is a copy of the
 ## English one where a translation is expected.
 
-const KEEP_SAME := ["lang_name_en", "lang_name_it", "title_piazza", "piazza_title", "diff_piazza", "date_fmt",
+const KEEP_SAME := ["lang_name_en", "lang_name_it", "date_fmt",
 	"ms_signed", "lat_count", "boards_online", "unlock_remix", "section_intro"]
 
 

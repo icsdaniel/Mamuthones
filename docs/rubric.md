@@ -77,8 +77,8 @@ design rule caps the aspect at 5.
 ## 8. Progression and replay
 - 6: Seven story stops unlock in order; free play; bests saved per song and difficulty.
 - 7: Mask carving, bell sets, sheepskin and straps work and show in the procession; remixes unlock.
-- 8: Ghost runs, the daily procession and the Piazza pass-and-play mode work; each stop gives a new
-  reason to replay (bells to earn, remix, carving points).
+- 8: Ghost runs and the daily procession work; each stop gives a new
+  reason to replay (grades to raise, remix, carving points).
 - 9: A player can see at a glance what to do next and what they are close to unlocking.
 - 10: Players want to finish every song at every difficulty.
 

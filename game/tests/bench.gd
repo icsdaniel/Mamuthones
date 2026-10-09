@@ -32,7 +32,7 @@ func _init() -> void:
 	for f in profile.FLAGS:
 		profile.set_flag(f, true)
 	var start := {"song_id": song_id, "difficulty": diff, "bell_set": "light", "remix": false,
-		"autoplay": true, "human": false, "piazza": false, "from_beat": 120.0, "to_beat": 184.0}
+		"autoplay": true, "human": false, "from_beat": 120.0, "to_beat": 184.0}
 	for x in a:
 		if x.begins_with("from="):
 			start.from_beat = float(x.substr(5))

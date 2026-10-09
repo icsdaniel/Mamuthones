@@ -224,10 +224,11 @@ func _well_done(session: Session) -> void:
 	var box := UIKit.column(_card, false, 18)
 	UIKit.spacer(box, 0, true)
 	box.add_child(UIKit.label(tr("tut_well_done"), UIKit.TITLE, true, HORIZONTAL_ALIGNMENT_CENTER))
-	var bells := BellMarks.new(maxi(session.bells(), 1), 64.0)
-	bells.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
-	box.add_child(bells)
-	bells.animate(0.1)
+	var grade := GradeBadge.new(session.grade_rank(), true)
+	grade.name = "Grade"
+	grade.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
+	box.add_child(grade)
+	grade.animate(0.1)
 	box.add_child(UIKit.label(tr("tut_accuracy") % roundi(session.accuracy() * 100.0), UIKit.SUB, true, HORIZONTAL_ALIGNMENT_CENTER))
 	UIKit.spacer(box, 0, true)
 	var go := UIKit.button(tr("ui_continue"), _next, UIKit.PRIMARY)

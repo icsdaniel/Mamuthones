@@ -1,6 +1,6 @@
 extends TestCase
 ## Play feel: resuming on the beat, the count-in you see and hear together, wrong-lane feedback on
-## the pressed button, Piazza hit feedback, and focus loss during a count-in.
+## the pressed button, and focus loss during a count-in.
 
 
 func _open(args: Dictionary) -> Array:
@@ -180,36 +180,6 @@ func test_wrong_lane_marks_the_pressed_button() -> void:
 	ev = ev.duplicate()
 	ev.pressed = false
 	router._input(ev)
-	_close(app)
-
-
-func test_piazza_hits_flash_the_cue() -> void:
-	var piazza := SongLibrary.piazza()
-	if not check(not piazza.is_empty(), "there are Piazza songs"):
-		return
-	var r: Array = await _open({"song_id": piazza[0].id, "difficulty": "piazza", "bell_set": "light", "piazza": true})
-	var app: App = r[0]
-	var play: Node = r[1]
-	var c: Conductor = r[2]
-	var s: Session = play.get("session")
-	var cue: PiazzaCue = play.get("cue")
-	check(cue != null, "Piazza shows its cue")
-	var bell: Note = null
-	for n in s.notes:
-		if n.is_bell():
-			bell = n
-			break
-	if bell == null or cue == null:
-		_close(app)
-		return
-	await _to_time(c, bell.t)
-	check_eq(cue.flashing(), "", "nothing flashes before the ring")
-	var frame := Engine.get_process_frames()
-	s.ring(bell.t, false)
-	check_eq(Engine.get_process_frames(), frame, "(same frame)")
-	check(cue.flashing() != "", "the ring flashes the circle with a big word (%s)" % cue.flashing())
-	cue.still = true
-	check(cue.still, "the cue has a grey still state")
 	_close(app)
 
 

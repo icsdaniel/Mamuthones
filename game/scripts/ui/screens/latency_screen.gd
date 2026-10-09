@@ -2,7 +2,7 @@ extends Screen
 ## The audio-delay tap test: four clicks to listen, then twelve to tap along with on the big drum.
 ## Nothing flashes with the clicks (that would measure the eyes, not the ears). The median delay
 ## becomes the audio offset. Uneven taps are explained and the test repeats.
-## args: first_run (bool) continues to the tutorial; otherwise back to settings.
+## args: first_run (bool) continues to the title (the tutorial stays optional); otherwise back.
 
 const BPM := LatencyTest.BPM
 const LISTEN := 4
@@ -190,7 +190,7 @@ func _keep(offset: float) -> void:
 func _next() -> void:
 	if args.get("first_run", false):
 		Profile.set_flag("latency_tested", true)
-		app.replace("tutorial", {"first_run": true})
+		app.reset("title")
 	else:
 		app.back()
 

@@ -1,6 +1,6 @@
 extends Screen
-## First launch, step 2: suggest headphones. One tap on to the title, where the tutorial and the
-## calibration wait as menu entries.
+## First launch, step 2: suggest headphones. One tap on to the calibration when this phone has not
+## been calibrated yet, else to the title.
 
 
 func build() -> void:
@@ -22,7 +22,10 @@ func build() -> void:
 
 func _next() -> void:
 	Profile.set_flag("headphones_seen", true)
-	app.reset("title")
+	if Profile.has_flag("calibrated"):
+		app.reset("title")
+	else:
+		app.replace("calibration", {"first_run": true})
 
 
 func on_back() -> void:

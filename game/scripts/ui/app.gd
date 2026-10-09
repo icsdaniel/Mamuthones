@@ -15,8 +15,6 @@ const SCREENS := {
 	"story": "res://scripts/ui/screens/story_screen.gd",
 	"stop_card": "res://scripts/ui/screens/stop_card_screen.gd",
 	"free_play": "res://scripts/ui/screens/free_play_screen.gd",
-	"piazza": "res://scripts/ui/screens/piazza_screen.gd",
-	"piazza_ranking": "res://scripts/ui/screens/piazza_ranking_screen.gd",
 	"daily": "res://scripts/ui/screens/daily_screen.gd",
 	"settings": "res://scripts/ui/screens/settings_screen.gd",
 	"credits": "res://scripts/ui/screens/credits_screen.gd",
@@ -63,7 +61,8 @@ func _ready() -> void:
 	if start_screen != "":
 		open(start_screen, start_args)
 	else:
-		open(UIKit.first_screen())
+		var first := UIKit.first_screen()
+		open(first, {"first_run": true} if first == "calibration" else {})
 
 
 func current() -> Screen:

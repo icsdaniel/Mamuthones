@@ -75,7 +75,7 @@ func test_ghost_line_in_points_after_the_first_note() -> void:
 func test_results_breakdown_and_timing_above_the_fold() -> void:
 	UIHarness.fresh_profile()
 	var s := _auto("fires", "hard", "village")
-	var args := {"session": s, "record": {"prev_best": int(s.score * 0.9), "new_best": true, "bells": s.bells(), "carving_gained": 2,
+	var args := {"session": s, "record": {"prev_best": int(s.score * 0.9), "new_best": true, "grade": s.grade_rank(), "carving_gained": 2,
 		"unlocked": [{"kind": "song", "id": "bonfires"}]}, "play_args": {"song_id": "fires", "difficulty": "hard", "bell_set": "village"}}
 	for loc in ["en", "it"]:
 		Profile.set_setting("language", loc)

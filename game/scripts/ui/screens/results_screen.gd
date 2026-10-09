@@ -1,5 +1,5 @@
 extends Screen
-## Results: the row's words for the run, the bells earned, the score and where it came from (accuracy,
+## Results: the row's words for the run, the letter grade (F to S+), the score and where it came from (accuracy,
 ## unison, weight), the early/late tendency, the best and the ghost, what was unlocked (celebrated), and
 ## one concrete tip for next time.
 ## args: session, record (Profile.record_result output, empty for autoplay), play_args, ghost.
@@ -7,11 +7,11 @@ extends Screen
 const TIERS := [0.5, 0.7, 0.85, 0.95]
 
 ## Juice hooks for sound (and anything else that wants the beats of this screen):
-## the score counting up (about 24 ticks, rising values), the count landing on the final score, each
-## earned bell popping in (0..2), and the best-score line appearing.
+## the score counting up (about 24 ticks, rising values), the count landing on the final score, the
+## grade stamping in, and the best-score line appearing.
 signal count_tick(value: int)
 signal count_done(value: int)
-signal bell_popped(index: int)
+signal grade_stamped(rank: int)
 signal best_revealed(new_best: bool)
 
 var session: Session
@@ -35,10 +35,10 @@ func build() -> void:
 
 	var acc := session.accuracy()
 	var words := UIKit.label(tr(grade_key(acc)), UIKit.HEADER, true, HORIZONTAL_ALIGNMENT_CENTER)
-	words.name = "Grade"
+	words.name = "Words"
 	box.add_child(words)
-	# Bells and score share one row, so the breakdown and timing fit above the fold.
-	# The showcase: a warm glow behind them flares as each bell pops in and as the score lands.
+	# Grade and score share one row, so the breakdown and timing fit above the fold.
+	# The showcase: a warm glow behind them flares as the grade stamps in and as the score lands.
 	var stage := PanelContainer.new()
 	stage.theme_type_variation = "ClearPanel"
 	box.add_child(stage)
@@ -65,19 +65,24 @@ func build() -> void:
 	top.alignment = BoxContainer.ALIGNMENT_CENTER
 	top.add_theme_constant_override("separation", 24)
 	stage.add_child(top)
-	var bells := BellMarks.new(session.bells(), 52.0)
-	bells.name = "Bells"
-	bells.size_flags_vertical = Control.SIZE_SHRINK_CENTER
-	top.add_child(bells)
-	bells.popped.connect(func(i: int) -> void:
-		bell_popped.emit(i)
-		_flare(0.75))
-	bells.animate(0.35)
+	var grade := GradeBadge.new(session.grade_rank(), true)
+	grade.name = "Grade"
+	grade.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+	top.add_child(grade)
+	grade.stamped.connect(func() -> void:
+		grade_stamped.emit(grade.rank)
+		_flare(0.5 + 0.1 * maxi(grade.rank - Session.RANK_B, 0)))
+	grade.animate(0.35)
 	var score := UIKit.label(UIKit.fmt_score(session.score), "BigNumberLabel", false, HORIZONTAL_ALIGNMENT_CENTER)
 	score.name = "Score"
 	score.add_theme_font_size_override("font_size", 72)
 	top.add_child(score)
 	_count_up(score, session.score)
+	if session.full_combo():
+		var fc := UIKit.label(tr("res_full_combo"), UIKit.CAPTION, true, HORIZONTAL_ALIGNMENT_CENTER)
+		fc.name = "FullCombo"
+		fc.add_theme_color_override("font_color", Palette.GOLD_HOT)
+		box.add_child(fc)
 	var best_line := _best_line()
 	if best_line != "":
 		var bl := UIKit.label(best_line, UIKit.SUB, true, HORIZONTAL_ALIGNMENT_CENTER)
@@ -317,13 +322,13 @@ static func tip_text(s: Session) -> String:
 	# A clean run: one step up that is actually open to this player, or nothing.
 	var diffs := s.song.difficulties()
 	var i := diffs.find(s.difficulty)
-	if s.bells() >= 2 and i >= 0 and i + 1 < diffs.size():
+	if s.grade_rank() >= Session.RANK_B and i >= 0 and i + 1 < diffs.size():
 		var nd := diffs[i + 1]
 		var tip := UIKit.tr_("tip_harder") % UIKit.tr_("diff_" + nd)
 		if nd in Progression.REMIX_LEVELS and s.song.has_remix() and not Progression.remix_unlocked(s.song.id):
-			tip += " " + UIKit.tr_("tip_harder_remix") % [Progression.REMIX_BELLS, UIKit.tr_("diff_" + nd)]
+			tip += " " + UIKit.tr_("tip_harder_remix") % [Session.grade_name(Progression.REMIX_GRADE), UIKit.tr_("diff_" + nd)]
 		return tip
-	var heavier := next_bell_set(s.bell_set) if s.bells() >= 2 else ""
+	var heavier := next_bell_set(s.bell_set) if s.grade_rank() >= Session.RANK_B else ""
 	if heavier != "":
 		return UIKit.tr_("tip_weight") % [BellSets.name(heavier, I18n.locale()), Hud._mult_text(float(BellSets.WEIGHTS[heavier]))]
 	return ""
@@ -383,7 +388,7 @@ func _glow_rest() -> void:
 
 func _next_song() -> SongData:
 	var play_args: Dictionary = args.get("play_args", {})
-	if play_args.get("daily", "") != "" or play_args.get("piazza", false) or session.bells() < 1:
+	if play_args.get("daily", "") != "" or session.grade_rank() < Progression.CLEAR_GRADE:
 		return null
 	var story := SongLibrary.story()
 	for i in story.size() - 1:

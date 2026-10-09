@@ -56,7 +56,7 @@ sensor access, so headless tests can drive them.
 }
 ```
 
-- `kind` is `story`, `piazza` (bells only; one chart named `piazza`) or `tutorial`.
+- `kind` is `story` or `tutorial`.
 - `key_root` is the MIDI note of the song's tonic, so step and hold sounds can be pitched to fit
   (`Sound.set_key(key_root)`).
 - `sections` name the song's parts in beats (intro, verse, build, climax, outro...) for the progress
@@ -87,7 +87,7 @@ sensor access, so headless tests can drive them.
 - `Note`: `kind` (`Note.Kind.STEP/HOLD/BELL/RING/STOMP/REST`), `t`, `end_t`, `lane`, `up` (bells, rings),
   `dir`, `call`, `beat`, plus play state (`done`, `holding`, `finished`, `hit_at`, `judgement`).
 - `Session.new(song: SongData, difficulty: String, bell_set: String, options := {})`, options
-  `slam: bool`, `piazza: bool`, `remix: bool`. Times are seconds of song time.
+  `slam: bool`, `remix: bool`. Times are seconds of song time.
   - Input: `tap(lane, t, touch_id)`, `release(t, touch_id)`, `ring(t) -> Dictionary`
     (`{up: bool, quality: "perfect"|"good"|"ok"|"miss"|"silence"|"free"}` so the bell sound can match).
   - `update(t)` every frame; `is_over(t)`.
@@ -113,7 +113,7 @@ sensor access, so headless tests can drive them.
 - `Daily`: `for_date(date_dict) -> {song_id, difficulty, mirror}` from a hash of the date.
 - `Profile` (autoload): versioned `user://profile.cfg`, corrupted files fall back to a fresh profile
   without crashing. Settings, calibration, audio offset, per song+difficulty bests `{score, accuracy,
-  bells, ghost}`, look (`mask`, `fleece`, `straps`, `bell_set`), piazza players, first-run flags.
+  bells, ghost}`, look (`mask`, `fleece`, `straps`, `bell_set`), first-run flags.
   `record_result(session) -> {prev_best, new_best, unlocked: [...]}`. Signal `changed`.
 - `Leaderboards` (autoload): `available()`, `submit(board_id, score)`, `show()`; a local backend now,
   with Game Center and Google Play Games backends to plug in at export time.

@@ -106,17 +106,19 @@ func build() -> void:
 	for item in [
 		["StoryMap", "title_story", func() -> void: app.open("story")],
 		["FreePlay", "title_free", func() -> void: app.open("free_play")],
-		["Piazza", "title_piazza", func() -> void: app.open("piazza")],
 		["Daily", "title_daily", func() -> void: app.open("daily")],
 		["Workshop", "title_workshop", func() -> void: app.open("workshop")],
 		["Leaderboards", "title_boards", _boards],
 		["Tutorial", "title_tutorial", func() -> void: app.open("tutorial")],
-		["Calibrate", "title_calibrate", func() -> void: app.open("calibration", {"then_latency": true})],
 	]:
 		var b := UIKit.button(tr(item[1]), item[2])
 		b.name = item[0]
 		b.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 		grid.add_child(b)
+	# The odd one out spans the width, so the grid stays even.
+	var cal := UIKit.button(tr("title_calibrate"), func() -> void: app.open("calibration", {"then_latency": true}))
+	cal.name = "Calibrate"
+	box.add_child(cal)
 
 	var rule_box := MarginContainer.new()
 	rule_box.add_theme_constant_override("margin_left", 72)

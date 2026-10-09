@@ -15,7 +15,9 @@ func test_song_plays_to_results_under_autoplay() -> void:
 	var res := app.current()
 	check_eq(res.screen_name(), "results_screen", "the song ends on the results")
 	check_eq(session.stats.miss, 0, "autoplay misses nothing")
-	check_eq(session.bells(), 3, "a perfect run earns 3 bells")
+	check_eq(session.grade(), "S+", "a perfect run earns an S+")
+	check(res.find_child("Grade", true, false) is GradeBadge, "results show the letter grade")
+	check(res.find_child("FullCombo", true, false) != null, "results say it was a full combo")
 	check(res.find_child("Breakdown", true, false) != null, "results break the score down")
 	check(res.find_child("Tendency", true, false) != null, "results show early/late tendency")
 	check(res.find_child("Tip", true, false) != null, "results give a tip")
@@ -134,14 +136,11 @@ func test_health_runs_out_and_restart_replays_the_song() -> void:
 	UIHarness.restore_profile()
 
 
-## Autoplay, the Piazza and the tutorial never show health and never fail.
+## Autoplay and the tutorial never show health and never fail.
 func test_exempt_modes_never_fail() -> void:
 	UIHarness.fresh_profile()
 	var story := SongLibrary.story()
-	var piazza := SongLibrary.piazza()
 	var cases := [{"song_id": story[1].id, "difficulty": "hard", "bell_set": "light", "autoplay": true, "human": true}]
-	if not piazza.is_empty():
-		cases.append({"song_id": piazza[0].id, "difficulty": "piazza", "bell_set": "light", "piazza": true})
 	var r := story[0].lesson_range(1)
 	cases.append({"song_id": story[0].id, "difficulty": "easy", "bell_set": "light", "from_beat": r.x, "to_beat": r.y})
 	for a in cases:

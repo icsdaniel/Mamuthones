@@ -3,7 +3,7 @@ extends RefCounted
 ## The seven stops of the story (docs/design.md section 5) as pixel-art worlds of Mamoiada, drawn by
 ## tools/art/pixel/stops.py into res://art/px/stops/ and described in StopCells (generated). This is
 ## the library that draws them: StopPicture (the cards, the story map) and ProcessionScene (the
-## Piazza, the workshop row, the title) both paint a world through here, so every picture of a stop is
+## workshop row, the title) both paint a world through here, so every picture of a stop is
 ## the same place.
 ##
 ##   1 The Workshop           the carver's room the night before: hearth, lamp, masks and bells, a mask on the bench

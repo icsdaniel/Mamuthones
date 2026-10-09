@@ -172,7 +172,7 @@ func _pick(d: String) -> void:
 	if today > 0:
 		_info.text = tr("daily_best_today") % UIKit.fmt_score(today)
 	elif not best.is_empty() and not song_hidden:
-		_info.text = tr("stop_best") % [UIKit.fmt_score(int(best.get("score", 0))), int(best.get("bells", 0))]
+		_info.text = tr("stop_best") % [UIKit.fmt_score(int(best.get("score", 0))), Session.grade_name(UIKit.grade_of(best))]
 	elif not played_today:
 		_info.text = tr("daily_be_first")
 	else:

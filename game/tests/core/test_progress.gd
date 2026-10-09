@@ -54,8 +54,6 @@ func test_profile_save_load_roundtrip() -> void:
 	p.set_look("fleece", "neon_pink")     # not a real fleece: refused
 	p.set_look("bell_set", "village")
 	p.set_calibration({"mode": "gyro", "threshold": 180.0, "axis": 0, "up_sign": 1, "reliable": true})
-	p.set_piazza_players(["Anna", "  Bachisio ", "Anna", "", "C", "D", "E", "F", "G"])
-	p.record_piazza("Anna", 1200)
 	check(p.save(), "saved")
 	p.free()
 	var q := _fresh_profile()
@@ -69,8 +67,6 @@ func test_profile_save_load_roundtrip() -> void:
 	check_eq(q.get_look().fleece, "dark_brown", "look kept")
 	check_eq(q.get_look().bell_set, "village", "bell set kept")
 	check_eq(q.calibration().get("threshold"), 180.0, "calibration kept")
-	check_eq(q.piazza_players(), ["Anna", "Bachisio", "C", "D", "E", "F"] as Array[String], "players trimmed, unique, at most 6")
-	check_eq(q.piazza_best("Anna"), 1200, "piazza best kept")
 	q.free()
 	_clean()
 
@@ -147,9 +143,8 @@ func test_progression_unlock_order() -> void:
 	p.leaderboards = lb
 	check_eq(Progression.story_order(), ["s1", "s2", "s3", "s4", "s5", "s6", "s7"] as Array[String], "story order by stop")
 	check(Progression.is_unlocked("s1", p), "stop 1 open")
-	# The tutorial (s1, the Workshop) is optional: stop 2 and the Piazza are open from the start.
+	# The tutorial (s1, the Workshop) is optional: stop 2 is open from the start.
 	check(Progression.is_unlocked("s2", p), "stop 2 open without the tutorial")
-	check(Progression.is_unlocked("pz", p), "piazza open without the tutorial")
 	check(Progression.bell_set_unlocked("light", p), "light from the start")
 	check(not Progression.bell_set_unlocked("village", p), "village locked")
 	check_eq(Progression.next_stop(p), "s2", "next stop skips the optional tutorial")
@@ -157,17 +152,18 @@ func test_progression_unlock_order() -> void:
 	check(not goals.is_empty() and goals[0].kind == "song" and goals[0].id == "s3", "first goal: finish s2 to open s3")
 	# A failed run unlocks nothing.
 	var bad := _play("s1", "easy", {}, 3)
-	check_eq(bad.bells(), 0, "3 hits of 19 is no bell")
+	check(bad.grade_rank() < Progression.CLEAR_GRADE, "3 hits of 19 is below a D (%s)" % bad.grade())
 	var r0: Dictionary = p.record_result(bad)
 	check(r0.unlocked.is_empty(), "nothing unlocked")
 	check(not Progression.is_unlocked("s3", p), "s3 still locked")
-	# Finishing s1 opens nothing new: s2 and the Piazza were already open.
+	# Finishing s1 opens nothing new: s2 was already open.
 	var r1: Dictionary = p.record_result(_play("s1", "easy"))
 	check(r1.new_best, "new best")
 	check_eq(r1.prev_best, bad.score, "previous best reported")
 	var kinds: Array = r1.unlocked.map(func(u): return "%s:%s" % [u.kind, u.id])
-	check(not "song:s2" in kinds and not "song:pz" in kinds, "s2 and the piazza were open already (%s)" % [kinds])
-	check_eq(r1.carving_gained, 3, "three bells, three carving points")
+	check(not "song:s2" in kinds, "s2 was open already (%s)" % [kinds])
+	check_eq(r1.grade, Session.RANK_SPLUS, "a perfect run is graded S+")
+	check_eq(r1.carving_gained, 3, "an S+ gives three carving points")
 	check_eq(Progression.carving_points(p), 3, "carving points")
 	check(not Progression.is_unlocked("s3", p), "s3 still locked")
 	# Clearing in order.
@@ -176,7 +172,7 @@ func test_progression_unlock_order() -> void:
 	check(Progression.bell_set_unlocked("village", p), "village open")
 	check(not Progression.remix_unlocked("s2", p), "no remix from easy")
 	var r3: Dictionary = p.record_result(_play("s2", "hard"))
-	check(r3.unlocked.any(func(u): return u.kind == "remix" and u.id == "s2_remix"), "remix unlocks at hard with 2+ bells")
+	check(r3.unlocked.any(func(u): return u.kind == "remix" and u.id == "s2_remix"), "remix unlocks at hard with a B or better")
 	check(Progression.is_unlocked("s2_remix", p), "remix id is playable")
 	for id in ["s3", "s4", "s5"]:
 		p.record_result(_play(id, "medium"))
@@ -373,12 +369,21 @@ class FakeBackend:
 		shown.append(id)
 
 
+func test_grades_from_old_saves_and_thresholds() -> void:
+	check_eq(Progression.entry_grade({"bells": 2, "accuracy": 0.86}), Session.RANK_B, "an old best gets the grade its accuracy earns")
+	check_eq(Progression.entry_grade({"accuracy": 0.99}), Session.RANK_S, "an old best is never S+ (no full combo known)")
+	check_eq(Progression.entry_grade({"grade": 7}), Session.RANK_SPLUS, "a saved grade is kept")
+	check_eq(Progression.entry_grade({}), 0, "nothing saved is F")
+	check_eq(Progression.CLEAR_GRADE, Session.GRADES.find("D"), "a D clears a stop")
+	check_eq(Progression.REMIX_GRADE, Session.GRADES.find("B"), "a B at Hard opens the remix")
+	check_eq(Progression.GRADE_POINTS.size(), Session.GRADES.size(), "carving points for every grade")
+
+
 func test_song_library() -> void:
 	SongLibrary.use_directory(STORY)
-	check_eq(SongLibrary.all().size(), 8, "7 stops and a piazza track")
+	check_eq(SongLibrary.all().size(), 7, "7 stops")
 	check_eq(SongLibrary.story().size(), 7, "story includes the tutorial")
 	check_eq(SongLibrary.story()[0].kind, "tutorial", "the workshop first")
-	check_eq(SongLibrary.piazza().size(), 1, "one piazza track")
 	check_eq(SongLibrary.get_song("s3_remix"), SongLibrary.get_song("s3"), "remix id gives the base song")
 	check(SongLibrary.is_remix_id("s3_remix") and not SongLibrary.is_remix_id("s3"), "is_remix_id")
 	check_eq(SongLibrary.get_song("nope"), null, "unknown id")
@@ -504,7 +509,6 @@ func test_profile_fuzz() -> void:
 	p.leaderboards = _boards()
 	p.set_setting("note_speed", 1.25)
 	p.set_flag("tutorial_done")
-	p.set_piazza_players(["Anna", "Bachisio"])
 	p.record_result(_play("s2", "easy"))
 	p.save()
 	var good: PackedByteArray = FileAccess.get_file_as_bytes(P)
@@ -535,7 +539,7 @@ func test_profile_fuzz() -> void:
 		var q := _fresh_profile()
 		statuses[q.load_status] = statuses.get(q.load_status, 0) + 1
 		if q.load_status == "ok":
-			check(q.get_setting("note_speed") == 1.25 and q.has_flag("tutorial_done") and q.piazza_players().size() == 2 and not q.best("s2", "easy").is_empty(), "fuzz %d: a trusted file reads back exactly" % i)
+			check(q.get_setting("note_speed") == 1.25 and q.has_flag("tutorial_done") and not q.best("s2", "easy").is_empty(), "fuzz %d: a trusted file reads back exactly" % i)
 		else:
 			check(q.load_status in ["corrupt", "new"], "fuzz %d: otherwise a fresh profile (%s)" % [i, q.load_status])
 			check_eq(q.get_setting("note_speed"), 1.0, "fuzz %d: fresh defaults" % i)
@@ -553,7 +557,6 @@ func test_tutorial_flag_clears_the_workshop() -> void:
 	check(not Progression.cleared("s1", p), "the Workshop is not finished yet")
 	p.set_flag("tutorial_done")
 	check(Progression.cleared("s1", p), "finishing the tutorial finishes the Workshop")
-	check(Progression.is_unlocked("pz", p), "the Piazza stays open")
 	p.free()
 	SongLibrary.reset()
 	_clean()

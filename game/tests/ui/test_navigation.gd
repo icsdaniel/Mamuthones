@@ -14,7 +14,13 @@ func test_first_launch_leads_to_the_menu() -> void:
 	check_eq(app.current().screen_name(), "headphones_screen", "then the headphone suggestion")
 	check(UIHarness.press(app, "Continue"), "headphones: continue")
 	await UIHarness.frames(tree, 2)
-	check_eq(app.current().screen_name(), "title_screen", "then straight to the menu: tutorial and calibration are optional")
+	check_eq(app.current().screen_name(), "calibration_screen", "then the calibration, since this phone is not calibrated")
+	check(UIHarness.press(app, "UseSlam"), "calibration: the buttons instead (no sensors here)")
+	await UIHarness.frames(tree, 2)
+	check_eq(app.current().screen_name(), "latency_screen", "then the sound delay test")
+	check(UIHarness.press(app, "Skip"), "delay test: skip")
+	await UIHarness.frames(tree, 2)
+	check_eq(app.current().screen_name(), "title_screen", "then the menu: the tutorial is optional")
 	check_eq(app.stack.size(), 1, "the title is the bottom of the stack")
 	for b in ["Tutorial", "Calibrate"]:
 		check(app.current().find_child(b, true, false) != null, "the menu offers %s" % b)
@@ -27,6 +33,24 @@ func test_first_launch_leads_to_the_menu() -> void:
 	var again := UIHarness.make_app(tree)
 	await UIHarness.frames(tree, 2)
 	check_eq(again.current().screen_name(), "title_screen", "the headphone tip shows once")
+	UIHarness.free_app(again)
+	UIHarness.restore_profile()
+
+
+## A phone that was never calibrated starts at the calibration, even after the first-run steps.
+func test_uncalibrated_phone_starts_at_calibration() -> void:
+	UIHarness.fresh_profile()
+	Profile.set_flag("calibrated", false)
+	var app := UIHarness.make_app(tree)
+	await UIHarness.frames(tree, 2)
+	check_eq(app.current().screen_name(), "calibration_screen", "an uncalibrated phone opens on the calibration")
+	check(UIHarness.press(app, "UseSlam"), "calibration: the buttons instead")
+	await UIHarness.frames(tree, 2)
+	check_eq(app.current().screen_name(), "latency_screen", "then the delay test")
+	UIHarness.free_app(app)
+	var again := UIHarness.make_app(tree)
+	await UIHarness.frames(tree, 2)
+	check_eq(again.current().screen_name(), "title_screen", "once calibrated, the title")
 	UIHarness.free_app(again)
 	UIHarness.restore_profile()
 
@@ -83,7 +107,7 @@ func test_menus_forward_and_back() -> void:
 	await UIHarness.frames(tree, 2)
 	check_eq(app.current().screen_name(), "title_screen", "a returning player starts on the title")
 	var routes := [
-		["StoryMap", "story_screen"], ["FreePlay", "free_play_screen"], ["Piazza", "piazza_screen"],
+		["StoryMap", "story_screen"], ["FreePlay", "free_play_screen"],
 		["Daily", "daily_screen"], ["Workshop", "workshop_screen"], ["Leaderboards", "boards_screen"],
 		["Settings", "settings_screen"], ["Tutorial", "tutorial_screen"], ["Calibrate", "calibration_screen"],
 	]
@@ -168,10 +192,8 @@ func test_short_intros_and_outros() -> void:
 	var ids: Array = []
 	for sd in SongLibrary.story():
 		ids.append(sd.id)
-	for sd in SongLibrary.piazza():
-		ids.append(sd.id)
 	for id in ids:
-		var diff := "piazza" if SongLibrary.get_song(id).kind == "piazza" else "hard"
+		var diff := "hard"
 		var app := UIHarness.make_app(tree, "play", {"song_id": id, "difficulty": diff, "bell_set": "light"})
 		await UIHarness.frames(tree, 3)
 		var play := app.current()
@@ -201,8 +223,8 @@ func test_first_note_within_a_minute() -> void:
 	var app := UIHarness.make_app(tree)
 	await UIHarness.frames(tree, 2)
 	var t0 := Time.get_ticks_msec()
-	# Language, headphones, then the first song straight from the menu (tutorial and calibration optional).
-	for b in ["Lang_en", "Continue", "PlayNext", "Play"]:
+	# Language, headphones, calibration, delay test, then the first song from the menu (tutorial optional).
+	for b in ["Lang_en", "Continue", "UseSlam", "Skip", "PlayNext", "Play"]:
 		check(UIHarness.press(app.current(), b), "first run: %s" % b)
 		await UIHarness.settle(tree)
 	var play: Node = null

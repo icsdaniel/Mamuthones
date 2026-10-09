@@ -7,15 +7,14 @@ extends RefCounted
 ## and stand-stills). Inputs carry their own time stamps, so they may arrive a little after the fact.
 ##
 ## Options: slam (the bell from the buttons: see _slam_bell; full rings judged on their step alone;
-## no tilt allowance), piazza (bells only, ±200 ms),
-## remix (remix offset), mirror (lanes 0<->2), from_beat/to_beat (only notes in
+## no tilt allowance), remix (remix offset), mirror (lanes 0<->2), from_beat/to_beat (only notes in
 ## [from, to), for tutorial lessons and practice), daily ("YYYY-MM-DD", recorded on the daily ladder).
 ##
 ## Additions beyond the architecture doc: tap() returns a result Dictionary; ring() takes an
 ## optional `tilt` flag and `strength` (0-1) and returns extra keys (judgement, offset, side,
 ## strength, note); running_accuracy(),
 ## mean_offset(), median_offset(), hit_offsets, score_breakdown(), end_time(), progress(t),
-## song_key(), ladder_ok(), passed(), upcoming_bell(t), window(kind), stats keys listed in _init,
+## song_key(), ladder_ok(), grade(), grade_rank(), full_combo(), passed(), window(kind), stats keys listed in _init,
 ## Note.side ("early"/"late"/"" for every judged hit, so a Perfect can still say which side it was).
 ## Signals wrong_step(lane, note, offset) (the pressed lane of a wrong step) and still_kept(note,
 ## points) and stomp_landed(note, judgement, offset, both); stats unison_peak (the highest multiplier
@@ -29,12 +28,12 @@ extends RefCounted
 ## (a stomp played with one thumb is a weaker hit, not a miss); wrong-lane steps and rings in a
 ## stand-still cost none. Healing steps (Note.heal, picked at the start from on-beat steps, about one
 ## every HEAL_EVERY[difficulty] seconds) restore HEAL when hit at Ok or better. At 0 `failed` fires
-## once; the rules keep judging, the play screen ends the run. Off (health_on false) in the Piazza,
+## once; the rules keep judging, the play screen ends the run. Off (health_on false) in
 ## lessons and practice (from_beat/to_beat) and with options.health = false (autoplay demos).
 ##
 ## Stray taps: a step button pressed with no note of any lane due (outside every window) and none of
 ## its own lane within WRONG_REACH breaks the combo like a wrong step (combo and streak to 0, unison down STRAY_DROP), with no health cost. Taps
-## before the first note's window, after the last note, in the Piazza, on slam's bell buttons and a
+## before the first note's window, after the last note, on slam's bell buttons and a
 ## late second thumb just after a stomp stay free. Mashing: LOCK_TAPS stray or wrong taps within
 ## LOCK_SPAN lock the step buttons for LOCK_TIME; taps while locked judge nothing (judgement "locked").
 ##
@@ -67,7 +66,6 @@ const PERFECT := 0.045
 const GOOD := 0.090
 const OK := 0.140
 const TILT_EXTRA := 0.015    ## tilts: +15 ms on every window (sensors are looser than touch)
-const PIAZZA_OK := 0.200     ## Piazza: all windows stretched so the outer one is ±200 ms
 const POINTS := {"perfect": 300, "good": 150, "early": 50, "late": 50}
 const RING_POINTS := {"perfect": 450, "good": 225, "early": 75, "late": 75}
 const STOMP_POINTS := {"perfect": 450, "good": 225, "early": 75, "late": 75}
@@ -110,7 +108,6 @@ var difficulty := ""
 var bell_set := "light"
 var options: Dictionary = {}
 var slam := false
-var piazza := false
 var remix := false
 var mirror := false
 var daily := ""
@@ -163,7 +160,6 @@ func _init(p_song: SongData, p_difficulty: String, p_bell_set: String = "light",
 	bell_set = p_bell_set if BellSets.is_valid(p_bell_set) else "light"
 	options = p_options
 	slam = bool(options.get("slam", false))
-	piazza = bool(options.get("piazza", false))
 	remix = bool(options.get("remix", false)) and song.has_remix()
 	mirror = bool(options.get("mirror", false))
 	daily = str(options.get("daily", ""))
@@ -171,26 +167,14 @@ func _init(p_song: SongData, p_difficulty: String, p_bell_set: String = "light",
 	var to_beat := float(options.get("to_beat", INF))
 	_weight = BellSets.weight(bell_set)
 	var base := Vector3(PERFECT, GOOD, OK)
-	if piazza:
-		# Loose timing whatever the bell set: the whole body is moving.
-		win_touch = base * (PIAZZA_OK / OK)
-		win_tilt = win_touch
-	else:
-		var scale := BellSets.window_scale(bell_set)
-		win_touch = base * scale
-		# Slam bells are touches, so they get no sensor allowance.
-		win_tilt = win_touch if slam else win_touch + Vector3.ONE * TILT_EXTRA
+	var scale := BellSets.window_scale(bell_set)
+	win_touch = base * scale
+	# Slam bells are touches, so they get no sensor allowance.
+	win_tilt = win_touch if slam else win_touch + Vector3.ONE * TILT_EXTRA
 	_max_window = maxf(win_touch.z, win_tilt.z)
 
 	var all := song.notes(difficulty, remix, mirror, from_beat, to_beat)
 	for n in all:
-		if piazza:
-			# Only tilts count: rings become plain bells, taps and stomps are dropped.
-			if n.kind == Note.Kind.RING:
-				n.kind = Note.Kind.BELL
-				n.lane = -1
-			if n.kind != Note.Kind.BELL and n.kind != Note.Kind.REST:
-				continue
 		n.index = notes.size()
 		notes.append(n)
 
@@ -220,7 +204,7 @@ func _init(p_song: SongData, p_difficulty: String, p_bell_set: String = "light",
 		# A couple of seconds after the last note, not the whole outro: the play screen fades the music.
 		_end_time = maxf(minf(song.length_for(remix), last_end + END_PAD), last_end + 1.0)
 	score_timeline.append(Vector2(notes[0].t - 1.0 if not notes.is_empty() else 0.0, 0.0))
-	health_on = not piazza and not options.has("from_beat") and not options.has("to_beat") and bool(options.get("health", true))
+	health_on = not options.has("from_beat") and not options.has("to_beat") and bool(options.get("health", true))
 	if health_on:
 		_pick_heals()
 
@@ -326,19 +310,40 @@ func _acc_sum() -> float:
 	return stats.perfect + 0.7 * stats.good + 0.3 * (stats.early + stats.late)
 
 
-## Bell rating 0..3 (≥ 70 %, ≥ 85 %, ≥ 95 %).
-func bells() -> int:
-	return bells_for(accuracy())
+## Letter grades, worst to best. A run's grade comes from its accuracy (GRADE_MIN, the least accuracy
+## for each letter); S+ also needs a full combo: no miss, wrong step, stray tap, lost hold or bell rung
+## into a stand-still. The rank is the index in GRADES (F = 0 .. S+ = 7).
+const GRADES: Array[String] = ["F", "E", "D", "C", "B", "A", "S", "S+"]
+const GRADE_MIN: Array[float] = [0.0, 0.60, 0.70, 0.78, 0.85, 0.90, 0.95, 0.98]
+const RANK_D := 2
+const RANK_B := 4
+const RANK_S := 6
+const RANK_SPLUS := 7
 
 
-static func bells_for(acc: float) -> int:
-	if acc >= 0.95 - 1e-9:
-		return 3
-	if acc >= 0.85 - 1e-9:
-		return 2
-	if acc >= 0.70 - 1e-9:
-		return 1
+func grade_rank() -> int:
+	return rank_for(accuracy(), full_combo())
+
+
+func grade() -> String:
+	return GRADES[grade_rank()]
+
+
+## Nothing broke the combo over the whole chart (every note played).
+func full_combo() -> bool:
+	return stats.total > 0 and stats.miss == 0 and stats.wrong == 0 and stats.stray == 0 \
+			and stats.let_go == 0 and stats.silence == 0
+
+
+static func rank_for(acc: float, combo := false) -> int:
+	for r in range(GRADES.size() - 1, 0, -1):
+		if acc >= GRADE_MIN[r] - 1e-9 and (r < RANK_SPLUS or combo):
+			return r
 	return 0
+
+
+static func grade_name(rank: int) -> String:
+	return GRADES[clampi(rank, 0, GRADES.size() - 1)]
 
 
 ## Where the score came from: base points, extra from unison, extra from weight, hold bonuses,
@@ -396,7 +401,7 @@ func song_key() -> String:
 
 ## Whether a run of this session may go on the global ladder.
 func ladder_ok() -> bool:
-	return not slam and not piazza and not options.has("from_beat") and not options.has("to_beat")
+	return not slam and not options.has("from_beat") and not options.has("to_beat")
 
 
 ## Half-widths (perfect, good, ok) for "touch" or "tilt".
@@ -418,16 +423,6 @@ func lock_left(t: float) -> float:
 
 func locked_until() -> float:
 	return _locked_until
-
-
-## The next bell (or full ring) still to play at or after t - its window, or null. For the big
-## Piazza cue and the up/down arrow.
-func upcoming_bell(t: float) -> Note:
-	for i in range(_first_open, notes.size()):
-		var n := notes[i]
-		if n.is_bell() and not n.done and n.t + win_tilt.z >= t:
-			return n
-	return null
 
 
 # ---------------------------------------------------------------- input
@@ -452,7 +447,7 @@ func tap(lane: int, t: float, touch_id: int = 0) -> Dictionary:
 		_holds.erase(touch_id)
 		if old.holding:
 			_end_hold(old, t, t >= old.end_t - HOLD_GRACE)
-	var n: Note = null if piazza else _find_lane_note(lane, t, touch_id)
+	var n: Note = _find_lane_note(lane, t, touch_id)
 	if n != null and slam and lane != 1 and _bell_nearer(n, t):
 		n = null   # in slam an outer press nearer a due bell is a bell press
 	if n != null:
@@ -490,7 +485,7 @@ func tap(lane: int, t: float, touch_id: int = 0) -> Dictionary:
 				res.offset = n.step_at - n.t
 				res.side = _side(res.offset)
 		res.judgement = n.judgement
-	elif not piazza and not (slam and lane != 1):
+	elif not (slam and lane != 1):
 		# A wrong step only when another lane's note is due AND the pressed lane has no note of its
 		# own coming soon: otherwise the tap is stray and free, and the player's note still counts.
 		# A tap with neither breaks the combo as a stray (a press a little early for the lane's own
@@ -817,7 +812,7 @@ func _wrong(n: Note, t: float, off: float, drop: int) -> void:
 
 # Whether a tap that hit no note and no other lane's note breaks the combo (see Stray taps).
 func _stray_counts(lane: int, t: float) -> bool:
-	if piazza or (slam and lane != 1):
+	if slam and lane != 1:
 		return false
 	if is_nan(_taps_from) or t < _taps_from - win_touch.z or t > _taps_to + win_touch.z:
 		return false

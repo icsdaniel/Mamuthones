@@ -1,7 +1,8 @@
 class_name BellMarks
 extends Control
 ## Up to three small bronze cowbells in pixel art (tools/art/pixel/ui_kit.py): earned ones in bronze, the
-## rest as hollow outlines. Used for a stop's best, a difficulty's best and the results. `animate()`
+## rest as hollow outlines. Used for the calibration's counted tilts and the unlock celebration (run
+## grades are letters: GradeBadge). `animate()`
 ## pops them in one by one on the art grid (1, 2, 3, 4 then 3 pixels a pixel), ringing each.
 
 ## One earned bell has popped in (index 0..2): for sounds and screen juice.

@@ -65,7 +65,6 @@ func _prepare_profile() -> void:
 			if d in s.difficulties():
 				profile.record_result(_played(s, d, "light", i != 2))
 	profile.set_look("fleece", "dark_brown")
-	profile.set_piazza_players(["Giovanni", "Maria", "Antonio", "Grazia"])
 
 
 static func _played(song: SongData, diff: String, bells: String, good: bool, until := INF) -> Session:
@@ -96,9 +95,6 @@ func _shots() -> Array:
 		{"file": "free_play", "screen": "free_play"},
 		{"file": "daily", "screen": "daily"},
 		{"file": "boards", "screen": "boards"},
-		{"file": "piazza", "screen": "piazza"},
-		{"file": "piazza_turn", "screen": "piazza", "args": {"round": _round(1)}},
-		{"file": "piazza_ranking", "screen": "piazza_ranking", "args": {"round": _round(4)}, "wait": 1.4},
 		{"file": "settings", "screen": "settings"},
 		{"file": "credits", "screen": "credits"},
 		{"file": "workshop", "screen": "workshop", "setup": "tab_mask", "wait": 0.8},
@@ -136,17 +132,7 @@ func _shots() -> Array:
 		{"file": "play_health_low", "screen": "play", "args": {"song_id": fires_id, "difficulty": "hard", "bell_set": "light", "autoplay": true, "health": true}, "setup": "moment:dense", "health": 2, "wait": 0.3},
 		{"file": "play_fail", "screen": "play", "args": {"song_id": fires_id, "difficulty": "hard", "bell_set": "light", "autoplay": true, "health": true}, "setup": "fail", "wait": 1.2},
 	]
-	var piazza := SongLibrary.piazza()
-	if not piazza.is_empty():
-		shots.append({"file": "play_piazza_hit", "screen": "play", "args": {"song_id": piazza[0].id, "difficulty": "piazza", "bell_set": "light", "piazza": true, "autoplay": true, "round": _round(1)}, "setup": "moment:rang", "wait": 0.05})
-		shots.append({"file": "play_piazza", "screen": "play", "args": {"song_id": piazza[0].id, "difficulty": "piazza", "bell_set": "light", "piazza": true, "autoplay": true, "round": _round(1)}, "setup": "advance:0.3"})
 	return shots
-
-
-func _round(turn: int) -> Dictionary:
-	var songs := SongLibrary.piazza()
-	return {"song_id": songs[0].id if not songs.is_empty() else "", "players": ["Giovanni", "Maria", "Antonio", "Grazia"],
-		"scores": [48250, 51900, 39600, 45100], "turn": turn}
 
 
 func _render(shot: Dictionary, size: Vector2i, locale: String, dir: String) -> void:
@@ -472,6 +458,6 @@ func _results_args() -> Dictionary:
 	ghost.final_score = int(s.score * 0.93)
 	var next := story[2].id if story.size() > 2 else song.id
 	return {"session": s, "ghost": ghost,
-		"record": {"prev_best": ghost.final_score, "new_best": true, "bells": s.bells(), "carving_gained": 2,
+		"record": {"prev_best": ghost.final_score, "new_best": true, "grade": s.grade_rank(), "carving_gained": 2,
 			"unlocked": [{"kind": "remix", "id": song.remix_id() if song.has_remix() else song.id}, {"kind": "song", "id": next}]},
 		"play_args": {"song_id": song.id, "difficulty": "hard", "bell_set": "village"}}

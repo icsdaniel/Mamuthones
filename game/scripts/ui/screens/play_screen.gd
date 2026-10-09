@@ -1,11 +1,10 @@
 extends Screen
 ## Playing a song. Top to bottom: HUD, then the three lanes of tiles and the three step buttons, with a
-## file of Mamuthones jumping on the beat either side of them (design section 8). The Piazza keeps the
-## procession scene over its cue instead. Conductor keeps song time from the audio clock; InputRouter (or Autoplay) feeds
+## file of Mamuthones jumping on the beat either side of them (design section 8). Conductor keeps song time from the audio clock; InputRouter (or Autoplay) feeds
 ## the Session; every hit is answered in the same frame with its sound, a button flash, a burst, a
 ## judgement word, a jolt of the row and a short vibration.
 ##
-## args: song_id, difficulty, bell_set, remix, mirror, daily, piazza, round (Piazza turn state),
+## args: song_id, difficulty, bell_set, remix, mirror, daily,
 ##       autoplay (bool), human (autoplay with small errors), from_beat/to_beat (a lesson),
 ##       embedded (emit `finished` instead of opening the results), lead_in (seconds before the first
 ##       note when starting mid-song, with no count), quick (restart / retry: start a bar before the
@@ -22,7 +21,6 @@ extends Screen
 
 signal finished(session: Session)
 
-const SCENE_SHARE := 0.27         ## Piazza: share of the screen height given to the procession scene
 const GUTTER := 0.0               ## the road fills the width; the Mamuthones stand beside its far end
 const BANNER_SHARE := 0.4         ## the count-in and the stand-still moment use this top share of the lanes
 const FAIL_MENU_DELAY := 0.5      ## seconds from running out of health to the fail menu
@@ -48,7 +46,7 @@ var router: InputRouter
 var autoplay: Autoplay
 var ghost: Ghost
 var hud: Hud
-var scene                         ## SideRows (songs) or ProcessionScene (Piazza): the same calls
+var scene                         ## the street backdrop: unison, stumbles, stand-stills
 var banner: Control               ## over the top of the lanes: count-in and stand-still moment
 var lanes: LaneView
 var backdrop: StreetBackdrop     ## the street picture, the fire and the swaying portraits (songs)
@@ -57,7 +55,6 @@ var filter: PixelFilter           ## the pixel look's lens over the whole screen
 var world: SubViewportContainer   ## the pixel look: the street, lanes and HUD drawn at the base size
 var world_vp: SubViewport
 var pixel := false                ## the play screen is in the pixel look
-var cue: PiazzaCue
 var paused := false
 var done := false
 
@@ -99,7 +96,6 @@ func build() -> void:
 	var auto := bool(args.get("autoplay", false))
 	var options := {
 		"slam": bool(Profile.get_setting("slam")) and not auto,
-		"piazza": bool(args.get("piazza", false)),
 		"remix": bool(args.get("remix", false)),
 		"mirror": bool(args.get("mirror", false)),
 	}
@@ -114,11 +110,10 @@ func build() -> void:
 	_first_t = session.notes[0].t if not session.notes.is_empty() else song.time_of(0.0, session.remix)
 	var best: Dictionary = Profile.best(session.song_key(), difficulty)
 	var gd = best.get("ghost", {})
-	if gd is Dictionary and not (gd as Dictionary).is_empty() and not session.piazza:
+	if gd is Dictionary and not (gd as Dictionary).is_empty():
 		ghost = Ghost.from_dict(gd)
 
-	# The Piazza keeps its plain black ground under the procession; songs play on the Fire Night.
-	pixel = str(Profile.get_setting("art_style")) == "pixel" and not session.piazza
+	pixel = str(Profile.get_setting("art_style")) == "pixel"
 	StreetSkin.pixel = pixel
 	# The pixel look draws the street, the lanes and the HUD straight into one small picture, one
 	# pixel per art pixel (a third of the base size each way), and shows it enlarged with hard edges.
@@ -153,18 +148,13 @@ func build() -> void:
 			n = n.get_parent()
 		if host_theme == null:
 			host_theme = WoodcutTheme.build()
-	var bg: Control
-	if session.piazza:
-		bg = ColorRect.new()
-		(bg as ColorRect).color = Palette.BLACK
-	else:
-		backdrop = StreetBackdrop.new()
-		PxType.smooth = not bool(args.get("embedded", false)) and not pixel
-		backdrop.name = "Backdrop"
-		backdrop.pixel = pixel
-		backdrop.own_cells = world == null
-		backdrop.bell_set = str(args.get("bell_set", "village"))
-		bg = backdrop
+	backdrop = StreetBackdrop.new()
+	PxType.smooth = not bool(args.get("embedded", false)) and not pixel
+	backdrop.name = "Backdrop"
+	backdrop.pixel = pixel
+	backdrop.own_cells = world == null
+	backdrop.bell_set = str(args.get("bell_set", "village"))
+	var bg: Control = backdrop
 	bg.set_anchors_preset(Control.PRESET_FULL_RECT)
 	bg.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	bg.theme = host_theme
@@ -197,32 +187,21 @@ func build() -> void:
 	(_field_box as CenterWidth).max_width = FIELD_MAX_W
 	_field_box.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	_field_box.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	if session.piazza:
-		var procession := ProcessionScene.new()
-		procession.name = "Procession"
-		procession.mouse_filter = Control.MOUSE_FILTER_IGNORE
-		procession.size_flags_vertical = Control.SIZE_EXPAND_FILL
-		procession.size_flags_stretch_ratio = SCENE_SHARE / (1.0 - SCENE_SHARE)
-		col.add_child(procession)
-		procession.set_stop(song.stop)
-		scene = procession
-		col.add_child(_field_box)
-	else:
-		# The stage: the lanes over the street; the street itself (with its swaying figures) is the backdrop.
-		var stage := Control.new()
-		stage.name = "Stage"
-		stage.size_flags_vertical = Control.SIZE_EXPAND_FILL
-		stage.mouse_filter = Control.MOUSE_FILTER_IGNORE
-		col.add_child(stage)
-		scene = backdrop
-		var gut := MarginContainer.new()
-		gut.set_anchors_preset(Control.PRESET_FULL_RECT)
-		gut.mouse_filter = Control.MOUSE_FILTER_IGNORE
-		var gw := int(round(get_viewport_rect().size.x * GUTTER)) if is_inside_tree() else 108
-		gut.add_theme_constant_override("margin_left", gw)
-		gut.add_theme_constant_override("margin_right", gw)
-		stage.add_child(gut)
-		gut.add_child(_field_box)
+	# The stage: the lanes over the street; the street itself (with its swaying figures) is the backdrop.
+	var stage := Control.new()
+	stage.name = "Stage"
+	stage.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	stage.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	col.add_child(stage)
+	scene = backdrop
+	var gut := MarginContainer.new()
+	gut.set_anchors_preset(Control.PRESET_FULL_RECT)
+	gut.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	var gw := int(round(get_viewport_rect().size.x * GUTTER)) if is_inside_tree() else 108
+	gut.add_theme_constant_override("margin_left", gw)
+	gut.add_theme_constant_override("margin_right", gw)
+	stage.add_child(gut)
+	gut.add_child(_field_box)
 	UIKit.show_look(scene)
 	scene.set_reduced_motion(UIKit.reduced_motion())
 	scene.set_unison(0)
@@ -232,29 +211,16 @@ func build() -> void:
 	lanes.session = session
 	lanes.note_speed = float(Profile.get_setting("note_speed"))
 	lanes.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	lanes.show_buttons = not session.piazza
-	lanes.visible = not session.piazza
 	lanes.spb = _spb
-	if not session.piazza:
-		backdrop.lanes = lanes
-		lanes.street = backdrop
-		lanes.pixel = pixel
+	backdrop.lanes = lanes
+	lanes.street = backdrop
+	lanes.pixel = pixel
 	_field_box.add_child(lanes)
 	words = JudgementWords.new()
 	words.set_anchors_preset(Control.PRESET_FULL_RECT)
 	if pixel:
 		words.z_index = PixelFilter.Z_OVER
 	lanes.add_child(words)
-
-	if session.piazza:
-		cue = PiazzaCue.new()
-		cue.name = "PiazzaCue"
-		cue.session = session
-		var round: Dictionary = args.get("round", {})
-		if not round.is_empty():
-			cue.player = str((round.players as Array)[int(round.turn)])
-		cue.mouse_filter = Control.MOUSE_FILTER_IGNORE
-		_field_box.add_child(cue)
 
 	if pixel and world == null and not OS.has_environment("NO_LENS"):
 		filter = PixelFilter.new()
@@ -294,17 +260,14 @@ func build() -> void:
 	session.still_kept.connect(_on_still_kept)
 	session.failed.connect(_on_failed)
 
-	# The count-in and the stand-still moment: over the procession in the Piazza, else over the top of
-	# the lanes, far from the hit line where the next notes are read.
-	if session.piazza:
-		banner = scene
-	else:
-		banner = Control.new()
-		banner.name = "Banner"
-		banner.mouse_filter = Control.MOUSE_FILTER_IGNORE
-		banner.anchor_right = 1.0
-		banner.anchor_bottom = BANNER_SHARE
-		lanes.add_child(banner)
+	# The count-in and the stand-still moment: over the top of the lanes, far from the hit line where
+	# the next notes are read.
+	banner = Control.new()
+	banner.name = "Banner"
+	banner.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	banner.anchor_right = 1.0
+	banner.anchor_bottom = BANNER_SHARE
+	lanes.add_child(banner)
 	if pixel:
 		banner.z_index = PixelFilter.Z_OVER
 	count_view = CountInView.new()
@@ -317,7 +280,7 @@ func build() -> void:
 	_bell_cue = bell_cue_on(difficulty)
 	Sound.set_key(song.key_root)
 	Sound.row_bells(0)
-	Sound.ambience("crowd+fire" if session.piazza else UIKit.ambience_for(song.stop))
+	Sound.ambience(UIKit.ambience_for(song.stop))
 	resized.connect(_layout_router)
 	_start.call_deferred()
 
@@ -464,8 +427,6 @@ func _process(delta: float) -> void:
 	if backdrop != null:
 		var hb := hud.get_global_transform() * Vector2(0.0, hud.frames_bottom())
 		backdrop.set_hud_bottom((backdrop.get_global_transform().affine_inverse() * hb).y)
-	if cue != null:
-		cue.song_time = tv
 	_schedule(t)
 	_count_in(t)
 	if ghost != null:
@@ -532,8 +493,6 @@ func _schedule(t: float) -> void:
 	if still != _still:
 		_still = still
 		scene.set_still(still)
-		if cue != null:
-			cue.still = still
 
 
 ## Song start: "4 3 2 1" on the music's own count-in sticks (beats -4..-1), then "Get ready" with the
@@ -670,8 +629,6 @@ func _on_judged(note: Note, judgement: String, offset: float) -> void:
 	var word_key: String = JUDGE_WORDS.get(judgement, "")
 	if word_key != "":
 		words.show_word(tr(word_key), side, lanes.word_spot(lane), quality)
-		if cue != null:
-			cue.hit(quality, tr(word_key))
 	if side != "" and not is_step:
 		# Steps say their side with the step tick; the lasting timing ticks are for the bells.
 		lanes.add_offset(offset, lane if lane >= 0 else 1)
@@ -817,8 +774,6 @@ func _on_still_kept(_note: Note, points: float) -> void:
 	scene.set_unison(session.unison_level)
 	scene.settle()
 	UIKit.vibrate(20)
-	if cue != null:
-		cue.hit("held", tr("judge_still_kept"))
 
 
 func _on_unison(level: int) -> void:
@@ -948,8 +903,6 @@ func _tick_count() -> void:
 	if left > 0.0:
 		var tv := _count_music_t - left
 		lanes.song_time = tv
-		if cue != null:
-			cue.song_time = tv
 		var k := maxf((_clock - _count_from) / _spb, 0.0)
 		count_view.show_digit(clampi(4 - floori(k), 1, 4), fposmod(k, 1.0))
 		lanes.beat_pulse = 1.0 - fposmod(k, 1.0)
@@ -1008,12 +961,6 @@ func _finish() -> void:
 	router.enabled = false
 	if bool(args.get("embedded", false)):
 		finished.emit(session)
-		return
-	if session.piazza and args.has("round"):
-		var round: Dictionary = (args.round as Dictionary).duplicate(true)
-		round.scores[int(round.turn)] = session.score
-		round.turn = int(round.turn) + 1
-		app.replace("piazza", {"round": round})
 		return
 	var record := {}
 	if autoplay == null:
