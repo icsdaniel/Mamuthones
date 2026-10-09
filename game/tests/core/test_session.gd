@@ -244,13 +244,43 @@ func test_mashing_locks_the_buttons() -> void:
 		q.tap(0, _bt(4 + i) + 0.25, i)
 	check_eq(q.stats.stray, 6, "six strays")
 	check_eq(q.stats.locks, 0, "a stray a beat apart never locks")
-	# Wrong steps count toward the lock too.
-	var w := Session.new(make([{"b": 0, "k": "step", "lane": 0}, {"b": 0.25, "k": "step", "lane": 0}, {"b": 0.5, "k": "step", "lane": 0}, {"b": 8, "k": "step", "lane": 0}]), "easy")
-	w.tap(2, _bt(0), 0)
-	w.tap(2, _bt(0.25), 1)
-	w.tap(2, _bt(0.5), 2)
-	check_eq(w.stats.wrong, 3, "three wrong steps")
-	check(w.is_locked(_bt(0.5) + 0.01), "lock the buttons too")
+	# Wrong steps count toward the lock too, when the buttons are pressed more often than the notes
+	# come: here two buttons for every note.
+	var chart := [{"b": 0, "k": "step", "lane": 0}, {"b": 0.25, "k": "step", "lane": 0}, {"b": 0.5, "k": "step", "lane": 0}, {"b": 8, "k": "step", "lane": 0}]
+	var w := Session.new(make(chart), "easy")
+	for i in 3:
+		w.tap(2, _bt(0.25 * i), 10 + i)
+		w.tap(1, _bt(0.25 * i) + 0.01, 20 + i)
+	check(w.stats.wrong >= 3, "wrong steps (%d)" % w.stats.wrong)
+	check(w.is_locked(_bt(0.5) + 0.02), "lock the buttons too")
+	# One wrong press per note is a player on the wrong button, not mashing: no lock.
+	var v := Session.new(make(chart), "easy")
+	for i in 3:
+		v.tap(2, _bt(0.25 * i), i)
+	check_eq(v.stats.wrong, 3, "three wrong steps")
+	check(not v.is_locked(_bt(0.5) + 0.01), "one press per note never locks")
+
+
+func test_falling_behind_in_a_fast_stream_never_locks() -> void:
+	# Eighths at 144 bpm on alternating lanes, every press 140 ms late (outside the window): each
+	# press is stray or wrong, but there is one per note, so the buttons stay free.
+	var chart := []
+	for i in 32:
+		chart.append({"b": i * 0.5, "k": "step", "lane": [0, 2, 1, 2][i % 4]})
+	var s := Session.new(make(chart, {"bpm": 144}), "easy")
+	for i in s.notes.size():
+		var n := s.notes[i]
+		s.update(n.t + 0.14)
+		check(s.tap(n.lane, n.t + 0.14, i).judgement != "locked", "press %d is not locked" % i)
+	check_eq(s.stats.locks, 0, "never locked")
+	# Mashing the same passage, three buttons a note, does lock.
+	var m := Session.new(make(chart, {"bpm": 144}), "easy")
+	for i in m.notes.size():
+		var n := m.notes[i]
+		m.update(n.t)
+		for k in 3:
+			m.tap(k, n.t + 0.07 + 0.02 * k, i * 3 + k)
+	check(m.stats.locks > 0, "mashing three buttons a note locks (%d)" % m.stats.locks)
 
 
 func test_stray_exemptions() -> void:

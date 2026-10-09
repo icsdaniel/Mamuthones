@@ -132,6 +132,8 @@ set_timing,Timing,Tempo
 set_calibrate,Redo the tilt calibration,Rifai la taratura del colpo
 set_latency,Sound delay test,Test del ritardo audio
 set_offset,Delay adjustment,Correzione del ritardo
+set_visual,Notes drawn early,Note disegnate in anticipo
+set_visual_note,"Makes up for the screen's own delay. Raise it if you hit late when you play by eye, lower it if you hit early.","Compensa il ritardo dello schermo. Alzalo se colpisci in ritardo giocando a vista, abbassalo se colpisci in anticipo."
 set_play,Play,Gioco
 set_note_speed,Note speed,Velocità delle note
 set_vibration,Vibration,Vibrazione
@@ -243,6 +245,10 @@ res_on_time,Right on the beat.,Proprio sul battito.
 res_early,"You tend to be early, by about %d ms.","Tendi ad anticipare, di circa %d ms."
 res_late,"You tend to be late, by about %d ms.","Tendi a ritardare, di circa %d ms."
 res_timing_few,Too few hits to tell.,Troppo pochi colpi per dirlo.
+res_fix_late,Fix it: show the notes %d ms earlier,Correggi: mostra le note %d ms prima
+res_fix_early,Fix it: show the notes %d ms later,Correggi: mostra le note %d ms dopo
+res_fixed,Done. Your next song uses it.,Fatto. La prossima canzone lo usa.
+res_frames,"Smoothness: %d frames a second, %d slow ones (slowest %d ms).","Fluidità: %d fotogrammi al secondo, %d lenti (il più lento %d ms)."
 res_meter_early,early,presto
 res_meter_late,late,tardi
 res_unlocked,Unlocked!,Sbloccato!

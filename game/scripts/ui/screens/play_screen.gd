@@ -38,6 +38,15 @@ const JUDGE_WORDS := {
 }
 
 var _vis_t := NAN                 ## the song time the screen shows (_visual_time)
+## Seconds the notes and everything on the beat are drawn ahead of the song's clock when a person
+## plays (Profile.visual_offset): the screen shows a frame a couple of refreshes after it is worked
+## out, and a touch reaches the game some ms after the thumb lands, so without it a player who reads
+## the notes lands every hit late by that much. 0 in autoplay and recordings.
+var _lead := 0.0
+## Frame times while notes are coming (live play), for the results' smoothness line:
+## [frames, seconds, frames slower than SLOW_FRAME, the slowest frame's seconds].
+var _frames := [0, 0.0, 0, 0.0]
+const SLOW_FRAME := 0.025
 var _song_t := 0.0                ## ... and the song's clock that frame (tests/start_profile.gd compares them)
 var song: SongData
 var session: Session
@@ -245,6 +254,7 @@ func build() -> void:
 		router.enabled = false
 	else:
 		lanes.router = router
+		_lead = 0.0 if Engine.get_write_movie_path() != "" else Profile.visual_offset()
 
 	session.judged.connect(_on_judged)
 	session.unison_changed.connect(_on_unison)
@@ -387,7 +397,7 @@ func _begin_count(music_t: float) -> void:
 
 func _layout_router() -> void:
 	if router != null and lanes != null:
-		router.buttons_rect = lanes.buttons_global_rect()
+		router.buttons_rect = lanes.tap_global_rect()
 
 
 func _process(delta: float) -> void:
@@ -412,8 +422,9 @@ func _process(delta: float) -> void:
 		autoplay.update(t)
 	else:
 		session.update(t)
+		_count_frame(t, delta)
 	_song_t = t
-	var tv := _visual_time(t, delta)
+	var tv := _visual_time(t, delta) + _lead
 	lanes.song_time = tv
 	var beat := (tv - song.offset_for(session.remix)) / _spb
 	lanes.beat_pulse = 1.0 - fposmod(beat, 1.0) if beat >= 0.0 else 0.0
@@ -429,6 +440,23 @@ func _process(delta: float) -> void:
 		scene.set_ghost_delta(ghost.lead_seconds(session.score, t))
 	if session.is_over(t) and _finish_at < 0.0:
 		_end_fade()
+
+
+func _count_frame(t: float, delta: float) -> void:
+	if session.notes.is_empty() or t < session.notes[0].t or t > session.end_time():
+		return
+	_frames[0] += 1
+	_frames[1] += delta
+	if delta > SLOW_FRAME:
+		_frames[2] += 1
+	_frames[3] = maxf(_frames[3], delta)
+
+
+## {fps, slow (frames over SLOW_FRAME), worst (s)} over the notes of this run so far ({} before any).
+func frame_stats() -> Dictionary:
+	if _frames[0] < 10:
+		return {}
+	return {"fps": _frames[0] / maxf(_frames[1], 0.001), "slow": _frames[2], "worst": _frames[3]}
 
 
 ## The song time the screen shows. The song's clock is read when the frame is worked out, which
@@ -897,7 +925,7 @@ func _on_pause_choice(what: String) -> void:
 func _tick_count() -> void:
 	var left := _resume_at - _clock
 	if left > 0.0:
-		var tv := _count_music_t - left
+		var tv := _count_music_t - left + _lead
 		lanes.song_time = tv
 		var k := maxf((_clock - _count_from) / _spb, 0.0)
 		count_view.show_digit(clampi(4 - floori(k), 1, 4), fposmod(k, 1.0))
@@ -961,7 +989,8 @@ func _finish() -> void:
 	var record := {}
 	if autoplay == null:
 		record = Profile.record_result(session)
-	app.replace("results", {"session": session, "record": record, "play_args": args, "ghost": ghost})
+	app.replace("results", {"session": session, "record": record, "play_args": args, "ghost": ghost,
+			"frames": frame_stats()})
 
 
 func _exit_tree() -> void:

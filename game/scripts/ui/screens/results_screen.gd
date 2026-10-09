@@ -2,7 +2,8 @@ extends Screen
 ## Results: the row's words for the run, the letter grade (F to S+), the score and where it came from (accuracy,
 ## unison), the early/late tendency, the best and the ghost, what was unlocked (celebrated), and
 ## one concrete tip for next time.
-## args: session, record (Profile.record_result output, empty for autoplay), play_args, ghost.
+## args: session, record (Profile.record_result output, empty for autoplay), play_args, ghost, frames
+## (the play screen's frame_stats(): how smoothly the phone drew the song, shown under the timing).
 
 const TIERS := [0.5, 0.7, 0.85, 0.95]
 
@@ -259,7 +260,38 @@ func _tendency(box: Container) -> void:
 	meter.custom_minimum_size.y = 150
 	meter.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	row.add_child(meter)
+	# A steady lean one way after a played song: one tap draws the notes that much earlier or later.
+	var shift := timing_fix(session)
+	if shift != 0.0 and not record.is_empty():
+		var key := "res_fix_late" if shift > 0.0 else "res_fix_early"
+		var fix := UIKit.button(tr(key) % roundi(absf(shift) * 1000.0), func() -> void: pass, UIKit.QUIET)
+		fix.name = "FixTiming"
+		fix.pressed.connect(func() -> void:
+			Profile.set_setting("visual_offset", Profile.visual_offset() + shift)
+			fix.text = tr("res_fixed")
+			fix.disabled = true)
+		c.add_child(fix)
+	var fr: Dictionary = args.get("frames", {})
+	if not fr.is_empty() and not record.is_empty():
+		var fl := UIKit.label(tr("res_frames") % [roundi(float(fr.fps)), int(fr.slow), roundi(float(fr.worst) * 1000.0)], UIKit.CAPTION)
+		fl.name = "Frames"
+		c.add_child(fl)
 	UIKit.pop_in(c, 0.7)
+
+
+## How much earlier (positive: the hits were late) the notes should be drawn to even out this run's
+## timing: its median offset to 5 ms, or 0 with fewer than TIMING_FIX_HITS hits or under TIMING_FIX_MIN.
+static func timing_fix(s: Session) -> float:
+	if s.hit_offsets.size() < TIMING_FIX_HITS:
+		return 0.0
+	var med := s.median_offset()
+	if absf(med) < TIMING_FIX_MIN:
+		return 0.0
+	return snappedf(med, 0.005)
+
+
+const TIMING_FIX_HITS := 20
+const TIMING_FIX_MIN := 0.015
 
 
 func _unlocks(box: Container) -> void:

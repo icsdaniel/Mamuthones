@@ -91,5 +91,10 @@ func _tick() -> void:
 		print("BENCH frames=%d avg=%.2fms p95=%.2fms worst=%.2fms script=%.2fms objects=%d" % [_times.size(), avg,
 			sorted[int(sorted.size() * 0.95)], sorted[-1], _script / _times.size(),
 			Performance.get_monitor(Performance.OBJECT_COUNT)])
+		var slow: Array[String] = []
+		for i in _times.size():
+			if _times[i] > avg * 3.0:
+				slow.append("%d:%.1f" % [i, _times[i]])
+		print("SLOW frames (over 3x the average): ", ", ".join(slow))
 		profile.load_profile()
 		quit()

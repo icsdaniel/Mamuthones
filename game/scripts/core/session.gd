@@ -35,7 +35,10 @@ extends RefCounted
 ## its own lane within WRONG_REACH breaks the combo like a wrong step (combo and streak to 0, unison down STRAY_DROP), with no health cost. Taps
 ## before the first note's window, after the last note, on slam's bell buttons and a
 ## late second thumb just after a stomp stay free. Mashing: LOCK_TAPS stray or wrong taps within
-## LOCK_SPAN lock the step buttons for LOCK_TIME; taps while locked judge nothing (judgement "locked").
+## LOCK_SPAN lock the step buttons for LOCK_TIME, but only while the player is pressing more often
+## than the chart asks (from the first of those taps, more presses than lane notes due, plus
+## LOCK_SPARE): a player who falls behind in a dense passage and taps late, once per note, is
+## struggling, not mashing, and is never locked. Taps while locked judge nothing (judgement "locked").
 ##
 ## Matching uses note-lock: an input goes to the EARLIEST open note whose window contains it, so a
 ## late player in a fast stream reads as late instead of drifting onto the next note.
@@ -95,7 +98,8 @@ const STRAY_DROP := 1        ## a stray tap (no note due anywhere)
 const STOMP_FOLLOW := 0.200  ## a tap this soon after a stomp on its lane is a late thumb, not stray
 const LOCK_TAPS := 3         ## this many stray or wrong taps...
 const LOCK_SPAN := 0.75      ## ...within this many seconds...
-const LOCK_TIME := 0.6       ## ...lock the step buttons this long
+const LOCK_TIME := 0.6       ## ...lock the step buttons this long...
+const LOCK_SPARE := 1        ## ...when the presses in the span outnumber its lane notes by more than this
 const SLAM_GAP := 0.080      ## Left and Right pressed within 80 ms of each other = one slam bell
 const MAX_HEALTH := 10
 const HEAL := 2              ## health a healing step restores (at Ok or better)
@@ -147,6 +151,7 @@ var _top_since := NAN
 var _top_time := 0.0
 var _locked_until := -INF
 var _bad_taps: Array[float] = []   # times of recent stray and wrong taps, for the mashing lock
+var _presses: Array[float] = []    # times of recent presses (not while locked), for the same
 var _stomp_at: Array[float] = [-INF, -INF, -INF]   # last stomp judged per lane
 var _taps_from := NAN   # the first and last moment a lane note is due (NAN: no lane notes)
 var _taps_to := NAN
@@ -430,6 +435,9 @@ func tap(lane: int, t: float, touch_id: int = 0) -> Dictionary:
 	if is_locked(t):
 		res.judgement = "locked"
 		return res
+	_presses.append(t)
+	while t - _presses[0] > LOCK_SPAN + win_touch.z:
+		_presses.pop_front()
 	# A touch id still holding a note means its release was lost: that hold was let go.
 	if _holds.has(touch_id):
 		var old: Note = _holds[touch_id]
@@ -818,16 +826,37 @@ func _stray(lane: int, t: float) -> void:
 	_bad_tap(t)
 
 
-# A stray or wrong tap: LOCK_TAPS of them within LOCK_SPAN lock the buttons for LOCK_TIME.
+# A stray or wrong tap: LOCK_TAPS of them within LOCK_SPAN lock the buttons for LOCK_TIME, when the
+# presses in that span also outnumber the lane notes due in it (see Mashing above).
 func _bad_tap(t: float) -> void:
 	_bad_taps.append(t)
 	while not _bad_taps.is_empty() and t - _bad_taps[0] > LOCK_SPAN:
 		_bad_taps.pop_front()
-	if _bad_taps.size() >= LOCK_TAPS:
+	if _bad_taps.size() >= LOCK_TAPS and _over_pressing(_bad_taps[0] - win_touch.z, t):
 		_bad_taps.clear()
 		_locked_until = t + LOCK_TIME
 		stats.locks += 1
 		input_locked.emit(_locked_until)
+
+
+# Whether the presses from lo to t outnumber, by more than LOCK_SPARE, the presses the chart asks
+# for then: one per lane note due between lo and t + the Early/Late window (a stomp asks for two).
+func _over_pressing(lo: float, t: float) -> bool:
+	var pressed := 0
+	for p in _presses:
+		if p >= lo - 1e-6:
+			pressed += 1
+	var due := 0
+	var i := mini(_first_open, notes.size())
+	while i > 0 and notes[i - 1].t >= lo:
+		i -= 1
+	for k in range(i, notes.size()):
+		var n := notes[k]
+		if n.t > t + win_touch.z:
+			break
+		if n.t >= lo and n.uses_lane():
+			due += 2 if n.kind == Note.Kind.STOMP else 1
+	return pressed > due + LOCK_SPARE
 
 
 func _end_hold(n: Note, t: float, kept: bool) -> void:

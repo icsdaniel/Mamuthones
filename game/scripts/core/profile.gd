@@ -13,6 +13,7 @@ extends Node
 ##   get_look() -> {mask: Dictionary, fleece, straps} / set_look(part, value)
 ##   calibration() -> Dictionary ({} = not calibrated) / set_calibration(d)
 ##   audio_offset() -> float seconds (the "audio_offset" setting)
+##   visual_offset() -> float seconds the notes are drawn early (the "visual_offset" setting)
 ##   best(song_key, difficulty) -> {} or {score, accuracy, grade, full_combo, ghost, slam, plays}
 ##   all_bests() -> {"song:difficulty": entry}
 ##       (one per difficulty; with no difficulty, the best of that day at any difficulty)
@@ -33,6 +34,7 @@ const DEFAULT_SETTINGS := {
 	"music_volume": 1.0,
 	"sfx_volume": 1.0,
 	"audio_offset": 0.0,     # seconds, from the tap test or set by hand
+	"visual_offset": 0.06,   # seconds the notes are drawn early (screen and touch delay); see visual_offset()
 	"bell_cue": true,        # the bell cue shown at Easy and Medium
 	"art_style": "pixel",    # the play screen's look: "pixel" (pixel art in 3D motion) or "painted"
 }
@@ -42,6 +44,7 @@ const STRAPS: Array[String] = ["natural", "dark"]
 ## Allowed ranges for number settings; values outside are clamped.
 const RANGES := {
 	"audio_offset": Vector2(-0.5, 0.5),
+	"visual_offset": Vector2(-0.1, 0.25),
 	"note_speed": Vector2(0.5, 3.0),
 	"music_volume": Vector2(0.0, 1.0),
 	"sfx_volume": Vector2(0.0, 1.0),
@@ -96,6 +99,14 @@ func set_setting(key: String, value: Variant) -> void:
 
 func audio_offset() -> float:
 	return float(get_setting("audio_offset"))
+
+
+## Seconds the play screen draws the notes ahead of the song's clock. The sound delay test times the
+## ears (music out, touch in), but a player reading the notes also waits for the screen (a frame shows
+## two or so refreshes after it is worked out) and for the touch to arrive; on a phone that is about
+## 60 ms, the default. The results screen can even it out from a song's own hits.
+func visual_offset() -> float:
+	return float(get_setting("visual_offset"))
 
 
 func has_flag(flag: String) -> bool:

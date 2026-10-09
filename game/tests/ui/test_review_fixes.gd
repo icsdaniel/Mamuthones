@@ -145,3 +145,52 @@ func test_delay_slider_matches_profile() -> void:
 	UIHarness.free_app(app)
 	UIHarness.restore_profile()
 
+
+
+## A run of song_id at diff where every step lands `late` seconds after its note.
+static func _late_run(song_id: String, diff: String, late: float) -> Session:
+	var s := Session.new(SongLibrary.get_song(song_id), diff, {})
+	var id := 0
+	for n in s.notes:
+		if n.kind == Note.Kind.STEP:
+			s.update(n.t + late)
+			s.tap(n.lane, n.t + late, id)
+			s.release(n.t + late + 0.05, id)
+			id += 1
+	s.update(s.end_time())
+	return s
+
+
+func test_results_offer_to_even_out_a_steady_lean() -> void:
+	UIHarness.fresh_profile()
+	var results: GDScript = load(App.SCREENS["results"])
+	var late := _late_run("fires", "hard", 0.045)
+	check_near(results.timing_fix(late), 0.045, 0.003, "45 ms late asks for the notes 45 ms earlier")
+	check_eq(results.timing_fix(_auto("fires", "hard")), 0.0, "a run on the beat asks for nothing")
+	var before := Profile.visual_offset()
+	var args := {"session": late, "record": {"prev_best": 0, "new_best": true, "grade": late.grade_rank(), "carving_gained": 0,
+		"unlocked": []}, "play_args": {"song_id": "fires", "difficulty": "hard"},
+		"frames": {"fps": 57.6, "slow": 12, "worst": 0.041}}
+	for sz in [Vector2i(720, 1280), Vector2i(720, 1440)]:
+		var app := UIHarness.make_app(tree, "results", args, sz)
+		await UIHarness.settle(tree)
+		var res := app.current()
+		var fix := UIHarness.find_button(res, "FixTiming")
+		if check(fix != null, "%s: a fix button under the timing" % sz):
+			var fold := (res.find_child("Footer", true, false) as Control).get_global_rect().position.y
+			var tend := res.find_child("Tendency", true, false) as Control
+			check(tend.get_global_rect().end.y <= fold + 1.0, "%s: the timing card still ends above the fold" % sz)
+			check(fix.text.contains("45"), "it says by how much (%s)" % fix.text)
+			var fl := res.find_child("Frames", true, false) as Label
+			check(fl != null and fl.text.contains("58") and fl.text.contains("41"), "the smoothness line (%s)" % (fl.text if fl else "none"))
+			if sz.y == 1440:
+				fix.pressed.emit()
+				check_near(Profile.visual_offset(), before + 0.045, 1e-6, "pressing it draws the notes 45 ms earlier")
+				check(fix.disabled, "and it is used up")
+		UIHarness.free_app(app)
+	# Autoplay results (no record) never offer it.
+	var app2 := UIHarness.make_app(tree, "results", {"session": late, "record": {}}, Vector2i(720, 1440))
+	await UIHarness.settle(tree)
+	check(UIHarness.find_button(app2.current(), "FixTiming") == null, "no fix offered for an autoplay run")
+	UIHarness.free_app(app2)
+	UIHarness.restore_profile()

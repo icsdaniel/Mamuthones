@@ -6,6 +6,9 @@ extends Control
 ## input arrives (flash() / burst() are called from the input signal handlers, then queue_redraw()).
 
 const BUTTONS_H := 264.0        ## height of the button row
+## Touches this far above the hit line still press the lane's button: in a fast passage thumbs creep
+## up toward the rings they are watching, and a press on a ring is meant for its button.
+const TAP_ABOVE := 80.0
 const LOOKAHEAD := 1.5          ## seconds of notes visible at note speed 1.0
 const FLASH_TIME := 0.14
 const CUE_TIME := 0.22          ## a button is "cued" when its next note is this close
@@ -70,9 +73,21 @@ func buttons_rect() -> Rect2:
 	return Rect2(0.0, size.y - BUTTONS_H, size.x, BUTTONS_H)
 
 
-## Global rect of the button row, for InputRouter.buttons_rect.
+## Global rect of the button row.
 func buttons_global_rect() -> Rect2:
+	return _to_global(buttons_rect())
+
+
+## Global rect where a touch presses a step button, for InputRouter.buttons_rect: the button row and
+## the strip above it up to TAP_ABOVE over the hit line (the rings and the judgement words), across
+## the whole width, so its thirds are the three lanes as the buttons are.
+func tap_global_rect() -> Rect2:
 	var r := buttons_rect()
+	var top := clampf(hit_line_screen_y() - TAP_ABOVE, 0.0, r.position.y)
+	return _to_global(Rect2(r.position.x, top, r.size.x, r.end.y - top))
+
+
+func _to_global(r: Rect2) -> Rect2:
 	return Rect2(get_global_transform() * r.position, r.size * get_global_transform().get_scale())
 
 

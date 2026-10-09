@@ -20,6 +20,9 @@ func build() -> void:
 	box.add_child(lat)
 	_slider(box, "audio_offset", tr("set_offset"), Profile.RANGES["audio_offset"].x, Profile.RANGES["audio_offset"].y, 0.005,
 		func(v: float) -> String: return tr("ms_signed") % roundi(v * 1000.0))
+	_slider(box, "visual_offset", tr("set_visual"), Profile.RANGES["visual_offset"].x, Profile.RANGES["visual_offset"].y, 0.005,
+		func(v: float) -> String: return tr("ms_signed") % roundi(v * 1000.0))
+	box.add_child(UIKit.label(tr("set_visual_note"), UIKit.CAPTION))
 
 	box.add_child(UIKit.label(tr("set_play"), UIKit.SUB))
 	var speed := _slider(box, "note_speed", tr("set_note_speed"), 0.5, 3.0, 0.1,
