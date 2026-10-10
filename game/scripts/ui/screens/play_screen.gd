@@ -350,6 +350,9 @@ func _start() -> void:
 func _settle() -> void:
 	if DisplayServer.get_name() == "headless":
 		return   # nothing is drawn, so nothing holds a frame (and tests expect the song at once)
+	await get_tree().process_frame
+	if lanes != null:
+		lanes.warm(session.notes.any(func(n: Note) -> bool: return n.kind == Note.Kind.BELL or n.kind == Note.Kind.RING))
 	var until := Time.get_ticks_msec() + int(SETTLE_MAX * 1000.0)
 	var steady := 0
 	var last := Time.get_ticks_usec()

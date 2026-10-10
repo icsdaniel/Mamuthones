@@ -343,6 +343,7 @@ func event_y(field: Rect2, t: float, pps: float) -> float:
 ## road (gems, rings, badges, the rope, labels), then the buttons.
 static var draw_usec := 0         ## time spent drawing the street lanes, summed (for tests/bench.gd)
 static var draw_count := 0
+static var last_draw_usec := 0    ## ... and in the last frame
 
 
 func _draw() -> void:
@@ -350,7 +351,8 @@ func _draw() -> void:
 		_street_map(true)
 		var t0 := Time.get_ticks_usec()
 		_draw_street()
-		draw_usec += Time.get_ticks_usec() - t0
+		last_draw_usec = Time.get_ticks_usec() - t0
+		draw_usec += last_draw_usec
 		draw_count += 1
 		return
 	if not _road_on():
@@ -1550,6 +1552,34 @@ func _px(o: Vector2, x: float, y: float, w: float, h: float, col: Color) -> void
 	draw_rect(Rect2(o + Vector2(x, y) * p, Vector2(w, h) * p), col)
 
 
+## Paints, before the song starts, every picture the lanes would otherwise make the first time it
+## is needed mid-song: the buttons pressed and lit, and (bells: a song with bells) the bell bars at
+## every size down the road. Each was a hitch of 25 ms or more on its first press, hit or bell.
+func warm(bells: bool) -> void:
+	if street == null or not pixel:
+		return
+	for lane in 3:
+		var cr := _button_cells(lane)
+		for key in ["btn_idle", "btn_pressed"]:
+			_nine(key, cr, BTN_CAP)
+		_nine("btn_idle!white", cr + Vector2i(2, 2), BTN_CAP)
+	if bells:
+		StreetSkin.warm(self, field_rect())
+
+
+## A step button's rect on the grid ...
+func _button_rect(lane: int) -> Rect2:
+	var r := buttons_rect()
+	var w := r.size.x / 3.0
+	return _grid_rect(Rect2(r.position.x + w * lane + 9.0, r.position.y + 15.0, w - 18.0, r.size.y - 30.0))
+
+
+## ... and its picture's size in cells (columns, rows).
+func _button_cells(lane: int) -> Vector2i:
+	var br := _button_rect(lane)
+	return Vector2i(int(br.size.x / PxArt.PX), int(br.size.y / PxArt.PX) - PX_LIFT)
+
+
 ## The three step buttons as pixel art, from Daniele's pictures (art/ai/btn_idle, btn_pressed, foot):
 ## carved wooden steps standing up out of the panel (their side shows below them). A press sinks the
 ## step and shows the pressed picture with its glow; a hit lights it hot, a miss dull red; a note
@@ -1565,10 +1595,11 @@ func _draw_pixel_buttons() -> void:
 	_px(panel.position, 0, 1, panel.size.x / p, 1, PX_BRONZE[0])
 	var w := r.size.x / 3.0
 	for lane in 3:
-		var br := _grid_rect(Rect2(r.position.x + w * lane + 9.0, r.position.y + 15.0, w - 18.0, r.size.y - 30.0))
+		var br := _button_rect(lane)
 		var st := _button_state(lane)
-		var cols := int(br.size.x / p)
-		var rows := int(br.size.y / p) - PX_LIFT
+		var cells := _button_cells(lane)
+		var cols := cells.x
+		var rows := cells.y
 		var down := PX_LIFT if st == "pressed" or st == "hit" else 0
 		var o := br.position + Vector2(0, down * p)
 		# the step's side under it (the part that sinks into the panel when pressed)

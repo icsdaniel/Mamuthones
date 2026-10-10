@@ -187,6 +187,10 @@ static func disc_glow(ci: CanvasItem, c: Vector2, rx: float, k: Array, alpha: fl
 ## and each shrunk to the sizes it is shown at: one picture pixel per screen cell, so it stays crisp.
 static var _ai := {}
 static var _ai_sized := {}
+## Per picture, halvings of it (the picture itself first): a size is shrunk from the smallest one at
+## least twice its size, so a bell bar 64 cells wide is not shrunk from a picture 1982 wide each time
+## it reaches a new size (that took 7 ms a size, and a bar sliding down the road meets dozens).
+static var _ai_mips := {}
 
 
 static func ai_tex(key: String, size: Vector2i) -> Texture2D:
@@ -203,22 +207,95 @@ static func ai_tex(key: String, size: Vector2i) -> Texture2D:
 				elif key.ends_with("!mirror"):
 					img.flip_x()
 		_ai[key] = img if img != null and not img.is_empty() else null
+		if _ai[key] != null:
+			var mips: Array[Image] = [img]
+			while mips[-1].get_width() >= 16 and mips[-1].get_height() >= 16:
+				var half := mips[-1].duplicate() as Image
+				half.resize(maxi(1, half.get_width() / 2), maxi(1, half.get_height() / 2), Image.INTERPOLATE_LANCZOS)
+				mips.append(half)
+			_ai_mips[key] = mips
 	var src: Image = _ai[key]
 	if src == null:
 		return null
 	size = size.max(Vector2i.ONE)
 	var k := "%s_%d_%d" % [key, size.x, size.y]
 	if not _ai_sized.has(k):
+		for m: Image in _ai_mips[key]:
+			if m.get_width() >= size.x * 2 and m.get_height() >= size.y * 2:
+				src = m
 		var img := src.duplicate() as Image
 		img.resize(size.x, size.y, Image.INTERPOLATE_LANCZOS)
 		# a cell is the note's or the road's, never half of each
-		for yy in size.y:
-			for xx in size.x:
-				var c := img.get_pixel(xx, yy)
-				c.a = 1.0 if c.a > 0.5 else 0.0
-				img.set_pixel(xx, yy, c)
+		if img.get_format() != Image.FORMAT_RGBA8:
+			img.convert(Image.FORMAT_RGBA8)
+		var data := img.get_data()
+		for i in range(3, data.size(), 4):
+			data[i] = 255 if data[i] > 127 else 0
+		img.set_data(size.x, size.y, false, Image.FORMAT_RGBA8, data)
 		_ai_sized[k] = ImageTexture.create_from_image(img)
 	return _ai_sized[k]
+
+
+## Shrinks, before the song starts, every size of the pictures a bell bar takes as it slides down
+## the road (its beam, its cowbells, its arrows) and when it is rung, and the hit rings' gold and red,
+## so none is shrunk mid-song in the frames a bell comes (each was a hitch of 7 ms or more). Only for the pixel look, which draws them from the pictures.
+static func warm(lv: LaneView, field: Rect2) -> void:
+	if not pixel or ai_tex("bar_up", Vector2i.ONE) == null:
+		return
+	field.position = Vector2.ZERO
+	# from where bars come into view to just past the hit line (a missed bar sweeping on past it,
+	# bigger, can still meet a new size)
+	var y := -field.size.y * 0.1
+	var end := LaneSkin.hit_line_y(field) + field.size.y * 0.03
+	while y < end:
+		var b := _bell_size(lv, field, y)
+		if b.lw >= 2.0:
+			ai_tex("bar_up", b.cells)
+			ai_tex("bar_down", b.cells)
+			if b.lw >= 6.0:
+				ai_tex("bar_bell", b.bell)
+				ai_tex("bar_arrow", b.arrow)
+				ai_tex("bar_arrow!flip", b.arrow)
+		y += 1.0
+	ai_tex("bar_bell", Vector2i.ONE)
+	# a bell rung on time: its cowbells thrown off the strap (bell_strike), at each size a strike has
+	var lw: float = lv.road_scale(LaneSkin.hit_line_y(field)) * _lane(field)
+	for q: float in [1.0, 0.8]:
+		for chain in 6:
+			var bs := lw * 0.42 * q * (1.0 + 0.07 * float(chain))
+			ai_tex("bar_bell", ai_cells(Vector2(-bs * 0.42, -bs * 1.2), Vector2(bs * 0.42, 0.0)))
+	# the hit rings burning gold or red, at the size the grey ones are drawn
+	for k: String in _ai_sized.keys():
+		if k.begins_with("ring_idle_"):
+			var wh := k.trim_prefix("ring_idle_").split("_")
+			for key in ["ring_gold", "ring_red"]:
+				ai_tex(key, Vector2i(int(wh[0]), int(wh[1])))
+
+
+## A bell bar's sizes at flat depth y, as _bell_pic draws it: {lw, cells (the beam), bell, arrow}.
+static func _bell_size(lv: LaneView, field: Rect2, y: float) -> Dictionary:
+	var lane := _lane(field)
+	var lw: float = lv.road_scale(y) * lane
+	var x0 := -field.size.x * 0.02
+	var x1 := field.size.x * 1.02
+	var hw := (x1 - x0) * 0.5
+	var f := _frame3(lv, field, (x0 + x1) * 0.5, y, hw, STRAP_D * lw * FORE)
+	var h := DISC_H * 0.7
+	var quad := PackedVector2Array([f.call(Vector3(-1, h, -1)), f.call(Vector3(1, h, -1)), f.call(Vector3(1, 0, 1)), f.call(Vector3(-1, 0, 1))])
+	var s := lw * 0.34
+	var a := lw * 0.25
+	var hh := lw * 0.23
+	return {"lw": lw, "cells": bar_cells(quad),
+		"bell": ai_cells(Vector2(-s * 0.35, -s), Vector2(s * 0.35, 0.0)),
+		"arrow": ai_cells(Vector2(-a, -hh * 1.4), Vector2(a, hh * 0.4))}
+
+
+## The beam's picture size for its quad on screen: few sizes (a beam slides down every frame), its
+## width in steps of 8 cells.
+static func bar_cells(quad: PackedVector2Array) -> Vector2i:
+	var w := quad[1].x - quad[0].x
+	var tall := quad[2].y - quad[1].y
+	return Vector2i(maxi(8, roundi(w / PxArt.PX / 8.0) * 8), maxi(3, roundi(tall / PxArt.PX)))
 
 
 ## The pixel look's note from its picture: the picture stretched over the disc it stands for (r lane
@@ -253,15 +330,21 @@ static func ai_disc(lv, field: Rect2, cx: float, y: float, r: float, key: String
 ## Picture `key` over the box lo..hi in whole cells: shrunk to the cells it covers, drawn one to one.
 static func ai_draw(ci: CanvasItem, key: String, lo: Vector2, hi: Vector2, mod := Color.WHITE) -> void:
 	var px := PxArt.PX
-	var cells := Vector2i(((hi - lo) / px).round())
-	if cells.x > 40:
-		# past the sheet's sizes (a missed note sweeping past the line): fewer sizes to shrink to
-		cells = (cells / 4) * 4
+	var cells := ai_cells(lo, hi)
 	var tex := ai_tex(key, cells)
 	if tex == null:
 		return
 	var at := PxArt.snap2((lo + hi) * 0.5 - Vector2(cells) * px * 0.5)
 	ci.draw_texture_rect(tex, Rect2(at, Vector2(cells) * px), false, mod)
+
+
+## The picture size (cells) ai_draw shows a picture at between lo and hi on screen.
+static func ai_cells(lo: Vector2, hi: Vector2) -> Vector2i:
+	var cells := Vector2i(((hi - lo) / PxArt.PX).round())
+	if cells.x > 40:
+		# past the sheet's sizes (a missed note sweeping past the line): fewer sizes to shrink to
+		cells = (cells / 4) * 4
+	return cells
 
 
 ## A disc lying on the road centred at flat (cx, y), radius r lane widths, h thick. k: its glaze.
@@ -542,11 +625,8 @@ static func bell(lv: LaneView, field: Rect2, y: float, up: bool, alpha := 1.0, p
 static func _bell_pic(lv: LaneView, f: Callable, h: float, lane: float, lw: float, y: float, up: bool, alpha: float, hot: bool, cowbells: bool) -> void:
 	var mod := Color(1.45, 1.4, 1.3, alpha) if hot else Color(1.0, 1.0, 1.0, alpha)
 	var quad := PackedVector2Array([f.call(Vector3(-1, h, -1)), f.call(Vector3(1, h, -1)), f.call(Vector3(1, 0, 1)), f.call(Vector3(-1, 0, 1))])
-	var w := quad[1].x - quad[0].x
 	var tall := quad[2].y - quad[1].y
-	# few sizes (a beam slides down every frame): the picture shrunk to a width in steps of 8 cells
-	var cells := Vector2i(maxi(8, roundi(w / PxArt.PX / 8.0) * 8), maxi(3, roundi(tall / PxArt.PX)))
-	var tex := ai_tex("bar_up" if up else "bar_down", cells)
+	var tex := ai_tex("bar_up" if up else "bar_down", bar_cells(quad))
 	lv.draw_polygon(quad, PackedColorArray([mod, mod, mod, mod]), PackedVector2Array([Vector2(0, 0), Vector2(1, 0), Vector2(1, 1), Vector2(0, 1)]), tex)
 	if lw < 6.0:
 		return

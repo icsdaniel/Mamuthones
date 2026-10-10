@@ -29,7 +29,8 @@ const DEFAULT_SETTINGS := {
 	"language": "",          # "" = follow the phone
 	"vibration": true,
 	"slam": false,
-	"reduced_motion": false,
+	"reduced_motion": false,  # kept for older profiles: true reads as animations "calm"
+	"animations": "full",     # "full", "calm" or "off" (UIKit.animations)
 	"note_speed": 1.0,
 	"music_volume": 1.0,
 	"sfx_volume": 1.0,
