@@ -50,7 +50,7 @@ func test_every_sample_loads() -> void:
 
 func test_bell_matrix_complete() -> void:
 	var s := _sound()
-	for set_id in ["light", "village", "full"]:
+	for set_id in ["village"]:
 		var arr: Array = s._bells[set_id]
 		check_eq(arr.size(), 12, "%s has 6 qualities x 2 directions" % set_id)
 		for i in arr.size():
@@ -65,7 +65,7 @@ func test_bell_matrix_complete() -> void:
 func test_one_shots_uncompressed() -> void:
 	# Bells, steps and the count-in stay raw 16-bit PCM: no decode cost, and count_in
 	# needs the raw bytes.
-	for path in ["res://audio/sfx/bells/full_down_perfect_1.wav", "res://audio/sfx/steps/tone_0_00.wav",
+	for path in ["res://audio/sfx/bells/village_down_perfect_1.wav", "res://audio/sfx/steps/tone_0_00.wav",
 			"res://audio/sfx/steps/foot_0_1.wav", "res://audio/sfx/fx/count_hi.wav"]:
 		var st := load(path) as AudioStreamWAV
 		if check(st != null, "%s is a WAV" % path):
@@ -165,7 +165,7 @@ func test_cue_and_rope_grab() -> void:
 	var p := _last_player(s, s._sfx_pool, 4)
 	check(s._ui["cue"].has(p.stream), "ui(\"cue\") plays the bell cue")
 	check(p.stream.get_length() < 0.35, "the cue is short")
-	check(not s._bells["light"][0].has(p.stream), "the cue is not a bell ring")
+	check(not s._bells["village"][0].has(p.stream), "the cue is not a bell ring")
 	s.rope_grab()
 	p = _last_player(s, s._sfx_pool, 4)
 	check(s._grabs.has(p.stream), "rope_grab() plays a grip")
@@ -193,7 +193,7 @@ func test_steps_follow_key() -> void:
 
 func test_takes_do_not_repeat() -> void:
 	var s := _sound()
-	var takes: Array = s._bells["full"][0]
+	var takes: Array = s._bells["village"][0]
 	var last: AudioStream = null
 	for i in 30:
 		var t: AudioStream = s._pick(takes, 999)
@@ -237,7 +237,7 @@ func test_hot_path_is_cheap() -> void:
 	var t0 := Time.get_ticks_usec()
 	for i in 300:
 		s.step(i % 3, ["perfect", "good", "ok"][i % 3])
-		s.bell("full", i % 2 == 0, "perfect")
+		s.bell("village", i % 2 == 0, "perfect")
 	var per_call := float(Time.get_ticks_usec() - t0) / 600.0
 	check(per_call < 200.0, "step/bell cost %.1f us per call" % per_call)
 	print("  Sound hot path: %.1f us per call" % per_call)
@@ -307,16 +307,16 @@ func test_early_and_late_sound_different() -> void:
 
 func test_strength_layers() -> void:
 	var s := _sound()
-	s.bell("full", true, "perfect", 0.1)
+	s.bell("village", true, "perfect", 0.1)
 	var soft := _last_player(s, s._bell_pool, 0)
 	check_eq(String(soft.bus), "BellsSoft", "a soft flick rings a little darker, through the gentle low-pass bus")
 	check(soft.volume_db >= -1.81, "and only about 1 dB down")
 	var before: int = s._next[0]
-	s.bell("full", false, "perfect", 0.95)
+	s.bell("village", false, "perfect", 0.95)
 	var hard := _last_player(s, s._bell_pool, 0)
-	check(s._accents["full"][1].has(hard.stream), "a hard flick layers the heavy slam")
+	check(s._accents["village"][1].has(hard.stream), "a hard flick layers the heavy slam")
 	check_eq((s._next[0] - before + s._bell_pool.size()) % s._bell_pool.size(), 2, "a hard flick uses two voices")
-	s.bell("full", false, "perfect")
+	s.bell("village", false, "perfect")
 	check_eq(String(_last_player(s, s._bell_pool, 0).bus), "Bells", "the default strength is the normal ring")
 	await _settle()
 
@@ -328,11 +328,11 @@ func test_row_only_with_the_procession() -> void:
 	s.row_bells(5)
 	for q in ["silence", "free", "miss"]:
 		var before: int = s._next[1]
-		s.bell("light", true, q)
+		s.bell("village", true, q)
 		check_eq(s._next[1], before, "the row stays out of a %s ring" % q)
 	for q in ["perfect", "good", "ok", "early", "late"]:
 		var before: int = s._next[1]
-		s.bell("light", true, q)
+		s.bell("village", true, q)
 		check(s._next[1] != before, "the row joins a %s ring" % q)
 	check(s.ROW_DB[5] <= -6.0, "the full row sits at -6 dB or under")
 	await _settle()
@@ -384,7 +384,7 @@ func test_steals_the_oldest_voice() -> void:
 	var n: int = s._bell_pool.size()
 	var first: AudioStreamPlayer = null
 	for i in n:
-		s.bell("full", i % 2 == 0, "perfect")
+		s.bell("village", i % 2 == 0, "perfect")
 		if i == 0:
 			first = _last_player(s, s._bell_pool, 0)
 		await tree.create_timer(0.03).timeout
@@ -401,7 +401,7 @@ func test_steals_the_oldest_voice() -> void:
 		var ending := {}  # voices within 50 ms of their end may finish on the mixer thread first
 		for p: AudioStreamPlayer in s._bell_pool:
 			ending[p] = p.stream.get_length() - p.get_playback_position() < 0.05
-		s.bell("full", true, "perfect")
+		s.bell("village", true, "perfect")
 		var took := _last_player(s, s._bell_pool, 0)
 		check(took == oldest or ending[took], "with every voice busy, the oldest ring is the one cut")
 		check(oldest == first or best > 0.2, "and it is one of the first rung")
@@ -461,7 +461,7 @@ func test_rings_duck_the_music() -> void:
 	for i in 30:
 		s._process(0.02)
 	check_near(AudioServer.get_bus_volume_db(music), trim, 0.01, "music at its level before a ring")
-	s.bell("full", false, "perfect")
+	s.bell("village", false, "perfect")
 	s._process(0.02)
 	check_near(AudioServer.get_bus_volume_db(music), trim - s.DUCK_DB, 0.01, "a ring dips the music %.1f dB" % s.DUCK_DB)
 	for i in 5:
@@ -471,10 +471,10 @@ func test_rings_duck_the_music() -> void:
 		s._process(0.02)
 	check_near(AudioServer.get_bus_volume_db(music), trim, 0.01, "and back within ~0.3 s")
 	s.set_volume("music", 0.5)
-	s.bell("full", false, "miss")
+	s.bell("village", false, "miss")
 	s._process(0.02)
 	check_near(AudioServer.get_bus_volume_db(music), trim + linear_to_db(0.5), 0.01, "a miss doesn't duck; the user's music volume is kept")
-	s.bell("full", true, "good")
+	s.bell("village", true, "good")
 	s._process(0.05)
 	check_near(AudioServer.get_bus_volume_db(music), trim + linear_to_db(0.5) - s.DUCK_DB, 0.01, "ducking works from the user's level")
 	for i in 30:
@@ -510,4 +510,21 @@ func test_bell_accent() -> void:
 	s.bell_accent(false, "good", 6)
 	s.hold_done(2)
 	check(s._thumps.size() == 2 and s._chimes.size() == 2, "the accent's samples loaded")
+	await _settle()
+
+
+func test_cued_sounds_go_through_the_cued_buses_and_a_miss_distorts_them() -> void:
+	var s := _sound()
+	s.cued(func() -> void: s.bell("village", true, "perfect"))
+	var bell: AudioStreamPlayer = s._bell_pool[(s._next[0] + s._bell_pool.size() - 1) % s._bell_pool.size()]
+	check_eq(bell.bus, &"BellsCued", "a cued bell plays on the cued bells bus")
+	s.bell("village", true, "free")
+	bell = s._bell_pool[(s._next[0] + s._bell_pool.size() - 1) % s._bell_pool.size()]
+	check_eq(bell.bus, &"Bells", "a bell played straight away goes back to its own bus")
+	var idx := AudioServer.get_bus_index("BellsCued")
+	check(idx >= 0 and not AudioServer.is_bus_effect_enabled(idx, 0), "no distortion before a miss")
+	s.miss()
+	check(AudioServer.is_bus_effect_enabled(idx, 0), "a miss distorts the cued sounds")
+	s._process(s.MISS_DISTORT + 0.01)
+	check(not AudioServer.is_bus_effect_enabled(idx, 0), "and only for a moment")
 	await _settle()

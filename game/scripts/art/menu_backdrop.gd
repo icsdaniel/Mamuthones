@@ -12,6 +12,7 @@ const FRAME_TIME := 0.11
 const TORCHES := [[-1, 0.47], [1, 0.47], [-1, 0.8], [1, 0.8]]
 
 var reduced_motion := false
+var still := false                ## animations off: the torches stand still
 var _wall: Texture2D
 var _frames: Array[Texture2D] = []
 var _glows: Array[TextureRect] = []
@@ -77,6 +78,8 @@ func _flicker(i: int, amount: float) -> void:
 
 func _process(delta: float) -> void:
 	if not is_visible_in_tree():
+		return
+	if still:
 		return
 	_t += delta
 	if _t < FRAME_TIME:

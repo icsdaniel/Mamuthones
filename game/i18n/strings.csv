@@ -71,8 +71,8 @@ lat_uneven,The taps were uneven,I tocchi erano irregolari
 lat_few,Not enough taps,Troppo pochi tocchi
 lat_uneven_body,"Try again and tap with the sound, not ahead of it. Headphones help.","Riprova e batti insieme al suono, senza anticiparlo. Con le cuffie è più facile."
 lat_again,Try again,Riprova
-lat_sounds_off,"That is a long delay, as with Bluetooth headphones: every step knock would come that late after your thumb, so step sounds are now off (Settings). The music and the notes stay in time.","È un ritardo lungo, come con le cuffie Bluetooth: ogni colpo dei passi arriverebbe così in ritardo dopo il pollice, quindi i suoni dei passi ora sono spenti (Impostazioni). Musica e note restano a tempo."
-lat_sounds_on,Step sounds are back on.,I suoni dei passi sono di nuovo accesi.
+lat_sounds_off,"That is a long delay, as with Bluetooth headphones: every button knock would come that late after your thumb, so the knocks are now off (Settings). The music and the notes stay in time.","È un ritardo lungo, come con le cuffie Bluetooth: ogni colpo dei pulsanti arriverebbe così in ritardo dopo il pollice, quindi i colpi ora sono spenti (Impostazioni). Musica e note restano a tempo."
+lat_sounds_on,Button knocks are back on.,I colpi dei pulsanti sono di nuovo accesi.
 title_continue,Play: %s,Gioca: %s
 title_procession,The procession,La processione
 title_story,Story,Storia
@@ -135,8 +135,8 @@ set_timing,Timing,Tempo
 set_calibrate,Redo the tilt calibration,Rifai la taratura del colpo
 set_latency,Sound delay test,Test del ritardo audio
 set_offset,Delay adjustment,Correzione del ritardo
-set_step_sounds,Step sounds,Suoni dei passi
-set_step_sounds_note,"The knock each button makes. On Android it comes a little after your thumb; turn it off if fast passages feel sluggish.","Il colpo di ogni pulsante. Su Android arriva un po' dopo il pollice; spegnilo se i passaggi veloci sembrano lenti."
+set_step_knocks,Button knocks,Colpi dei pulsanti
+set_step_knocks_note,"A knock on every step button. Off, your hits on time bring up the song's tune instead. On Android the knock comes a little after your thumb.","Un colpo a ogni pulsante. Spento, i colpi a tempo fanno risaltare la melodia del brano. Su Android il colpo arriva un po' dopo il pollice."
 set_visual_test,Screen delay test,Test del ritardo dello schermo
 vis_title,Screen delay,Ritardo dello schermo
 vis_intro,"Notes slide onto the ring in silence. Tap the pad the moment each one touches the ring. This measures your eyes and the screen, not the sound.","Le note scendono sull'anello in silenzio. Tocca il riquadro nell'istante in cui ognuna tocca l'anello. Così misuriamo occhi e schermo, non il suono."
@@ -153,9 +153,11 @@ set_vibration,Vibration,Vibrazione
 set_slam,Slam mode: Left + Right rings the bells,Modalità colpo: Sinistra + Destra suonano i campanacci
 set_slam_note,For when tilting is hard. Runs are marked and stay off the global ladder.,Per quando inclinare il telefono è difficile. Le partite vengono segnate e restano fuori dalla classifica mondiale.
 set_reduced_motion,Reduced motion,Meno movimento
-set_look,Play screen look,Aspetto della partita
-look_pixel,Pixel,Pixel
-look_painted,Painted,Dipinto
+set_animations,Animations,Animazioni
+anim_full,Full,Complete
+anim_calm,Calm,Calme
+anim_off,Off,Spente
+set_animations_note,"Off: the street, the fire and the figures stand still and only the notes move, for the smoothest play.","Spente: la strada, il fuoco e le figure restano fermi e si muovono solo le note, per il gioco più fluido."
 set_sound,Sound,Suono
 set_music,Music,Musica
 set_sfx,Bells and effects,Campanacci ed effetti
@@ -295,9 +297,9 @@ res_new_best_by,New best: +%s over your best,Nuovo record: +%s sul tuo record
 res_first_best,Your first best on this song,Il tuo primo record su questo brano
 res_best,Best: %s (%s to go),Record: %s (ne mancano %s)
 res_slam_note,"Played in slam mode: kept on this phone, not on the global ladder.","Giocata in modalità colpo: resta su questo telefono, fuori dalla classifica mondiale."
+tip_still,"Keep the phone still through the grey stand-still bars: any tilt there, even a small one, shakes the bells and costs 100 points and a level of unison.","Tieni fermo il telefono durante le barre grigie delle soste: ogni inclinazione, anche piccola, scuote i campanacci e costa 100 punti e un livello di unisono."
+tip_holds,"Keep holds pressed until their end crosses the line: each hold kept is worth 150 × unison, plus 50 for every note you play on time while holding it.","Tieni premute le note lunghe finché la fine non passa la linea: ognuna vale 150 × unisono, più 50 per ogni nota suonata a tempo mentre la tieni."
 res_full_combo,Full combo,Combo completa
-tip_still,Keep the phone steady through the grey stand-still bars: each ring there costs 100 points and a level of unison.,Tieni fermo il telefono durante le barre grigie delle soste: ogni colpo lì costa 100 punti e un livello di unisono.
-tip_holds,Keep holds pressed until their end crosses the line: each hold kept is worth 150 × unison.,Tieni premute le note lunghe finché la fine non passa la linea: ognuna vale 150 × unisono.
 tip_bells,"Many bells were missed. Flick sharply and snap back just as the bell touches the line. If the tilt feels off, redo the calibration in Settings.","Molti campanacci sono andati persi. Dai un colpo secco e torna subito indietro proprio quando il campanaccio tocca la linea. Se il colpo non risponde bene, rifai la taratura nelle Impostazioni."
 tip_bells_slam,"Many bells were missed. Press Left and Right at the same instant, just as the bell touches the line.","Molti campanacci sono andati persi. Premi Sinistra e Destra nello stesso istante, proprio quando il campanaccio tocca la linea."
 tip_early,"You were early by about %d ms. Wait for the note to touch the line. If it always feels like this, run the delay test in Settings.","Hai anticipato di circa %d ms. Aspetta che la nota tocchi la linea. Se ti capita sempre, fai il test del ritardo nelle Impostazioni."
@@ -357,9 +359,9 @@ tut_holds,Press the button when the head reaches the line and keep holding until
 tut_holds_short,Press and hold,Premi e tieni premuto
 tut_fail_holds,Keep your thumb down until the end of the long note reaches the line.,Tieni il pollice giù finché la fine della nota non arriva alla linea.
 tut_still_title,Stand still,Fermi
-tut_still,"Grey bars mean the procession stops. Keep stepping on the notes, but don't ring the bells until the grey has passed.","Le barre grigie vogliono dire che la processione si ferma. Continua con i passi, ma non suonare i campanacci finché il grigio non è passato."
-tut_still_short,No bells in the grey,Niente campanacci nel grigio
-tut_fail_still,The bells rang during a stand-still. Hold the phone steady while the grey bars pass.,I campanacci hanno suonato durante una sosta. Tieni fermo il telefono mentre passano le barre grigie.
+tut_still,"Grey bars mean the procession stops dead. Hold the phone still until the grey has passed: even a small tilt shakes the bells.","Le barre grigie vogliono dire che la processione si ferma di colpo. Tieni fermo il telefono finché il grigio non è passato: anche una piccola inclinazione scuote i campanacci."
+tut_still_short,Don't move in the grey,Immobili nel grigio
+tut_fail_still,The phone moved during a stand-still. Hold it still while the grey bars pass.,Il telefono si è mosso durante una sosta. Tienilo fermo mentre passano le barre grigie.
 tut_stomps_title,Two thumbs,Due pollici
 tut_stomps,"Two gems side by side on one button: press that button with both thumbs at once, on the beat.","Due gemme affiancate su un tasto: premi quel tasto con entrambi i pollici insieme, a tempo."
 tut_stomps_short,Both thumbs on one button,Due pollici sullo stesso tasto

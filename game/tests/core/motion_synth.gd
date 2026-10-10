@@ -29,6 +29,12 @@ func flick(t0: float, up: bool, rot_peak := 400.0, acc_peak := 12.0, dur := 0.2,
 	events.append({"kind": "flick", "t0": t0, "sign": 1.0 if up else -1.0, "rot": rot_peak, "acc": acc_peak, "dur": dur, "acc_sign": acc_sign})
 
 
+## A slow lean of the top edge (up = toward the player) about the tilt axis, peaking at `rate` °/s,
+## lasting dur seconds: no flick, just the phone tipped (turns rate × dur × 2/π degrees).
+func lean(t0: float, up: bool, rate := 40.0, dur := 1.0, acc := 1.0) -> void:
+	events.append({"kind": "lean", "t0": t0, "sign": 1.0 if up else -1.0, "rot": rate, "dur": dur, "acc": acc})
+
+
 ## A body turn (yaw, about the screen's z axis) peaking at `rate` °/s, lasting dur seconds.
 func turn(t0: float, rate := 250.0, dur := 0.5) -> void:
 	events.append({"kind": "turn", "t0": t0, "rot": rate, "dur": dur})
@@ -84,6 +90,11 @@ func sample(t: float) -> Array:
 			acc.z += e.acc
 			acc.x += e.acc * 0.15
 			gyro[int(e.get("rot_axis", 1))] += e.rot
+		elif e.kind == "lean":
+			if dt < 0.0 or dt > e.dur:
+				continue
+			gyro.x += e.sign * e.rot * sin(PI * dt / e.dur)
+			acc.z += e.sign * e.acc * cos(PI * dt / e.dur)
 		elif e.kind == "turn":
 			if dt < 0.0 or dt > e.dur:
 				continue

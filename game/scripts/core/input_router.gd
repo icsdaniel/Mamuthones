@@ -21,8 +21,12 @@ signal lifted(lane: int)
 signal rang(result: Dictionary)
 ## Every tilt the detector fired, heard or not (rang leaves out tilts with no bell near).
 signal tilted(result: Dictionary)
+## The phone moved in a stand-still and broke it (note: the stand-still).
+signal moved_still(note: Note)
 signal pause_requested
 
+## Seconds into a stand-still before moving counts: the tail of a bell rung just before it settles.
+const STILL_GRACE := 0.15
 const KEY_LANES := {KEY_A: 0, KEY_S: 1, KEY_D: 2, KEY_J: 3, KEY_K: 4, KEY_L: 5}   ## 3-5: second thumb
 
 var session: Session:
@@ -195,6 +199,7 @@ func feed_motion(t: float, acc: Vector3, gyro_dps: Vector3) -> void:
 	_last_motion_t = t
 	if motion_log != null:
 		motion_log.add_reading(t, acc, gyro_dps)
+	_watch_still(t)
 	if detector.feed(t, acc, gyro_dps):
 		_tilt_rang(detector.last_t, t, false)
 	else:
@@ -203,6 +208,11 @@ func feed_motion(t: float, acc: Vector3, gyro_dps: Vector3) -> void:
 		if not is_nan(peak) and session.bell_due(peak):
 			detector.used()
 			_tilt_rang(peak, t, true)
+	if detector.watching_still() and not is_nan(detector.moved_at):
+		var broke := session.moved(detector.moved_at)
+		detector.end_still()
+		if broke != null:
+			moved_still.emit(broke)
 
 
 func _tilt_rang(at: float, t: float, retry: bool) -> void:
@@ -223,6 +233,17 @@ func _tilt_rang(at: float, t: float, retry: bool) -> void:
 	if rr.get("quality") == "free":
 		return
 	rang.emit(rr)
+
+
+# In a stand-still the detector watches for any tilt (from STILL_GRACE in, until it ends or breaks).
+func _watch_still(t: float) -> void:
+	var rest := session.rest_at(t)
+	if rest == null or rest.judgement == "silence":
+		if detector.watching_still():
+			detector.end_still()
+		return
+	if not detector.watching_still() and t >= rest.t + STILL_GRACE:
+		detector.watch_still(t)
 
 
 func _press(lane: int, t: float, id: int) -> void:

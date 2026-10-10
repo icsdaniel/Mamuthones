@@ -122,6 +122,8 @@ def build():
         s.bell_cue(b + bar * 4 + 2, rank=2 if bar % 2 else 3, land="stomp")
         s.ev("bells", b + bar * 4 + 1, 1, None, 0.25, count=8)
         s.ev("bells", b + bar * 4 + 3, 1, None, 0.25, count=8)
+    # the break: the whole row stops dead in the middle of the run, and comes back in on the bar
+    s.stop(b + 14, 2, tempt="call")
 
     # ---- outro: the hook once more, a long last chord
     b = s.sec("outro", 4, 1)

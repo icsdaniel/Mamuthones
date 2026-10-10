@@ -183,17 +183,18 @@ func _finish() -> void:
 		_actions.add_child(skip)
 
 
-## Turns the step sounds off for a long sound delay and back on for a short one when this test had
-## turned them off. Returns the string key to tell the player, or "".
+## Turns the button knocks off for a long sound delay (they would come that late after the thumb;
+## every other sound is played on the music and stays in time) and back on for a short one when this
+## test had turned them off. Returns the string key to tell the player, or "".
 static func step_sounds_for(offset: float) -> String:
 	if offset >= LATE_SOUND:
-		if bool(Profile.get_setting("step_sounds")):
-			Profile.set_setting("step_sounds", false)
-			Profile.set_flag("step_sounds_auto_off", true)
+		if bool(Profile.get_setting("step_knocks")):
+			Profile.set_setting("step_knocks", false)
+			Profile.set_flag("knocks_auto_off", true)
 			return "lat_sounds_off"
-	elif Profile.has_flag("step_sounds_auto_off"):
-		Profile.set_flag("step_sounds_auto_off", false)
-		Profile.set_setting("step_sounds", true)
+	elif Profile.has_flag("knocks_auto_off"):
+		Profile.set_flag("knocks_auto_off", false)
+		Profile.set_setting("step_knocks", true)
 		return "lat_sounds_on"
 	return ""
 

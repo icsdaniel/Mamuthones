@@ -26,7 +26,7 @@ import pixelate as px
 from bake_figures import shrink_rgba, region, H, OUT
 
 K = 40
-AI = os.path.join(px.GAME, "art/ai")
+AI = os.path.join(px.GAME, "../tools/art/sources/ai")   # the figure pictures are kept out of the game
 # where across its picture each figure stands on its spot (0 its left edge, 1 its right, before it
 # is turned): these figures stride wide and reach out with rope and bells, so neither their feet
 # nor their middle keeps them on screen; picked by eye on the play screen

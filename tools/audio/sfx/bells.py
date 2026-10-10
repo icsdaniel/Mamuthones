@@ -403,7 +403,7 @@ def render_row(up: bool, tight: bool, take: int) -> np.ndarray:
 
 
 def main() -> None:
-    only = [a for a in sys.argv[1:] if a in SETS or a == "row"] or ["light", "village", "full", "row"]
+    only = [a for a in sys.argv[1:] if a in SETS or a == "row"] or ["village", "row"]   # the game ships the Village load only (the others: name them)
     for s in ("light", "village", "full"):
         if s in only:
             for name, x in render_set(s).items():

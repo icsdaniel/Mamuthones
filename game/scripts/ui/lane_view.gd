@@ -343,6 +343,7 @@ func event_y(field: Rect2, t: float, pps: float) -> float:
 ## road (gems, rings, badges, the rope, labels), then the buttons.
 static var draw_usec := 0         ## time spent drawing the street lanes, summed (for tests/bench.gd)
 static var draw_count := 0
+static var last_draw_usec := 0    ## ... and in the last frame
 
 
 func _draw() -> void:
@@ -350,7 +351,8 @@ func _draw() -> void:
 		_street_map(true)
 		var t0 := Time.get_ticks_usec()
 		_draw_street()
-		draw_usec += Time.get_ticks_usec() - t0
+		last_draw_usec = Time.get_ticks_usec() - t0
+		draw_usec += last_draw_usec
 		draw_count += 1
 		return
 	if not _road_on():
@@ -562,8 +564,6 @@ var perspective := true          ## false: the flat lanes (tests may flatten)
 ## the lanes follow its painted lines: project() asks the street where a flat point lies, and this
 ## control draws the notes, the hit line, the bursts and the buttons over it (_draw_street).
 var street: StreetBackdrop
-## The pixel look (PixelFilter over the screen): the buttons are drawn as pixel art on its grid.
-var pixel := false
 var beat := -1000.0              ## the song's beat now (fractional), for the beads on the rails
 var spb := 0.0                   ## seconds per beat (0: no beads)
 var fire_dim := 0.0              ## 0..1 the fire burns low (health): the road's light dims with it
@@ -578,7 +578,7 @@ var _fx: Control                 ## additive, over the notes: hit bursts
 func _ready() -> void:
 	if street != null:
 		perspective = false
-	if street != null and pixel and not OS.has_environment("NO_ATLAS"):
+	if street != null and not OS.has_environment("NO_ATLAS"):
 		# the notes are painted once into a sheet and stamped from it: drawing them each frame was the lag
 		var at := NoteAtlas.new(self)
 		add_child(at)
@@ -1125,9 +1125,9 @@ func _off_beat(n: Note) -> bool:
 
 ## A sixteenth: a quarter of a beat off (only Expert has them; triplet eighths are not). A half-beat
 ## note inside a run of sixteenths is played at the same speed, so it is silver too: violet between
-## two silver notes read as a slower note (Daniele, 2026-10-10).
+## two silver notes read as a slower note (Daniele, 2026-10-10; Note.quick marks the pairs).
 func _sixteenth(n: Note) -> bool:
-	if absf(fposmod(n.beat, 0.5) - 0.25) < 0.02:
+	if n.quick or absf(fposmod(n.beat, 0.5) - 0.25) < 0.02:
 		return true
 	if absf(fposmod(n.beat, 1.0) - 0.5) >= 0.02 or session == null:
 		return false
@@ -1452,62 +1452,7 @@ func _street_chevron(pos: Vector2, side: String, age: float, size_k := 1.0) -> v
 ## middle one), lit gold while pressed, hot on a hit, dull red on a miss, their edge glowing when a
 ## note is about to reach their lane.
 func _draw_street_buttons() -> void:
-	if pixel:
-		_draw_pixel_buttons()
-		return
-	var r := buttons_rect()
-	var span := _screen_span()
-	var panel := Rect2(span.x, r.position.y, span.y - span.x, r.size.y + 400.0)
-	draw_rect(panel, Color("#0b0a10"))
-	draw_rect(Rect2(panel.position, Vector2(panel.size.x, 3.0)), Color("#ffb04a") * Color(1, 1, 1, 0.6 + 0.4 * beat_env()))
-	var w := r.size.x / 3.0
-	var pad := 7.0
-	for lane in 3:
-		var br := Rect2(r.position.x + w * lane + pad, r.position.y + pad + 4.0, w - pad * 2.0, r.size.y - pad * 2.0 - 4.0)
-		var st := _button_state(lane)
-		var sb := StyleBoxFlat.new()
-		sb.set_corner_radius_all(18)
-		sb.set_border_width_all(3)
-		sb.bg_color = BTN_BG
-		sb.border_color = BTN_EDGE
-		var foot := BTN_BONE
-		match st:
-			"cued":
-				sb.border_color = Color("#ffc445")
-				sb.shadow_color = Color("#ff9a2a66")
-				sb.shadow_size = 10
-			"pressed":
-				sb.bg_color = Color("#4a3014")
-				sb.border_color = Color("#ffe08a")
-				sb.shadow_color = Color("#ffb04a88")
-				sb.shadow_size = 14
-			"hit":
-				sb.bg_color = Color("#c47a1c")
-				sb.border_color = Color("#fff2c0")
-				sb.shadow_color = Color("#ffc445aa")
-				sb.shadow_size = 18
-				foot = Color("#fffaf0")
-			"miss":
-				sb.bg_color = Color("#3a1212")
-				sb.border_color = Color("#a83030")
-				foot = BTN_BONE.darkened(0.4)
-		draw_style_box(sb, br)
-		# a lit lip along the top, the lane's slot light carried down onto the button
-		var lip := Color("#ffb04a")
-		var la := 0.35 + 0.25 * beat_env()
-		match st:
-			"cued":
-				la = 0.9
-			"pressed", "hit":
-				lip = Color("#fff2c0")
-				la = 1.0
-		draw_rect(Rect2(br.position.x + 18.0, br.position.y + 5.0, br.size.x - 36.0, 6.0), Color(lip, la))
-		var feet := [-1.0, 1.0] if lane == 1 else ([-1.0] if lane == 0 else [1.0])
-		var fs := minf(br.size.x, br.size.y) * 0.25
-		for i in feet.size():
-			var ox := 0.0 if feet.size() == 1 else (float(i) - 0.5) * fs * 1.5
-			_footprint(br.get_center() + Vector2(ox, 0.0), fs, feet[i], foot)
-	_draw_street_marks(r, w)
+	_draw_pixel_buttons()
 
 
 # ------------------------------------------------------------------ the pixel look's buttons
@@ -1578,6 +1523,34 @@ func _px(o: Vector2, x: float, y: float, w: float, h: float, col: Color) -> void
 	draw_rect(Rect2(o + Vector2(x, y) * p, Vector2(w, h) * p), col)
 
 
+## Paints, before the song starts, every picture the lanes would otherwise make the first time it
+## is needed mid-song: the buttons pressed and lit, and (bells: a song with bells) the bell bars at
+## every size down the road. Each was a hitch of 25 ms or more on its first press, hit or bell.
+func warm(bells: bool) -> void:
+	if street == null:
+		return
+	for lane in 3:
+		var cr := _button_cells(lane)
+		for key in ["btn_idle", "btn_pressed"]:
+			_nine(key, cr, BTN_CAP)
+		_nine("btn_idle!white", cr + Vector2i(2, 2), BTN_CAP)
+	if bells:
+		StreetSkin.warm(self, field_rect())
+
+
+## A step button's rect on the grid ...
+func _button_rect(lane: int) -> Rect2:
+	var r := buttons_rect()
+	var w := r.size.x / 3.0
+	return _grid_rect(Rect2(r.position.x + w * lane + 9.0, r.position.y + 15.0, w - 18.0, r.size.y - 30.0))
+
+
+## ... and its picture's size in cells (columns, rows).
+func _button_cells(lane: int) -> Vector2i:
+	var br := _button_rect(lane)
+	return Vector2i(int(br.size.x / PxArt.PX), int(br.size.y / PxArt.PX) - PX_LIFT)
+
+
 ## The three step buttons as pixel art, from Daniele's pictures (art/ai/btn_idle, btn_pressed, foot):
 ## carved wooden steps standing up out of the panel (their side shows below them). A press sinks the
 ## step and shows the pressed picture with its glow; a hit lights it hot, a miss dull red; a note
@@ -1593,10 +1566,11 @@ func _draw_pixel_buttons() -> void:
 	_px(panel.position, 0, 1, panel.size.x / p, 1, PX_BRONZE[0])
 	var w := r.size.x / 3.0
 	for lane in 3:
-		var br := _grid_rect(Rect2(r.position.x + w * lane + 9.0, r.position.y + 15.0, w - 18.0, r.size.y - 30.0))
+		var br := _button_rect(lane)
 		var st := _button_state(lane)
-		var cols := int(br.size.x / p)
-		var rows := int(br.size.y / p) - PX_LIFT
+		var cells := _button_cells(lane)
+		var cols := cells.x
+		var rows := cells.y
 		var down := PX_LIFT if st == "pressed" or st == "hit" else 0
 		var o := br.position + Vector2(0, down * p)
 		# the step's side under it (the part that sinks into the panel when pressed)

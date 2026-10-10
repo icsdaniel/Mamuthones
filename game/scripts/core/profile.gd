@@ -29,15 +29,15 @@ const DEFAULT_SETTINGS := {
 	"language": "",          # "" = follow the phone
 	"vibration": true,
 	"slam": false,
-	"reduced_motion": false,
+	"reduced_motion": false,  # kept for older profiles: true reads as animations "calm"
+	"animations": "full",     # "full", "calm" or "off" (UIKit.animations)
 	"note_speed": 1.0,
 	"music_volume": 1.0,
 	"sfx_volume": 1.0,
 	"audio_offset": 0.0,     # seconds, from the tap test or set by hand
 	"visual_offset": 0.06,   # seconds the notes are drawn early (screen and touch delay); see visual_offset()
 	"bell_cue": true,        # the bell cue shown at Easy and Medium
-	"step_sounds": true,     # the knock of each step button (off: only the bells and the music)
-	"art_style": "pixel",    # the play screen's look: "pixel" (pixel art in 3D motion) or "painted"
+	"step_knocks": false,    # a knock on each step button (off: hits on time bring up the song's tune instead)
 }
 const FLAGS: Array[String] = ["language_chosen", "headphones_seen", "calibrated", "latency_tested", "tutorial_done"]
 const FLEECES: Array[String] = ["black", "dark_brown"]
