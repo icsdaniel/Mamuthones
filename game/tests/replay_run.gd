@@ -100,6 +100,6 @@ func _init() -> void:
 	for c in changed:
 		print(c)
 	print("all notes: misses then %d, now %d; then %s; now %s" % [all_miss[0], all_miss[1], counts[0], counts[1]])
-	print("bells and rings caught: then %d, now %d (%s); rings fired %d; rings in stand-stills %d; grade %s %.1f%%" % [hit[0], hit[1],
-		"old detector" if old else "forgive", rings, s.stats.silence, s.grade(), s.accuracy() * 100.0])
+	print("bells and rings caught: then %d, now %d (%s); rings fired %d; rings in stand-stills %d; threshold %.1f; grade %s %.1f%%" % [hit[0], hit[1],
+		"old detector" if old else "forgive", rings, s.stats.silence, det.threshold, s.grade(), s.accuracy() * 100.0])
 	quit()

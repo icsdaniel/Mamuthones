@@ -34,6 +34,7 @@ cal_tilt_up,"Tilt the top toward you, sharply, and back","Porta di scatto la par
 cal_tilt_down,"Now away from you, sharply, and back","Ora di scatto lontano da te, e torna"
 cal_hint,"Hold the phone the way you will play: both hands, screen facing you. Three times each way.","Tieni il telefono come quando giochi: due mani, schermo verso di te. Tre volte per verso."
 cal_done,Done: your bells are tuned,Fatto: i tuoi campanacci sono pronti
+cal_check_body,"Try it now: tilt as you would in a song and each ring is marked on the graph. Holding the phone should stay between the gold lines.","Prova ora: inclina come in una canzone e ogni rintocco viene segnato sul grafico. Tenendo il telefono fermo la linea resta tra le righe dorate."
 cal_done_body,You can redo this any time in Settings.,Puoi rifarlo quando vuoi dalle Impostazioni.
 cal_again,Try again,Riprova
 cal_use_slam,Play with buttons instead,Gioca con i tasti

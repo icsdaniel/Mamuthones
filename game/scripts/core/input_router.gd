@@ -19,6 +19,8 @@ extends Control
 signal stepped(lane: int)
 signal lifted(lane: int)
 signal rang(result: Dictionary)
+## Every tilt the detector fired, heard or not (rang leaves out tilts with no bell near).
+signal tilted(result: Dictionary)
 signal pause_requested
 
 const KEY_LANES := {KEY_A: 0, KEY_S: 1, KEY_D: 2, KEY_J: 3, KEY_K: 4, KEY_L: 5}   ## 3-5: second thumb
@@ -214,6 +216,12 @@ func _tilt_rang(at: float, t: float, retry: bool) -> void:
 		run_log.event(at, "ring", {"tilt": true, "up": rr.get("up"), "q": rr.get("quality"),
 			"j": rr.get("judgement"), "note": bn.index if bn != null else -1, "strength": snappedf(detector.last_strength, 0.01),
 			"threshold": snappedf(detector.threshold, 0.1), "fed_at": snappedf(t, 0.0001), "retry": retry})
+	tilted.emit(rr)
+	# A tilt with no bell anywhere near is not shown or heard: holding the phone moves it all the
+	# time, and every small lobe over the threshold rang out (Daniele, 2026-10-10: 69 of 113 rings in
+	# a Rope Expert run). A tilt in a stand-still still rings, as it costs points.
+	if rr.get("quality") == "free":
+		return
 	rang.emit(rr)
 
 
