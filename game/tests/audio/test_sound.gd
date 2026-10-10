@@ -511,3 +511,20 @@ func test_bell_accent() -> void:
 	s.hold_done(2)
 	check(s._thumps.size() == 2 and s._chimes.size() == 2, "the accent's samples loaded")
 	await _settle()
+
+
+func test_cued_sounds_go_through_the_cued_buses_and_a_miss_distorts_them() -> void:
+	var s := _sound()
+	s.cued(func() -> void: s.bell("village", true, "perfect"))
+	var bell: AudioStreamPlayer = s._bell_pool[(s._next[0] + s._bell_pool.size() - 1) % s._bell_pool.size()]
+	check_eq(bell.bus, &"BellsCued", "a cued bell plays on the cued bells bus")
+	s.bell("village", true, "free")
+	bell = s._bell_pool[(s._next[0] + s._bell_pool.size() - 1) % s._bell_pool.size()]
+	check_eq(bell.bus, &"Bells", "a bell played straight away goes back to its own bus")
+	var idx := AudioServer.get_bus_index("BellsCued")
+	check(idx >= 0 and not AudioServer.is_bus_effect_enabled(idx, 0), "no distortion before a miss")
+	s.miss()
+	check(AudioServer.is_bus_effect_enabled(idx, 0), "a miss distorts the cued sounds")
+	s._process(s.MISS_DISTORT + 0.01)
+	check(not AudioServer.is_bus_effect_enabled(idx, 0), "and only for a moment")
+	await _settle()

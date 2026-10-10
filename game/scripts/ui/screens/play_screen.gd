@@ -75,6 +75,7 @@ var _spb := 0.5
 var _stomp_sounded := false       ## a stomp sounded on this touch: no plain step knock
 var _sched := 0                  ## next note to check for calls and accents
 var _last_accent_t := -INF       ## the last accent's note time (a chord swells once)
+var _hold_ends: Array[Note] = []  ## holds whose end chime is still to come (_schedule)
 var _bell_sched := 0             ## next note to check for the bell cue
 var _bell_cue := false           ## a soft tick half a beat before each bell (Easy and Medium)
 var _pause_panel: Control
@@ -542,8 +543,8 @@ func _schedule(t: float) -> void:
 		if n.kind != Note.Kind.REST and n.t > _last_accent_t + 0.01 and not _no_lift:
 			_last_accent_t = n.t
 			lift.accent()
-		if n.lane >= 0 and n.kind in [Note.Kind.STEP, Note.Kind.HOLD, Note.Kind.STOMP] and not _no_lift:
-			Sound.note_accent(n.lane)
+		if not _no_lift:
+			_cue(n)
 		_sched += 1
 	# The bell cue: on Easy and Medium the music's rim clicks come before many beats with no bell, so
 	# a soft tick of its own comes half a beat before each bell or full ring (heard on time, like the
@@ -558,6 +559,16 @@ func _schedule(t: float) -> void:
 		if _bell_cue and not n.done and n.t > t:
 			Sound.ui("cue")
 		_bell_sched += 1
+	# a hold's small bell at its end, unless it was let go
+	var k := 0
+	while k < _hold_ends.size():
+		var h: Note = _hold_ends[k]
+		if h.end_t - lead > t:
+			k += 1
+			continue
+		if h.judgement != "let_go" and h.judgement != "miss":
+			Sound.cued(Sound.hold_done.bind(h.lane))
+		_hold_ends.remove_at(k)
 	var still := false
 	for i in range(maxi(_sched - 8, 0), mini(_sched + 8, notes.size())):
 		var n := notes[i]
@@ -567,6 +578,25 @@ func _schedule(t: float) -> void:
 	if still != _still:
 		_still = still
 		scene.set_still(still)
+
+
+## A note's sounds, played on its beat as if hit on time (heard on the beat whatever the sound delay);
+## a miss distorts them afterwards (Sound.miss). Steps and holds: the lane's soft tone; bells and full
+## rings: the bell and its on-time accent; stomps: the stomp. A hold's end chime waits in _hold_ends.
+func _cue(n: Note) -> void:
+	match n.kind:
+		Note.Kind.STEP, Note.Kind.HOLD:
+			Sound.cued(Sound.note_accent.bind(n.lane))
+			if n.kind == Note.Kind.HOLD:
+				_hold_ends.append(n)
+		Note.Kind.BELL, Note.Kind.RING:
+			Sound.cued(func() -> void:
+				Sound.bell(BellSets.STANDARD, n.up, "perfect")
+				Sound.bell_accent(n.up, "perfect", _bell_chain + 1))
+			if n.kind == Note.Kind.RING and n.lane >= 0:
+				Sound.cued(Sound.note_accent.bind(n.lane))
+		Note.Kind.STOMP:
+			Sound.cued(Sound.stomp.bind(n.lane, "perfect"))
 
 
 ## Song start: "4 3 2 1" on the music's own count-in sticks (beats -4..-1), then "Get ready" with the
@@ -641,12 +671,14 @@ func _on_rang(result: Dictionary) -> void:
 	var strength := float(result.get("strength", 0.5))
 	# Strength is how hard the flick was; harder flicks ring heavier.
 	var up := bool(result.get("up", true))
-	Sound.bell(BellSets.STANDARD, up, q, strength)
+	# A bell note already rang on the music (_schedule), heard on its beat; only a tilt with no bell
+	# to ring (free) or one in a stand-still (silence) sounds now.
+	if q == "free" or q == "silence":
+		Sound.bell(BellSets.STANDARD, up, q, strength)
 	scene.jolt("bell")
 	if q == "perfect" or q == "good":
 		# On time: the bell strikes. The accent grows along a chain of on-time bells.
 		_bell_chain += 1
-		Sound.bell_accent(up, q, _bell_chain)
 		_bell_strike(up, q)
 	elif q != "free":
 		_bell_chain = 0
@@ -733,11 +765,10 @@ func _on_judged(note: Note, judgement: String, offset: float) -> void:
 
 ## A step, call or hold hit on time (Perfect, Good, or a hold kept to its end): light runs up its
 ## lane to the procession in the note's colour; a call hit on time makes the Issohadore crack his rope;
-## a hold kept to its end rings a small bell at the lane's pitch, knocks the screen and flares the fire.
+## a hold kept to its end knocks the screen and flares the fire (its small bell rang on the music).
 func _on_time_step(note: Note, judgement: String) -> void:
 	if judgement == "held":
 		lanes.lane_pulse(note.lane, StreetSkin.K_HOLD[3], 1.6)
-		Sound.hold_done(note.lane)
 		knock(Vector2(0.0, 3.0))
 		if backdrop != null:
 			backdrop.kick(0.5)
@@ -768,8 +799,7 @@ func note_colour(note: Note) -> Color:
 ## button (placeholders the art and sound passes replace, see handoff/stomp.md). judged has already
 ## drawn the burst and word.
 func _on_stomp(note: Note, judgement: String, _offset: float, both: bool) -> void:
-	if both and not Profile.has_flag("late_sound"):
-		Sound.stomp(note.lane, step_quality(judgement))
+	# The stomp's sound already played on its beat (_schedule).
 	if both:
 		_stomp_sounded = true
 		if scene.has_method("stomp"):
@@ -778,8 +808,6 @@ func _on_stomp(note: Note, judgement: String, _offset: float, both: bool) -> voi
 			scene.jolt("ring")
 		UIKit.vibrate(40)
 	else:
-		if not Profile.has_flag("late_sound"):
-			Sound.stomp_half(note.lane)
 		words.show_word(tr("judge_one_thumb"), "", lanes.word_spot(note.lane), "early")
 	lanes.stomp_hit(note.lane, judgement, both)
 	if both:
