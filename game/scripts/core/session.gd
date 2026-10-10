@@ -667,6 +667,8 @@ static func _quality(judgement: String) -> String:
 ## few readings later (about 30 ms on Daniele's phone): a bell waits this much longer before it is
 ## called missed, so a tilt inside its window is never judged after the bell already went.
 const TILT_GRACE := 0.06
+## How early a tap may still take its lane's next note (as an Ok) when no note is in the window.
+const EARLY_REACH := 0.17
 
 
 func _timeout(n: Note) -> float:
@@ -693,11 +695,23 @@ func _own_note_near(lane: int, t: float) -> Note:
 # Note-lock: the earliest open note on the lane whose window contains t. A stomp waiting for its
 # second thumb takes only another touch (touch_id) within STOMP_GAP of the first.
 func _find_lane_note(lane: int, t: float, touch_id: int = -1) -> Note:
+	var n := _lane_note_within(lane, t, touch_id, win_touch.z, win_touch.z)
+	if n == null:
+		# Nothing in the window: a tap up to EARLY_REACH early still takes its lane's next note, as an
+		# Ok. In dense passages (Expert sixteenths, 139 ms apart) Daniele's taps ran early and 17 of
+		# them landed 130-160 ms ahead of their note, where they did nothing and the note was then
+		# missed (2026-10-10 Carnival Expert run).
+		n = _lane_note_within(lane, t, touch_id, EARLY_REACH, 0.0)
+	return n
+
+
+# The first open note of the lane due between `late` seconds before t and `early` seconds after it.
+func _lane_note_within(lane: int, t: float, touch_id: int, early: float, late: float) -> Note:
 	for i in range(_first_open, notes.size()):
 		var n := notes[i]
-		if n.t - win_touch.z > t:
+		if n.t - early > t:
 			break
-		if n.done or n.lane != lane or not n.uses_lane() or absf(t - n.t) > win_touch.z:
+		if n.done or n.lane != lane or not n.uses_lane() or n.t - t > early or t - n.t > late:
 			continue
 		if n.kind == Note.Kind.RING and not is_nan(n.step_at):
 			continue

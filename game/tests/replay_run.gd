@@ -79,12 +79,27 @@ func _init() -> void:
 		if not n.is_bell():
 			continue
 		var was: String = then.get(n.index, "?")
+		if was == "":
+			continue   # the run was left before this note
 		hit[0] += 1 if was != "miss" else 0
 		hit[1] += 1 if n.judgement != "miss" else 0
 		if was != n.judgement or (n.t >= lo and n.t <= hi):
 			changed.append("%3d %7.3f %-5s then %-8s now %s" % [n.index, n.t, n.kind_name(), was, n.judgement])
+	var all_miss := [0, 0]
+	var counts := [{}, {}]
+	for n in s.notes:
+		var was: String = then.get(n.index, "")
+		if was == "" or n.kind == Note.Kind.REST:
+			continue
+		all_miss[0] += 1 if was == "miss" else 0
+		all_miss[1] += 1 if n.judgement == "miss" else 0
+		counts[0][was] = counts[0].get(was, 0) + 1
+		counts[1][n.judgement] = counts[1].get(n.judgement, 0) + 1
+		if was != n.judgement and not n.is_bell():
+			changed.append("%3d %7.3f %-5s then %-8s now %s" % [n.index, n.t, n.kind_name(), was, n.judgement])
 	for c in changed:
 		print(c)
+	print("all notes: misses then %d, now %d; then %s; now %s" % [all_miss[0], all_miss[1], counts[0], counts[1]])
 	print("bells and rings caught: then %d, now %d (%s); rings fired %d; rings in stand-stills %d; grade %s %.1f%%" % [hit[0], hit[1],
 		"old detector" if old else "forgive", rings, s.stats.silence, s.grade(), s.accuracy() * 100.0])
 	quit()
