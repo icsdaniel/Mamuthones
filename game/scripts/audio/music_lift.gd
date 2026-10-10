@@ -7,15 +7,17 @@ extends RefCounted
 ##   layer sits on, up to RUN_MAX; an Ok lowers it a little, a miss (or a wrong or stray tap) drops it
 ##   to nothing. So while the player keeps time the tune is already up when the next note sounds:
 ##   nothing waits on the phone's audio delay.
-## - the swell: each hit on time also pushes the layer higher for a moment, fading back to the run
-##   over SWELL_BEATS, so a hit is heard as the music answering it.
+## - the accent: every note pushes the layer higher for a moment at its own time, fading back to the
+##   run over SWELL_BEATS, as if it was hit on time. The play screen calls accent() when the music
+##   being mixed reaches the note, so the accent is heard on the note whatever the phone's sound delay;
+##   a note that turns out missed is corrected afterwards by the miss sound and the cut.
 ## The level follows its target quickly up (ATTACK) and a little slower down (RELEASE); a miss cuts it
 ## faster (CUT), so the hole in the music is heard with the miss.
 
 const RUN_MAX := 0.55
 const RUN_STEP := {"perfect": 0.3, "good": 0.2, "held": 0.3}
 const RUN_OK := 0.12
-const SWELL := {"perfect": 0.9, "good": 0.7, "held": 0.9}
+const ACCENT := 0.9
 const SWELL_BEATS := 0.6
 const ATTACK := 0.01
 const RELEASE := 0.12
@@ -29,7 +31,12 @@ var _cut := false
 
 func hit(quality: String) -> void:
 	run = minf(run + float(RUN_STEP.get(quality, 0.2)), RUN_MAX)
-	swell = maxf(swell, float(SWELL.get(quality, 0.7)))
+	_cut = false
+
+
+## A note's accent, at the note's time (see the class notes).
+func accent() -> void:
+	swell = maxf(swell, ACCENT)
 	_cut = false
 
 

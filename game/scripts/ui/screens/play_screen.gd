@@ -73,7 +73,8 @@ var done := false
 var _first_t := 0.0
 var _spb := 0.5
 var _stomp_sounded := false       ## a stomp sounded on this touch: no plain step knock
-var _sched := 0                  ## next note to check for calls
+var _sched := 0                  ## next note to check for calls and accents
+var _last_accent_t := -INF       ## the last accent's note time (a chord swells once)
 var _bell_sched := 0             ## next note to check for the bell cue
 var _bell_cue := false           ## a soft tick half a beat before each bell (Easy and Medium)
 var _pause_panel: Control
@@ -441,8 +442,6 @@ func _process(delta: float) -> void:
 		session.update(t)
 		_count_frame(t, delta)
 	_song_t = t
-	if not _no_lift:
-		conductor.set_lift(lift.tick(delta, _spb))
 	var tv := _visual_time(t, delta) + _lead
 	lanes.song_time = tv
 	if run_log != null:
@@ -457,6 +456,8 @@ func _process(delta: float) -> void:
 		var hb := hud.get_global_transform() * Vector2(0.0, hud.frames_bottom())
 		backdrop.set_hud_bottom((backdrop.get_global_transform().affine_inverse() * hb).y)
 	_schedule(t)
+	if not _no_lift:
+		conductor.set_lift(lift.tick(delta, _spb))
 	_count_in(t)
 	if ghost != null:
 		scene.set_ghost_delta(ghost.lead_seconds(session.score, t))
@@ -524,7 +525,8 @@ func _set_beat(beat: float) -> void:
 
 
 ## Things that happen on the music, not on the player: the Issohadore's call with off-beat steps (a
-## touch early so it is heard on time), standing still.
+## touch early so it is heard on time), every note's accent (as if hit on time: the tune swells and a
+## step's lane tone sounds; a miss is corrected afterwards), standing still.
 func _schedule(t: float) -> void:
 	# The whole sound delay, not just the output latency: with Bluetooth headphones (200 ms on
 	# Daniele's) the call and the cue otherwise came a fifth of a second after the music.
@@ -537,6 +539,11 @@ func _schedule(t: float) -> void:
 			break
 		if n.call:
 			Sound.call_out()
+		if n.kind != Note.Kind.REST and n.t > _last_accent_t + 0.01 and not _no_lift:
+			_last_accent_t = n.t
+			lift.accent()
+		if n.lane >= 0 and n.kind in [Note.Kind.STEP, Note.Kind.HOLD, Note.Kind.STOMP] and not _no_lift:
+			Sound.note_accent(n.lane)
 		_sched += 1
 	# The bell cue: on Easy and Medium the music's rim clicks come before many beats with no bell, so
 	# a soft tick of its own comes half a beat before each bell or full ring (heard on time, like the

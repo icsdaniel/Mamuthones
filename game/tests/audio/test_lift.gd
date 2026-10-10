@@ -1,6 +1,6 @@
 extends TestCase
 ## The lift layer: every song has one as long as the song, the conductor plays it in sync and sets its
-## level, and MusicLift raises it on hits on time and drops it on a miss.
+## level, and MusicLift raises it on hits on time, swells it on every note's accent and drops it on a miss.
 
 
 func _songs() -> Array[String]:
@@ -51,10 +51,10 @@ func test_hits_raise_it_and_a_miss_drops_it() -> void:
 			lift.tick(1.0 / 60.0, spb)
 	check(lift.run > 0.5, "a run of Perfects raises the floor (%.2f)" % lift.run)
 	check(lift.level > 0.5, "the layer sits up while the player keeps time (%.2f)" % lift.level)
-	lift.hit("perfect")
+	lift.accent()
 	for f in 3:
 		lift.tick(1.0 / 60.0, spb)
-	check(lift.level > 0.75, "a hit swells it at once (%.2f)" % lift.level)
+	check(lift.level > 0.75, "a note's accent swells it at once (%.2f)" % lift.level)
 	lift.miss()
 	for f in 9:
 		lift.tick(1.0 / 60.0, spb)
@@ -62,3 +62,16 @@ func test_hits_raise_it_and_a_miss_drops_it() -> void:
 	lift.hit("good")
 	lift.ok()
 	check(lift.run < MusicLift.RUN_STEP["good"], "an Ok gives some of the run back")
+
+
+func test_a_missed_note_was_accented_then_corrected() -> void:
+	var lift := MusicLift.new()
+	lift.accent()
+	for f in 6:
+		lift.tick(1.0 / 60.0, 0.5)
+	check(lift.level > 0.7, "the note is accented on its time, before it is judged (%.2f)" % lift.level)
+	lift.miss()
+	for f in 9:
+		lift.tick(1.0 / 60.0, 0.5)
+	check(lift.level < 0.05, "the miss takes the accent back (%.2f)" % lift.level)
+	check_eq(lift.run, 0.0, "and the run is gone")

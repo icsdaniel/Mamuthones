@@ -43,6 +43,8 @@ const ROW_DB: Array[float] = [-80.0, -20.0, -16.0, -12.0, -9.0, -6.0]
 ## lower on a Good, the dum up to ACCENT_CHAIN_DB louder along a chain of on-time bells, and the
 ## chime doubled at the octave from ACCENT_OCTAVE_CHAIN bells in a row.
 const ACCENT_THUMP_DB := -3.0
+## The soft tuned tone on every note's time (note_accent), under the step's own tone.
+const NOTE_ACCENT_DB := -6.0
 const ACCENT_CHIME_DB := -8.0
 const ACCENT_GOOD_DB := -4.0
 const ACCENT_CHAIN_DB := 2.0
@@ -264,6 +266,14 @@ func bell_accent(up: bool, quality: String, chain := 1) -> void:
 	_play(_accent_pool, 6, _pick(_chimes, 132), ACCENT_CHIME_DB + soft, pitch)
 	if chain >= ACCENT_OCTAVE_CHAIN:
 		_play(_accent_pool, 6, _pick(_chimes, 133), ACCENT_CHIME_DB + ACCENT_OCTAVE_DB + soft, pitch * 2.0)
+
+
+## A note's accent, played on the note's time whether or not it is hit (PlayScreen schedules it on the
+## music, so it is heard in time even with Bluetooth delay): the lane's tuned tone alone, soft, no
+## footfall. A missed note is corrected afterwards by miss().
+func note_accent(lane: int) -> void:
+	lane = clampi(lane, 0, LANES - 1)
+	_play(_tone_pool, 3, _tones[lane][_key_pc >> 1], NOTE_ACCENT_DB + randf_range(-0.5, 0.0), _tone_pitch)
 
 
 ## A hold kept to its end: the small bell rung once at the lane's pitch (Left the root, Middle the
