@@ -58,7 +58,15 @@ func _init() -> void:
 			"t":
 				det.note_touch(t)
 			"press":
-				s.tap(int(e[3].lane), t, int(e[3].id))
+				var r := s.tap(int(e[3].lane), t, int(e[3].id))
+				var rn: Note = r.get("note")
+				if not old and rn != null and rn.kind == Note.Kind.RING and r.get("judgement", "") == "" and is_nan(rn.bell_at) \
+						and det.tilting_for(t) >= BellDetector.HELD_TILT:
+					det.claim(t)
+					rings += 1
+					var rr := s.ring(t, true, det.last_strength)
+					if t >= lo and t <= hi:
+						print("  held %.3f %s" % [t, rr.get("quality")])
 			"release":
 				s.release(t, int(e[3].id))
 	s.update(s.end_time() + 1.0)

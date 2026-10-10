@@ -666,3 +666,23 @@ func test_a_slow_tilt_that_rang_too_early_offers_its_peak() -> void:
 			offered += 1
 		t += 0.01
 	check_eq(offered, 0, "no retry without forgive")
+
+
+## A full ring's tap that lands while the phone is already turning steadily takes that tilt; a tap's
+## own knock (starting with the tap) does not count as turning (Daniele's rings at 66.3 s).
+func test_tilting_for_tells_a_held_tilt_from_a_knock() -> void:
+	var det := _detector(144.0)
+	var t := 0.0
+	while t < 1.0:
+		det.feed(t, Vector3.ZERO, Vector3(0.0 if t < 0.8 else 120.0, 0.0, 0.0))   # 2/3 of the threshold from 0.8 s
+		t += 0.01
+	check(det.tilting_for(1.0) >= BellDetector.HELD_TILT, "turning steadily for 0.2 s (%.2f)" % det.tilting_for(1.0))
+	var knock := _detector(144.0)
+	t = 0.0
+	while t < 1.0:
+		knock.feed(t, Vector3.ZERO, Vector3(150.0 if t >= 0.98 else 0.0, 0.0, 0.0))
+		t += 0.01
+	check(knock.tilting_for(1.0) < BellDetector.HELD_TILT, "a knock that just started is not a held tilt")
+	det.claim(1.0)
+	check_eq(det.last_t, 1.0, "claimed as the lobe's ring")
+	check(not det.feed(1.01, Vector3.ZERO, Vector3(300.0, 0.0, 0.0)), "and the same lobe does not ring again")

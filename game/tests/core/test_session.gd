@@ -356,12 +356,12 @@ func test_full_ring() -> void:
 	check_near(got[1][1], 0.1, 1e-6, "offset of the later input")
 	# Only one half: miss when the window passes.
 	s.tap(1, _bt(8), 0)
-	s.update(_bt(8) + 0.2)
+	s.update(_bt(8) + 0.3)
 	check_eq(got[2][0], "miss", "a ring without its bell is a miss")
 	# A step outside the window does not count as the ring's half.
 	check_eq(s.tap(1, _bt(12) - 0.2, 0).note, null, "early step is not the ring's half")
 	s.ring(_bt(12))
-	s.update(_bt(12) + 0.2)
+	s.update(_bt(12) + 0.3)
 	check_eq(got[3][0], "miss", "both halves must land in the window")
 
 
@@ -956,3 +956,19 @@ func test_health_exempt_modes_never_fail() -> void:
 		check(s.heal_notes().is_empty(), "%s: no healing steps" % [opts])
 		check_eq(s.health, Session.MAX_HEALTH, "%s: health never drops" % [opts])
 		check_eq(fails[0], 0, "%s: never fails" % [opts])
+
+
+## A tilt stamped inside its window but reaching the rules a few readings later still counts:
+## the bell is not called missed until TILT_GRACE after its window (Daniele's ring at 83.8 s).
+func test_a_late_arriving_tilt_inside_its_window_counts() -> void:
+	var s := Session.new(make([{"b": 0, "k": "bell"}, {"b": 4, "k": "ring", "lane": 2}]), "easy")
+	var tilt_ok := s.win_tilt.z
+	s.update(_bt(0) + tilt_ok + 0.03)
+	check_eq(s.notes[0].judgement, "", "not missed yet just after the window")
+	var r := s.ring(_bt(0) + tilt_ok - 0.01)
+	check_eq(r.judgement, "late", "the tilt stamped inside the window is judged on its own time")
+	s.update(_bt(0) + tilt_ok + Session.TILT_GRACE + 0.01)
+	var ring_note := s.notes[1]
+	s.tap(2, _bt(4), 1)
+	s.update(_bt(4) + maxf(s.win_touch.z, tilt_ok) + Session.TILT_GRACE + 0.01)
+	check_eq(ring_note.judgement, "miss", "a full ring with no tilt is still missed after the grace")

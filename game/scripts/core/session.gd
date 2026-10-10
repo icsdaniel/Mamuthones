@@ -663,12 +663,18 @@ static func _quality(judgement: String) -> String:
 	return "miss"
 
 
+## A tilt is stamped with the moment it crossed the threshold but reaches the rules a frame or a
+## few readings later (about 30 ms on Daniele's phone): a bell waits this much longer before it is
+## called missed, so a tilt inside its window is never judged after the bell already went.
+const TILT_GRACE := 0.06
+
+
 func _timeout(n: Note) -> float:
 	match n.kind:
 		Note.Kind.BELL:
-			return win_tilt.z
+			return win_tilt.z + (0.0 if slam else TILT_GRACE)
 		Note.Kind.RING:
-			return win_touch.z if slam else maxf(win_touch.z, win_tilt.z)
+			return win_touch.z if slam else maxf(win_touch.z, win_tilt.z) + TILT_GRACE
 	return win_touch.z
 
 

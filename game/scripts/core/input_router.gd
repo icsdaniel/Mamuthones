@@ -231,6 +231,12 @@ func _press(lane: int, t: float, id: int) -> void:
 			"note": n.index if n != null else -1, "off": snappedf(float(r.get("offset", 0.0)), 0.0001),
 			"stomp": r.get("stomp", ""), "handled_ms": snappedf((run_log.now() - _event_real) * 1000.0, 0.01)})
 	stepped.emit(lane)
+	# A full ring tapped while the phone is already tilting: that tilt is its bell half.
+	var rn: Note = r.get("note")
+	if rn != null and rn.kind == Note.Kind.RING and r.get("judgement", "") == "" and is_nan(rn.bell_at) \
+			and detector != null and not session.slam and detector.tilting_for(t) >= BellDetector.HELD_TILT:
+		detector.claim(t)
+		_tilt_rang(t, t, true)
 	if not r.get("ring", {}).is_empty():
 		if run_log != null:
 			run_log.event(t, "ring", {"tilt": false, "q": r.ring.get("quality"), "j": r.ring.get("judgement")})

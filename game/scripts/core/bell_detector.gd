@@ -49,8 +49,12 @@ const MAX_GAP := 0.06         ## seconds; a longer gap between readings breaks i
 const TOUCH_WINDOW := 0.10    ## seconds after a touch during which accel rings need more proof
 const PEAK_WATCH := 0.15
 const NEAR := 0.6             ## near-miss: a sustained lobe above this share of the threshold
-const ADAPT_FLOOR := 0.6
+## The threshold may follow softer play down to 40 % of the calibrated one: Daniele calibrated with
+## big flicks (peaks 333 °/s, threshold 150) and played much softer, and at the old 60 % floor his
+## soft ring tilts never crossed it (2026-10-10 run).
+const ADAPT_FLOOR := 0.4
 const RETRY_DROP := 0.8       ## a forgiven lobe has passed a peak once it falls under this × that peak
+const HELD_TILT := 0.06       ## seconds of steady turning before a full ring's tap that make its tilt
 const FORGIVE_PEAK := 0.75    ## a forgiven lobe re-arms only if it peaked under this × typical_peak
 ## The threshold never climbs over the calibrated one: after a few hard flicks it had risen to
 ## 1.2 × on Daniele's phone (2026-10-09 run log) and a normal flick that peaked under it was lost.
@@ -89,6 +93,7 @@ var _lobe_max := 0.0          # highest reading of the lobe that last rang
 var _lobe_max_t := -INF       # when it was read
 var _retry_t := NAN           # the peak of a forgiven lobe, offered once by take_retry()
 var _offered_t := -INF        # the last peak offered
+var _above_since := NAN       # since when the signal has stayed over SUSTAIN × threshold
 var _calm_since := NAN
 var _cand_t := NAN
 var _cand_first := NAN
@@ -145,6 +150,7 @@ func reset() -> void:
 	_armed = true
 	_forgiven = false
 	_retry_t = NAN
+	_above_since = NAN
 	_calm_since = NAN
 	_cand_t = NAN
 	_rise_since = NAN
@@ -187,7 +193,7 @@ func feed(t: float, acc: Vector3, gyro_dps: Vector3) -> bool:
 		if v > _lobe_max:
 			_lobe_max = v
 			_lobe_max_t = t - _reading_age()
-		elif fresh and v < RETRY_DROP * _lobe_max and _lobe_max_t > _offered_t and _lobe_max_t > last_t + 0.02:
+		elif fresh and v < RETRY_DROP * _lobe_max and _lobe_max_t > _offered_t and _lobe_max_t > last_t + 0.005:
 			# Past a peak (a slow tilt can have two): offer it while the bell's window is still open.
 			_retry_t = _lobe_max_t
 			_offered_t = _lobe_max_t
@@ -205,6 +211,11 @@ func feed(t: float, acc: Vector3, gyro_dps: Vector3) -> bool:
 	# A held reading says nothing new about a starting ring.
 	if not fresh:
 		return false
+	if v >= threshold * SUSTAIN:
+		if is_nan(_above_since):
+			_above_since = t
+	else:
+		_above_since = NAN
 	if v < threshold * SLOPE:
 		_rise_since = NAN
 	elif is_nan(_rise_since) and v < threshold and not _lobe_over:
@@ -259,6 +270,25 @@ func take_retry() -> float:
 	var r := _retry_t
 	_retry_t = NAN
 	return r
+
+
+## How long the phone has been turning steadily (over SUSTAIN × threshold) at time t, 0 if not.
+## A tap's own knock lasts a few tens of ms and starts with the tap; a tilt held through the tap
+## has been going for longer.
+func tilting_for(t: float) -> float:
+	return 0.0 if is_nan(_above_since) else maxf(0.0, t - _above_since)
+
+
+## The tilt going on now rang a bell at t (the tilt half of a full ring, read at its tap): it counts
+## as this lobe's ring, with the usual lockout after it.
+func claim(t: float) -> void:
+	_armed = false
+	_forgiven = false
+	_calm_since = NAN
+	_cand_t = NAN
+	last_t = t
+	_retry_t = NAN
+	_offered_t = INF
 
 
 ## A retry rang a bell: the rest of that lobe offers nothing more.
