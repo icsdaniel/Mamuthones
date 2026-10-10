@@ -75,7 +75,6 @@ func build() -> void:
 		_diff_buttons[d] = b
 	_best = UIKit.label("", UIKit.CAPTION)
 	box.add_child(_best)
-	UIKit.bell_set_picker(box)
 	if song.has_remix() and not Progression.remix_unlocked(song.id):
 		var r := UIKit.label(tr("stop_remix_locked"), UIKit.CAPTION)
 		r.name = "RemixLocked"
@@ -95,13 +94,12 @@ func _pick(d: String) -> void:
 	if best.is_empty():
 		_best.text = tr("stop_no_best")
 	else:
-		_best.text = tr("stop_best") % [UIKit.fmt_score(int(best.get("score", 0))), int(best.get("bells", 0))]
+		_best.text = tr("stop_best") % [UIKit.fmt_score(int(best.get("score", 0))), Session.grade_name(UIKit.grade_of(best))]
 
 
 func _play() -> void:
 	app.open("play", {
 		"song_id": song.id,
 		"difficulty": difficulty,
-		"bell_set": str(Profile.get_look().get("bell_set", "light")),
 		"remix": use_remix,
 	})

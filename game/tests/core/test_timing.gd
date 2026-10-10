@@ -315,6 +315,37 @@ func _song(chart: Array) -> SongData:
 	return SongData.from_dict({"id": "r", "bpm": 120, "offset": 1.0, "charts": {"easy": chart}})
 
 
+func test_router_tilt_breaks_a_stand_still() -> void:
+	# 120 bpm, offset 1 s: the stand-still runs from 2.0 s to 4.0 s; a bell sits at 5.0 s.
+	var s := Session.new(_song([{"b": 0, "k": "step", "lane": 1}, {"b": 2, "k": "rest", "len": 4}, {"b": 8, "k": "bell"}]), "easy")
+	var r := _router(s)
+	var rang := []
+	var broke := []
+	r.rang.connect(func(x): rang.append(x))
+	r.moved_still.connect(func(n): broke.append(n))
+	# Steady hands through the first second of the stand-still, then a soft tilt (70 °/s, well
+	# under the 150 °/s ring) at 3.2 s.
+	for i in 150:
+		var t := 1.8 + i / 60.0
+		var dt := t - 3.2
+		var g := 70.0 * sin(PI * dt / 0.3) if dt >= 0.0 and dt < 0.3 else 3.0 * sin(t * 40.0)
+		r.feed_motion(t, Vector3.ZERO, Vector3(g, 0, 0))
+	check(rang.is_empty(), "the soft tilt rang nothing")
+	check_eq(broke.size(), 1, "but it broke the stand-still, once")
+	check_eq(s.stats.silence, 1, "counted like a ring into it")
+	check_eq(s.notes[1].judgement, "silence", "the stand-still is broken")
+	s.update(5.5)
+	check_eq(s.stats.still_kept, 0, "and earns nothing")
+	# A stand-still held steady to its end is kept.
+	var s2 := Session.new(_song([{"b": 0, "k": "step", "lane": 1}, {"b": 2, "k": "rest", "len": 4}]), "easy")
+	var r2 := _router(s2)
+	for i in 150:
+		var t := 1.8 + i / 60.0
+		r2.feed_motion(t, Vector3.ZERO, Vector3(4.0 * sin(t * 40.0), 0, 0))
+	s2.update(4.5)
+	check_eq(s2.stats.still_kept, 1, "steady hands keep it")
+
+
 func test_router_touches_and_holds() -> void:
 	var s := Session.new(_song([{"b": 0, "k": "step", "lane": 0}, {"b": 2, "k": "step", "lane": 2}, {"b": 4, "k": "hold", "lane": 1, "len": 2}]), "easy")
 	var r := _router(s)
@@ -411,7 +442,7 @@ func test_router_motion_and_slam() -> void:
 	check(st > 0.5 and st <= 1.0, "a 400 °/s flick over a 150 °/s threshold rings strong (%.2f)" % st)
 	check_near(st, r.detector.last_strength, 1e-6, "the rang payload carries the detector's strength")
 	# Slam session: tilts ignored, Left + Right ring.
-	var sl := Session.new(_song([{"b": 0, "k": "bell"}]), "easy", "light", {"slam": true})
+	var sl := Session.new(_song([{"b": 0, "k": "bell"}]), "easy", {"slam": true})
 	var r2 := _router(sl)
 	var rang2 := []
 	r2.rang.connect(func(x): rang2.append(x))
@@ -472,7 +503,7 @@ func test_router_drag_and_focus_loss() -> void:
 # steps and full rings with one thumb, stomps with both thumbs on their button, bells with both outer buttons, or with the free outer button
 # while the other thumb keeps a hold. Returns [session, most buttons down at once].
 func _slam_bot(song: SongData, diff: String) -> Array:
-	var s := Session.new(song, diff, "light", {"slam": true})
+	var s := Session.new(song, diff, {"slam": true})
 	var r := _router(s)
 	var events := []   # [t, order (0 = release first), kind, lane, id]
 	var id := 0
@@ -608,7 +639,7 @@ func test_web_motion_rings_at_60_hz() -> void:
 			var reader := MotionReader.new()
 			var rings := []
 			var det := r.detector
-			r.rang.connect(func(_x): rings.append([det.last_up, det.last_t]))
+			r.tilted.connect(func(_x): rings.append([det.last_up, det.last_t]))
 			var k := 0
 			var frame_t := 0.003
 			var per_frame := {}
@@ -636,3 +667,19 @@ func test_web_motion_rings_at_60_hz() -> void:
 				check_eq(wrong_way, 0, "%s: up and down read the right way" % what)
 			r.queue_free()
 
+
+
+## A tilt with no bell near rings nothing out loud (Daniele, 2026-10-10: holding the phone rang the
+## bell all song long); a tilt on a bell still rings.
+func test_a_tilt_with_no_bell_near_is_silent() -> void:
+	var s := Session.new(_song([]), "easy")
+	var r := _router(s)
+	var heard := []
+	var fired := []
+	r.rang.connect(func(x): heard.append(x))
+	r.tilted.connect(func(x): fired.append(x))
+	r.call("_tilt_rang", 1.0, 1.0, false)
+	check_eq(fired.size(), 1, "the tilt fired")
+	check_eq(fired[0].get("quality"), "free", "with no bell near")
+	check(heard.is_empty(), "and nothing rang out")
+	r.queue_free()

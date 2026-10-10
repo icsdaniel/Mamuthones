@@ -1,6 +1,6 @@
 extends TestCase
 ## Play feel: resuming on the beat, the count-in you see and hear together, wrong-lane feedback on
-## the pressed button, Piazza hit feedback, and focus loss during a count-in.
+## the pressed button, and focus loss during a count-in.
 
 
 func _open(args: Dictionary) -> Array:
@@ -32,7 +32,7 @@ func _to_time(c: Conductor, t: float) -> void:
 
 
 func test_resume_goes_back_to_a_bar_line_and_counts_in() -> void:
-	var r: Array = await _open({"song_id": "carnival", "difficulty": "easy", "bell_set": "light"})
+	var r: Array = await _open({"song_id": "carnival", "difficulty": "easy"})
 	var app: App = r[0]
 	var play: Node = r[1]
 	var c: Conductor = r[2]
@@ -83,7 +83,7 @@ func test_resume_goes_back_to_a_bar_line_and_counts_in() -> void:
 
 
 func test_restart_starts_near_the_first_note() -> void:
-	var r: Array = await _open({"song_id": "carnival", "difficulty": "easy", "bell_set": "light"})
+	var r: Array = await _open({"song_id": "carnival", "difficulty": "easy"})
 	var app: App = r[0]
 	var play: Node = r[1]
 	play.call("pause")
@@ -104,7 +104,7 @@ func test_restart_starts_near_the_first_note() -> void:
 
 
 func test_the_count_in_is_seen_on_the_audio_sticks() -> void:
-	var r: Array = await _open({"song_id": "carnival", "difficulty": "easy", "bell_set": "light"})
+	var r: Array = await _open({"song_id": "carnival", "difficulty": "easy"})
 	var app: App = r[0]
 	var play: Node = r[1]
 	var c: Conductor = r[2]
@@ -136,7 +136,7 @@ func test_the_count_in_is_seen_on_the_audio_sticks() -> void:
 
 func test_wrong_lane_marks_the_pressed_button() -> void:
 	# Health off: the run skips every note before the target, which would otherwise run health out.
-	var r: Array = await _open({"song_id": "carnival", "difficulty": "medium", "bell_set": "light", "health": false})
+	var r: Array = await _open({"song_id": "carnival", "difficulty": "medium", "health": false})
 	var app: App = r[0]
 	var play: Node = r[1]
 	var c: Conductor = r[2]
@@ -183,38 +183,8 @@ func test_wrong_lane_marks_the_pressed_button() -> void:
 	_close(app)
 
 
-func test_piazza_hits_flash_the_cue() -> void:
-	var piazza := SongLibrary.piazza()
-	if not check(not piazza.is_empty(), "there are Piazza songs"):
-		return
-	var r: Array = await _open({"song_id": piazza[0].id, "difficulty": "piazza", "bell_set": "light", "piazza": true})
-	var app: App = r[0]
-	var play: Node = r[1]
-	var c: Conductor = r[2]
-	var s: Session = play.get("session")
-	var cue: PiazzaCue = play.get("cue")
-	check(cue != null, "Piazza shows its cue")
-	var bell: Note = null
-	for n in s.notes:
-		if n.is_bell():
-			bell = n
-			break
-	if bell == null or cue == null:
-		_close(app)
-		return
-	await _to_time(c, bell.t)
-	check_eq(cue.flashing(), "", "nothing flashes before the ring")
-	var frame := Engine.get_process_frames()
-	s.ring(bell.t, false)
-	check_eq(Engine.get_process_frames(), frame, "(same frame)")
-	check(cue.flashing() != "", "the ring flashes the circle with a big word (%s)" % cue.flashing())
-	cue.still = true
-	check(cue.still, "the cue has a grey still state")
-	_close(app)
-
-
 func test_focus_loss_during_the_count_in_pauses_again() -> void:
-	var r: Array = await _open({"song_id": "carnival", "difficulty": "easy", "bell_set": "light"})
+	var r: Array = await _open({"song_id": "carnival", "difficulty": "easy"})
 	var app: App = r[0]
 	var play: Node = r[1]
 	var c: Conductor = r[2]
@@ -299,36 +269,18 @@ func test_notes_slide_smoothly() -> void:
 	lv.free()
 
 
-## The figures' bob follows the clock, never the pictures: whichever pictures a figure has, the drop
-## shows just after the beat, halfway back up next, and the rest pose for the rest of the beat. Each
-## figure has all three pictures, one size, so a swap never shifts or rescales it.
-func test_figure_poses_follow_the_beat() -> void:
-	check_eq(StreetBackdrop.pose_at(0.0), StreetBackdrop.DROP, "on the beat: the drop")
-	check_eq(StreetBackdrop.pose_at(StreetBackdrop.DROP_TIME - 0.001), StreetBackdrop.DROP, "still down just before DROP_TIME")
-	check_eq(StreetBackdrop.pose_at(StreetBackdrop.DROP_TIME + 0.001), StreetBackdrop.HALF, "then halfway back up")
-	check_eq(StreetBackdrop.pose_at(StreetBackdrop.HALF_TIME + 0.001), StreetBackdrop.STAND, "then resting")
-	check_eq(StreetBackdrop.pose_at(0.4), StreetBackdrop.STAND, "resting until the next beat")
-	check_eq(StreetBackdrop.pose_at(0.09, true), StreetBackdrop.STAND, "reduced motion skips the halfway pose")
-	check(StreetBackdrop.HALF_TIME - StreetBackdrop.DROP_TIME >= 1.0 / 30.0, "the halfway pose lasts at least a frame at 30 fps")
-	for fig in ["issohadore", "mamuthone"]:
-		var size := Vector2.ZERO
-		for k in 3:
-			var path := "res://art/street/%s_bob_%d.png" % [fig, k]
-			check(ResourceLoader.exists(path), "%s has picture %d" % [fig, k])
-			if not ResourceLoader.exists(path):
-				continue
-			var s: Vector2 = (load(path) as Texture2D).get_size()
-			if k == 0:
-				size = s
-			check_eq(s, size, "%s picture %d is the same size as its rest pose" % [fig, k])
-	var b := StreetBackdrop.new()
-	b.size = Vector2(720, 1440)
-	tree.root.add_child(b)
-	b.set_process(false)
-	for t in [0.02, 0.1, 0.3]:
-		b.beat = 8.0 + t / 0.5
-		b._bob_figures()
-		var want := StreetBackdrop.pose_at(t)
-		for i in b._figures.size():
-			check(b._figures[i].texture == b._poses[i][want], "figure %d shows pose %d at %.2f s after the beat" % [i, want, t])
-	b.queue_free()
+## Note colours tell the rhythm: a sixteenth is silver, and so is a half-beat note inside a run of
+## sixteenths (Daniele: violet there read as a slower note). A plain eighth stays violet.
+func test_half_beats_in_sixteenth_runs_are_silver() -> void:
+	var song := SongData.from_dict({"id": "t", "bpm": 120, "offset": 1.0, "length": 0.0, "charts": {"easy": [
+		{"b": 0, "k": "step", "lane": 1}, {"b": 0.25, "k": "step", "lane": 0}, {"b": 0.5, "k": "step", "lane": 1},
+		{"b": 0.75, "k": "step", "lane": 2}, {"b": 2, "k": "step", "lane": 1}, {"b": 2.5, "k": "step", "lane": 0},
+		{"b": 3, "k": "step", "lane": 1}]}})
+	var lv := LaneView.new()
+	lv.session = Session.new(song, "easy")
+	var n := lv.session.notes
+	check(lv._sixteenth(n[1]) and lv._sixteenth(n[3]), "sixteenths are silver")
+	check(lv._sixteenth(n[2]), "the half beat between them is silver too")
+	check(not lv._sixteenth(n[5]), "a lone eighth stays violet")
+	check(not lv._sixteenth(n[0]) and not lv._sixteenth(n[4]), "on-beat notes are neither")
+	lv.free()

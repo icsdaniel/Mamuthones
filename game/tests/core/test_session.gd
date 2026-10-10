@@ -1,6 +1,6 @@
 extends TestCase
-## Session rules: every judgement and window, unison, weight, full rings, holds, stomps,
-## stand-stills, slam, Piazza, remix and mirror (docs/design.md section 3).
+## Session rules: every judgement and window, unison, full rings, holds, stomps,
+## stand-stills, slam, remix and mirror (docs/design.md section 3).
 
 const FIX := "res://tests/core/fixtures/"
 
@@ -49,10 +49,12 @@ func test_fixture_loads() -> void:
 	check_eq(n[8].lane, 1, "on its lane")
 
 
-func test_judgement_windows_light() -> void:
+func test_judgement_windows() -> void:
 	# One step per beat, hit with a chosen offset each; boundaries on both sides.
-	var offs := [0.0, 0.044, -0.044, 0.046, -0.089, 0.089, -0.091, 0.091, -0.139, 0.139, -0.141, 0.141]
-	var want := ["perfect", "perfect", "perfect", "good", "good", "good", "early", "late", "early", "late", "miss", "miss"]
+	# Just before the Ok window an early tap still takes its note as Ok (EARLY_REACH); just after it a
+	# late one does not, and beyond EARLY_REACH an early one does not either.
+	var offs := [0.0, 0.040, -0.040, 0.042, -0.080, 0.080, -0.082, 0.082, -0.125, 0.125, -0.127, 0.127, -0.2]
+	var want := ["perfect", "perfect", "perfect", "good", "good", "good", "early", "late", "early", "late", "early", "miss", "miss"]
 	var s := Session.new(make(steps(offs.size())), "easy")
 	var got := []
 	s.judged.connect(func(_n, j, _o): got.append(j))
@@ -68,7 +70,7 @@ func test_judgement_windows_light() -> void:
 	check_eq(cleaned, want, "judgements by offset")
 	check_eq(s.stats.perfect, 3, "perfects")
 	check_eq(s.stats.good, 3, "goods")
-	check_eq(s.stats.early, 2, "earlies")
+	check_eq(s.stats.early, 3, "earlies")
 	check_eq(s.stats.late, 2, "lates")
 	check_eq(s.stats.miss, 2, "misses")
 
@@ -85,17 +87,16 @@ func test_points_per_judgement() -> void:
 	check_eq(s.score, 500, "miss is 0")
 
 
-func test_bell_set_window_scaling() -> void:
-	# Full load: windows × 0.8 -> perfect 36 ms, good 72 ms, ok 112 ms.
-	var s := Session.new(make(steps(4)), "easy", "full")
-	check_near(s.window("touch").x, 0.036, 1e-6, "full load perfect")
-	check_eq(s.tap(1, _bt(0) + 0.040, 0).judgement, "good", "40 ms is Good with the full load")
-	check_eq(s.tap(1, _bt(1) + 0.080, 0).judgement, "late", "80 ms is Late with the full load")
-	check_eq(s.tap(1, _bt(2) + 0.120, 0).judgement, "", "120 ms is outside the full load window")
-	var v := Session.new(make(steps(2)), "easy", "village")
-	check_near(v.window("touch").y, 0.081, 1e-6, "village good")
-	check_eq(v.tap(1, _bt(0) - 0.040, 0).judgement, "perfect", "40 ms is Perfect with village")
-	check_eq(v.tap(1, _bt(1) + 0.041, 0).judgement, "good", "41 ms is Good with village")
+func test_standard_windows_are_the_old_village_ones() -> void:
+	# One timing for everyone (Daniele, 2026-10-09): perfect 40.5 ms, good 81 ms, ok 126 ms.
+	var v := Session.new(make(steps(4)), "easy")
+	check_near(v.window("touch").x, 0.0405, 1e-6, "perfect")
+	check_near(v.window("touch").y, 0.081, 1e-6, "good")
+	check_near(v.window("touch").z, 0.126, 1e-6, "ok")
+	check_eq(v.tap(1, _bt(0) - 0.040, 0).judgement, "perfect", "40 ms is Perfect")
+	check_eq(v.tap(1, _bt(1) + 0.041, 0).judgement, "good", "41 ms is Good")
+	check_eq(v.tap(1, _bt(2) + 0.100, 0).judgement, "late", "100 ms is Late")
+	check_eq(v.tap(1, _bt(3) + 0.130, 0).judgement, "", "130 ms is outside the window")
 
 
 func test_results_carry_direction() -> void:
@@ -128,15 +129,15 @@ func test_ring_strength() -> void:
 	check_eq(s.ring(_bt(2), true, 3.0).strength, 1.0, "clamped to 1")
 	check_eq(s.ring(_bt(4), false, 0.9).strength, 0.5, "keyboard rings are 0.5")
 	check_eq(s.ring(_bt(9), true, 0.2).strength, 0.2, "a free ring carries it too")
-	var sl := Session.new(make([{"b": 0, "k": "bell"}]), "easy", "light", {"slam": true})
+	var sl := Session.new(make([{"b": 0, "k": "bell"}]), "easy", {"slam": true})
 	check_eq(sl.ring(_bt(0), true, 0.9).strength, 0.5, "slam rings are 0.5")
 
 
 func test_tilt_windows() -> void:
 	var s := Session.new(make([{"b": 0, "k": "bell"}, {"b": 2, "k": "bell"}, {"b": 4, "k": "bell"}, {"b": 6, "k": "bell"}]), "easy")
-	check_eq(s.ring(_bt(0) + 0.058).quality, "perfect", "tilts get +15 ms: 58 ms is Perfect")
-	check_eq(s.ring(_bt(2) - 0.150).judgement, "early", "150 ms early is still Early for a tilt")
-	check_eq(s.ring(_bt(4) + 0.058, false).judgement, "good", "no allowance for a keyboard/slam bell")
+	check_eq(s.ring(_bt(0) + 0.054).quality, "perfect", "tilts get +15 ms: 54 ms is Perfect")
+	check_eq(s.ring(_bt(2) - 0.138).judgement, "early", "138 ms early is still Early for a tilt")
+	check_eq(s.ring(_bt(4) + 0.054, false).judgement, "good", "no allowance for a keyboard/slam bell")
 	var r := s.ring(_bt(6) + 0.2)
 	check_eq(r.quality, "miss", "a ring just outside the window is a dull knock")
 	check_eq(r.judgement, "", "and judges nothing")
@@ -245,13 +246,43 @@ func test_mashing_locks_the_buttons() -> void:
 		q.tap(0, _bt(4 + i) + 0.25, i)
 	check_eq(q.stats.stray, 6, "six strays")
 	check_eq(q.stats.locks, 0, "a stray a beat apart never locks")
-	# Wrong steps count toward the lock too.
-	var w := Session.new(make([{"b": 0, "k": "step", "lane": 0}, {"b": 0.25, "k": "step", "lane": 0}, {"b": 0.5, "k": "step", "lane": 0}, {"b": 8, "k": "step", "lane": 0}]), "easy")
-	w.tap(2, _bt(0), 0)
-	w.tap(2, _bt(0.25), 1)
-	w.tap(2, _bt(0.5), 2)
-	check_eq(w.stats.wrong, 3, "three wrong steps")
-	check(w.is_locked(_bt(0.5) + 0.01), "lock the buttons too")
+	# Wrong steps count toward the lock too, when the buttons are pressed more often than the notes
+	# come: here two buttons for every note.
+	var chart := [{"b": 0, "k": "step", "lane": 0}, {"b": 0.25, "k": "step", "lane": 0}, {"b": 0.5, "k": "step", "lane": 0}, {"b": 8, "k": "step", "lane": 0}]
+	var w := Session.new(make(chart), "easy")
+	for i in 3:
+		w.tap(2, _bt(0.25 * i), 10 + i)
+		w.tap(1, _bt(0.25 * i) + 0.01, 20 + i)
+	check(w.stats.wrong >= 3, "wrong steps (%d)" % w.stats.wrong)
+	check(w.is_locked(_bt(0.5) + 0.02), "lock the buttons too")
+	# One wrong press per note is a player on the wrong button, not mashing: no lock.
+	var v := Session.new(make(chart), "easy")
+	for i in 3:
+		v.tap(2, _bt(0.25 * i), i)
+	check_eq(v.stats.wrong, 3, "three wrong steps")
+	check(not v.is_locked(_bt(0.5) + 0.01), "one press per note never locks")
+
+
+func test_falling_behind_in_a_fast_stream_never_locks() -> void:
+	# Eighths at 144 bpm on alternating lanes, every press 140 ms late (outside the window): each
+	# press is stray or wrong, but there is one per note, so the buttons stay free.
+	var chart := []
+	for i in 32:
+		chart.append({"b": i * 0.5, "k": "step", "lane": [0, 2, 1, 2][i % 4]})
+	var s := Session.new(make(chart, {"bpm": 144}), "easy")
+	for i in s.notes.size():
+		var n := s.notes[i]
+		s.update(n.t + 0.14)
+		check(s.tap(n.lane, n.t + 0.14, i).judgement != "locked", "press %d is not locked" % i)
+	check_eq(s.stats.locks, 0, "never locked")
+	# Mashing the same passage, three buttons a note, does lock.
+	var m := Session.new(make(chart, {"bpm": 144}), "easy")
+	for i in m.notes.size():
+		var n := m.notes[i]
+		m.update(n.t)
+		for k in 3:
+			m.tap(k, n.t + 0.07 + 0.02 * k, i * 3 + k)
+	check(m.stats.locks > 0, "mashing three buttons a note locks (%d)" % m.stats.locks)
 
 
 func test_stray_exemptions() -> void:
@@ -262,11 +293,8 @@ func test_stray_exemptions() -> void:
 	s.update(st.t + Session.STOMP_GAP + 0.01)
 	check(st.done, "one-thumb stomp judged")
 	check_eq(s.tap(1, st.t + 0.15, 1).judgement, "", "a late second thumb is free")
-	# The Piazza takes no taps at all.
-	var p := Session.new(make(steps(8, 1)), "easy", "light", {"piazza": true})
-	check_eq(p.tap(1, _bt(2) + 0.25, 0).judgement, "", "no strays in the Piazza")
 	# Slam: the outer buttons ring the bell; only the middle can stray.
-	var sl := Session.new(make([{"b": 0, "k": "step", "lane": 1}, {"b": 4, "k": "step", "lane": 1}, {"b": 8, "k": "step", "lane": 1}]), "easy", "light", {"slam": true})
+	var sl := Session.new(make([{"b": 0, "k": "step", "lane": 1}, {"b": 4, "k": "step", "lane": 1}, {"b": 8, "k": "step", "lane": 1}]), "easy", {"slam": true})
 	check_eq(sl.tap(0, _bt(2) + 0.25, 0).judgement, "", "an outer press in slam is a bell press")
 	check_eq(sl.tap(1, _bt(2) + 0.25, 1).judgement, "stray", "the middle can stray")
 
@@ -286,28 +314,26 @@ func test_tap_with_own_note_coming_is_stray() -> void:
 	# 300 ms away is beyond 2 × 140 ms: that tap is a wrong step.
 	var w := Session.new(make([{"b": 0, "k": "step", "lane": 0}, {"b": 0.6, "k": "step", "lane": 2}]), "easy")
 	check_eq(w.tap(2, _bt(0), 0).judgement, "wrong", "own note 300 ms away does not excuse the tap")
-	# Full-load windows shrink the reach too (2 × 112 ms).
-	var f := Session.new(make([{"b": 0, "k": "step", "lane": 0}, {"b": 0.46, "k": "step", "lane": 2}]), "easy", "full")
-	check_eq(f.tap(2, _bt(0), 0).judgement, "wrong", "230 ms is beyond 2 × 112 ms with the full load")
+	# The reach is twice the Ok window (2 × 126 ms).
+	var f := Session.new(make([{"b": 0, "k": "step", "lane": 0}, {"b": 0.52, "k": "step", "lane": 2}]), "easy")
+	check_eq(f.tap(2, _bt(0), 0).judgement, "wrong", "260 ms is beyond 2 × 126 ms")
 
 
-func test_weight_multiplies_score() -> void:
-	for pair in [["light", 300], ["village", 360], ["full", 450]]:
-		var s := Session.new(make(steps(1)), "easy", pair[0])
-		s.tap(1, _bt(0), 0)
-		check_eq(s.score, pair[1], "%s weight" % pair[0])
-		check_eq(s.weight(), BellSets.weight(pair[0]), "weight()")
-	# unison × weight together: 13th perfect with village = 300 × 1.5 × 1.2 = 540
-	var v := Session.new(make(steps(13)), "easy", "village")
+func test_unison_multiplies_score() -> void:
+	var s := Session.new(make(steps(1)), "easy")
+	s.tap(1, _bt(0), 0)
+	check_eq(s.score, 300, "a Perfect is 300")
+	# 13th perfect at unison ×1.5 = 450
+	var v := Session.new(make(steps(13)), "easy")
 	for i in 12:
 		v.tap(1, _bt(i), 0)
 	var before := v.score
 	v.tap(1, _bt(12), 0)
-	check_eq(v.score - before, 540, "points × unison × weight")
+	check_eq(v.score - before, 450, "points × unison")
 	var bd := v.score_breakdown()
 	check_near(bd.base, 13 * 300, 1e-6, "breakdown base")
 	check_near(bd.unison, 150, 1e-6, "breakdown unison extra")
-	check_near(bd.weight, 0.2 * (12 * 300 + 450), 1e-6, "breakdown weight extra")
+	check(not bd.has("weight"), "no weight part any more")
 	check_near(bd.total, v.score, 0.5, "breakdown adds up")
 
 
@@ -332,12 +358,12 @@ func test_full_ring() -> void:
 	check_near(got[1][1], 0.1, 1e-6, "offset of the later input")
 	# Only one half: miss when the window passes.
 	s.tap(1, _bt(8), 0)
-	s.update(_bt(8) + 0.2)
+	s.update(_bt(8) + 0.3)
 	check_eq(got[2][0], "miss", "a ring without its bell is a miss")
 	# A step outside the window does not count as the ring's half.
 	check_eq(s.tap(1, _bt(12) - 0.2, 0).note, null, "early step is not the ring's half")
 	s.ring(_bt(12))
-	s.update(_bt(12) + 0.2)
+	s.update(_bt(12) + 0.3)
 	check_eq(got[3][0], "miss", "both halves must land in the window")
 
 
@@ -386,7 +412,7 @@ func test_stomp_both_thumbs() -> void:
 	s.tap(0, _bt(2) - 0.060, 3)
 	check_eq(s.tap(0, _bt(2) + 0.020, 4).judgement, "good", "80 ms apart is still one stomp")
 	# Mirror moves it like any lane note.
-	var m := Session.new(make([{"b": 0, "k": "stomp", "lane": 0}]), "easy", "light", {"mirror": true})
+	var m := Session.new(make([{"b": 0, "k": "stomp", "lane": 0}]), "easy", {"mirror": true})
 	check_eq(m.notes[0].lane, 2, "mirror flips the stomp's lane")
 	s.update(_bt(5))
 	check_eq(landed, [[0, "perfect", true], [1, "good", true]], "stomp_landed for both, none for the missed one")
@@ -425,7 +451,7 @@ func test_stomp_one_thumb() -> void:
 
 func test_stomp_and_slam() -> void:
 	# Slam rings the bell with Left + Right; a stomp is one button twice, so they never mix up.
-	var s := Session.new(make([{"b": 0, "k": "stomp", "lane": 0}, {"b": 2, "k": "bell"}, {"b": 4, "k": "stomp", "lane": 2}]), "easy", "light", {"slam": true})
+	var s := Session.new(make([{"b": 0, "k": "stomp", "lane": 0}, {"b": 2, "k": "bell"}, {"b": 4, "k": "stomp", "lane": 2}]), "easy", {"slam": true})
 	var r1 := s.tap(0, _bt(0), 1)
 	var r2 := s.tap(0, _bt(0) + 0.03, 2)
 	check(r1.ring.is_empty() and r2.ring.is_empty(), "a stomp on Left rings no bell")
@@ -461,9 +487,24 @@ func test_stand_still() -> void:
 	var mid := s.score
 	s.update(_bt(23))
 	check_eq(s.stats.still_kept, 1, "the second rest was kept")
-	check_eq(s.score - mid, Session.STILL_BONUS * 2, "a kept 2-beat stand-still earns STILL_BONUS × 2 beats × unison × weight")
+	check_eq(s.score - mid, Session.STILL_BONUS * 2, "a kept 2-beat stand-still earns STILL_BONUS × 2 beats × unison")
 	check_near(s.score_breakdown().stills, Session.STILL_BONUS * 2.0, 1e-9, "shown in the breakdown")
 	check_near(s.score_breakdown().penalties, 200.0, 1e-9, "penalties in the breakdown")
+
+
+func test_moving_breaks_a_stand_still_once() -> void:
+	var s := Session.new(make(steps(4) + [{"b": 4, "k": "rest", "len": 4}]), "easy")
+	for i in 4:
+		s.tap(1, _bt(i), 0)
+	check(s.moved(_bt(3)) == null, "moving outside a stand-still is free")
+	var before := s.score
+	check(s.moved(_bt(5)) != null, "moving inside one breaks it")
+	check_eq(s.score, before - Session.STILL_PENALTY, "and costs like a ring")
+	check(s.moved(_bt(6)) == null, "a broken stand-still is broken once by moving")
+	s.ring(_bt(5) + 0.05)
+	check_eq(s.stats.silence, 1, "the ring that follows the same tilt is not charged again")
+	s.update(_bt(9))
+	check_eq(s.stats.still_kept, 0, "not kept")
 
 
 func test_score_never_shown_below_zero_but_penalty_kept() -> void:
@@ -476,14 +517,14 @@ func test_score_never_shown_below_zero_but_penalty_kept() -> void:
 	check_eq(z.score, 200, "max(0, 300 - 100)")
 
 
-func test_still_bonus_scales_with_unison_and_weight() -> void:
-	var s := Session.new(make(steps(24) + [{"b": 24, "k": "rest", "len": 2}]), "easy", "full")
+func test_still_bonus_scales_with_unison() -> void:
+	var s := Session.new(make(steps(24) + [{"b": 24, "k": "rest", "len": 2}]), "easy")
 	for i in 24:
 		s.tap(1, _bt(i), 0)
 	check_eq(s.unison_level, 2, "unison ×2")
 	var before := s.score
 	s.update(_bt(27))
-	check_eq(s.score - before, roundi(Session.STILL_BONUS * 2 * 2 * 1.5), "per beat × 2 beats × unison 2 × weight 1.5")
+	check_eq(s.score - before, roundi(Session.STILL_BONUS * 2 * 2), "per beat × 2 beats × unison 2")
 
 
 func test_kept_still_counts_four_hits_and_top_stats() -> void:
@@ -528,7 +569,7 @@ func test_kept_still_counts_four_hits_and_top_stats() -> void:
 
 
 func test_still_bonus_per_beat_and_hit_cap() -> void:
-	# Per beat: a 3-beat stand-still is worth 3 × STILL_BONUS × unison × weight and 6 hits.
+	# Per beat: a 3-beat stand-still is worth 3 × STILL_BONUS × unison and 6 hits.
 	var s := Session.new(make(steps(6) + [{"b": 6, "k": "rest", "len": 3}]), "easy")
 	for i in 6:
 		s.tap(1, _bt(i), 0)
@@ -581,6 +622,35 @@ func test_note_lock_in_fast_streams() -> void:
 	check_eq(e.notes[1].side, "", "5 ms is dead on")
 
 
+func test_hold_and_play_adds_to_the_hold() -> void:
+	# A hold on Left with steps on Right and a bell under it; the second hold has nothing under it.
+	var s := Session.new(make([{"b": 0, "k": "hold", "lane": 0, "len": 4}, {"b": 1, "k": "step", "lane": 2},
+			{"b": 2, "k": "bell"}, {"b": 3, "k": "step", "lane": 2}, {"b": 8, "k": "hold", "lane": 0, "len": 4}]), "easy")
+	var under := []
+	s.played_under.connect(func(h, n): under.append([h.index, n.index]))
+	s.tap(0, _bt(0), 1)
+	s.tap(2, _bt(1), 2)
+	s.release(_bt(1) + 0.1, 2)
+	s.ring(_bt(2))
+	s.tap(2, _bt(3) + 0.1, 3)    # an Ok: played, but not on time
+	check_eq(under, [[0, 1], [0, 2]], "the step and the bell played on time under the hold")
+	var before: float = s.score_breakdown().holds
+	s.update(_bt(4))
+	check_near(s.score_breakdown().holds - before, float(Session.HOLD_BONUS + 2 * Session.TIE_BONUS), 1e-6, "kept: the hold's bonus grows with what was played under it")
+	s.tap(0, _bt(8), 4)
+	before = s.score_breakdown().holds
+	s.update(_bt(12))
+	check_near(s.score_breakdown().holds - before, float(Session.HOLD_BONUS), 1e-6, "a plain hold earns the plain bonus")
+
+
+func test_half_beat_in_a_sixteenth_pair_is_quick() -> void:
+	var s := Session.new(make([{"b": 0, "k": "step", "lane": 0}, {"b": 0.5, "k": "step", "lane": 1}, {"b": 0.75, "k": "step", "lane": 2},
+			{"b": 2, "k": "step", "lane": 0}, {"b": 2.5, "k": "step", "lane": 1}, {"b": 3, "k": "step", "lane": 2}]), "easy")
+	check(s.notes[1].quick, "a half-beat followed a quarter beat later reads with the sixteenth")
+	check(not s.notes[2].quick, "the sixteenth itself is silver by its own beat")
+	check(not s.notes[4].quick, "a lone half-beat stays violet")
+
+
 func test_reused_touch_id_ends_old_hold() -> void:
 	var s := Session.new(make([{"b": 0, "k": "hold", "lane": 0, "len": 8}, {"b": 1, "k": "hold", "lane": 2, "len": 2}]), "easy")
 	var ends := []
@@ -602,7 +672,7 @@ func test_stomp_second_thumb_is_not_a_wrong_step() -> void:
 	check_eq(s.stats.wrong, 0, "no wrong")
 
 
-func test_accuracy_and_bells() -> void:
+func test_accuracy_and_grades() -> void:
 	var s := Session.new(make(steps(10)), "easy")
 	for i in 6:
 		s.tap(1, _bt(i), 0)                # 6 perfect
@@ -610,18 +680,34 @@ func test_accuracy_and_bells() -> void:
 	s.tap(1, _bt(7) + 0.06, 0)            # good
 	s.tap(1, _bt(8) + 0.12, 0)            # late
 	s.update(100)                         # miss
-	check_near(s.accuracy(), (6 + 1.4 + 0.3) / 10.0, 1e-9, "accuracy formula")
-	check_eq(s.bells(), 1, "77 % is one bell")
-	check_eq(Session.bells_for(0.69), 0, "69 % no bell")
-	check_eq(Session.bells_for(0.70), 1, "70 % one bell")
-	check_eq(Session.bells_for(0.85), 2, "85 % two bells")
-	check_eq(Session.bells_for(0.95), 3, "95 % three bells")
+	check_near(s.accuracy(), (6 + 2 + 0.5) / 10.0, 1e-9, "accuracy formula: Good counts in full, Ok half")
+	check_eq(s.grade(), "B", "85 % is a B")
+	check(not s.full_combo(), "a miss is no full combo")
+	var want := {0.0: "F", 0.59: "F", 0.60: "E", 0.69: "E", 0.70: "D", 0.78: "C", 0.85: "B", 0.90: "A", 0.95: "S", 0.97: "S", 0.98: "S+", 1.0: "S+"}
+	for acc in want:
+		check_eq(Session.grade_name(Session.rank_for(acc)), want[acc], "%d %%" % roundi(acc * 100.0))
 	check_near(s.mean_offset(), (0.06 + 0.06 + 0.12) / 9.0, 1e-6, "mean offset leans late")
 	check(s.is_over(100.0), "over after the end")
 
 
+func test_misses_cap_the_grade() -> void:
+	var s_plus := Session.GRADES.find("S+")
+	check_eq(Session.capped_rank(s_plus, 0), s_plus, "no miss: S+ stands")
+	check_eq(Session.grade_name(Session.capped_rank(s_plus, 1)), "S", "one miss: at best S")
+	check_eq(Session.grade_name(Session.capped_rank(s_plus, 2)), "S", "two: still S")
+	check_eq(Session.grade_name(Session.capped_rank(s_plus, 4)), "A", "four misses: at best A")
+	check_eq(Session.grade_name(Session.capped_rank(Session.GRADES.find("B"), 9)), "B", "a lower grade is kept")
+	# Played: 98 % Perfect but one note missed.
+	var s := Session.new(make(steps(60)), "easy")
+	for i in 59:
+		s.tap(1, _bt(i), 0)
+	s.update(100)
+	check(s.accuracy() >= 0.98, "accuracy %.3f is S+ by itself" % s.accuracy())
+	check_eq(s.grade(), "S", "but the miss makes it an S")
+
+
 func test_slam_mode() -> void:
-	var s := Session.new(make([{"b": 0, "k": "bell"}, {"b": 2, "k": "step", "lane": 0}, {"b": 4, "k": "rest"}, {"b": 8, "k": "step", "lane": 0}, {"b": 8, "k": "step", "lane": 2}]), "easy", "light", {"slam": true})
+	var s := Session.new(make([{"b": 0, "k": "bell"}, {"b": 2, "k": "step", "lane": 0}, {"b": 4, "k": "rest"}, {"b": 8, "k": "step", "lane": 0}, {"b": 8, "k": "step", "lane": 2}]), "easy", {"slam": true})
 	check(s.slam and not s.ladder_ok(), "slam runs are marked and kept off the ladder")
 	var a := s.tap(0, _bt(0) - 0.03, 1)
 	check(a.ring.is_empty(), "one side alone is not a bell")
@@ -648,7 +734,7 @@ func test_slam_mode() -> void:
 
 func test_slam_with_one_thumb_holding() -> void:
 	# A bell during an outer-lane hold, and a lane-1 full ring, need only two thumbs in slam mode.
-	var s := Session.new(make([{"b": 0, "k": "hold", "lane": 0, "len": 4}, {"b": 2, "k": "bell"}, {"b": 6, "k": "ring", "lane": 1}, {"b": 8, "k": "hold", "lane": 1, "len": 4}, {"b": 10, "k": "bell"}]), "easy", "light", {"slam": true})
+	var s := Session.new(make([{"b": 0, "k": "hold", "lane": 0, "len": 4}, {"b": 2, "k": "bell"}, {"b": 6, "k": "ring", "lane": 1}, {"b": 8, "k": "hold", "lane": 1, "len": 4}, {"b": 10, "k": "bell"}]), "easy", {"slam": true})
 	s.tap(0, _bt(0), 1)
 	var r := s.tap(2, _bt(2), 2)
 	check_eq(r.ring.get("judgement"), "perfect", "the free thumb rings the bell while the other holds")
@@ -664,23 +750,10 @@ func test_slam_with_one_thumb_holding() -> void:
 	check_eq(s.stats.miss, 0, "nothing missed")
 
 
-func test_piazza_windows() -> void:
-	var d := {"id": "pz", "kind": "piazza", "bpm": 120, "offset": 1.0, "charts": {"piazza": [{"b": 0, "k": "bell"}, {"b": 2, "k": "bell"}, {"b": 4, "k": "step", "lane": 1}, {"b": 6, "k": "bell"}]}}
-	var s := Session.new(SongData.from_dict(d), "piazza", "full", {"piazza": true})
-	check_eq(s.stats.total, 3, "only bells count in the Piazza")
-	check_near(s.window("tilt").z, 0.200, 1e-6, "±200 ms whatever the bell set")
-	check_eq(s.ring(_bt(0) + 0.19).judgement, "late", "190 ms still counts")
-	check_eq(s.ring(_bt(2) - 0.06).judgement, "perfect", "60 ms is Perfect in the loose Piazza windows")
-	check_eq(s.tap(1, _bt(4), 0).judgement, "", "taps do nothing")
-	s.update(100)
-	check_eq(s.stats.miss, 1, "the unplayed bell is a miss")
-	check(not s.ladder_ok(), "Piazza scores stay on the phone")
-
-
 func test_remix_offsets() -> void:
 	var s := song()
 	var a := Session.new(s, "easy")
-	var b := Session.new(s, "easy", "light", {"remix": true})
+	var b := Session.new(s, "easy", {"remix": true})
 	check_near(a.notes[0].t, 1.0, 1e-9, "original offset")
 	check_near(b.notes[0].t, 0.5, 1e-9, "remix offset")
 	check_near(b.notes[2].t - a.notes[2].t, -0.5, 1e-9, "same beat grid, shifted")
@@ -691,10 +764,10 @@ func test_remix_offsets() -> void:
 
 func test_mirror_and_range() -> void:
 	var s := song()
-	var m := Session.new(s, "easy", "light", {"mirror": true})
+	var m := Session.new(s, "easy", {"mirror": true})
 	check_eq(m.notes[0].lane, 2, "lane 0 mirrored to 2")
 	check_eq(m.notes[1].lane, 1, "lane 1 stays")
-	var r := Session.new(s, "easy", "light", {"from_beat": 4, "to_beat": 13})
+	var r := Session.new(s, "easy", {"from_beat": 4, "to_beat": 13})
 	check_eq(r.notes.size(), 4, "only notes in [4, 13)")
 	check(r.notes[0].up, "bell direction comes from the whole chart")
 	check(not r.notes[3].up, "second bell of the chart is down")
@@ -717,7 +790,8 @@ func test_autoplay_is_perfect() -> void:
 	check_eq(s.stats.silence, 0, "no bell in the stand-still")
 	check_eq(s.stats.still_kept, 1, "stand-still kept")
 	check_eq(rang.size(), 4, "rang for 3 bells and 1 full ring")
-	check_eq(s.bells(), 3, "three bells")
+	check_eq(s.grade(), "S+", "a perfect full combo is S+")
+	check(s.full_combo(), "full combo")
 
 
 func test_autoplay_human_is_close() -> void:
@@ -738,7 +812,7 @@ func test_lessons_and_passed() -> void:
 	check_eq(s1.lesson_range(1), Vector2(16, 24), "lesson range")
 	check_eq(s1.lesson_range(5), Vector2.ZERO, "no such lesson")
 	var r := s1.lesson_range(1)
-	var s := Session.new(s1, "easy", "light", {"from_beat": r.x, "to_beat": r.y})
+	var s := Session.new(s1, "easy", {"from_beat": r.x, "to_beat": r.y})
 	check_eq(s.stats.total, 2, "the bells lesson has two bells")
 	check_eq(s.stats.rests, 1, "and one stand-still")
 	s.ring(s1.time_of(16))
@@ -746,7 +820,7 @@ func test_lessons_and_passed() -> void:
 	s.ring(s1.time_of(21))
 	s.update(s.end_time())
 	check(not s.passed(), "ringing in the stand-still fails the lesson")
-	var t := Session.new(s1, "easy", "light", {"from_beat": r.x, "to_beat": r.y})
+	var t := Session.new(s1, "easy", {"from_beat": r.x, "to_beat": r.y})
 	t.ring(s1.time_of(16))
 	t.ring(s1.time_of(21))
 	t.update(t.end_time())
@@ -768,7 +842,7 @@ func test_frame_cost() -> void:
 			_:
 				chart.append({"b": b, "k": "step", "lane": [0, 2][i % 2]})
 	var dense := SongData.from_dict({"id": "dense", "bpm": 120, "offset": 1.0, "charts": {"expert": chart}})
-	var s := Session.new(dense, "expert", "full")
+	var s := Session.new(dense, "expert")
 	var ap := Autoplay.new(s)
 	var frames := 0
 	var t := 0.0
@@ -919,8 +993,8 @@ func test_health_never_on_holds_rings_calls_or_off_beats() -> void:
 func test_health_exempt_modes_never_fail() -> void:
 	var s1 := SongData.load_file(FIX + "story/s1.json")
 	var r := s1.lesson_range(1)
-	for opts in [{"piazza": true}, {"from_beat": r.x, "to_beat": r.y}, {"health": false}]:
-		var s := Session.new(s1, "easy", "light", opts)
+	for opts in [{"from_beat": r.x, "to_beat": r.y}, {"health": false}]:
+		var s := Session.new(s1, "easy", opts)
 		var fails := [0]
 		s.failed.connect(func() -> void: fails[0] += 1)
 		_run(s, s.end_time() + 1.0)
@@ -928,3 +1002,97 @@ func test_health_exempt_modes_never_fail() -> void:
 		check(s.heal_notes().is_empty(), "%s: no healing steps" % [opts])
 		check_eq(s.health, Session.MAX_HEALTH, "%s: health never drops" % [opts])
 		check_eq(fails[0], 0, "%s: never fails" % [opts])
+
+
+## A tilt stamped inside its window but reaching the rules a few readings later still counts:
+## the bell is not called missed until TILT_GRACE after its window (Daniele's ring at 83.8 s).
+func test_a_late_arriving_tilt_inside_its_window_counts() -> void:
+	var s := Session.new(make([{"b": 0, "k": "bell"}, {"b": 4, "k": "ring", "lane": 2}]), "easy")
+	var tilt_ok := s.win_tilt.z
+	s.update(_bt(0) + tilt_ok + 0.03)
+	check_eq(s.notes[0].judgement, "", "not missed yet just after the window")
+	var r := s.ring(_bt(0) + tilt_ok - 0.01)
+	check_eq(r.judgement, "late", "the tilt stamped inside the window is judged on its own time")
+	s.update(_bt(0) + tilt_ok + Session.TILT_GRACE + 0.01)
+	var ring_note := s.notes[1]
+	s.tap(2, _bt(4), 1)
+	s.update(_bt(4) + maxf(s.win_touch.z, tilt_ok) + Session.TILT_GRACE + 0.01)
+	check_eq(ring_note.judgement, "miss", "a full ring with no tilt is still missed after the grace")
+
+
+## A tap a little earlier than the Ok window still takes its lane's next note as an Ok when nothing
+## else is in the window (Daniele's Carnival Expert run: 17 taps 130-160 ms early did nothing).
+func test_a_tap_just_before_the_window_takes_its_note_as_ok() -> void:
+	var s := Session.new(make(steps(4)), "easy")
+	var ok := s.win_touch.z
+	var r := s.tap(1, _bt(0) - (ok + 0.03), 0)
+	check(r.note == s.notes[0], "the note is taken")
+	check_eq(r.judgement, "early", "as an early Ok")
+	check_eq(s.stats.stray, 0, "not a stray")
+	var r2 := s.tap(1, _bt(1) - Session.EARLY_REACH - 0.03, 1)
+	check(r2.note == null, "further than EARLY_REACH: nothing")
+	# A note still in its window is always preferred to the next one early.
+	var d := Session.new(make([{"b": 0, "k": "step", "lane": 1}, {"b": 0.5, "k": "step", "lane": 1}]), "easy")
+	var late := d.tap(1, _bt(0) + 0.1, 0)
+	check(late.note == d.notes[0], "a late tap takes the note behind it, not the next one")
+
+
+## Daniele (2026-10-10): anticipating one note made the rest seem to speed up. One tap ahead took the
+## first note early; each honest tap after it then took the next note early, so every note vanished
+## before reaching the line. A tap nearer a note already taken is a second tap on it instead.
+func test_one_early_tap_does_not_shift_the_rest() -> void:
+	var chart := []
+	for i in 12:
+		chart.append({"b": i * 0.28, "k": "step", "lane": 1})
+	var s := Session.new(make(chart), "easy")
+	var first := s.tap(1, _bt(0) - 0.1, 0)
+	check(first.note == s.notes[0], "the early tap takes the first note")
+	var shifted := 0
+	for i in 12:
+		var t := _bt(i * 0.28) + 0.01
+		s.update(t)
+		var r := s.tap(1, t, i + 1)
+		var rn: Note = r.get("note")
+		if rn != null and rn.index != i:
+			shifted += 1
+		s.release(t + 0.03, i + 1)
+	check_eq(shifted, 0, "no honest tap takes the note after its own")
+	for i in range(1, 12):
+		check_eq(s.notes[i].judgement, "perfect", "note %d is hit on time" % i)
+
+
+## Running ahead is not a second tap: taps 110 ms early on notes 140 ms apart each take their own note
+## (Daniele's Carnival Expert run rushed this way).
+func test_rushed_taps_still_take_their_own_notes() -> void:
+	var chart := []
+	for i in 10:
+		chart.append({"b": i * 0.28, "k": "step", "lane": 1})
+	var s := Session.new(make(chart), "easy")
+	var own := 0
+	for i in 10:
+		var t := _bt(i * 0.28) - 0.11
+		s.update(t)
+		var r := s.tap(1, t, i)
+		var rn: Note = r.get("note")
+		if rn != null and rn.index == i:
+			own += 1
+		s.release(t + 0.03, i)
+	check_eq(own, 10, "every rushed tap takes its own note")
+
+
+## A wrong step whose note is still hit after it breaks the combo but loses no note, so it does not
+## cap the grade (Daniele, 2026-10-10: two such taps capped a 98.9 % Piazza Hard run at A).
+func test_a_wrong_step_with_its_note_still_hit_loses_no_note() -> void:
+	var s := Session.new(make(steps(4)), "easy")
+	var w := s.tap(0, _bt(0) - 0.08, 0)
+	check_eq(w.judgement, "wrong", "a tap on the wrong button is a wrong step")
+	check_eq(s.combo, 0, "it breaks the combo")
+	s.release(_bt(0) - 0.05, 0)
+	for i in 4:
+		s.update(_bt(i))
+		s.tap(1, _bt(i), i + 1)
+		s.release(_bt(i) + 0.05, i + 1)
+	s.update(_bt(5))
+	check_eq(s.lost_notes(), 0, "no note was lost")
+	check_eq(s.max_combo, 4, "the longest combo counts the hits after it")
+	check_eq(s.grade(), "S+", "every note hit perfectly is not capped")

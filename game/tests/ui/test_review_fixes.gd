@@ -5,8 +5,8 @@ extends TestCase
 
 
 ## A whole run played by Autoplay, off screen.
-static func _auto(song_id: String, diff: String, bell_set := "light") -> Session:
-	var s := Session.new(SongLibrary.get_song(song_id), diff, bell_set, {})
+static func _auto(song_id: String, diff: String) -> Session:
+	var s := Session.new(SongLibrary.get_song(song_id), diff, {})
 	var a := Autoplay.new(s)
 	var t := -1.0
 	while not s.is_over(t) and t < 600.0:
@@ -25,7 +25,7 @@ func test_early_late_only_off_perfect() -> void:
 	check_eq(script.JUDGE_WORDS["late"], "judge_ok", "the Ok band's word is Ok, not Late")
 	# In play: a slightly early Perfect shows no hint and leaves no tick.
 	UIHarness.fresh_profile()
-	var app := UIHarness.make_app(tree, "play", {"song_id": "carnival", "difficulty": "easy", "bell_set": "light"})
+	var app := UIHarness.make_app(tree, "play", {"song_id": "carnival", "difficulty": "easy"})
 	await UIHarness.frames(tree, 3)
 	var play := app.current()
 	var s: Session = play.get("session")
@@ -50,7 +50,7 @@ func test_ghost_line_in_points_after_the_first_note() -> void:
 	check_eq(Hud.ghost_text(0), tr("hud_ghost_even"), "level reads as level")
 	UIHarness.fresh_profile()
 	var best := _auto("carnival", "easy")
-	var app := UIHarness.make_app(tree, "play", {"song_id": "carnival", "difficulty": "easy", "bell_set": "light"})
+	var app := UIHarness.make_app(tree, "play", {"song_id": "carnival", "difficulty": "easy"})
 	await UIHarness.frames(tree, 3)
 	var play := app.current()
 	var hud: Hud = play.get("hud")
@@ -74,9 +74,9 @@ func test_ghost_line_in_points_after_the_first_note() -> void:
 
 func test_results_breakdown_and_timing_above_the_fold() -> void:
 	UIHarness.fresh_profile()
-	var s := _auto("fires", "hard", "village")
-	var args := {"session": s, "record": {"prev_best": int(s.score * 0.9), "new_best": true, "bells": s.bells(), "carving_gained": 2,
-		"unlocked": [{"kind": "song", "id": "bonfires"}]}, "play_args": {"song_id": "fires", "difficulty": "hard", "bell_set": "village"}}
+	var s := _auto("fires", "hard")
+	var args := {"session": s, "record": {"prev_best": int(s.score * 0.9), "new_best": true, "grade": s.grade_rank(), "carving_gained": 2,
+		"unlocked": [{"kind": "song", "id": "bonfires"}]}, "play_args": {"song_id": "fires", "difficulty": "hard"}}
 	for loc in ["en", "it"]:
 		Profile.set_setting("language", loc)
 		for sz in [Vector2i(720, 1280), Vector2i(720, 1440), Vector2i(720, 1600), Vector2i(1290, 2796), Vector2i(1536, 2048)]:
@@ -102,25 +102,15 @@ func test_results_breakdown_and_timing_above_the_fold() -> void:
 func test_tips_are_correct_and_concrete() -> void:
 	UIHarness.fresh_profile()
 	var results: GDScript = load(App.SCREENS["results"])
-	# A clean Expert run on Village with Full load still locked: no "try Expert", no "try Village".
-	var s := _auto("fires", "expert", "village")
+	# A clean Expert run: no "try Expert", and no bell set talk (there are none).
+	var s := _auto("fires", "expert")
 	var tip: String = results.tip_text(s)
 	check(not tip.contains(tr("diff_expert")), "no \"Try Expert\" for an Expert run (%s)" % tip)
-	check(not tip.contains(BellSets.name("village", "en")), "no \"Village\" for a Village run (%s)" % tip)
-	check_eq(results.next_bell_set("village"), "", "Full load is locked at the start, so nothing heavier is suggested")
-	check_eq(results.next_bell_set("light"), "", "Village is locked at the start too")
+	check(not tip.contains("Village") and not tip.contains("Full load"), "no bell sets in the tip (%s)" % tip)
 	# A clean Hard run points at the next difficulty.
-	var h := _auto("fires", "hard", "light")
+	var h := _auto("fires", "hard")
 	var ht: String = results.tip_text(h)
 	check(ht.contains(tr("diff_expert")), "a clean Hard run suggests Expert (%s)" % ht)
-	# Once Village opens, a clean Expert Light run suggests exactly Village.
-	for stop_song in ["workshop", "fires", "bonfires"]:
-		Profile.record_result(_auto(stop_song, "easy"))
-	if Progression.bell_set_unlocked("village"):
-		var e := _auto("fires", "expert", "light")
-		var et: String = results.tip_text(e)
-		check(et.contains(BellSets.name("village", "en")) and not et.contains(BellSets.name("full", "en")),
-			"suggests the next unlocked set only (%s)" % et)
 	UIHarness.restore_profile()
 
 
@@ -156,35 +146,51 @@ func test_delay_slider_matches_profile() -> void:
 	UIHarness.restore_profile()
 
 
-func test_daily_hides_later_songs_and_plays_the_chosen_level() -> void:
+
+## A run of song_id at diff where every step lands `late` seconds after its note.
+static func _late_run(song_id: String, diff: String, late: float) -> Session:
+	var s := Session.new(SongLibrary.get_song(song_id), diff, {})
+	var id := 0
+	for n in s.notes:
+		if n.kind == Note.Kind.STEP:
+			s.update(n.t + late)
+			s.tap(n.lane, n.t + late, id)
+			s.release(n.t + late + 0.05, id)
+			id += 1
+	s.update(s.end_time())
+	return s
+
+
+func test_results_offer_to_even_out_a_steady_lean() -> void:
 	UIHarness.fresh_profile()
-	var date := {}
-	var base := Time.get_unix_time_from_datetime_string("2026-10-01T12:00:00")
-	for i in 60:
-		var d := Time.get_date_dict_from_unix_time(base + i * 86400)
-		if Daily.is_hidden(d):
-			date = d
-			break
-	if not check(not date.is_empty(), "some day in the next two months picks a song a new player has not reached"):
-		UIHarness.restore_profile()
-		return
-	var app := UIHarness.make_app(tree, "daily", {"date": date})
+	var results: GDScript = load(App.SCREENS["results"])
+	var late := _late_run("fires", "hard", 0.045)
+	check_near(results.timing_fix(late), 0.045, 0.003, "45 ms late asks for the notes 45 ms earlier")
+	check_eq(results.timing_fix(_auto("fires", "hard")), 0.0, "a run on the beat asks for nothing")
+	var before := Profile.visual_offset()
+	var args := {"session": late, "record": {"prev_best": 0, "new_best": true, "grade": late.grade_rank(), "carving_gained": 0,
+		"unlocked": []}, "play_args": {"song_id": "fires", "difficulty": "hard"},
+		"frames": {"fps": 57.6, "slow": 12, "worst": 0.041}}
+	for sz in [Vector2i(720, 1280), Vector2i(720, 1440)]:
+		var app := UIHarness.make_app(tree, "results", args, sz)
+		await UIHarness.settle(tree)
+		var res := app.current()
+		var fix := UIHarness.find_button(res, "FixTiming")
+		if check(fix != null, "%s: a fix button under the timing" % sz):
+			var fold := (res.find_child("Footer", true, false) as Control).get_global_rect().position.y
+			var tend := res.find_child("Tendency", true, false) as Control
+			check(tend.get_global_rect().end.y <= fold + 1.0, "%s: the timing card still ends above the fold (%d > %d)" % [sz, tend.get_global_rect().end.y, fold])
+			check(fix.text.contains("45"), "it says by how much (%s)" % fix.text)
+			var fl := res.find_child("Frames", true, false) as Label
+			check(fl != null and fl.text.contains("58") and fl.text.contains("41"), "the smoothness line (%s)" % (fl.text if fl else "none"))
+			if sz.y == 1440:
+				fix.pressed.emit()
+				check_near(Profile.visual_offset(), before + 0.045, 1e-6, "pressing it draws the notes 45 ms earlier")
+				check(fix.disabled, "and it is used up")
+		UIHarness.free_app(app)
+	# Autoplay results (no record) never offer it.
+	var app2 := UIHarness.make_app(tree, "results", {"session": late, "record": {}}, Vector2i(720, 1440))
 	await UIHarness.settle(tree)
-	var screen := app.current()
-	var title := screen.find_child("SongTitle", true, false) as Label
-	var song := SongLibrary.get_song(str(Daily.for_date(date).song_id))
-	check_eq(title.text, tr("daily_hidden"), "the song's name is hidden")
-	check(not (screen.find_child("Picture", true, false) is TextureRect), "and its picture is replaced")
-	check(UIHarness.find_button(screen, "Diff_medium").button_pressed, "the picker starts on Medium")
-	check(UIHarness.press(screen, "Diff_hard"), "the player picks Hard")
-	check(UIHarness.press(screen, "Play"), "and plays")
-	await UIHarness.settle(tree)
-	var play := app.current()
-	check_eq(play.screen_name(), "play_screen", "the day's procession starts")
-	var s: Session = play.get("session")
-	if s != null:
-		check_eq(s.difficulty, "hard", "at the chosen level")
-		check_eq(s.song.id, song.id, "on the day's song")
-		check_eq(s.daily, Daily.key(date), "as that day's daily")
-	UIHarness.free_app(app)
+	check(UIHarness.find_button(app2.current(), "FixTiming") == null, "no fix offered for an autoplay run")
+	UIHarness.free_app(app2)
 	UIHarness.restore_profile()

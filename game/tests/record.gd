@@ -1,8 +1,10 @@
 extends SceneTree
 ## Starts a song in Autoplay for recording with Godot's movie maker:
 ##   godot --path game --rendering-driver opengl3 --resolution 720x1440 --write-movie out.avi \
-##       --fixed-fps 60 -s res://tests/record.gd -- <song_id> <difficulty> [remix] [human] [bells=<set>]
-##       [from=<beat>] [style=pixel|painted]
+##       --fixed-fps 60 -s res://tests/record.gd -- <song_id> <difficulty> [remix] [human]
+##       [from=<beat>] [miss=<rate>] [knocks]
+## miss=<rate>: the human player misses that share of notes; knocks: the step buttons knock (off by
+## default). Set NO_LIFT=1 in the environment to keep the lift layer down (the song as it was).
 ## Plays the song through to the results screen, holds the results for a few seconds, then quits.
 ## Uses a throwaway profile, so the recording never changes the player's own progress.
 
@@ -20,10 +22,6 @@ func _init() -> void:
 	var a := OS.get_cmdline_user_args()
 	var song_id := a[0] if a.size() > 0 else "fires"
 	var diff := a[1] if a.size() > 1 else "hard"
-	var bells := "light"
-	for x in a:
-		if x.begins_with("bells="):
-			bells = x.substr(6)
 	await process_frame
 	profile = root.get_node("/root/Profile")
 	profile.load_profile(PROFILE)
@@ -36,15 +34,17 @@ func _init() -> void:
 		return
 	_app = load("res://scenes/main.tscn").instantiate()
 	_app.set("start_screen", "play")
-	var start := {"song_id": song_id, "difficulty": diff, "bell_set": bells, "remix": "remix" in a,
-		"autoplay": true, "human": "human" in a, "piazza": diff == "piazza"}
+	var start := {"song_id": song_id, "difficulty": diff, "remix": "remix" in a,
+		"autoplay": true, "human": "human" in a}
 	for x in a:
 		# from=<beat>: start a short way into the song (with --quit-after, a clip of the action)
 		if x.begins_with("from="):
 			start.from_beat = float(x.substr(5))
 			start.to_beat = float(x.substr(5)) + 64.0
-		elif x.begins_with("style="):
-			profile.set_setting("art_style", x.substr(6))
+		elif x.begins_with("miss="):
+			start.miss_rate = float(x.substr(5))
+		elif x == "knocks":
+			profile.set_setting("step_knocks", true)
 	_app.set("start_args", start)
 	root.add_child(_app)
 	process_frame.connect(_tick)

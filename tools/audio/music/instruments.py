@@ -12,6 +12,7 @@ from __future__ import annotations
 
 import glob
 import os
+import zlib
 
 import numpy as np
 import soundfile as sf
@@ -22,6 +23,12 @@ from dsp import SR, add_at, bandpass, highpass, lowpass, peaking, pink, resonato
 
 # ------------------------------------------------------------------ helpers
 
+
+
+def stable_seed(*parts):
+    """A per-song, per-part seed that is the same on every run (Python's hash() of a string is not),
+    so a song renders identically each time and its lift layer lines up with it sample for sample."""
+    return zlib.crc32("/".join(str(p) for p in parts).encode()) % 1000
 
 def mtof(m):
     return 440.0 * 2 ** ((np.asarray(m, dtype=float) - 69) / 12)
@@ -245,7 +252,7 @@ def _vowel_gain(v, fs):
 
 def render_voice(kind):
     def f(song, evs, n):
-        return voice_line(song, evs, n, kind, seed=hash((song.id, kind)) % 1000)
+        return voice_line(song, evs, n, kind, seed=stable_seed(song.id, kind))
     return f
 
 
@@ -291,7 +298,7 @@ PIPE = {
 def render_pipe(kind):
     def f(song, evs, n):
         prof = PIPE[kind]
-        r = rng(hash((song.id, kind)) % 1000)
+        r = rng(stable_seed(song.id, kind))
         freq = np.full(n, np.nan)
         amp = np.zeros(n)
         dips = np.zeros(n)
@@ -424,7 +431,7 @@ def fade_tail(y, sec=0.05):
 
 def render_drum(inst):
     def f(song, evs, n):
-        r = rng(hash((song.id, inst)) % 1000)
+        r = rng(stable_seed(song.id, inst))
         out = np.zeros(n)
         for e in evs:
             y = fade_tail(drum_hit(inst, e.p.get("hit", "hit"), e.vel, r))
@@ -472,7 +479,7 @@ def synth_bell(f0, r, decay=0.9):
 
 def render_bells(song, evs, n):
     """A row of Mamuthones jumping: many bells struck within a few tens of ms, stereo spread."""
-    r = rng(hash((song.id, "bells")) % 1000)
+    r = rng(stable_seed(song.id, "bells"))
     bank = bell_bank()
     out = np.zeros((n, 2))
     for e in evs:
@@ -530,7 +537,7 @@ def render_rope(song, evs, n):
 
 def render_fire(song, evs, n):
     """Bonfire ambience: low roar plus random crackles (stereo). Events give level over spans."""
-    r = rng(hash((song.id, "fire")) % 1000)
+    r = rng(stable_seed(song.id, "fire"))
     level = np.zeros(n)
     for e in evs:
         s, end = s_of(song, e.b), s_of(song, e.b + e.dur)
@@ -566,7 +573,7 @@ def render_fire(song, evs, n):
 def render_crowd(song, evs, n):
     """Piazza crowd: a babble of formant voices on random syllables plus shaped noise and cheers."""
     from score import Ev
-    r = rng(hash((song.id, "crowd")) % 1000)
+    r = rng(stable_seed(song.id, "crowd"))
     level = np.zeros(n)
     cheers = []
     for e in evs:
@@ -659,7 +666,7 @@ def hat(vel, r, open_=False):
 
 def render_kit(inst):
     def f(song, evs, n):
-        r = rng(hash((song.id, inst)) % 1000)
+        r = rng(stable_seed(song.id, inst))
         out = np.zeros(n)
         for e in evs:
             st = e.p.get("style", "")

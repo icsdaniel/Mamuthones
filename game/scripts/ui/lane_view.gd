@@ -6,6 +6,9 @@ extends Control
 ## input arrives (flash() / burst() are called from the input signal handlers, then queue_redraw()).
 
 const BUTTONS_H := 264.0        ## height of the button row
+## Touches this far above the hit line still press the lane's button: in a fast passage thumbs creep
+## up toward the rings they are watching, and a press on a ring is meant for its button.
+const TAP_ABOVE := 80.0
 const LOOKAHEAD := 1.5          ## seconds of notes visible at note speed 1.0
 const FLASH_TIME := 0.14
 const CUE_TIME := 0.22          ## a button is "cued" when its next note is this close
@@ -70,9 +73,21 @@ func buttons_rect() -> Rect2:
 	return Rect2(0.0, size.y - BUTTONS_H, size.x, BUTTONS_H)
 
 
-## Global rect of the button row, for InputRouter.buttons_rect.
+## Global rect of the button row.
 func buttons_global_rect() -> Rect2:
+	return _to_global(buttons_rect())
+
+
+## Global rect where a touch presses a step button, for InputRouter.buttons_rect: the button row and
+## the strip above it up to TAP_ABOVE over the hit line (the rings and the judgement words), across
+## the whole width, so its thirds are the three lanes as the buttons are.
+func tap_global_rect() -> Rect2:
 	var r := buttons_rect()
+	var top := clampf(hit_line_screen_y() - TAP_ABOVE, 0.0, r.position.y)
+	return _to_global(Rect2(r.position.x, top, r.size.x, r.end.y - top))
+
+
+func _to_global(r: Rect2) -> Rect2:
 	return Rect2(get_global_transform() * r.position, r.size * get_global_transform().get_scale())
 
 
@@ -328,6 +343,7 @@ func event_y(field: Rect2, t: float, pps: float) -> float:
 ## road (gems, rings, badges, the rope, labels), then the buttons.
 static var draw_usec := 0         ## time spent drawing the street lanes, summed (for tests/bench.gd)
 static var draw_count := 0
+static var last_draw_usec := 0    ## ... and in the last frame
 
 
 func _draw() -> void:
@@ -335,7 +351,8 @@ func _draw() -> void:
 		_street_map(true)
 		var t0 := Time.get_ticks_usec()
 		_draw_street()
-		draw_usec += Time.get_ticks_usec() - t0
+		last_draw_usec = Time.get_ticks_usec() - t0
+		draw_usec += last_draw_usec
 		draw_count += 1
 		return
 	if not _road_on():
@@ -542,13 +559,11 @@ void fragment() {
 ## Road surface colours from the far end (by the fire) to the buttons.
 const ROAD_STOPS := [[0.0, Color("#2a1c22")], [0.25, Color("#1a1520")], [0.6, Color("#131018")], [1.0, Color("#0c0a12")]]
 
-var perspective := true          ## false: the flat lanes (the Piazza hides them anyway; tests may flatten)
+var perspective := true          ## false: the flat lanes (tests may flatten)
 ## The street picture (set before this enters the tree). With it, the road is the picture's own and
 ## the lanes follow its painted lines: project() asks the street where a flat point lies, and this
 ## control draws the notes, the hit line, the bursts and the buttons over it (_draw_street).
 var street: StreetBackdrop
-## The pixel look (PixelFilter over the screen): the buttons are drawn as pixel art on its grid.
-var pixel := false
 var beat := -1000.0              ## the song's beat now (fractional), for the beads on the rails
 var spb := 0.0                   ## seconds per beat (0: no beads)
 var fire_dim := 0.0              ## 0..1 the fire burns low (health): the road's light dims with it
@@ -563,7 +578,7 @@ var _fx: Control                 ## additive, over the notes: hit bursts
 func _ready() -> void:
 	if street != null:
 		perspective = false
-	if street != null and pixel and not OS.has_environment("NO_ATLAS"):
+	if street != null and not OS.has_environment("NO_ATLAS"):
 		# the notes are painted once into a sheet and stamped from it: drawing them each frame was the lag
 		var at := NoteAtlas.new(self)
 		add_child(at)
@@ -1108,9 +1123,37 @@ func _off_beat(n: Note) -> bool:
 	return fr > 0.12 and fr < 0.88
 
 
-## A sixteenth: a quarter of a beat off (only Expert has them; triplet eighths are not).
+## A sixteenth: a quarter of a beat off (only Expert has them; triplet eighths are not). A half-beat
+## note inside a run of sixteenths is played at the same speed, so it is silver too: violet between
+## two silver notes read as a slower note (Daniele, 2026-10-10; Note.quick marks the pairs).
 func _sixteenth(n: Note) -> bool:
-	return absf(fposmod(n.beat, 0.5) - 0.25) < 0.02
+	if n.quick or absf(fposmod(n.beat, 0.5) - 0.25) < 0.02:
+		return true
+	if absf(fposmod(n.beat, 1.0) - 0.5) >= 0.02 or session == null:
+		return false
+	if _six_cache_for != session:
+		_six_cache_for = session
+		_six_cache.clear()
+	if not _six_cache.has(n.index):
+		_six_cache[n.index] = _in_sixteenth_run(n)
+	return _six_cache[n.index]
+
+
+var _six_cache := {}                 ## note index -> half-beat note inside a sixteenth run
+var _six_cache_for: Session
+
+
+func _in_sixteenth_run(n: Note) -> bool:
+	var ns := session.notes
+	for dir: int in [-1, 1]:
+		var i: int = n.index + dir
+		while i >= 0 and i < ns.size() and absf(ns[i].beat - n.beat) <= 0.27:
+			var m: Note = ns[i]
+			var gap := absf(m.beat - n.beat)
+			if m.uses_lane() and gap > 0.02 and absf(gap - 0.25) < 0.02:
+				return true
+			i += dir
+	return false
 
 
 ## Notes emerge from the fire's haze at the far end of the road.
@@ -1409,69 +1452,59 @@ func _street_chevron(pos: Vector2, side: String, age: float, size_k := 1.0) -> v
 ## middle one), lit gold while pressed, hot on a hit, dull red on a miss, their edge glowing when a
 ## note is about to reach their lane.
 func _draw_street_buttons() -> void:
-	if pixel:
-		_draw_pixel_buttons()
-		return
-	var r := buttons_rect()
-	var span := _screen_span()
-	var panel := Rect2(span.x, r.position.y, span.y - span.x, r.size.y + 400.0)
-	draw_rect(panel, Color("#0b0a10"))
-	draw_rect(Rect2(panel.position, Vector2(panel.size.x, 3.0)), Color("#ffb04a") * Color(1, 1, 1, 0.6 + 0.4 * beat_env()))
-	var w := r.size.x / 3.0
-	var pad := 7.0
-	for lane in 3:
-		var br := Rect2(r.position.x + w * lane + pad, r.position.y + pad + 4.0, w - pad * 2.0, r.size.y - pad * 2.0 - 4.0)
-		var st := _button_state(lane)
-		var sb := StyleBoxFlat.new()
-		sb.set_corner_radius_all(18)
-		sb.set_border_width_all(3)
-		sb.bg_color = BTN_BG
-		sb.border_color = BTN_EDGE
-		var foot := BTN_BONE
-		match st:
-			"cued":
-				sb.border_color = Color("#ffc445")
-				sb.shadow_color = Color("#ff9a2a66")
-				sb.shadow_size = 10
-			"pressed":
-				sb.bg_color = Color("#4a3014")
-				sb.border_color = Color("#ffe08a")
-				sb.shadow_color = Color("#ffb04a88")
-				sb.shadow_size = 14
-			"hit":
-				sb.bg_color = Color("#c47a1c")
-				sb.border_color = Color("#fff2c0")
-				sb.shadow_color = Color("#ffc445aa")
-				sb.shadow_size = 18
-				foot = Color("#fffaf0")
-			"miss":
-				sb.bg_color = Color("#3a1212")
-				sb.border_color = Color("#a83030")
-				foot = BTN_BONE.darkened(0.4)
-		draw_style_box(sb, br)
-		# a lit lip along the top, the lane's slot light carried down onto the button
-		var lip := Color("#ffb04a")
-		var la := 0.35 + 0.25 * beat_env()
-		match st:
-			"cued":
-				la = 0.9
-			"pressed", "hit":
-				lip = Color("#fff2c0")
-				la = 1.0
-		draw_rect(Rect2(br.position.x + 18.0, br.position.y + 5.0, br.size.x - 36.0, 6.0), Color(lip, la))
-		var feet := [-1.0, 1.0] if lane == 1 else ([-1.0] if lane == 0 else [1.0])
-		var fs := minf(br.size.x, br.size.y) * 0.25
-		for i in feet.size():
-			var ox := 0.0 if feet.size() == 1 else (float(i) - 0.5) * fs * 1.5
-			_footprint(br.get_center() + Vector2(ox, 0.0), fs, feet[i], foot)
-	_draw_street_marks(r, w)
+	_draw_pixel_buttons()
 
 
 # ------------------------------------------------------------------ the pixel look's buttons
 
-const PX_WOOD := [Color("#160c0a"), Color("#4a2e1e"), Color("#64402a"), Color("#8a5c36")]   ## shade, face, lit, lip
+const PX_WOOD := [Color("#160c0a")]   ## the shade under a step
 const PX_BRONZE := [Color("#4e2a0a"), Color("#b0701e"), Color("#f2c46a")]
 const PX_LIFT := 3          ## art px a button stands up from the panel (its side shows below it)
+const BTN_CAP := 118        ## source px of the button pictures' carved frame (kept square when stretched)
+const FOOT_ASPECT := 206.0 / 431.0
+
+
+## Picture `key` from art/ai stretched to cells, nine-sliced: its frame (cap source px from each
+## edge) keeps its shape at the cells' scale and only the middle stretches; alpha cut hard at half.
+## "<name>!white": its silhouette in white, for a glow tinted by modulate.
+static var _nine_cache := {}
+
+static func _nine(key: String, cells: Vector2i, cap_src: int) -> Texture2D:
+	cells = cells.max(Vector2i(4, 4))
+	var k := "%s_%d_%d" % [key, cells.x, cells.y]
+	if _nine_cache.has(k):
+		return _nine_cache[k]
+	var tex: Texture2D = null
+	var path := "res://art/ai/%s.png" % key.trim_suffix("!white")
+	if ResourceLoader.exists(path):
+		var src := (load(path) as Texture2D).get_image()
+		src.decompress()
+		src.convert(Image.FORMAT_RGBA8)
+		var sw := src.get_width()
+		var sh := src.get_height()
+		var cap := clampi(roundi(cap_src * float(cells.y) / sh), 1, mini(cells.x, cells.y) / 2 - 1)
+		var xs := [[0, cap_src, 0, cap], [cap_src, sw - cap_src, cap, cells.x - cap], [sw - cap_src, sw, cells.x - cap, cells.x]]
+		var ys := [[0, cap_src, 0, cap], [cap_src, sh - cap_src, cap, cells.y - cap], [sh - cap_src, sh, cells.y - cap, cells.y]]
+		var out := Image.create(cells.x, cells.y, false, Image.FORMAT_RGBA8)
+		for py: Array in ys:
+			for px: Array in xs:
+				var dw: int = px[3] - px[2]
+				var dh: int = py[3] - py[2]
+				if dw <= 0 or dh <= 0:
+					continue
+				var piece := src.get_region(Rect2i(px[0], py[0], px[1] - px[0], py[1] - py[0]))
+				piece.resize(dw, dh, Image.INTERPOLATE_LANCZOS)
+				out.blit_rect(piece, Rect2i(0, 0, dw, dh), Vector2i(px[2], py[2]))
+		for y in cells.y:
+			for x in cells.x:
+				var c := out.get_pixel(x, y)
+				c.a = 1.0 if c.a > 0.5 else 0.0
+				if key.ends_with("!white"):
+					c = Color(1, 1, 1, c.a)
+				out.set_pixel(x, y, c)
+		tex = ImageTexture.create_from_image(out)
+	_nine_cache[k] = tex
+	return tex
 
 
 ## A rect in this control's coordinates snapped to the lens's grid (whole art px on screen).
@@ -1490,10 +1523,38 @@ func _px(o: Vector2, x: float, y: float, w: float, h: float, col: Color) -> void
 	draw_rect(Rect2(o + Vector2(x, y) * p, Vector2(w, h) * p), col)
 
 
-## The three step buttons as pixel art: carved wooden steps edged in bronze, standing up out of the
-## panel (their side shows below them). A press sinks the step into the panel; a hit lights it hot,
-## a miss dull red; a note about to reach its lane lights its edge. A bare foot is burnt into each
-## (both feet in the middle one).
+## Paints, before the song starts, every picture the lanes would otherwise make the first time it
+## is needed mid-song: the buttons pressed and lit, and (bells: a song with bells) the bell bars at
+## every size down the road. Each was a hitch of 25 ms or more on its first press, hit or bell.
+func warm(bells: bool) -> void:
+	if street == null:
+		return
+	for lane in 3:
+		var cr := _button_cells(lane)
+		for key in ["btn_idle", "btn_pressed"]:
+			_nine(key, cr, BTN_CAP)
+		_nine("btn_idle!white", cr + Vector2i(2, 2), BTN_CAP)
+	if bells:
+		StreetSkin.warm(self, field_rect())
+
+
+## A step button's rect on the grid ...
+func _button_rect(lane: int) -> Rect2:
+	var r := buttons_rect()
+	var w := r.size.x / 3.0
+	return _grid_rect(Rect2(r.position.x + w * lane + 9.0, r.position.y + 15.0, w - 18.0, r.size.y - 30.0))
+
+
+## ... and its picture's size in cells (columns, rows).
+func _button_cells(lane: int) -> Vector2i:
+	var br := _button_rect(lane)
+	return Vector2i(int(br.size.x / PxArt.PX), int(br.size.y / PxArt.PX) - PX_LIFT)
+
+
+## The three step buttons as pixel art, from Daniele's pictures (art/ai/btn_idle, btn_pressed, foot):
+## carved wooden steps standing up out of the panel (their side shows below them). A press sinks the
+## step and shows the pressed picture with its glow; a hit lights it hot, a miss dull red; a note
+## about to reach its lane lights its edge. A bare foot is carved into each (both in the middle one).
 func _draw_pixel_buttons() -> void:
 	var r := buttons_rect()
 	var span := _screen_span()
@@ -1505,131 +1566,43 @@ func _draw_pixel_buttons() -> void:
 	_px(panel.position, 0, 1, panel.size.x / p, 1, PX_BRONZE[0])
 	var w := r.size.x / 3.0
 	for lane in 3:
-		var br := _grid_rect(Rect2(r.position.x + w * lane + 9.0, r.position.y + 15.0, w - 18.0, r.size.y - 30.0))
+		var br := _button_rect(lane)
 		var st := _button_state(lane)
-		var cols := int(br.size.x / p)
-		var rows := int(br.size.y / p) - PX_LIFT
+		var cells := _button_cells(lane)
+		var cols := cells.x
+		var rows := cells.y
 		var down := PX_LIFT if st == "pressed" or st == "hit" else 0
 		var o := br.position + Vector2(0, down * p)
-		var face: Color = PX_WOOD[1]
-		var lit: Color = PX_WOOD[2]
-		var lip: Color = PX_WOOD[3]
-		var edge: Color = PX_BRONZE[1]
-		var foot := "idle"
-		match st:
-			"cued":
-				edge = Color("#ffc445")
-				lip = Color("#8a5a2a")
-				foot = "bright"
-			"pressed":
-				face = Color("#4a3014")
-				lit = Color("#6a4420")
-				lip = Color("#ffd27a")
-				edge = Color("#ffe08a")
-				foot = "bright"
-			"hit":
-				face = Color("#c47a1c")
-				lit = Color("#e8a020")
-				lip = Color("#fff2c0")
-				edge = Color("#fff2c0")
-				foot = "hot"
-			"miss":
-				face = Color("#3a1212")
-				lit = Color("#5e1a14")
-				lip = Color("#a83030")
-				edge = Color("#a83030")
-				foot = "dim"
 		# the step's side under it (the part that sinks into the panel when pressed)
 		var side := PX_LIFT - down
 		if side > 0:
-			_px(o, 1, rows, cols - 2, side, PX_BRONZE[0])
-			_px(o, 2, rows + side - 1, cols - 4, 1, PX_WOOD[0])
-		# the edge: a bronze band with its corners cut, then the face, a lit top lip and a shaded foot
-		_px(o, 2, 0, cols - 4, rows, edge)
-		_px(o, 1, 1, cols - 2, rows - 2, edge)
-		_px(o, 0, 2, cols, rows - 4, edge)
-		# a two-px bronze band, lit along its top
-		_px(o, 2, 0, cols - 4, 1, PX_BRONZE[0] if st != "miss" else edge)
-		_px(o, 3, 2, cols - 6, rows - 4, face)
-		_px(o, 2, 3, cols - 4, rows - 6, face)
-		_px(o, 3, 2, cols - 6, 1, lip)
-		_px(o, 2, 3, cols - 4, 2, lit)
-		_px(o, 2, rows - 4, cols - 4, 1, PX_WOOD[0].lerp(face, 0.4))
-		_px(o, 3, rows - 3, cols - 6, 1, PX_WOOD[0])
+			_px(o, 2, rows - 1, cols - 4, side + 1, PX_BRONZE[0])
+			_px(o, 3, rows + side - 1, cols - 6, 1, PX_WOOD[0])
+		var down_pic := st == "pressed" or st == "hit"
+		var tex := _nine("btn_pressed" if down_pic else "btn_idle", Vector2i(cols, rows), BTN_CAP)
+		var mod := {"idle": Color.WHITE, "cued": Color(1.2, 1.1, 0.92), "pressed": Color.WHITE,
+			"hit": Color(1.45, 1.2, 0.85), "miss": Color(0.95, 0.5, 0.45)}[st] as Color
 		if st == "cued" or st == "hit":
-			draw_rect(Rect2(o - Vector2(p, p), Vector2(cols + 2, rows + 2) * p), Color(edge, 0.35), false, p)
-		# wood grain across the face
-		var gy := 7
-		while gy < rows - 5:
-			var gx := 4 + (gy * 7) % 5
-			_px(o, gx, gy, cols - gx - 5 - (gy * 3) % 7, 1, face.darkened(0.28))
-			gy += 6 + gy % 3
-		# the feet burnt into it, pixel by pixel
-		var fcol := {"idle": Palette.BONE, "bright": Color("#fff6e0"), "hot": Color("#fffaf0"), "dim": Palette.BONE.darkened(0.45)}[foot] as Color
+			# a one-px glow around the step's own outline (its cut corners included)
+			var glow := Color("#fff2c0") if st == "hit" else Color("#ffc445")
+			var sil := _nine("btn_idle!white", Vector2i(cols + 2, rows + 2), BTN_CAP)
+			if sil != null:
+				draw_texture_rect(sil, Rect2(o - Vector2(p, p), Vector2(cols + 2, rows + 2) * p), false, Color(glow, 0.8))
+		if tex != null:
+			draw_texture_rect(tex, Rect2(o, Vector2(cols, rows) * p), false, mod)
+		# the feet carved into it
+		var fmod := {"idle": Color(0.82, 0.78, 0.72), "cued": Color(1, 0.97, 0.9), "pressed": Color.WHITE,
+			"hit": Color(1.15, 1.1, 1.0), "miss": Color(0.55, 0.32, 0.3)}[st] as Color
 		var feet := [-1.0, 1.0] if lane == 1 else ([-1.0] if lane == 0 else [1.0])
-		var fh := clampi(int(rows * 0.62), 20, 38)
+		var fh := clampi(int(rows * 0.5), 16, 40)
+		var fw := maxi(roundi(fh * FOOT_ASPECT), 6)
 		for i in feet.size():
-			var cx := cols * 0.5 + (0.0 if feet.size() == 1 else (float(i) - 0.5) * fh * 0.75)
-			_pixel_foot(o, Vector2(roundf(cx), roundf(rows * 0.5)), fh, feet[i], fcol, PX_WOOD[0])
+			var cx := cols * 0.5 + (0.0 if feet.size() == 1 else (float(i) - 0.5) * fw * 1.5)
+			var ftex := StreetSkin.ai_tex("foot" if feet[i] > 0.0 else "foot!mirror", Vector2i(fw, fh))
+			if ftex != null:
+				var fo := Vector2(roundf(cx - fw * 0.5), roundf(rows * 0.5 - fh * 0.5))
+				draw_texture_rect(ftex, Rect2(o + fo * p, Vector2(fw, fh) * p), false, fmod)
 	_draw_street_marks(r, w)
-
-
-## A bare footprint in whole art px: centre c (art px from o), h art px tall, left (-1) or right (1)
-## foot, filled in col with a one-px shadow below its edge.
-func _pixel_foot(o: Vector2, c: Vector2, h: int, foot: float, col: Color, shade: Color) -> void:
-	var runs := _foot_runs(h, foot)
-	for pass_ in 2:
-		var dy := 1 if pass_ == 0 else 0
-		for run: Vector3i in runs:
-			_px(o, c.x + run.x, c.y + run.y + dy, run.z, 1, shade if pass_ == 0 else col)
-
-
-## The footprint's shape as runs of art px (x, y, length) from its centre, worked out once per size
-## and foot: the buttons are drawn every frame and testing every pixel each time was most of a frame.
-static var _foot_cache := {}
-
-static func _foot_runs(h: int, foot: float) -> Array[Vector3i]:
-	var key := Vector2i(h, int(foot))
-	if _foot_cache.has(key):
-		return _foot_cache[key]
-	var w := int(ceil(h * 0.3))
-	var toes := [Vector3(-0.15, -0.7, 0.14), Vector3(0.1, -0.74, 0.08), Vector3(0.27, -0.69, 0.07), Vector3(0.42, -0.61, 0.065), Vector3(0.54, -0.5, 0.06)]
-	var inside := func(x: float, y: float) -> bool:
-		# in units of half the foot's height: y -1 the toes' tips .. 1 the heel; x across, + outward
-		var u := x / (h * 0.5) * foot
-		var v := y / (h * 0.5)
-		# the sole: widest at the ball, narrowing to the heel, the arch cut in on the inner side
-		if v >= -0.5 and v <= 1.0:
-			var half := lerpf(0.36, 0.25, clampf((v + 0.3) / 1.1, 0.0, 1.0))
-			if v < -0.3:
-				half = lerpf(0.26, 0.36, (v + 0.5) / 0.2)
-			var inner := half
-			if v > 0.05 and v < 0.6:
-				inner = half - 0.12 * sin((v - 0.05) / 0.55 * PI)
-			var lo := -inner
-			if v > 0.85:
-				var r := sqrt(maxf(0.0, 1.0 - pow((v - 0.85) / 0.15, 2.0)))
-				return u >= -inner * r and u <= half * r
-			return u >= lo and u <= half
-		# the toes: the big one on the inside, the rest smaller, stepping down outward
-		for t: Vector3 in toes:
-			if (u - t.x) * (u - t.x) + (v - t.y) * (v - t.y) <= t.z * t.z:
-				return true
-		return false
-	var runs: Array[Vector3i] = []
-	for yy in range(-h / 2 - 2, h / 2 + 2):
-		var start := 0
-		var open := false
-		for xx in range(-w, w + 2):
-			var on: bool = xx <= w and inside.call(float(xx) + 0.5, float(yy) + 0.5)
-			if on and not open:
-				start = xx
-				open = true
-			elif not on and open:
-				runs.append(Vector3i(start, yy, xx - start))
-				open = false
-	_foot_cache[key] = runs
-	return runs
 
 
 ## A bare footprint (left foot for -1, right for 1): the sole and five toes.

@@ -24,7 +24,9 @@ const DUCK_DB := 3.0
 const DUCK_ATTACK := 0.015
 const DUCK_HOLD := 0.13
 const DUCK_RELEASE := 0.12
-const BELL_SETS: Array[String] = ["light", "village", "full"]
+## The one load everyone plays with (BellSets.STANDARD; the Light and Full loads were removed
+## with the bell sets, Daniele 2026-10-09, and their samples with them to keep the app light).
+const BELL_SETS: Array[String] = ["village"]
 ## Index = quality slot used by bell(): perfect, good, ok, miss, early, late.
 const QUALITIES: Array[String] = ["perfect", "good", "ok", "miss", "early", "late"]
 const QUALITY_TAKES: Array[int] = [3, 3, 3, 3, 2, 2]
@@ -43,6 +45,8 @@ const ROW_DB: Array[float] = [-80.0, -20.0, -16.0, -12.0, -9.0, -6.0]
 ## lower on a Good, the dum up to ACCENT_CHAIN_DB louder along a chain of on-time bells, and the
 ## chime doubled at the octave from ACCENT_OCTAVE_CHAIN bells in a row.
 const ACCENT_THUMP_DB := -3.0
+## The soft tuned tone on every note's time (note_accent), under the step's own tone.
+const NOTE_ACCENT_DB := -6.0
 const ACCENT_CHIME_DB := -8.0
 const ACCENT_GOOD_DB := -4.0
 const ACCENT_CHAIN_DB := 2.0
@@ -65,6 +69,11 @@ const BUS_BELLS := &"Bells"
 const BUS_SOFT := &"BellsSoft"
 const BUS_EARLY := &"BellsEarly"
 const BUS_LATE := &"BellsLate"
+## Sounds played on the music as if the note was hit (cued()) go through these, under Bells and Sfx:
+## a miss turns on their distortion for MISS_DISTORT seconds, so a ring already sounding breaks up.
+const BUS_BELLS_CUED := &"BellsCued"
+const BUS_SFX_CUED := &"SfxCued"
+const MISS_DISTORT := 0.4
 
 # bells: set id -> Array of 12 Arrays (quality slot * 2 + (0 up / 1 down)) of takes
 var _bells := {}
@@ -119,6 +128,8 @@ var _user_db := {"Music": 0.0, "Bells": 0.0, "Sfx": 0.0, "Ambience": 0.0}
 var _music_bus := -1
 var _duck := 0.0        # 0..1, how far the music is dipped
 var _duck_hold := 0.0   # seconds left at full dip
+var _cueing := false     # inside cued(): sounds go to the cued buses
+var _distort_left := 0.0 # seconds the cued buses stay distorted
 
 
 func _ready() -> void:
@@ -129,6 +140,14 @@ func _ready() -> void:
 
 
 # ---------------------------------------------------------------------------- API
+
+## Plays what `play` plays (any of the calls below) on the cued buses: sounds the play screen starts
+## on the music's clock as if the note was hit, which a miss() then distorts.
+func cued(play: Callable) -> void:
+	_cueing = true
+	play.call()
+	_cueing = false
+
 
 ## Sets the song's key: step tones and hold drones play root, fifth and octave of it.
 ## Call it when a song starts: it also starts the three drones, silent, so a hold
@@ -266,6 +285,14 @@ func bell_accent(up: bool, quality: String, chain := 1) -> void:
 		_play(_accent_pool, 6, _pick(_chimes, 133), ACCENT_CHIME_DB + ACCENT_OCTAVE_DB + soft, pitch * 2.0)
 
 
+## A note's accent, played on the note's time whether or not it is hit (PlayScreen schedules it on the
+## music, so it is heard in time even with Bluetooth delay): the lane's tuned tone alone, soft, no
+## footfall. A missed note is corrected afterwards by miss().
+func note_accent(lane: int) -> void:
+	lane = clampi(lane, 0, LANES - 1)
+	_play(_tone_pool, 3, _tones[lane][_key_pc >> 1], NOTE_ACCENT_DB + randf_range(-0.5, 0.0), _tone_pitch)
+
+
 ## A hold kept to its end: the small bell rung once at the lane's pitch (Left the root, Middle the
 ## fifth, Right the octave, like the lanes' own tones), a little louder than a bell's chime.
 func hold_done(lane: int) -> void:
@@ -294,6 +321,8 @@ func miss() -> void:
 	_last_miss = now
 	_play(_miss_pool, 5, _pick(_misses, 303), randf_range(-1.0, 0.0), randf_range(0.98, 1.02))
 	_duck_hold = DUCK_HOLD * 2.0
+	_set_distort(true)
+	_distort_left = MISS_DISTORT
 	_streak = 0
 	if _jangle_player.playing:
 		_jangle_choking = true
@@ -455,6 +484,10 @@ func _exit_tree() -> void:
 
 
 func _process(delta: float) -> void:
+	if _distort_left > 0.0:
+		_distort_left -= delta
+		if _distort_left <= 0.0:
+			_set_distort(false)
 	# music duck: a 15 ms dip, held while the ring's attack sounds, a 120 ms return.
 	# The bus volume is ramped across each mix block, so the steps don't click.
 	var duck := _duck
@@ -561,8 +594,10 @@ func _play(pool: Array[AudioStreamPlayer], which: int, stream: AudioStream, gain
 	p.stream = stream
 	p.volume_db = gain_db
 	p.pitch_scale = pitch
-	if bus != &"":
-		p.bus = bus
+	var base: StringName = bus if bus != &"" else p.get_meta("bus", p.bus)
+	if _cueing:
+		base = BUS_SFX_CUED if base == &"Sfx" else BUS_BELLS_CUED
+	p.bus = base
 	p.play()
 
 
@@ -607,13 +642,8 @@ func _row_joins(quality: String) -> bool:
 	return false
 
 
-func _alias(set_id: String) -> String:
-	match set_id.to_lower():
-		"full_load", "fullload", "heavy", "full":
-			return "full"
-		"light", "first":
-			return "light"
-	return "village"
+func _alias(_set_id: String) -> String:
+	return BellSets.STANDARD
 
 
 func _make_buses() -> void:
@@ -640,6 +670,20 @@ func _make_buses() -> void:
 			var pan := AudioEffectPanner.new()
 			pan.pan = pair[1]
 			AudioServer.add_bus_effect(idx, pan)
+	# the cued buses: a crunching overdrive and a low-pass, both off until a miss (_set_distort)
+	for pair in [[BUS_BELLS_CUED, "Bells"], [BUS_SFX_CUED, "Sfx"]]:
+		var idx := _ensure_bus(pair[0], pair[1])
+		if AudioServer.get_bus_effect_count(idx) == 0:
+			var dist := AudioEffectDistortion.new()
+			dist.mode = AudioEffectDistortion.MODE_LOFI
+			dist.drive = 0.75
+			dist.post_gain = -6.0
+			AudioServer.add_bus_effect(idx, dist, 0)
+			var lp := AudioEffectLowPassFilter.new()
+			lp.cutoff_hz = 900.0
+			AudioServer.add_bus_effect(idx, lp, 1)
+			AudioServer.set_bus_effect_enabled(idx, 0, false)
+			AudioServer.set_bus_effect_enabled(idx, 1, false)
 	_music_bus = AudioServer.get_bus_index("Music")
 	var master := AudioServer.get_bus_index("Master")
 	var has_limiter := false
@@ -650,6 +694,13 @@ func _make_buses() -> void:
 		var lim := AudioEffectHardLimiter.new()
 		lim.ceiling_db = -1.0
 		AudioServer.add_bus_effect(master, lim)
+
+
+func _set_distort(on: bool) -> void:
+	for b in [BUS_BELLS_CUED, BUS_SFX_CUED]:
+		var idx := AudioServer.get_bus_index(b)
+		for i in AudioServer.get_bus_effect_count(idx):
+			AudioServer.set_bus_effect_enabled(idx, i, on)
 
 
 func _ensure_bus(bus_name: String, send: String) -> int:
@@ -759,5 +810,6 @@ func _fill(pool: Array[AudioStreamPlayer], count: int, bus: String) -> void:
 	for i in count:
 		var p := AudioStreamPlayer.new()
 		p.bus = bus
+		p.set_meta("bus", StringName(bus))  # _play returns it here after a one-off bus
 		add_child(p)
 		pool.append(p)

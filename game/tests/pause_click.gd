@@ -1,22 +1,20 @@
 extends SceneTree
 ## Clicks the play screen's pause button through real input events, to check that taps reach the
-## HUD inside the pixel look's picture: godot --path game -s res://tests/pause_click.gd -- [style]
+## HUD inside the play screen's pixel picture: godot --path game -s res://tests/pause_click.gd
 
 var profile: Node
 
 
 func _init() -> void:
-	var a := OS.get_cmdline_user_args()
 	await process_frame
 	profile = root.get_node("/root/Profile")
 	profile.load_profile("user://click_profile.cfg")
 	profile.reset()
 	for f in profile.FLAGS:
 		profile.set_flag(f, true)
-	profile.set_setting("art_style", a[0] if a.size() > 0 else "pixel")
 	var app: Control = load("res://scenes/main.tscn").instantiate()
 	app.set("start_screen", "play")
-	app.set("start_args", {"song_id": "fires", "difficulty": "easy", "bell_set": "light"})
+	app.set("start_args", {"song_id": "fires", "difficulty": "easy"})
 	root.add_child(app)
 	for i in 90:
 		await process_frame

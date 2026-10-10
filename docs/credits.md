@@ -12,7 +12,7 @@ Built with [Godot Engine](https://godotengine.org) (MIT licence).
 All music is original, written for this game and synthesized from written scores by
 `tools/audio/music/` (numpy/scipy, no samples of real recordings, no known tunes): canto a tenore
 style voices (formant synthesis on open vowels), launeddas style reed pipes, frame and bass drums.
-The procession bells in the music and the Piazza tracks use the game's own bell sounds (see Sound).
+The procession bells in the music use the game's own bell sounds (see Sound).
 
 ## Sound
 

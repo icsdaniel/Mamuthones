@@ -1,6 +1,6 @@
 extends Screen
-## Settings: timing (calibration, delay test, manual offset), play (note speed, vibration, slam, reduced
-## motion), sound volumes, language, credits. Every change is saved at once.
+## Settings: timing (calibration, delay test, manual offset), play (note speed, vibration, slam,
+## animations), sound volumes, language, credits. Every change is saved at once.
 
 
 func build() -> void:
@@ -20,6 +20,12 @@ func build() -> void:
 	box.add_child(lat)
 	_slider(box, "audio_offset", tr("set_offset"), Profile.RANGES["audio_offset"].x, Profile.RANGES["audio_offset"].y, 0.005,
 		func(v: float) -> String: return tr("ms_signed") % roundi(v * 1000.0))
+	var vis := UIKit.button(tr("set_visual_test"), func() -> void: app.open("screen_delay"))
+	vis.name = "ScreenDelay"
+	box.add_child(vis)
+	_slider(box, "visual_offset", tr("set_visual"), Profile.RANGES["visual_offset"].x, Profile.RANGES["visual_offset"].y, 0.005,
+		func(v: float) -> String: return tr("ms_signed") % roundi(v * 1000.0))
+	box.add_child(UIKit.label(tr("set_visual_note"), UIKit.CAPTION))
 
 	box.add_child(UIKit.label(tr("set_play"), UIKit.SUB))
 	var speed := _slider(box, "note_speed", tr("set_note_speed"), 0.5, 3.0, 0.1,
@@ -32,21 +38,22 @@ func build() -> void:
 	speed.value_changed.connect(func(v: float) -> void: preview.note_speed = v)
 	_toggle(box, "bell_cue", tr("set_bell_cue"), tr("set_bell_cue_note"))
 	_toggle(box, "vibration", tr("set_vibration"))
+	_toggle(box, "step_knocks", tr("set_step_knocks"), tr("set_step_knocks_note"))
 	_toggle(box, "slam", tr("set_slam"), tr("set_slam_note"))
-	_toggle(box, "reduced_motion", tr("set_reduced_motion"))
-	# the play screen's look: pixel art (the default) or Daniele's painted pictures
-	box.add_child(UIKit.label(tr("set_look"), UIKit.CAPTION))
-	var looks := HBoxContainer.new()
-	looks.name = "Looks"
-	looks.add_theme_constant_override("separation", 12)
-	for style in ["pixel", "painted"]:
-		var lb := UIKit.button(tr("look_" + style), _look.bind(style, looks))
-		lb.toggle_mode = true
-		lb.set_pressed_no_signal(str(Profile.get_setting("art_style")) == style)
-		lb.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-		lb.name = "Look_" + style
-		looks.add_child(lb)
-	box.add_child(looks)
+	# animations: full, calm (less movement), or off (the smoothest play: only the notes move)
+	box.add_child(UIKit.label(tr("set_animations"), UIKit.CAPTION))
+	var anims := HBoxContainer.new()
+	anims.name = "Animations"
+	anims.add_theme_constant_override("separation", 12)
+	for a in ["full", "calm", "off"]:
+		var ab := UIKit.button(tr("anim_" + a), _animations.bind(a, anims))
+		ab.toggle_mode = true
+		ab.set_pressed_no_signal(UIKit.animations() == a)
+		ab.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		ab.name = "Anim_" + a
+		anims.add_child(ab)
+	box.add_child(anims)
+	box.add_child(UIKit.label(tr("set_animations_note"), UIKit.CAPTION))
 
 	box.add_child(UIKit.label(tr("set_sound"), UIKit.SUB))
 	_slider(box, "music_volume", tr("set_music"), 0.0, 1.0, 0.05,
@@ -143,7 +150,9 @@ func _language(code: String) -> void:
 	app.rebuild_all()
 
 
-func _look(style: String, row: Control) -> void:
-	Profile.set_setting("art_style", style)
+func _animations(a: String, row: Control) -> void:
+	Sound.ui("tap")
+	Profile.set_setting("animations", a)
+	Profile.set_setting("reduced_motion", a != "full")
 	for c in row.get_children():
-		(c as Button).set_pressed_no_signal(c.name == "Look_" + style)
+		(c as Button).set_pressed_no_signal(c.name == "Anim_" + a)

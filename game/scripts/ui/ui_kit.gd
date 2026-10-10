@@ -51,8 +51,21 @@ static func language() -> String:
 	return l if l != "" else I18n.system_locale()
 
 
+## Settings: "full", "calm" (less movement: the old Reduced motion) or "off" (nothing moves but the
+## notes and the hit feedback, for the smoothest play on any phone).
+static func animations() -> String:
+	var a := str(Profile.get_setting("animations"))
+	if a == "full" and bool(Profile.get_setting("reduced_motion")):
+		return "calm"
+	return a
+
+
 static func reduced_motion() -> bool:
-	return bool(Profile.get_setting("reduced_motion"))
+	return animations() != "full"
+
+
+static func animations_off() -> bool:
+	return animations() == "off"
 
 
 static func first_screen() -> String:
@@ -60,6 +73,8 @@ static func first_screen() -> String:
 		return "language"
 	if not Profile.has_flag("headphones_seen"):
 		return "headphones"
+	if not Profile.has_flag("calibrated"):
+		return "calibration"
 	return "title"
 
 
@@ -169,6 +184,65 @@ static func header(box: Container, title: String, on_back: Callable) -> HBoxCont
 	row.add_child(l)
 	box.add_child(row)
 	return row
+
+
+## Browser-style tabs in one row: the chosen tab is lit and open at the bottom onto the page below,
+## the others sit back, darker and lower, on a gold rule. `items` are [id, label] pairs; `on_pick`
+## gets the id. Each tab is a toggle Button named "Tab_<id>".
+static func tabs(box: Container, items: Array, selected: String, on_pick: Callable) -> HBoxContainer:
+	var row := HBoxContainer.new()
+	row.name = "Tabs"
+	row.add_theme_constant_override("separation", 0)
+	for it in items:
+		var id: String = it[0]
+		var b := Button.new()
+		b.text = it[1]
+		b.name = "Tab_" + id
+		b.toggle_mode = true
+		b.focus_mode = Control.FOCUS_NONE
+		b.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		b.size_flags_vertical = Control.SIZE_SHRINK_END
+		b.custom_minimum_size = Vector2(0, TOUCH)
+		b.clip_text = true
+		b.pressed.connect(func() -> void:
+			Sound.ui("tap")
+			on_pick.call(id))
+		juice(b)
+		row.add_child(b)
+	box.add_child(row)
+	select_tab(row, selected)
+	return row
+
+
+## Lights the tab `id` in a `tabs()` row.
+static func select_tab(row: HBoxContainer, id: String) -> void:
+	var kids := row.get_children()
+	for i in kids.size():
+		var b: Button = kids[i]
+		var on := b.name == "Tab_" + id
+		# Neighbours share one divider: a tab draws its left edge only when first or lit, its right
+		# edge unless the next tab is the lit one.
+		var next_on := i + 1 < kids.size() and kids[i + 1].name == "Tab_" + id
+		b.set_pressed_no_signal(on)
+		var sb := StyleBoxFlat.new()
+		sb.bg_color = PixelPalette.NAVY[3] if on else PixelPalette.NAVY[1]
+		sb.border_color = PixelPalette.GOLD[4] if on else PixelPalette.GOLD[3]
+		sb.border_width_left = 6 if on or i == 0 else 0
+		sb.border_width_right = 0 if next_on else 6
+		sb.border_width_top = 6
+		sb.border_width_bottom = 0 if on else 6
+		sb.content_margin_left = 10
+		sb.content_margin_right = 10
+		sb.content_margin_top = 8
+		sb.content_margin_bottom = 8
+		sb.anti_aliasing = false
+		for st in ["normal", "hover", "pressed", "hover_pressed", "disabled", "focus"]:
+			b.add_theme_stylebox_override(st, sb)
+		var ink: Color = PixelPalette.BONE[4] if on else PixelPalette.BONE[1]
+		for c in ["font_color", "font_hover_color", "font_pressed_color", "font_hover_pressed_color", "font_focus_color"]:
+			b.add_theme_color_override(c, ink)
+		# The open tab stands a little taller than the ones behind it.
+		b.custom_minimum_size.y = TOUCH + 12 if on else TOUCH
 
 
 static func button(text: String, on_press: Callable, variation := "") -> Button:
@@ -345,17 +419,29 @@ static func apply_volumes() -> void:
 static func show_look(scene) -> void:
 	var look: Dictionary = Profile.get_look()
 	scene.set_look(look.get("mask", MaskSpec.default()), str(look.get("fleece", "black")), str(look.get("straps", "natural")))
+	if "bell_set" in scene:
+		scene.bell_set = BellSets.STANDARD
 
 
-## Best bells over every difficulty of a song.
-static func best_bells(song_id: String) -> int:
+## Best grade rank over every difficulty of a song (-1: never played).
+static func best_grade(song_id: String) -> int:
+	return Progression.best_grade(song_id)
+
+
+## Whether any difficulty of a song was played with a full combo.
+static func any_full_combo(song_id: String) -> bool:
 	var song := SongLibrary.get_song(song_id)
 	if song == null:
-		return 0
-	var out := 0
+		return false
 	for d in song.difficulties():
-		out = maxi(out, int(Profile.best(song_id, d).get("bells", 0)))
-	return out
+		if bool(Profile.best(song_id, d).get("full_combo", false)):
+			return true
+	return false
+
+
+## A saved best's grade rank (-1 when there is none).
+static func grade_of(best: Dictionary) -> int:
+	return Progression.entry_grade(best) if not best.is_empty() else -1
 
 
 ## Bests and ghosts are kept per track: the remix is its own.
@@ -378,7 +464,8 @@ static func goal_line(g: Dictionary) -> String:
 	if need.has("song_id"):
 		var where := song_title(SongLibrary.get_song(str(need.song_id)))
 		if need.has("difficulty"):
-			return tr_("goal_hard") % [what, int(need.get("bells", 2)), where, int(have.get("bells", 0))]
+			var have_g := int(have.get("grade", -1))
+			return tr_("goal_hard") % [what, Session.grade_name(int(need.get("grade", Session.RANK_B))), where, Session.grade_name(have_g) if have_g >= 0 else "-"]
 		return tr_("goal_song") % [what, where]
 	if need.has("points"):
 		if int(have.get("stop", 1)) < int(need.get("stop", 1)):
@@ -397,8 +484,6 @@ static func unlock_name(u: Dictionary) -> String:
 			return song_title(SongLibrary.get_song(id))
 		"remix":
 			return tr_("name_remix") % song_title(SongLibrary.get_song(id))
-		"bell_set":
-			return tr_("name_bells") % BellSets.name(id, I18n.locale())
 		"mask":
 			return mask_option_name(str(u.get("part", "")), id)
 	return id
@@ -419,45 +504,9 @@ static func unlock_text(u: Dictionary) -> String:
 			return tr_("unlock_song") % unlock_name(u)
 		"remix":
 			return tr_("unlock_remix") % unlock_name(u)
-		"bell_set":
-			return tr_("unlock_bells") % unlock_name(u)
 		"mask":
 			return tr_("unlock_mask") % unlock_name(u)
 	return unlock_name(u)
-
-
-## The bell sets as a row of toggles (locked ones say where they unlock); picking one saves it.
-static func bell_set_picker(box: Container) -> HBoxContainer:
-	box.add_child(label(tr_("bells_title"), SUB))
-	var row := HBoxContainer.new()
-	row.add_theme_constant_override("separation", 10)
-	row.name = "BellSets"
-	box.add_child(row)
-	var current := str(Profile.get_look().get("bell_set", "light"))
-	var buttons: Array[Button] = []
-	for id in BellSets.ids():
-		var open := Progression.bell_set_unlocked(id)
-		var b := Button.new()
-		b.text = "%s\n×%s" % [BellSets.name(id, I18n.locale()), str(BellSets.weight(id))]
-		b.toggle_mode = true
-		b.disabled = not open
-		b.custom_minimum_size = Vector2(TOUCH, TOUCH * 1.2)
-		b.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-		b.focus_mode = Control.FOCUS_NONE
-		b.set_pressed_no_signal(id == current)
-		b.name = "Set_" + id
-		buttons.append(b)
-		row.add_child(b)
-	for b in buttons:
-		var id := b.name.substr(4)
-		b.pressed.connect(func() -> void:
-			Profile.set_look("bell_set", id)
-			Sound.bell(id, true, "perfect")
-			for o in buttons:
-				o.set_pressed_no_signal(o == b))
-	var note := label(tr_("bells_note"), CAPTION)
-	box.add_child(note)
-	return row
 
 
 ## A dark veil over a scene so text on top reads.

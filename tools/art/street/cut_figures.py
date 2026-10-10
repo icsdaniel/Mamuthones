@@ -4,7 +4,7 @@ with a soft alpha edge, and copies the empty street picture in as the play scree
     python3 tools/art/street/cut_figures.py <folder with the reference pictures>
 
 Background removal: pixels close to the picture's own backdrop colour that connect to the picture's
-border become transparent; the edge is feathered by a pixel. Writes game/art/street/*.png.
+border become transparent; the edge is feathered by a pixel. Writes tools/art/sources/street/*.png.
 """
 import sys, os
 import numpy as np
@@ -13,7 +13,7 @@ from scipy import ndimage
 import cv2
 
 SRC = sys.argv[1] if len(sys.argv) > 1 and not sys.argv[1].startswith("--") else "/mnt/project-files/mockups/lowpoly"
-OUT = os.path.join(os.path.dirname(__file__), "../../../game/art/street")
+OUT = os.path.join(os.path.dirname(__file__), "../sources/street")   # sources for tools/art/pixel3d, not shipped
 
 # name: (source, crop box l, t, r, b, tolerance)
 CUTS = {
@@ -84,7 +84,7 @@ def feet_x(img):
 # camera, feet in the same spot, on a plain backdrop, in the order standing, the drop on the beat,
 # halfway back up. To replace a figure's pictures, save a new sheet over <figure>_bob_sheet.png in
 # the reference folder and run this script with --bob: it finds the three poses by itself, cuts
-# them out, lines their feet up on one canvas and writes game/art/street/<figure>_bob_0/1/2.png
+# them out, lines their feet up on one canvas and writes tools/art/sources/street/<figure>_bob_0/1/2.png
 # (0 rest, 1 drop, 2 halfway). The game's timing is in StreetBackdrop and doesn't change.
 #
 # REST picks which of the sheet's poses the figure stands in between beats. The Issohadore's sheet

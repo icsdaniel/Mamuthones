@@ -1,5 +1,5 @@
 extends TestCase
-## Profile (save, load, versioning, corruption), Leaderboards, Progression, Daily and Ghost.
+## Profile (save, load, versioning, corruption), Leaderboards, Progression and Ghost.
 
 const ProfileScript := preload("res://scripts/core/profile.gd")
 const LeaderboardsScript := preload("res://scripts/core/leaderboards.gd")
@@ -28,7 +28,7 @@ func _boards() -> Node:
 # Plays a chart with autoplay (perfect) or with only the first `hits` notes hit.
 func _play(song_id: String, diff: String, opts := {}, hits := -1) -> Session:
 	var song := SongLibrary.get_song(song_id)
-	var s := Session.new(song, diff, "light", opts)
+	var s := Session.new(song, diff, opts)
 	var ap := Autoplay.new(s)
 	var t := -1.0
 	while not s.is_over(t):
@@ -52,10 +52,8 @@ func test_profile_save_load_roundtrip() -> void:
 	p.set_flag("tutorial_done")
 	p.set_look("fleece", "dark_brown")
 	p.set_look("fleece", "neon_pink")     # not a real fleece: refused
-	p.set_look("bell_set", "village")
+	p.set_look("bell_set", "village")    # bell sets are gone: refused
 	p.set_calibration({"mode": "gyro", "threshold": 180.0, "axis": 0, "up_sign": 1, "reliable": true})
-	p.set_piazza_players(["Anna", "  Bachisio ", "Anna", "", "C", "D", "E", "F", "G"])
-	p.record_piazza("Anna", 1200)
 	check(p.save(), "saved")
 	p.free()
 	var q := _fresh_profile()
@@ -67,10 +65,8 @@ func test_profile_save_load_roundtrip() -> void:
 	check(q.has_flag("tutorial_done") and q.has_flag("calibrated"), "flags kept (calibration sets calibrated)")
 	check(not q.has_flag("latency_tested"), "unset flag")
 	check_eq(q.get_look().fleece, "dark_brown", "look kept")
-	check_eq(q.get_look().bell_set, "village", "bell set kept")
+	check(not q.get_look().has("bell_set"), "no bell set in the look")
 	check_eq(q.calibration().get("threshold"), 180.0, "calibration kept")
-	check_eq(q.piazza_players(), ["Anna", "Bachisio", "C", "D", "E", "F"] as Array[String], "players trimmed, unique, at most 6")
-	check_eq(q.piazza_best("Anna"), 1200, "piazza best kept")
 	q.free()
 	_clean()
 
@@ -147,40 +143,39 @@ func test_progression_unlock_order() -> void:
 	p.leaderboards = lb
 	check_eq(Progression.story_order(), ["s1", "s2", "s3", "s4", "s5", "s6", "s7"] as Array[String], "story order by stop")
 	check(Progression.is_unlocked("s1", p), "stop 1 open")
-	# The tutorial (s1, the Workshop) is optional: stop 2 and the Piazza are open from the start.
-	check(Progression.is_unlocked("s2", p), "stop 2 open without the tutorial")
-	check(Progression.is_unlocked("pz", p), "piazza open without the tutorial")
-	check(Progression.bell_set_unlocked("light", p), "light from the start")
-	check(not Progression.bell_set_unlocked("village", p), "village locked")
+	# Every stop is open from the start; the story still starts at stop 2 (the tutorial is optional).
+	for id in Progression.story_order():
+		check(Progression.is_unlocked(id, p), "%s open from the start" % id)
+	check_eq(Progression.highest_stop(p), 2, "the story is at stop 2")
 	check_eq(Progression.next_stop(p), "s2", "next stop skips the optional tutorial")
 	var goals: Array = Progression.next_goals(p)
-	check(not goals.is_empty() and goals[0].kind == "song" and goals[0].id == "s3", "first goal: finish s2 to open s3")
+	check(not goals.any(func(g): return g.kind == "bell_set"), "no bell set goals (%s)" % [goals])
 	# A failed run unlocks nothing.
 	var bad := _play("s1", "easy", {}, 3)
-	check_eq(bad.bells(), 0, "3 hits of 19 is no bell")
+	check(bad.grade_rank() < Progression.CLEAR_GRADE, "3 hits of 19 is below a D (%s)" % bad.grade())
 	var r0: Dictionary = p.record_result(bad)
 	check(r0.unlocked.is_empty(), "nothing unlocked")
-	check(not Progression.is_unlocked("s3", p), "s3 still locked")
-	# Finishing s1 opens nothing new: s2 and the Piazza were already open.
+	check_eq(Progression.highest_stop(p), 2, "the story has not moved")
+	# Finishing s1 opens nothing new: s2 was already open.
 	var r1: Dictionary = p.record_result(_play("s1", "easy"))
 	check(r1.new_best, "new best")
 	check_eq(r1.prev_best, bad.score, "previous best reported")
 	var kinds: Array = r1.unlocked.map(func(u): return "%s:%s" % [u.kind, u.id])
-	check(not "song:s2" in kinds and not "song:pz" in kinds, "s2 and the piazza were open already (%s)" % [kinds])
-	check_eq(r1.carving_gained, 3, "three bells, three carving points")
+	check(not "song:s2" in kinds, "s2 was open already (%s)" % [kinds])
+	check_eq(r1.grade, Session.RANK_SPLUS, "a perfect run is graded S+")
+	check_eq(r1.carving_gained, 3, "an S+ gives three carving points")
+	check_eq(p.best("s1", "easy").get("full_combo"), true, "the full combo is kept with the best")
 	check_eq(Progression.carving_points(p), 3, "carving points")
-	check(not Progression.is_unlocked("s3", p), "s3 still locked")
+	check_eq(Progression.highest_stop(p), 2, "the optional tutorial does not move the story past stop 2")
 	# Clearing in order.
 	var r2: Dictionary = p.record_result(_play("s2", "easy"))
-	check(r2.unlocked.any(func(u): return u.kind == "bell_set" and u.id == "village"), "village unlocks when stop 3 is reached")
-	check(Progression.bell_set_unlocked("village", p), "village open")
+	check(not r2.unlocked.any(func(u): return u.kind == "bell_set"), "no bell sets to unlock")
 	check(not Progression.remix_unlocked("s2", p), "no remix from easy")
 	var r3: Dictionary = p.record_result(_play("s2", "hard"))
-	check(r3.unlocked.any(func(u): return u.kind == "remix" and u.id == "s2_remix"), "remix unlocks at hard with 2+ bells")
+	check(r3.unlocked.any(func(u): return u.kind == "remix" and u.id == "s2_remix"), "remix unlocks at hard with a B or better")
 	check(Progression.is_unlocked("s2_remix", p), "remix id is playable")
 	for id in ["s3", "s4", "s5"]:
 		p.record_result(_play(id, "medium"))
-	check(Progression.bell_set_unlocked("full", p), "full load at stop 6")
 	check_eq(Progression.highest_stop(p), 6, "at stop 6")
 	check_eq(Progression.next_stop(p), "s6", "next stop is s6")
 	# Remix bests are their own.
@@ -191,7 +186,7 @@ func test_progression_unlock_order() -> void:
 	# Practice runs do not count.
 	var before: Dictionary = p.all_bests().duplicate(true)
 	p.record_result(_play("s6", "easy", {"from_beat": 0, "to_beat": 8}))
-	check(not Progression.is_unlocked("s7", p), "a lesson does not clear a stop")
+	check(not Progression.cleared("s6", p), "a lesson does not clear a stop")
 	check_eq(p.all_bests().size(), before.size(), "practice does not add bests")
 	# Mask options follow Art's MaskSpec when present.
 	var spec = Progression._spec()
@@ -215,7 +210,7 @@ func test_progression_unlock_order() -> void:
 	_clean()
 
 
-func test_slam_and_daily_results() -> void:
+func test_slam_results() -> void:
 	_clean()
 	SongLibrary.use_directory(STORY)
 	var p := _fresh_profile()
@@ -227,71 +222,10 @@ func test_slam_and_daily_results() -> void:
 	check_eq(p.best("s1", "easy").get("slam"), true, "and are marked")
 	check(Progression.is_unlocked("s2", p), "slam runs still unlock (accessibility)")
 	check_eq(lb.best(lb.board_id("s1", "easy")), 0, "slam runs stay off the global ladder")
-	var today := {"year": 2026, "month": 9, "day": 26}
-	var d := Daily.for_date(today)
-	var ds := _play(d.song_id, d.difficulty, Daily.session_options(today))
-	p.record_result(ds)
-	check_eq(p.daily_best("2026-09-26", d.difficulty).get("score"), ds.score, "daily best kept by date and difficulty")
-	check_eq(p.daily_best("2026-09-26").get("score"), ds.score, "and as the day's best")
-	# The date is passed explicitly: the test must not depend on the day it runs.
-	check_eq(lb.best(Daily.board_id(today, d.difficulty)), ds.score, "daily ladder gets it")
 	p.free()
 	lb.free()
 	SongLibrary.reset()
 	_clean()
-
-
-func test_daily_determinism() -> void:
-	SongLibrary.use_directory(STORY)
-	var a := Daily.for_date({"year": 2026, "month": 2, "day": 17})
-	SongLibrary.use_directory(STORY)     # reload from disk
-	var b := Daily.for_date({"year": 2026, "month": 2, "day": 17})
-	check_eq(a, b, "same date, same procession")
-	check_eq(a.key, "2026-02-17", "date key")
-	check(a.song_id in ["s2", "s3", "s4", "s5", "s6", "s7"], "a story song, not the tutorial (%s)" % a.song_id)
-	var songs := {}
-	var mirrors := {}
-	var prev := ""
-	var repeats := 0
-	var date := {"year": 2026, "month": 1, "day": 1}
-	for i in 120:
-		var d := Daily.for_date(date)
-		songs[d.song_id] = true
-		mirrors[d.mirror] = true
-		check_eq(d.difficulties, ["easy", "medium", "hard", "expert"] as Array[String], "the player picks any level")
-		check_eq(d.difficulty, Daily.DEFAULT_DIFFICULTY, "the screen starts on the same level every day")
-		if d.song_id == prev:
-			repeats += 1
-		prev = d.song_id
-		date = _next_day(date)
-	check_eq(songs.size(), 6, "every story song comes up")
-	check_eq(mirrors.size(), 2, "mirrored and not")
-	check_eq(repeats, 0, "never the same song two days running")
-	SongLibrary.reset()
-
-
-static func _next_day(date: Dictionary) -> Dictionary:
-	var unix := Time.get_unix_time_from_datetime_dict({"year": date.year, "month": date.month, "day": date.day, "hour": 12})
-	return Time.get_date_dict_from_unix_time(unix + 86400)
-
-
-func test_daily_hash_is_pinned() -> void:
-	# Pinned values: if these change, players on different versions would get different dailies.
-	check_eq(Daily._fnv(""), _expected_fnv(""), "empty")
-	check_eq(Daily._fnv("2026-09-26"), _expected_fnv("2026-09-26"), "a date")
-
-
-# Independent reimplementation of the hash, to pin it.
-func _expected_fnv(text: String) -> int:
-	var h := 0x811c9dc5
-	for c in text.to_utf8_buffer():
-		h = ((h ^ c) * 0x01000193) % 4294967296
-	h ^= h >> 16
-	h = (h * 2146121005) % 4294967296
-	h ^= h >> 15
-	h = (h * 2221713035) % 4294967296
-	h ^= h >> 16
-	return h
 
 
 func test_ghost() -> void:
@@ -373,12 +307,21 @@ class FakeBackend:
 		shown.append(id)
 
 
+func test_grades_from_old_saves_and_thresholds() -> void:
+	check_eq(Progression.entry_grade({"bells": 2, "accuracy": 0.86}), Session.RANK_B, "an old best gets the grade its accuracy earns")
+	check_eq(Progression.entry_grade({"accuracy": 0.99}), Session.RANK_SPLUS, "an old 99 % best is S+")
+	check_eq(Progression.entry_grade({"grade": 7}), Session.RANK_SPLUS, "a saved grade is kept")
+	check_eq(Progression.entry_grade({}), 0, "nothing saved is F")
+	check_eq(Progression.CLEAR_GRADE, Session.GRADES.find("D"), "a D clears a stop")
+	check_eq(Progression.REMIX_GRADE, Session.GRADES.find("B"), "a B at Hard opens the remix")
+	check_eq(Progression.GRADE_POINTS.size(), Session.GRADES.size(), "carving points for every grade")
+
+
 func test_song_library() -> void:
 	SongLibrary.use_directory(STORY)
-	check_eq(SongLibrary.all().size(), 8, "7 stops and a piazza track")
+	check_eq(SongLibrary.all().size(), 7, "7 stops")
 	check_eq(SongLibrary.story().size(), 7, "story includes the tutorial")
 	check_eq(SongLibrary.story()[0].kind, "tutorial", "the workshop first")
-	check_eq(SongLibrary.piazza().size(), 1, "one piazza track")
 	check_eq(SongLibrary.get_song("s3_remix"), SongLibrary.get_song("s3"), "remix id gives the base song")
 	check(SongLibrary.is_remix_id("s3_remix") and not SongLibrary.is_remix_id("s3"), "is_remix_id")
 	check_eq(SongLibrary.get_song("nope"), null, "unknown id")
@@ -504,7 +447,6 @@ func test_profile_fuzz() -> void:
 	p.leaderboards = _boards()
 	p.set_setting("note_speed", 1.25)
 	p.set_flag("tutorial_done")
-	p.set_piazza_players(["Anna", "Bachisio"])
 	p.record_result(_play("s2", "easy"))
 	p.save()
 	var good: PackedByteArray = FileAccess.get_file_as_bytes(P)
@@ -535,7 +477,7 @@ func test_profile_fuzz() -> void:
 		var q := _fresh_profile()
 		statuses[q.load_status] = statuses.get(q.load_status, 0) + 1
 		if q.load_status == "ok":
-			check(q.get_setting("note_speed") == 1.25 and q.has_flag("tutorial_done") and q.piazza_players().size() == 2 and not q.best("s2", "easy").is_empty(), "fuzz %d: a trusted file reads back exactly" % i)
+			check(q.get_setting("note_speed") == 1.25 and q.has_flag("tutorial_done") and not q.best("s2", "easy").is_empty(), "fuzz %d: a trusted file reads back exactly" % i)
 		else:
 			check(q.load_status in ["corrupt", "new"], "fuzz %d: otherwise a fresh profile (%s)" % [i, q.load_status])
 			check_eq(q.get_setting("note_speed"), 1.0, "fuzz %d: fresh defaults" % i)
@@ -553,97 +495,7 @@ func test_tutorial_flag_clears_the_workshop() -> void:
 	check(not Progression.cleared("s1", p), "the Workshop is not finished yet")
 	p.set_flag("tutorial_done")
 	check(Progression.cleared("s1", p), "finishing the tutorial finishes the Workshop")
-	check(Progression.is_unlocked("pz", p), "the Piazza stays open")
 	p.free()
 	SongLibrary.reset()
 	_clean()
 
-
-func test_daily_boards_and_checks() -> void:
-	_clean()
-	SongLibrary.use_directory(STORY)
-	var day := {"year": 2026, "month": 9, "day": 26}
-	check_eq(Daily.board_id(day, "hard"), "daily.2026-09-26.hard", "a board per day and difficulty")
-	check_eq(Daily.board_for("2026-09-26", "easy"), "daily.2026-09-26.easy", "from a date key")
-	var d := Daily.for_date(day)
-	for diff in ["easy", "medium", "hard", "expert"]:
-		var right := Session.new(SongLibrary.get_song(d.song_id), diff, "light", Daily.session_options(day))
-		check(Daily.matches(right), "the day's procession matches at %s (the player picks)" % diff)
-	var flipped := Session.new(SongLibrary.get_song(d.song_id), "hard", "light", {"daily": "2026-09-26", "mirror": not d.mirror})
-	check(not Daily.matches(flipped), "the wrong mirroring does not")
-	var other_song := "s2" if d.song_id != "s2" else "s3"
-	var wrong_song := Session.new(SongLibrary.get_song(other_song), "hard", "light", Daily.session_options(day))
-	check(not Daily.matches(wrong_song), "another song does not")
-	var p := _fresh_profile()
-	var lb := _boards()
-	p.leaderboards = lb
-	var fake := _play(d.song_id, "easy", {"daily": "2026-09-26", "mirror": not d.mirror})
-	p.record_result(fake)
-	check(p.daily_best("2026-09-26").is_empty(), "a run that is not the day's procession is not a daily")
-	check_eq(lb.best("daily.2026-09-26.easy"), 0, "and not on the daily ladder")
-	var easy := _play(d.song_id, "easy", Daily.session_options(day))
-	p.record_result(easy)
-	var hard := _play(d.song_id, "hard", Daily.session_options(day))
-	p.record_result(hard)
-	check_eq(lb.best("daily.2026-09-26.easy"), easy.score, "one ladder per difficulty: easy")
-	check_eq(lb.best("daily.2026-09-26.hard"), hard.score, "and hard")
-	check_eq(p.daily_best("2026-09-26", "easy").get("score"), easy.score, "profile keeps each difficulty")
-	check_eq(p.daily_best("2026-09-26", "hard").get("score"), hard.score, "separately")
-	check_eq(p.daily_best("2026-09-26").get("score"), maxi(easy.score, hard.score), "the day's best over all")
-	check(p.daily_best("2026-09-26", "expert").is_empty(), "nothing at a level not played")
-	# Local daily ladders keep the last 14 dates (every difficulty); online one board per difficulty.
-	for i in 20:
-		lb.submit("daily.2026-08-%02d.easy" % (i + 1), 100 + i)
-		lb.submit("daily.2026-08-%02d.hard" % (i + 1), 100 + i)
-	var dates := {}
-	for k in lb._boards.keys():
-		if str(k).begins_with("daily."):
-			dates[str(k).split(".")[1]] = true
-	check_eq(dates.size(), 14, "14 dates kept")
-	check(not lb._boards.has("daily.2026-08-01.easy"), "oldest dates dropped")
-	check(lb._boards.has("daily.2026-09-26.easy") and lb._boards.has("daily.2026-09-26.hard"), "the newest kept at every level")
-	check_eq(lb.platform_id("daily.2026-09-26.hard"), "daily_hard", "one recurring board per difficulty online")
-	check_eq(lb.platform_id("song.fires.hard"), "song.fires.hard", "song boards keep their id")
-	p.free()
-	lb.free()
-	SongLibrary.reset()
-	_clean()
-
-
-func test_daily_old_profile_entry() -> void:
-	# Profiles saved before per-difficulty dailies keep one entry under the bare date.
-	_clean()
-	var cfg := ConfigFile.new()
-	cfg.set_value("meta", "version", ProfileScript.VERSION)
-	cfg.set_value("daily", "values", {"2026-09-20": {"score": 5000, "song_id": "s2", "difficulty": "hard", "bells": 2}})
-	ProfileScript.write_sealed(cfg, P)
-	var p := _fresh_profile()
-	check_eq(p.daily_best("2026-09-20", "hard").get("score"), 5000, "found at its difficulty")
-	check(p.daily_best("2026-09-20", "easy").is_empty(), "not at another")
-	check_eq(p.daily_best("2026-09-20").get("score"), 5000, "and as the day's best")
-	p.free()
-	_clean()
-
-
-func test_daily_hides_songs_past_progress() -> void:
-	_clean()
-	SongLibrary.use_directory(STORY)
-	var p := _fresh_profile()
-	# The first day (from 1 Jan 2026) each song comes up.
-	var date := {"year": 2026, "month": 1, "day": 1}
-	var days := {}
-	for i in 60:
-		var id: String = Daily.for_date(date).song_id
-		if not days.has(id):
-			days[id] = date
-		date = _next_day(date)
-	check(days.has("s2") and days.has("s5"), "both come up within 60 days")
-	check(not Daily.is_hidden(days.s2, p), "a new player: s2 is open (the tutorial is optional), so it shows")
-	check(Daily.is_hidden(days.s5, p), "s5 is past their progress, hidden")
-	p.record_result(_play("s2", "easy"))
-	check(Daily.is_hidden(days.s5, p), "after clearing s2, s5 is still hidden")
-	check_eq(Daily.is_hidden_song("s5", p), true, "by song id too")
-	check(not Daily.is_hidden_song("", p), "no song, nothing to hide")
-	p.free()
-	SongLibrary.reset()
-	_clean()

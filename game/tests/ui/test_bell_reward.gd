@@ -12,7 +12,7 @@ func _first(s: Session, kind: Note.Kind) -> Note:
 
 func test_on_time_bells_strike_and_chain() -> void:
 	UIHarness.fresh_profile()
-	var app := UIHarness.make_app(tree, "play", {"song_id": "fires", "difficulty": "hard", "bell_set": "light"})
+	var app := UIHarness.make_app(tree, "play", {"song_id": "fires", "difficulty": "hard"})
 	await UIHarness.frames(tree, 3)
 	var play := app.current()
 	var lanes: LaneView = play.get("lanes")
@@ -35,7 +35,7 @@ func test_on_time_bells_strike_and_chain() -> void:
 
 func test_on_time_steps_light_their_lane() -> void:
 	UIHarness.fresh_profile()
-	var app := UIHarness.make_app(tree, "play", {"song_id": "fires", "difficulty": "hard", "bell_set": "light"})
+	var app := UIHarness.make_app(tree, "play", {"song_id": "fires", "difficulty": "hard"})
 	await UIHarness.frames(tree, 3)
 	var play := app.current()
 	var s: Session = play.get("session")

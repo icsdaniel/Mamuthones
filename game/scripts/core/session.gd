@@ -7,15 +7,14 @@ extends RefCounted
 ## and stand-stills). Inputs carry their own time stamps, so they may arrive a little after the fact.
 ##
 ## Options: slam (the bell from the buttons: see _slam_bell; full rings judged on their step alone;
-## no tilt allowance), piazza (bells only, ±200 ms),
-## remix (remix offset), mirror (lanes 0<->2), from_beat/to_beat (only notes in
-## [from, to), for tutorial lessons and practice), daily ("YYYY-MM-DD", recorded on the daily ladder).
+## no tilt allowance), remix (remix offset), mirror (lanes 0<->2), from_beat/to_beat (only notes in
+## [from, to), for tutorial lessons and practice).
 ##
 ## Additions beyond the architecture doc: tap() returns a result Dictionary; ring() takes an
 ## optional `tilt` flag and `strength` (0-1) and returns extra keys (judgement, offset, side,
 ## strength, note); running_accuracy(),
 ## mean_offset(), median_offset(), hit_offsets, score_breakdown(), end_time(), progress(t),
-## song_key(), ladder_ok(), passed(), upcoming_bell(t), window(kind), stats keys listed in _init,
+## song_key(), ladder_ok(), grade(), grade_rank(), full_combo(), passed(), window(kind), stats keys listed in _init,
 ## Note.side ("early"/"late"/"" for every judged hit, so a Perfect can still say which side it was).
 ## Signals wrong_step(lane, note, offset) (the pressed lane of a wrong step) and still_kept(note,
 ## points) and stomp_landed(note, judgement, offset, both); stats unison_peak (the highest multiplier
@@ -29,14 +28,17 @@ extends RefCounted
 ## (a stomp played with one thumb is a weaker hit, not a miss); wrong-lane steps and rings in a
 ## stand-still cost none. Healing steps (Note.heal, picked at the start from on-beat steps, about one
 ## every HEAL_EVERY[difficulty] seconds) restore HEAL when hit at Ok or better. At 0 `failed` fires
-## once; the rules keep judging, the play screen ends the run. Off (health_on false) in the Piazza,
+## once; the rules keep judging, the play screen ends the run. Off (health_on false) in
 ## lessons and practice (from_beat/to_beat) and with options.health = false (autoplay demos).
 ##
 ## Stray taps: a step button pressed with no note of any lane due (outside every window) and none of
 ## its own lane within WRONG_REACH breaks the combo like a wrong step (combo and streak to 0, unison down STRAY_DROP), with no health cost. Taps
-## before the first note's window, after the last note, in the Piazza, on slam's bell buttons and a
+## before the first note's window, after the last note, on slam's bell buttons and a
 ## late second thumb just after a stomp stay free. Mashing: LOCK_TAPS stray or wrong taps within
-## LOCK_SPAN lock the step buttons for LOCK_TIME; taps while locked judge nothing (judgement "locked").
+## LOCK_SPAN lock the step buttons for LOCK_TIME, but only while the player is pressing more often
+## than the chart asks (from the first of those taps, more presses than lane notes due, plus
+## LOCK_SPARE): a player who falls behind in a dense passage and taps late, once per note, is
+## struggling, not mashing, and is never locked. Taps while locked judge nothing (judgement "locked").
 ##
 ## Matching uses note-lock: an input goes to the EARLIEST open note whose window contains it, so a
 ## late player in a fast stream reads as late instead of drifting onto the next note.
@@ -45,6 +47,8 @@ signal judged(note: Note, judgement: String, offset: float)
 signal unison_changed(level: int)
 signal hold_started(lane: int)
 signal hold_ended(lane: int, kept: bool)
+## A note was played on time (Perfect or Good) while `hold` was being held: hold and play.
+signal played_under(hold: Note, note: Note)
 ## A tap on `lane` counted as a wrong step against `note` (another lane's note); judged also fires
 ## for that note. The UI marks the pressed button with this.
 signal wrong_step(lane: int, note: Note, offset: float)
@@ -62,12 +66,12 @@ signal health_changed(health: int, delta: int)
 ## Health ran out (fires once).
 signal failed()
 
-# Timing windows for the Light set, in seconds (half-widths).
-const PERFECT := 0.045
-const GOOD := 0.090
-const OK := 0.140
+# Timing windows in seconds (half-widths). One standard for everyone: the old Village bells' timing
+# (Daniele, 2026-10-09, when the bell sets and their score multipliers were removed).
+const PERFECT := 0.0405
+const GOOD := 0.081
+const OK := 0.126
 const TILT_EXTRA := 0.015    ## tilts: +15 ms on every window (sensors are looser than touch)
-const PIAZZA_OK := 0.200     ## Piazza: all windows stretched so the outer one is ±200 ms
 const POINTS := {"perfect": 300, "good": 150, "early": 50, "late": 50}
 const RING_POINTS := {"perfect": 450, "good": 225, "early": 75, "late": 75}
 const STOMP_POINTS := {"perfect": 450, "good": 225, "early": 75, "late": 75}
@@ -75,10 +79,13 @@ const STOMP_POINTS := {"perfect": 450, "good": 225, "early": 75, "late": 75}
 ## "together" spread over 20-60 ms; 80 ms keeps a deliberate double tap (about 150 ms) apart.
 const STOMP_GAP := 0.080
 const HOLD_BONUS := 150
+## Hold and play: each note played on time while a hold is held adds this to the hold's bonus
+## (scaled like it), paid when the hold is kept to its end.
+const TIE_BONUS := 50
 const END_PAD := 2.0        ## a whole song ends this many seconds after its last note (not at the end of the audio)
 const HOLD_GRACE := 0.120    ## a hold released up to 120 ms before its end still counts as kept
 const STILL_PENALTY := 100
-## A stand-still kept to its end: STILL_BONUS × beats × unison × weight. 800 puts stillness at about
+## A stand-still kept to its end: STILL_BONUS × beats × unison. 800 puts stillness at about
 ## 10 % of a perfect run's score on a typical story song at Hard (measured by test_charts).
 const STILL_BONUS := 800
 const STILL_HITS := 2        ## and 2 hits per beat toward the next unison level...
@@ -96,7 +103,8 @@ const STRAY_DROP := 1        ## a stray tap (no note due anywhere)
 const STOMP_FOLLOW := 0.200  ## a tap this soon after a stomp on its lane is a late thumb, not stray
 const LOCK_TAPS := 3         ## this many stray or wrong taps...
 const LOCK_SPAN := 0.75      ## ...within this many seconds...
-const LOCK_TIME := 0.6       ## ...lock the step buttons this long
+const LOCK_TIME := 0.6       ## ...lock the step buttons this long...
+const LOCK_SPARE := 1        ## ...when the presses in the span outnumber its lane notes by more than this
 const SLAM_GAP := 0.080      ## Left and Right pressed within 80 ms of each other = one slam bell
 const MAX_HEALTH := 10
 const HEAL := 2              ## health a healing step restores (at Ok or better)
@@ -107,13 +115,10 @@ const HEAL_DENSITY_SPAN := 4.0   ## a healing step comes right after the busiest
 
 var song: SongData
 var difficulty := ""
-var bell_set := "light"
 var options: Dictionary = {}
 var slam := false
-var piazza := false
 var remix := false
 var mirror := false
-var daily := ""
 var notes: Array[Note] = []
 var health_on := true
 var health := MAX_HEALTH
@@ -137,8 +142,7 @@ var win_touch := Vector3.ZERO   ## (perfect, good, ok) for steps, holds, stomps 
 var win_tilt := Vector3.ZERO    ## same for tilted bells
 
 var _raw := 0.0
-var _breakdown := {"base": 0.0, "unison": 0.0, "weight": 0.0, "holds": 0.0, "stills": 0.0, "penalties": 0.0}
-var _weight := 1.0
+var _breakdown := {"base": 0.0, "unison": 0.0, "holds": 0.0, "stills": 0.0, "penalties": 0.0}
 var _first_open := 0
 var _holds: Dictionary = {}        # touch_id -> Note
 var _ring_windows: Dictionary = {} # note index -> Vector3 used by that ring's bell half
@@ -152,47 +156,31 @@ var _top_since := NAN
 var _top_time := 0.0
 var _locked_until := -INF
 var _bad_taps: Array[float] = []   # times of recent stray and wrong taps, for the mashing lock
+var _presses: Array[float] = []    # times of recent presses (not while locked), for the same
 var _stomp_at: Array[float] = [-INF, -INF, -INF]   # last stomp judged per lane
 var _taps_from := NAN   # the first and last moment a lane note is due (NAN: no lane notes)
 var _taps_to := NAN
 
 
-func _init(p_song: SongData, p_difficulty: String, p_bell_set: String = "light", p_options: Dictionary = {}) -> void:
+func _init(p_song: SongData, p_difficulty: String, p_options: Dictionary = {}) -> void:
 	song = p_song
 	difficulty = p_difficulty
-	bell_set = p_bell_set if BellSets.is_valid(p_bell_set) else "light"
 	options = p_options
 	slam = bool(options.get("slam", false))
-	piazza = bool(options.get("piazza", false))
 	remix = bool(options.get("remix", false)) and song.has_remix()
 	mirror = bool(options.get("mirror", false))
-	daily = str(options.get("daily", ""))
 	var from_beat := float(options.get("from_beat", -INF))
 	var to_beat := float(options.get("to_beat", INF))
-	_weight = BellSets.weight(bell_set)
-	var base := Vector3(PERFECT, GOOD, OK)
-	if piazza:
-		# Loose timing whatever the bell set: the whole body is moving.
-		win_touch = base * (PIAZZA_OK / OK)
-		win_tilt = win_touch
-	else:
-		var scale := BellSets.window_scale(bell_set)
-		win_touch = base * scale
-		# Slam bells are touches, so they get no sensor allowance.
-		win_tilt = win_touch if slam else win_touch + Vector3.ONE * TILT_EXTRA
+	win_touch = Vector3(PERFECT, GOOD, OK)
+	# Slam bells are touches, so they get no sensor allowance.
+	win_tilt = win_touch if slam else win_touch + Vector3.ONE * TILT_EXTRA
 	_max_window = maxf(win_touch.z, win_tilt.z)
 
 	var all := song.notes(difficulty, remix, mirror, from_beat, to_beat)
 	for n in all:
-		if piazza:
-			# Only tilts count: rings become plain bells, taps and stomps are dropped.
-			if n.kind == Note.Kind.RING:
-				n.kind = Note.Kind.BELL
-				n.lane = -1
-			if n.kind != Note.Kind.BELL and n.kind != Note.Kind.REST:
-				continue
 		n.index = notes.size()
 		notes.append(n)
+	_mark_quick()
 
 	stats = {
 		"perfect": 0, "good": 0, "early": 0, "late": 0, "miss": 0, "wrong": 0,
@@ -220,7 +208,7 @@ func _init(p_song: SongData, p_difficulty: String, p_bell_set: String = "light",
 		# A couple of seconds after the last note, not the whole outro: the play screen fades the music.
 		_end_time = maxf(minf(song.length_for(remix), last_end + END_PAD), last_end + 1.0)
 	score_timeline.append(Vector2(notes[0].t - 1.0 if not notes.is_empty() else 0.0, 0.0))
-	health_on = not piazza and not options.has("from_beat") and not options.has("to_beat") and bool(options.get("health", true))
+	health_on = not options.has("from_beat") and not options.has("to_beat") and bool(options.get("health", true))
 	if health_on:
 		_pick_heals()
 
@@ -304,11 +292,9 @@ func unison_mult() -> float:
 	return UNISON_MULTS[unison_level]
 
 
-func weight() -> float:
-	return _weight
-
-
-## (Perfect + 0.7 Good + 0.3 Early/Late) / all judgeable notes of the chart (unplayed count as 0).
+## (Perfect + Good + 0.5 Early/Late) / all judgeable notes of the chart (unplayed count as 0).
+## Good counts in full (Daniele, 2026-10-10: a run of only Perfects and Goods, no Ok and no miss, is
+## an S+; the old 0.7 for Good felt far too punishing). Perfects still score more points.
 func accuracy() -> float:
 	if stats.total == 0:
 		return 0.0
@@ -323,27 +309,72 @@ func running_accuracy() -> float:
 
 
 func _acc_sum() -> float:
-	return stats.perfect + 0.7 * stats.good + 0.3 * (stats.early + stats.late)
+	return stats.perfect + stats.good + OK_ACC * (stats.early + stats.late)
 
 
-## Bell rating 0..3 (≥ 70 %, ≥ 85 %, ≥ 95 %).
-func bells() -> int:
-	return bells_for(accuracy())
+## Letter grades, worst to best. A run's grade comes from its accuracy (GRADE_MIN, the least accuracy
+## for each letter), capped by misses (capped_rank). S+ needs no missed note but may have stray taps
+## or Oks (Daniele, 2026-10-09: reachable without a full combo). A full combo
+## (no miss, wrong step, stray tap, lost hold or bell rung into a stand-still) is its own mark beside
+## the grade. The rank is the index in GRADES (F = 0 .. S+ = 7).
+const GRADES: Array[String] = ["F", "E", "D", "C", "B", "A", "S", "S+"]
+const OK_ACC := 0.5            ## what an Ok (early/late) counts for in accuracy
+const GRADE_MIN: Array[float] = [0.0, 0.60, 0.70, 0.78, 0.85, 0.90, 0.95, 0.98]
+const RANK_D := 2
+const RANK_B := 4
+const RANK_S := 6
+const RANK_SPLUS := 7
 
 
-static func bells_for(acc: float) -> int:
-	if acc >= 0.95 - 1e-9:
-		return 3
-	if acc >= 0.85 - 1e-9:
-		return 2
-	if acc >= 0.70 - 1e-9:
-		return 1
+func grade_rank() -> int:
+	return capped_rank(rank_for(accuracy()), lost_notes())
+
+
+## Notes lost: missed, or lost to a wrong step. A wrong step whose note was still hit after it
+## breaks the combo but loses no note (Daniele, 2026-10-10: two such taps capped a 98.9 % run at A).
+func lost_notes() -> int:
+	var n: int = stats.miss
+	for note in notes:
+		n += 1 if note.judgement == "wrong" else 0
+	return n
+
+
+## Misses cap the grade whatever the accuracy (Daniele, 2026-10-10: an S with 4 misses was too
+## permissive): S+ needs no lost note (see lost_notes), S at most S_MAX_MISSES.
+const S_MAX_MISSES := 2
+
+
+static func capped_rank(rank: int, misses: int) -> int:
+	if misses > S_MAX_MISSES:
+		return mini(rank, RANK_S - 1)
+	if misses > 0:
+		return mini(rank, RANK_S)
+	return rank
+
+
+func grade() -> String:
+	return GRADES[grade_rank()]
+
+
+## Nothing broke the combo over the whole chart (every note played).
+func full_combo() -> bool:
+	return stats.total > 0 and stats.miss == 0 and stats.wrong == 0 and stats.stray == 0 \
+			and stats.let_go == 0 and stats.silence == 0
+
+
+static func rank_for(acc: float) -> int:
+	for r in range(GRADES.size() - 1, 0, -1):
+		if acc >= GRADE_MIN[r] - 1e-9:
+			return r
 	return 0
 
 
-## Where the score came from: base points, extra from unison, extra from weight, hold bonuses,
-## kept stand-still bonuses and stand-still penalties (positive). total = base + unison + weight +
-## holds + stills - penalties; the score shown is max(0, total), rounded.
+static func grade_name(rank: int) -> String:
+	return GRADES[clampi(rank, 0, GRADES.size() - 1)]
+
+
+## Where the score came from: base points, extra from unison, hold bonuses, kept stand-still
+## bonuses and stand-still penalties (positive). total = base + unison + holds + stills - penalties; the score shown is max(0, total), rounded.
 func score_breakdown() -> Dictionary:
 	var d := _breakdown.duplicate()
 	d.total = _raw
@@ -396,7 +427,7 @@ func song_key() -> String:
 
 ## Whether a run of this session may go on the global ladder.
 func ladder_ok() -> bool:
-	return not slam and not piazza and not options.has("from_beat") and not options.has("to_beat")
+	return not slam and not options.has("from_beat") and not options.has("to_beat")
 
 
 ## Half-widths (perfect, good, ok) for "touch" or "tilt".
@@ -420,16 +451,6 @@ func locked_until() -> float:
 	return _locked_until
 
 
-## The next bell (or full ring) still to play at or after t - its window, or null. For the big
-## Piazza cue and the up/down arrow.
-func upcoming_bell(t: float) -> Note:
-	for i in range(_first_open, notes.size()):
-		var n := notes[i]
-		if n.is_bell() and not n.done and n.t + win_tilt.z >= t:
-			return n
-	return null
-
-
 # ---------------------------------------------------------------- input
 
 
@@ -446,13 +467,16 @@ func tap(lane: int, t: float, touch_id: int = 0) -> Dictionary:
 	if is_locked(t):
 		res.judgement = "locked"
 		return res
+	_presses.append(t)
+	while t - _presses[0] > LOCK_SPAN + win_touch.z:
+		_presses.pop_front()
 	# A touch id still holding a note means its release was lost: that hold was let go.
 	if _holds.has(touch_id):
 		var old: Note = _holds[touch_id]
 		_holds.erase(touch_id)
 		if old.holding:
 			_end_hold(old, t, t >= old.end_t - HOLD_GRACE)
-	var n: Note = null if piazza else _find_lane_note(lane, t, touch_id)
+	var n: Note = _find_lane_note(lane, t, touch_id)
 	if n != null and slam and lane != 1 and _bell_nearer(n, t):
 		n = null   # in slam an outer press nearer a due bell is a bell press
 	if n != null:
@@ -490,7 +514,7 @@ func tap(lane: int, t: float, touch_id: int = 0) -> Dictionary:
 				res.offset = n.step_at - n.t
 				res.side = _side(res.offset)
 		res.judgement = n.judgement
-	elif not piazza and not (slam and lane != 1):
+	elif not (slam and lane != 1):
 		# A wrong step only when another lane's note is due AND the pressed lane has no note of its
 		# own coming soon: otherwise the tap is stray and free, and the player's note still counts.
 		# A tap with neither breaks the combo as a stray (a press a little early for the lane's own
@@ -558,22 +582,61 @@ func ring(t: float, tilt: bool = true, strength: float = 0.5) -> Dictionary:
 	_next_free_up = not up
 	var rest := _rest_at(t)
 	if rest != null:
-		# Every ring costs, but one shake that rings twice within 150 ms counts once.
-		if t - _last_silence >= SILENCE_DEBOUNCE:
-			rest.judgement = "silence"
-			rest.hit_at = t
-			stats.silence += 1
-			combo = 0
-			unison_streak = 0
-			_raw -= STILL_PENALTY
-			_breakdown.penalties += STILL_PENALTY
-			_set_unison(unison_level - SILENCE_DROP, t)
-			_refresh_score(t)
-			judged.emit(rest, "silence", t - rest.t)
-		_last_silence = t
+		_break_still(rest, t)
 		return {"up": up, "quality": "silence", "judgement": "silence", "offset": 0.0, "side": "", "strength": st, "note": rest}
 	var near := _find_bell(t, 2.0 * w.z) != null
 	return {"up": up, "quality": "miss" if near else "free", "judgement": "", "offset": 0.0, "side": "", "strength": st, "note": null}
+
+
+## True when a bell (or the tilt half of a full ring) can still be rung at t.
+func bell_due(t: float, tilt: bool = true) -> bool:
+	return _find_bell(t, (win_tilt if tilt and not slam else win_touch).z) != null
+# Half-beat steps next to a sixteenth (a lane note a quarter beat away) read as part of it.
+func _mark_quick() -> void:
+	var laned: Array[Note] = []
+	for n in notes:
+		if n.uses_lane():
+			laned.append(n)
+	for i in laned.size():
+		var n := laned[i]
+		if n.kind != Note.Kind.STEP or absf(fposmod(n.beat, 1.0) - 0.5) > 0.02:
+			continue
+		for j in [i - 1, i + 1]:
+			if j >= 0 and j < laned.size() and absf(absf(laned[j].beat - n.beat) - 0.25) < 0.02:
+				n.quick = true
+
+
+## The phone moved (tilted, however gently) at t. Inside a stand-still that breaks it, like a ring:
+## the Mamuthone's bells give him away. Returns the stand-still it broke, or null (no stand-still at
+## t, or this one already broken: a stand-still is broken once by moving, rings still cost).
+func moved(t: float) -> Note:
+	var rest := _rest_at(t)
+	if rest == null or rest.judgement == "silence":
+		return null
+	input_log.append([t, "moved"])
+	_break_still(rest, t)
+	return rest
+
+
+## The stand-still at t (one is running from its beat to its end), or null.
+func rest_at(t: float) -> Note:
+	return _rest_at(t)
+
+
+# Every ring costs, but one shake that rings twice within 150 ms (or moves and then rings) counts once.
+func _break_still(rest: Note, t: float) -> void:
+	if t - _last_silence >= SILENCE_DEBOUNCE:
+		rest.judgement = "silence"
+		rest.hit_at = t
+		stats.silence += 1
+		combo = 0
+		unison_streak = 0
+		_raw -= STILL_PENALTY
+		_breakdown.penalties += STILL_PENALTY
+		_set_unison(unison_level - SILENCE_DROP, t)
+		_refresh_score(t)
+		judged.emit(rest, "silence", t - rest.t)
+	_last_silence = t
 
 
 ## Call every frame with the current song time.
@@ -594,7 +657,7 @@ func update(t: float) -> void:
 						n.judgement = "still"
 						stats.still_kept += 1
 						var beats := still_beats(n)
-						var v := STILL_BONUS * beats * unison_mult() * _weight
+						var v := STILL_BONUS * beats * unison_mult()
 						_raw += v
 						_breakdown.stills += v
 						_refresh_score(n.end_t)
@@ -649,12 +712,20 @@ static func _quality(judgement: String) -> String:
 	return "miss"
 
 
+## A tilt is stamped with the moment it crossed the threshold but reaches the rules a frame or a
+## few readings later (about 30 ms on Daniele's phone): a bell waits this much longer before it is
+## called missed, so a tilt inside its window is never judged after the bell already went.
+const TILT_GRACE := 0.06
+## How early a tap may still take its lane's next note (as an Ok) when no note is in the window.
+const EARLY_REACH := 0.17
+
+
 func _timeout(n: Note) -> float:
 	match n.kind:
 		Note.Kind.BELL:
-			return win_tilt.z
+			return win_tilt.z + (0.0 if slam else TILT_GRACE)
 		Note.Kind.RING:
-			return win_touch.z if slam else maxf(win_touch.z, win_tilt.z)
+			return win_touch.z if slam else maxf(win_touch.z, win_tilt.z) + TILT_GRACE
 	return win_touch.z
 
 
@@ -673,11 +744,46 @@ func _own_note_near(lane: int, t: float) -> Note:
 # Note-lock: the earliest open note on the lane whose window contains t. A stomp waiting for its
 # second thumb takes only another touch (touch_id) within STOMP_GAP of the first.
 func _find_lane_note(lane: int, t: float, touch_id: int = -1) -> Note:
+	var n := _lane_note_within(lane, t, touch_id, win_touch.z, win_touch.z)
+	if n == null:
+		# Nothing in the window: a tap up to EARLY_REACH early still takes its lane's next note, as an
+		# Ok. In dense passages (Expert sixteenths, 139 ms apart) Daniele's taps ran early and 17 of
+		# them landed 130-160 ms ahead of their note, where they did nothing and the note was then
+		# missed (2026-10-10 Carnival Expert run).
+		n = _lane_note_within(lane, t, touch_id, EARLY_REACH, 0.0)
+	# A tap nearer to a note of this lane that is already taken is a second tap on that one, not an
+	# early tap on the next. Taking the next note made every later tap take the note after its own:
+	# the notes then vanished before reaching the line, as if the song had sped up (Daniele,
+	# 2026-10-10, after anticipating a note). A player running ahead hit the taken note early too, so
+	# the next one is expected as early: rushed taps still take their note.
+	if n != null and n.t > t:
+		var m := _taken_before(lane, n)
+		var at := NAN if m == null else (m.step_at if not is_nan(m.step_at) else m.hit_at)
+		if not is_nan(at):
+			var ahead := minf(at - m.t, 0.0)
+			if absf(t - m.t) < absf(t - (n.t + ahead)):
+				return null
+	return n
+
+
+# The lane's last taken note before n (null if the one before it is still open or there is none).
+func _taken_before(lane: int, n: Note) -> Note:
+	var i := n.index - 1
+	while i >= 0 and n.t - notes[i].t < 1.0:
+		var m := notes[i]
+		if m.lane == lane and m.uses_lane():
+			return m if m.done else null
+		i -= 1
+	return null
+
+
+# The first open note of the lane due between `late` seconds before t and `early` seconds after it.
+func _lane_note_within(lane: int, t: float, touch_id: int, early: float, late: float) -> Note:
 	for i in range(_first_open, notes.size()):
 		var n := notes[i]
-		if n.t - win_touch.z > t:
+		if n.t - early > t:
 			break
-		if n.done or n.lane != lane or not n.uses_lane() or absf(t - n.t) > win_touch.z:
+		if n.done or n.lane != lane or not n.uses_lane() or n.t - t > early or t - n.t > late:
 			continue
 		if n.kind == Note.Kind.RING and not is_nan(n.step_at):
 			continue
@@ -750,6 +856,11 @@ func _hit(n: Note, t: float, g: String, off: float, table: Dictionary) -> void:
 	else:
 		unison_streak = 0
 	judged.emit(n, g, off)
+	if (g == "perfect" or g == "good") and n.kind != Note.Kind.HOLD:
+		for h: Note in _holds.values():
+			if h.holding and h != n:
+				h.tied += 1
+				played_under.emit(h, n)
 	if n.heal:
 		_heal()
 
@@ -817,7 +928,7 @@ func _wrong(n: Note, t: float, off: float, drop: int) -> void:
 
 # Whether a tap that hit no note and no other lane's note breaks the combo (see Stray taps).
 func _stray_counts(lane: int, t: float) -> bool:
-	if piazza or (slam and lane != 1):
+	if slam and lane != 1:
 		return false
 	if is_nan(_taps_from) or t < _taps_from - win_touch.z or t > _taps_to + win_touch.z:
 		return false
@@ -834,16 +945,37 @@ func _stray(lane: int, t: float) -> void:
 	_bad_tap(t)
 
 
-# A stray or wrong tap: LOCK_TAPS of them within LOCK_SPAN lock the buttons for LOCK_TIME.
+# A stray or wrong tap: LOCK_TAPS of them within LOCK_SPAN lock the buttons for LOCK_TIME, when the
+# presses in that span also outnumber the lane notes due in it (see Mashing above).
 func _bad_tap(t: float) -> void:
 	_bad_taps.append(t)
 	while not _bad_taps.is_empty() and t - _bad_taps[0] > LOCK_SPAN:
 		_bad_taps.pop_front()
-	if _bad_taps.size() >= LOCK_TAPS:
+	if _bad_taps.size() >= LOCK_TAPS and _over_pressing(_bad_taps[0] - win_touch.z, t):
 		_bad_taps.clear()
 		_locked_until = t + LOCK_TIME
 		stats.locks += 1
 		input_locked.emit(_locked_until)
+
+
+# Whether the presses from lo to t outnumber, by more than LOCK_SPARE, the presses the chart asks
+# for then: one per lane note due between lo and t + the Early/Late window (a stomp asks for two).
+func _over_pressing(lo: float, t: float) -> bool:
+	var pressed := 0
+	for p in _presses:
+		if p >= lo - 1e-6:
+			pressed += 1
+	var due := 0
+	var i := mini(_first_open, notes.size())
+	while i > 0 and notes[i - 1].t >= lo:
+		i -= 1
+	for k in range(i, notes.size()):
+		var n := notes[k]
+		if n.t > t + win_touch.z:
+			break
+		if n.t >= lo and n.uses_lane():
+			due += 2 if n.kind == Note.Kind.STOMP else 1
+	return pressed > due + LOCK_SPARE
 
 
 func _end_hold(n: Note, t: float, kept: bool) -> void:
@@ -851,7 +983,7 @@ func _end_hold(n: Note, t: float, kept: bool) -> void:
 	n.finished = true
 	if kept:
 		stats.held += 1
-		var v := HOLD_BONUS * unison_mult() * _weight
+		var v := (HOLD_BONUS + TIE_BONUS * n.tied) * unison_mult()
 		_raw += v
 		_breakdown.holds += v
 		_refresh_score(t)
@@ -867,10 +999,9 @@ func _end_hold(n: Note, t: float, kept: bool) -> void:
 
 func _add_points(pts: int, t: float) -> void:
 	var m := unison_mult()
-	_raw += pts * m * _weight
+	_raw += pts * m
 	_breakdown.base += pts
 	_breakdown.unison += pts * (m - 1.0)
-	_breakdown.weight += pts * m * (_weight - 1.0)
 	_refresh_score(t)
 
 

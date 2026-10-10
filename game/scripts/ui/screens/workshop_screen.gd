@@ -1,9 +1,8 @@
 extends Screen
 ## The workshop: build your own Mamuthone. Carve the mask (every bell earned is a carving point; finer
-## options open as the story goes on), choose the bell set (tap to hear it), the fleece shade and the
-## straps. A close-up of your own Mamuthone (Art's portrait) at the top changes as you choose, with
+## options open as the story goes on), the fleece shade and the straps. A close-up of your own Mamuthone (Art's portrait) at the top changes as you choose, with
 ## the part being carved outlined.
-## args: tab (optional: mask, bells or dress).
+## args: tab (optional: mask or dress).
 
 static var tab := "mask"
 static var part := "brow"
@@ -27,7 +26,7 @@ func build() -> void:
 	var row := HBoxContainer.new()
 	row.add_theme_constant_override("separation", 10)
 	box.add_child(row)
-	for t in ["mask", "bells", "dress"]:
+	for t in ["mask", "dress"]:
 		var b := UIKit.button(tr("ws_tab_" + t), _show_tab.bind(t))
 		b.toggle_mode = true
 		b.size_flags_horizontal = Control.SIZE_EXPAND_FILL
@@ -48,19 +47,19 @@ func _refresh_look() -> void:
 	var m: Dictionary = MaskSpec.sanitize(look.get("mask", {}))
 	var f := str(look.get("fleece", "black"))
 	var st := str(look.get("straps", "natural"))
-	var bs := str(look.get("bell_set", "village"))
-	if m != portrait.mask or f != portrait.fleece or st != portrait.straps or bs != portrait.bell_set:
-		portrait.set_look(m, f, st, bs)
+	if m != portrait.mask or f != portrait.fleece or st != portrait.straps:
+		portrait.set_look(m, f, st, BellSets.STANDARD)
 		var walking := _body.get_node_or_null("Walking") as ProcessionScene if _body != null else null
 		if walking != null:
 			UIKit.show_look(walking)
-			walking.bell_set = bs
 	var hp := part if tab == "mask" else ""
 	if portrait.highlight_part != hp:
 		portrait.highlight_part = hp
 
 
 func _show_tab(t: String) -> void:
+	if not _tabs.has(t):
+		t = "mask"
 	tab = t
 	for k in _tabs:
 		(_tabs[k] as Button).set_pressed_no_signal(k == t)
@@ -71,14 +70,12 @@ func _show_tab(t: String) -> void:
 	match t:
 		"mask":
 			_build_mask()
-		"bells":
-			_build_bells()
 		_:
 			_build_dress()
 	_refresh_look()
 
 
-## Under the bells and dress choices: your Mamuthone walking in the row, whole, bells and all, so a
+## Under the dress choices: your Mamuthone walking in the row, whole, bells and all, so a
 ## choice is seen (and heard) on the move. It takes the room left on the page.
 func _walking_row() -> void:
 	var vh := get_viewport_rect().size.y if is_inside_tree() else 1440.0
@@ -92,7 +89,7 @@ func _walking_row() -> void:
 	scene.set_unison(2)
 	scene.set_reduced_motion(UIKit.reduced_motion())
 	UIKit.show_look(scene)
-	scene.bell_set = str(Profile.get_look().get("bell_set", "light"))
+	scene.bell_set = BellSets.STANDARD
 
 
 func _spec() -> Dictionary:
@@ -163,24 +160,6 @@ func _carve(option: String) -> void:
 	Sound.ui("carve")
 	UIKit.vibrate(15)
 	_show_tab("mask")
-
-
-func _build_bells() -> void:
-	_body.add_child(UIKit.label(tr("ws_bells_intro"), ""))
-	UIKit.bell_set_picker(_body)
-	var ring := UIKit.button(tr("ws_ring"), _ring, UIKit.QUIET)
-	ring.name = "Ring"
-	_body.add_child(ring)
-	_walking_row()
-
-
-var _ring_up := true
-
-
-func _ring() -> void:
-	var id := str(Profile.get_look().get("bell_set", "light"))
-	Sound.bell(id, _ring_up, "perfect")
-	_ring_up = not _ring_up
 
 
 func _build_dress() -> void:

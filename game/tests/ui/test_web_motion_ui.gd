@@ -101,6 +101,32 @@ func test_settings_names_the_web_states() -> void:
 	check(tr("motion_denied") != "motion_denied", "a line for motion refused")
 
 
+## Once calibrated the graph turns into a check: the song's detector runs on the live sensor with its
+## threshold drawn, a hand's small sway stays under it and a tilt rings and is marked.
+func test_calibration_check_marks_tilts_and_not_sway() -> void:
+	UIHarness.fresh_profile()
+	var r := FakeReader.new()
+	r.fake_status = "ok"
+	r.fake_permission = "granted"
+	var app := UIHarness.make_app(tree, "calibration", {"reader": r})
+	await UIHarness.settle(tree)
+	var screen := app.current()
+	screen.call("_on_finished", {"mode": "gyro", "threshold": 120.0, "axis": 0, "up_sign": 1, "reliable": true, "median_peak": 300.0})
+	var graph: TiltGraph = screen.get("graph")
+	check_near(graph.threshold, 300.0 * BellDetector.PLAY_SHARE, 1e-3, "the graph draws the song's threshold")
+	# Sway: 40 °/s wobbles for half a second, then one tilt toward the player peaking at 300.
+	for i in 30:
+		r.frame = [{"age": 0.0, "linear": Vector3.ZERO, "rotation_dps": Vector3(40.0 * sin(i * 0.7), 0, 0)}]
+		await tree.process_frame
+	check_eq(graph.ring_count(), 0, "holding the phone rings nothing")
+	for i in 12:
+		r.frame = [{"age": 0.0, "linear": Vector3.ZERO, "rotation_dps": Vector3(300.0 * sin(PI * i / 11.0), 0, 0)}]
+		await tree.process_frame
+	check_eq(graph.ring_count(), 1, "a tilt rings once and is marked")
+	UIHarness.free_app(app)
+	UIHarness.restore_profile()
+
+
 ## Records the times fed to it (the calibrator's feed signature).
 class _Spy extends Calibrator:
 	var got: Array

@@ -158,6 +158,8 @@ def build():
                 s.bell_cue(b + bar * 4 + 3.5, rank=3, big=False)
         s.offcall(b + bar * 4 + 1.5)
     s.ev("crowd", b, 32, None, 0.6)
+    # the break: the whole row stops dead in the middle of the run, and comes back in on the bar
+    s.stop(b + 14, 2, tempt="call")
 
     # ---- outro: one last throw, the halt, the final stroke and laughter
     b = s.sec("outro", 4, 1)

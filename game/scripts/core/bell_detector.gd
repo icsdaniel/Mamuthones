@@ -17,9 +17,25 @@ extends RefCounted
 ## - One flick = one ring: a down-and-up flick has two lobes, so after a ring the detector waits
 ##   0.45 beat (bells written half a beat apart stay playable) AND for the signal to stay below half
 ##   the threshold for 50 ms (the dip between the two lobes of a slow flick is shorter than that).
-## - Adapts during a song: if flicks get softer, the threshold follows 45 % of the recent peaks,
-##   and repeated near-misses (clear lobes just under the threshold) lower it, never below 60 %
-##   of the calibrated value.
+## - The threshold is fixed for the whole song: PLAY_SHARE of the calibrated flick's peak, as song
+##   tilts are softer than the sharp ones calibration asks for. It used to follow the player during a
+##   song, but stray lobes from holding the phone taught it to sink, and a calibration should mean
+##   the same thing from the first beat to the last (Daniele, 2026-10-10).
+## - A small ring that rang no bell (forgive(), peaking under FORGIVE_PEAK of the typical flick)
+##   does not hold the next one back: the detector re-arms as soon as that lobe is over. In fast
+##   passages each tap shakes the phone a little over the threshold, and those lobes rang just ahead
+##   of a bell; the lockout and the calm wait then swallowed the real flick that followed (five of
+##   the nine misses at the end of Daniele's 2026-10-10 Piazza Hard run). A full-size flick keeps
+##   the lockout, so its return lobe never rings a second time.
+## - A slow tilt crosses the threshold well before it peaks: Daniele's ring at 66 s (2026-10-10 run)
+##   crossed 226 ms before the beat and peaked 25 ms before it, one smooth lobe. When a ring rang
+##   nothing, the time of its lobe's peak is offered as a second try (take_retry()) once the lobe is
+##   over; the caller rings it only if a bell is due then.
+## - Stand-stills: between watch_still() and end_still() the detector also watches for any tilt at
+##   all, much softer than a ring. The phone has moved (moved_at is set) when the signal stays over
+##   STILL_SHARE of the calibrated threshold for STILL_SUSTAIN, or, in gyro mode, when the phone has
+##   turned more than STILL_ANGLE degrees about the tilt axis since the watch began (a slow tilt).
+##   A hand's tremor, a thumb tap's few-ms jolt and the sensor's drift stay well under both.
 
 signal rang(t: float, up: bool)
 
@@ -37,21 +53,26 @@ const CONFIRM_FAST := 0.005
 const SLOPE := 0.25           ## rising-slope readings lie between this share and the full threshold
 const MAX_GAP := 0.06         ## seconds; a longer gap between readings breaks interpolation
 const TOUCH_WINDOW := 0.10    ## seconds after a touch during which accel rings need more proof
-const PEAK_WATCH := 0.15
-const NEAR := 0.6             ## near-miss: a sustained lobe above this share of the threshold
-const ADAPT_FLOOR := 0.6
-const ADAPT_CEIL := 1.25
+const RETRY_DROP := 0.8       ## a forgiven lobe has passed a peak once it falls under this × that peak
+const HELD_TILT := 0.06       ## seconds of steady turning before a full ring's tap that make its tilt
+const FORGIVE_PEAK := 0.75    ## a forgiven lobe re-arms only if it peaked under this × typical_peak
+## Song threshold as a share of the calibrated flick's peak. Daniele calibrated with big flicks
+## (peaks 333 °/s) and played much softer; replaying his six 2026-10-10 runs, 0.3 catches every bell
+## the old adaptive threshold did.
+const PLAY_SHARE := 0.3
+const STILL_SHARE := 0.35     ## share of the calibrated threshold that counts as moving in a stand-still
+const STILL_SUSTAIN := 0.04   ## seconds the signal must stay over it (a tap's jolt is a few ms)
+const STILL_ANGLE := 20.0     ## degrees turned about the tilt axis that break a stand-still (gyro)
 const DEFAULTS := {"gyro": 150.0, "accel": 10.0}
 const RANGES := {"gyro": Vector2(60.0, 600.0), "accel": Vector2(4.0, 25.0)}
 
 var mode := "gyro"
 var threshold := 150.0
-var base_threshold := 150.0
+var base_threshold := 150.0    ## the calibrated threshold (before PLAY_SHARE), for the stand-still watch
 var axis := 0
 var up_sign := 1
 var reliable := false
 var bpm := 120.0
-var adapt := true
 ## Time and direction of the last ring.
 var last_t := -INF
 var last_up := true
@@ -70,6 +91,12 @@ var rise_time := 0.045
 var sample_interval := 1.0 / 60.0
 
 var _armed := true
+var _forgiven := false        # the last ring rang nothing: re-arm once its lobe is over
+var _lobe_max := 0.0          # highest reading of the lobe that last rang
+var _lobe_max_t := -INF       # when it was read
+var _retry_t := NAN           # the peak of a forgiven lobe, offered once by take_retry()
+var _offered_t := -INF        # the last peak offered
+var _above_since := NAN       # since when the signal has stayed over SUSTAIN × threshold
 var _calm_since := NAN
 var _cand_t := NAN
 var _cand_first := NAN
@@ -83,11 +110,13 @@ var _prev_t := -INF
 var _last_vec := Vector3(NAN, NAN, NAN)
 var _held_seen := 0.0         # > 0 while repeated readings are being seen (sensor slower than frames)
 var _last_touch := -INF
-var _peak := 0.0
-var _peak_until := -INF
-var _recent: Array[float] = []
-var _near_n := 0
-var _near_count := 0
+## Stand-still watch (see watch_still): when it began (INF = not watching), the angle turned since,
+## the first reading of the current movement, and the time the phone was found to have moved.
+var _still_from := INF
+var _still_angle := 0.0
+var _still_prev_t := NAN
+var _move_since := NAN
+var moved_at := NAN
 
 
 static func from_calibration(d: Dictionary, has_gyro := true) -> BellDetector:
@@ -102,13 +131,15 @@ func configure(d: Dictionary, has_gyro := true) -> void:
 		mode = "gyro" if has_gyro else "accel"
 	var r: Vector2 = RANGES[mode]
 	threshold = clampf(float(d.get("threshold", DEFAULTS[mode])), r.x, r.y) if d.get("mode", "") == mode else DEFAULTS[mode]
-	base_threshold = threshold
 	# Without a calibration: tilting the top edge is rotation about x, or acceleration along z.
 	axis = clampi(int(d.get("axis", 0 if mode == "gyro" else 2)), 0, 2) if d.get("mode", "") == mode else (0 if mode == "gyro" else 2)
 	up_sign = 1 if int(d.get("up_sign", 1)) >= 0 else -1
 	var calibrated: bool = d.get("mode", "") == mode
 	var med := float(d.get("median_peak", 0.0)) if calibrated else 0.0
 	typical_peak = med if med > threshold else threshold / Calibrator.SHARE
+	base_threshold = threshold
+	if med > 0.0:
+		threshold = clampf(minf(threshold, med * PLAY_SHARE), r.x, r.y)
 	rise_time = clampf(float(d.get("rise_time", 0.045)), 0.02, 0.15)
 	reliable = bool(d.get("reliable", false))
 	reset()
@@ -124,6 +155,9 @@ func lockout() -> float:
 
 func reset() -> void:
 	_armed = true
+	_forgiven = false
+	_retry_t = NAN
+	_above_since = NAN
 	_calm_since = NAN
 	_cand_t = NAN
 	_rise_since = NAN
@@ -132,8 +166,44 @@ func reset() -> void:
 	_prev_t = -INF
 	_last_vec = Vector3(NAN, NAN, NAN)
 	last_t = -INF
-	_peak_until = -INF
-	_near_n = 0
+
+
+## Starts watching for any tilt from time t (a stand-still began); moved_at is cleared.
+func watch_still(t: float) -> void:
+	_still_from = t
+	_still_angle = 0.0
+	_still_prev_t = NAN
+	_move_since = NAN
+	moved_at = NAN
+
+
+## Stops watching (the stand-still ended or was already broken).
+func end_still() -> void:
+	_still_from = INF
+	_move_since = NAN
+
+
+func watching_still() -> bool:
+	return _still_from < INF
+
+
+func _watch_still(t: float, v: float, signed_v: float) -> void:
+	if t < _still_from or not is_nan(moved_at):
+		return
+	if mode == "gyro":
+		if not is_nan(_still_prev_t):
+			_still_angle += signed_v * clampf(t - _still_prev_t, 0.0, MAX_GAP)
+		_still_prev_t = t
+		if absf(_still_angle) > STILL_ANGLE:
+			moved_at = t
+			return
+	if v > base_threshold * STILL_SHARE:
+		if is_nan(_move_since):
+			_move_since = t
+		elif t - _move_since >= STILL_SUSTAIN - 1e-6:
+			moved_at = _move_since
+	else:
+		_move_since = NAN
 
 
 ## A finger touched the screen at time t (taps shake the phone).
@@ -156,12 +226,17 @@ func feed(t: float, acc: Vector3, gyro_dps: Vector3) -> bool:
 		# A real sensor never repeats itself exactly unless the reading is being held.
 		_held_seen = 1.0
 	var fired := false
-	# Watch the peak of the last ring, for adapting.
-	if t <= _peak_until:
-		_peak = maxf(_peak, v)
-	elif _peak_until > -INF:
-		_learn_peak(_peak)
-		_peak_until = -INF
+	if not _armed and _forgiven:
+		if v > _lobe_max:
+			_lobe_max = v
+			_lobe_max_t = t - _reading_age()
+		elif fresh and v < RETRY_DROP * _lobe_max and _lobe_max_t > _offered_t and _lobe_max_t > last_t + 0.005:
+			# Past a peak (a slow tilt can have two): offer it while the bell's window is still open.
+			_retry_t = _lobe_max_t
+			_offered_t = _lobe_max_t
+		if v < threshold * SUSTAIN:
+			_armed = _lobe_max < FORGIVE_PEAK * typical_peak
+			_forgiven = false
 	if not _armed:
 		if v < threshold * 0.5:
 			if is_nan(_calm_since):
@@ -173,6 +248,13 @@ func feed(t: float, acc: Vector3, gyro_dps: Vector3) -> bool:
 	# A held reading says nothing new about a starting ring.
 	if not fresh:
 		return false
+	if v >= threshold * SUSTAIN:
+		if is_nan(_above_since):
+			_above_since = t
+	else:
+		_above_since = NAN
+	if _still_from < INF:
+		_watch_still(t, v, vec[axis])
 	if v < threshold * SLOPE:
 		_rise_since = NAN
 	elif is_nan(_rise_since) and v < threshold and not _lobe_over:
@@ -193,8 +275,6 @@ func feed(t: float, acc: Vector3, gyro_dps: Vector3) -> bool:
 				if fast:
 					fired = true
 					_fire()
-			else:
-				_watch_near(v, t)
 		elif v >= threshold * SUSTAIN:
 			_cand_peak = maxf(_cand_peak, v)
 			_predict(v, t)
@@ -215,17 +295,58 @@ func _reading_age() -> float:
 	return 0.5 * sample_interval if _held_seen > 0.0 else 0.0
 
 
+## The last ring matched no bell (the session found nothing in its window): it holds nothing back,
+## so a real flick right after a stray lobe still rings.
+func forgive() -> void:
+	if not _armed:
+		_forgiven = true
+
+
+## The peak time of a forgiven lobe that just ended (NAN when there is none); each is offered once.
+func take_retry() -> float:
+	var r := _retry_t
+	_retry_t = NAN
+	return r
+
+
+## How long the phone has been turning steadily (over SUSTAIN × threshold) at time t, 0 if not.
+## A tap's own knock lasts a few tens of ms and starts with the tap; a tilt held through the tap
+## has been going for longer.
+func tilting_for(t: float) -> float:
+	return 0.0 if is_nan(_above_since) else maxf(0.0, t - _above_since)
+
+
+## The tilt going on now rang a bell at t (the tilt half of a full ring, read at its tap): it counts
+## as this lobe's ring, with the usual lockout after it.
+func claim(t: float) -> void:
+	_armed = false
+	_forgiven = false
+	_calm_since = NAN
+	_cand_t = NAN
+	last_t = t
+	_retry_t = NAN
+	_offered_t = INF
+
+
+## A retry rang a bell: the rest of that lobe offers nothing more.
+func used() -> void:
+	_offered_t = INF
+	_retry_t = NAN
+
+
 func _fire() -> void:
 	_armed = false
+	_forgiven = false
+	_lobe_max = _cand_peak
+	_lobe_max_t = _cand_t - _reading_age()
+	_retry_t = NAN
+	_offered_t = -INF
 	_calm_since = NAN
 	last_t = _cand_t - _reading_age()
 	var s := signf(_cand_vec[axis]) * up_sign
 	last_up = s >= 0.0
 	last_strength = strength_of(maxf(_cand_peak, _cand_pred))
 	_cand_t = NAN
-	_near_n = 0
-	_peak = 0.0
-	_peak_until = last_t + PEAK_WATCH
 	rang.emit(last_t, last_up)
 
 
@@ -248,39 +369,3 @@ func _predict(v: float, t: float) -> void:
 	var mid := (v + _prev_v) * 0.5
 	_cand_pred = maxf(_cand_pred, sqrt(pow(slope / w, 2.0) + mid * mid))
 
-
-func _learn_peak(p: float) -> void:
-	if not adapt or p <= 0.0:
-		return
-	_recent.append(p)
-	if _recent.size() > 8:
-		_recent.remove_at(0)
-	if _recent.size() < 4:
-		return
-	var s := _recent.duplicate()
-	s.sort()
-	var target: float = s[s.size() >> 1] * Calibrator.SHARE
-	threshold = _clamp_adapt(lerpf(threshold, target, 0.3))
-
-
-# Sustained lobes (30 ms or more) that rise above NEAR × threshold but never cross it look like
-# softened flicks. Three of them lower the threshold by 10 %.
-func _watch_near(v: float, t: float) -> void:
-	if not adapt:
-		return
-	if v > threshold * NEAR:
-		if _near_n == 0:
-			_cand_first = t
-		_near_n += 1
-	elif v < threshold * 0.3:
-		if _near_n >= 2 and _prev_t - _cand_first >= 0.03 and _prev_t - _last_touch > TOUCH_WINDOW:
-			_near_count += 1
-			if _near_count >= 3:
-				_near_count = 0
-				threshold = _clamp_adapt(threshold * 0.9)
-		_near_n = 0
-
-
-func _clamp_adapt(x: float) -> float:
-	var r: Vector2 = RANGES[mode]
-	return clampf(clampf(x, base_threshold * ADAPT_FLOOR, base_threshold * ADAPT_CEIL), r.x, r.y)

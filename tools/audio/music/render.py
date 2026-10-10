@@ -2,12 +2,13 @@
 """Render the whole soundtrack from the written scores.
 
     python3 tools/audio/music/render.py                 # everything
-    python3 tools/audio/music/render.py fires rope      # some songs (story ids or piazza ids)
+    python3 tools/audio/music/render.py fires rope      # some songs (story ids)
     python3 tools/audio/music/render.py --no-remix fires
     options: --stems DIR (default /tmp/mamuthones_stems), --report FILE (JSON measurements)
 
-For each story song it writes game/audio/music/<id>.ogg, <id>_remix.ogg and
-game/data/songs/<id>.json (with charts), keeps every stem as FLAC under the stems folder, and
+For each story song it writes game/audio/music/<id>.ogg, <id>_remix.ogg, their lift layers
+(<id>_lift.ogg, <id>_remix_lift.ogg; see lift.py) and game/data/songs/<id>.json (with charts),
+keeps every stem as FLAC under the stems folder, and
 measures loudness, true peak, chart-to-onset timing, rests and bell cues.
 """
 from __future__ import annotations
@@ -24,6 +25,7 @@ import numpy as np  # noqa: E402
 
 import analyze  # noqa: E402
 import dsp  # noqa: E402
+import lift  # noqa: E402
 import mixer  # noqa: E402
 from charts import chart_song  # noqa: E402
 
@@ -32,13 +34,9 @@ MUSIC = os.path.join(ROOT, "game", "audio", "music")
 SONGS = os.path.join(ROOT, "game", "data", "songs")
 
 STORY = ["workshop", "fires", "bonfires", "carnival", "rope", "piazza", "shrove"]
-PIAZZA = ["piazza_fire", "piazza_crowd", "piazza_dusk"]
 
 
 def load_song(sid):
-    if sid.startswith("piazza_"):
-        from songs import piazza_mode
-        return piazza_mode.build(sid).finalize()
     mod = __import__(f"songs.{sid}", fromlist=["build"])
     return mod.build().finalize()
 
@@ -115,7 +113,7 @@ def rechart_one(sid, opts, report):
     import soundfile as sf
     y = sf.read(os.path.join(MUSIC, sid + ".ogg"), always_2d=True)[0]
     heard = analyze.mix_onsets(y)
-    charts, sources = chart_song(song, heard) if song.kind != "piazza" else piazza_chart(song)
+    charts, sources = chart_song(song, heard)
     entry = report.get(sid, {})
     entry["mix_timing"] = analyze.mix_timing_report(song, charts, heard)
     entry["timing"] = analyze.timing_report(song, sources, stems, charts)
@@ -150,10 +148,11 @@ def render_one(sid, opts, report):
     stem_dir = os.path.join(opts["stems"], sid)
     mixer.save_stems(stems, stem_dir)
     y, meas = finish(song, stems, n, sid, opts["quality"])
+    lift.lift_layer(song, stems, n, lift.LIFT, os.path.join(MUSIC, sid + "_lift.ogg"))
     dsp.spectrogram_png(os.path.join(opts["stems"], sid + ".png"), y)
     entry = {"audio": meas, "features": analyze.features(y)}
     heard = analyze.mix_onsets(y)
-    charts, sources = chart_song(song, heard) if song.kind != "piazza" else piazza_chart(song)
+    charts, sources = chart_song(song, heard)
     entry["mix_timing"] = analyze.mix_timing_report(song, charts, heard)
     entry["timing"] = analyze.timing_report(song, sources, stems, charts)
     entry["rests"] = analyze.rest_report(song, stems, sources)
@@ -168,12 +167,13 @@ def render_one(sid, opts, report):
         "offset": round(song.offset, 4),
         "audio": f"res://audio/music/{song.id}.ogg",
     }
-    if song.kind != "piazza" and opts["remix"]:
+    if opts["remix"]:
         import remix
         rsong = remix.build(song, stems)
         rstems, rn = mixer.render_stems(rsong)
         mixer.save_stems(rstems, os.path.join(opts["stems"], sid + "_remix"))
         ry, rmeas = finish(rsong, rstems, rn, sid + "_remix", opts["quality"])
+        lift.lift_layer(rsong, rstems, rn, lift.LIFT_REMIX, os.path.join(MUSIC, sid + "_remix_lift.ogg"))
         dsp.spectrogram_png(os.path.join(opts["stems"], sid + "_remix.png"), ry)
         rsrc = remix.remix_sources(rsong, sources)
         entry["remix"] = {"audio": rmeas, "features": analyze.features(ry),
@@ -181,7 +181,7 @@ def render_one(sid, opts, report):
                           "mix_timing": analyze.mix_timing_report(rsong, charts, analyze.mix_onsets(ry))}
         data["remix"] = {"id": sid + "_remix", "bpm": song.bpm, "offset": round(rsong.offset, 4),
                          "audio": f"res://audio/music/{sid}_remix.ogg"}
-    elif song.kind != "piazza":
+    else:
         old = os.path.join(SONGS, sid + ".json")
         if os.path.exists(old):
             with open(old, encoding="utf-8") as f:
@@ -211,13 +211,6 @@ def render_one(sid, opts, report):
     return entry
 
 
-def piazza_chart(song):
-    from charts import N
-    notes = [N(c.b, "bell", c.rank, "bell", None, c.stem, src=c) for c in song.cands if c.role == "bell"]
-    notes.sort(key=lambda n: n.b)
-    return {"piazza": [n.json() for n in notes]}, {"piazza": [(n.b, n.k, n.stem, 0) for n in notes]}
-
-
 def _job(args):
     sid, opts, prev = args
     rep = {sid: prev} if prev else {}
@@ -244,7 +237,7 @@ def main(argv):
             opts["jobs"] = int(next(it))
         else:
             ids.append(a)
-    ids = ids or STORY + PIAZZA
+    ids = ids or STORY
     os.makedirs(MUSIC, exist_ok=True)
     os.makedirs(SONGS, exist_ok=True)
     os.makedirs(opts["stems"], exist_ok=True)

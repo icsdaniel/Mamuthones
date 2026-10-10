@@ -1,11 +1,10 @@
 extends Screen
 ## Playing a song. Top to bottom: HUD, then the three lanes of tiles and the three step buttons, with a
-## file of Mamuthones jumping on the beat either side of them (design section 8). The Piazza keeps the
-## procession scene over its cue instead. Conductor keeps song time from the audio clock; InputRouter (or Autoplay) feeds
+## file of Mamuthones jumping on the beat either side of them (design section 8). Conductor keeps song time from the audio clock; InputRouter (or Autoplay) feeds
 ## the Session; every hit is answered in the same frame with its sound, a button flash, a burst, a
 ## judgement word, a jolt of the row and a short vibration.
 ##
-## args: song_id, difficulty, bell_set, remix, mirror, daily, piazza, round (Piazza turn state),
+## args: song_id, difficulty, remix, mirror,
 ##       autoplay (bool), human (autoplay with small errors), from_beat/to_beat (a lesson),
 ##       embedded (emit `finished` instead of opening the results), lead_in (seconds before the first
 ##       note when starting mid-song, with no count), quick (restart / retry: start a bar before the
@@ -22,7 +21,6 @@ extends Screen
 
 signal finished(session: Session)
 
-const SCENE_SHARE := 0.27         ## Piazza: share of the screen height given to the procession scene
 const GUTTER := 0.0               ## the road fills the width; the Mamuthones stand beside its far end
 const BANNER_SHARE := 0.4         ## the count-in and the stand-still moment use this top share of the lanes
 const FAIL_MENU_DELAY := 0.5      ## seconds from running out of health to the fail menu
@@ -40,6 +38,18 @@ const JUDGE_WORDS := {
 }
 
 var _vis_t := NAN                 ## the song time the screen shows (_visual_time)
+## Seconds the notes and everything on the beat are drawn ahead of the song's clock when a person
+## plays (Profile.visual_offset): the screen shows a frame a couple of refreshes after it is worked
+## out, and a touch reaches the game some ms after the thumb lands, so without it a player who reads
+## the notes lands every hit late by that much. 0 in autoplay and recordings.
+var _lead := 0.0
+## The last live run, recorded in full and saved over the previous one when the screen ends
+## (RunLog: sent by testers when a run felt wrong). null in autoplay.
+var run_log: RunLog
+## Frame times while notes are coming (live play), for the results' smoothness line:
+## [frames, seconds, frames slower than SLOW_FRAME, the slowest frame's seconds].
+var _frames := [0, 0.0, 0, 0.0]
+const SLOW_FRAME := 0.025
 var _song_t := 0.0                ## ... and the song's clock that frame (tests/start_profile.gd compares them)
 var song: SongData
 var session: Session
@@ -48,24 +58,23 @@ var router: InputRouter
 var autoplay: Autoplay
 var ghost: Ghost
 var hud: Hud
-var scene                         ## SideRows (songs) or ProcessionScene (Piazza): the same calls
+var scene                         ## the street backdrop: unison, stumbles, stand-stills
 var banner: Control               ## over the top of the lanes: count-in and stand-still moment
 var lanes: LaneView
 var backdrop: StreetBackdrop     ## the street picture, the fire and the swaying portraits (songs)
 var words: JudgementWords
-var filter: PixelFilter           ## the pixel look's lens over the whole screen (art style "pixel")
-var world: SubViewportContainer   ## the pixel look: the street, lanes and HUD drawn at the base size
+var filter: PixelFilter           ## a lens over the whole screen (only when the World picture is off)
+var world: SubViewportContainer   ## the street, lanes and HUD drawn at one pixel per art pixel
 var world_vp: SubViewport
-var pixel := false                ## the play screen is in the pixel look
-var cue: PiazzaCue
 var paused := false
 var done := false
 
-var _bell_set := "light"
 var _first_t := 0.0
 var _spb := 0.5
 var _stomp_sounded := false       ## a stomp sounded on this touch: no plain step knock
-var _sched := 0                  ## next note to check for calls
+var _sched := 0                  ## next note to check for calls and accents
+var _last_accent_t := -INF       ## the last accent's note time (a chord swells once)
+var _hold_ends: Array[Note] = []  ## holds whose end chime is still to come (_schedule)
 var _bell_sched := 0             ## next note to check for the bell cue
 var _bell_cue := false           ## a soft tick half a beat before each bell (Easy and Medium)
 var _pause_panel: Control
@@ -79,6 +88,8 @@ var _audio_count := false        ## the song started at its own count-in (sticks
 var _bar_count := false          ## the song started inside its intro: 4-3-2-1 over the bar before the first note's
 var _tap_hit := false            ## the tap being handled judged a note (set by _on_judged)
 var _tap_quality := ""           ## how well it hit: perfect, good, ok (Sound.step's quality)
+var lift := MusicLift.new()      ## hits on time bring up the song's tune (Conductor.set_lift)
+var _no_lift := OS.has_environment("NO_LIFT")   # before/after recordings: the song alone
 var _clock := 0.0
 var _field_box: Control
 var _still := false
@@ -95,37 +106,30 @@ func build() -> void:
 		push_error("play: unknown song %s" % args.get("song_id", ""))
 		return
 	var difficulty := str(args.get("difficulty", "easy"))
-	_bell_set = str(args.get("bell_set", "light"))
 	var auto := bool(args.get("autoplay", false))
 	var options := {
 		"slam": bool(Profile.get_setting("slam")) and not auto,
-		"piazza": bool(args.get("piazza", false)),
 		"remix": bool(args.get("remix", false)),
 		"mirror": bool(args.get("mirror", false)),
 	}
-	if str(args.get("daily", "")) != "":
-		options.daily = str(args.daily)
 	if args.has("from_beat"):
 		options.from_beat = float(args.from_beat)
 		options.to_beat = float(args.to_beat)
 	options.health = bool(args.get("health", not auto))
-	session = Session.new(song, difficulty, _bell_set, options)
+	session = Session.new(song, difficulty, options)
 	_spb = 60.0 / song.bpm
 	_first_t = session.notes[0].t if not session.notes.is_empty() else song.time_of(0.0, session.remix)
 	var best: Dictionary = Profile.best(session.song_key(), difficulty)
 	var gd = best.get("ghost", {})
-	if gd is Dictionary and not (gd as Dictionary).is_empty() and not session.piazza:
+	if gd is Dictionary and not (gd as Dictionary).is_empty():
 		ghost = Ghost.from_dict(gd)
 
-	# The Piazza keeps its plain black ground under the procession; songs play on the Fire Night.
-	pixel = str(Profile.get_setting("art_style")) == "pixel" and not session.piazza
-	StreetSkin.pixel = pixel
 	# The pixel look draws the street, the lanes and the HUD straight into one small picture, one
 	# pixel per art pixel (a third of the base size each way), and shows it enlarged with hard edges.
 	# That is the pixel art itself: no filter reads the screen back and no other picture is drawn,
-	# so a phone does far less work per frame than for the painted look at full resolution.
+	# so a phone does far less work per frame than for a picture drawn at full resolution.
 	var host: Node = self
-	if pixel and not OS.has_environment("NO_WORLD"):
+	if not OS.has_environment("NO_WORLD"):
 		world = SubViewportContainer.new()
 		world.name = "World"
 		world.stretch = true
@@ -153,18 +157,12 @@ func build() -> void:
 			n = n.get_parent()
 		if host_theme == null:
 			host_theme = WoodcutTheme.build()
-	var bg: Control
-	if session.piazza:
-		bg = ColorRect.new()
-		(bg as ColorRect).color = Palette.BLACK
-	else:
-		backdrop = StreetBackdrop.new()
-		PxType.smooth = not bool(args.get("embedded", false)) and not pixel
-		backdrop.name = "Backdrop"
-		backdrop.pixel = pixel
-		backdrop.own_cells = world == null
-		backdrop.bell_set = str(args.get("bell_set", "village"))
-		bg = backdrop
+	backdrop = StreetBackdrop.new()
+	PxType.smooth = false
+	backdrop.name = "Backdrop"
+	backdrop.own_cells = world == null
+	backdrop.bell_set = BellSets.STANDARD
+	var bg: Control = backdrop
 	bg.set_anchors_preset(Control.PRESET_FULL_RECT)
 	bg.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	bg.theme = host_theme
@@ -188,7 +186,6 @@ func build() -> void:
 	col.add_child(hud_margin)
 	hud = Hud.new()
 	hud.name = "Hud"
-	hud.pixel = pixel
 	hud_margin.add_child(hud)
 	hud.setup(session, ghost)
 	hud.pause_pressed.connect(pause)
@@ -197,32 +194,21 @@ func build() -> void:
 	(_field_box as CenterWidth).max_width = FIELD_MAX_W
 	_field_box.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	_field_box.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	if session.piazza:
-		var procession := ProcessionScene.new()
-		procession.name = "Procession"
-		procession.mouse_filter = Control.MOUSE_FILTER_IGNORE
-		procession.size_flags_vertical = Control.SIZE_EXPAND_FILL
-		procession.size_flags_stretch_ratio = SCENE_SHARE / (1.0 - SCENE_SHARE)
-		col.add_child(procession)
-		procession.set_stop(song.stop)
-		scene = procession
-		col.add_child(_field_box)
-	else:
-		# The stage: the lanes over the street; the street itself (with its swaying figures) is the backdrop.
-		var stage := Control.new()
-		stage.name = "Stage"
-		stage.size_flags_vertical = Control.SIZE_EXPAND_FILL
-		stage.mouse_filter = Control.MOUSE_FILTER_IGNORE
-		col.add_child(stage)
-		scene = backdrop
-		var gut := MarginContainer.new()
-		gut.set_anchors_preset(Control.PRESET_FULL_RECT)
-		gut.mouse_filter = Control.MOUSE_FILTER_IGNORE
-		var gw := int(round(get_viewport_rect().size.x * GUTTER)) if is_inside_tree() else 108
-		gut.add_theme_constant_override("margin_left", gw)
-		gut.add_theme_constant_override("margin_right", gw)
-		stage.add_child(gut)
-		gut.add_child(_field_box)
+	# The stage: the lanes over the street; the street itself (with its swaying figures) is the backdrop.
+	var stage := Control.new()
+	stage.name = "Stage"
+	stage.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	stage.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	col.add_child(stage)
+	scene = backdrop
+	var gut := MarginContainer.new()
+	gut.set_anchors_preset(Control.PRESET_FULL_RECT)
+	gut.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	var gw := int(round(get_viewport_rect().size.x * GUTTER)) if is_inside_tree() else 108
+	gut.add_theme_constant_override("margin_left", gw)
+	gut.add_theme_constant_override("margin_right", gw)
+	stage.add_child(gut)
+	gut.add_child(_field_box)
 	UIKit.show_look(scene)
 	scene.set_reduced_motion(UIKit.reduced_motion())
 	scene.set_unison(0)
@@ -232,31 +218,16 @@ func build() -> void:
 	lanes.session = session
 	lanes.note_speed = float(Profile.get_setting("note_speed"))
 	lanes.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	lanes.show_buttons = not session.piazza
-	lanes.visible = not session.piazza
 	lanes.spb = _spb
-	if not session.piazza:
-		backdrop.lanes = lanes
-		lanes.street = backdrop
-		lanes.pixel = pixel
+	backdrop.lanes = lanes
+	lanes.street = backdrop
 	_field_box.add_child(lanes)
 	words = JudgementWords.new()
 	words.set_anchors_preset(Control.PRESET_FULL_RECT)
-	if pixel:
-		words.z_index = PixelFilter.Z_OVER
+	words.z_index = PixelFilter.Z_OVER
 	lanes.add_child(words)
 
-	if session.piazza:
-		cue = PiazzaCue.new()
-		cue.name = "PiazzaCue"
-		cue.session = session
-		var round: Dictionary = args.get("round", {})
-		if not round.is_empty():
-			cue.player = str((round.players as Array)[int(round.turn)])
-		cue.mouse_filter = Control.MOUSE_FILTER_IGNORE
-		_field_box.add_child(cue)
-
-	if pixel and world == null and not OS.has_environment("NO_LENS"):
+	if world == null and not OS.has_environment("NO_LENS"):
 		filter = PixelFilter.new()
 		filter.name = "PixelFilter"
 		host.add_child(filter)
@@ -267,7 +238,7 @@ func build() -> void:
 	conductor.finished.connect(_on_music_finished)
 
 	if auto:
-		autoplay = Autoplay.new(session, bool(args.get("human", false)))
+		autoplay = Autoplay.new(session, bool(args.get("human", false)), 12345, float(args.get("miss_rate", -1.0)))
 		autoplay.stepped.connect(_on_stepped)
 		autoplay.rang.connect(_on_rang)
 	router = InputRouter.new()
@@ -278,13 +249,27 @@ func build() -> void:
 	add_child(router)
 	router.stepped.connect(_on_stepped)
 	router.rang.connect(_on_rang)
+	router.moved_still.connect(_on_moved_still)
 	router.pause_requested.connect(pause)
 	if auto:
 		router.enabled = false
 	else:
 		lanes.router = router
+		_lead = 0.0 if Engine.get_write_movie_path() != "" else Profile.visual_offset()
+		run_log = RunLog.new(session, {"visual_lead": _lead, "play_args": _plain_args()})
+		router.run_log = run_log
+		router.motion_log = run_log.motion
 
 	session.judged.connect(_on_judged)
+	if run_log != null:
+		var rl := run_log
+		session.judged.connect(func(n: Note, j: String, off: float) -> void: rl.judged(_song_t, n, j, off))
+		session.stray.connect(func(lane: int) -> void: rl.event(_song_t, "stray", {"lane": lane}))
+		session.wrong_step.connect(func(lane: int, n: Note, off: float) -> void:
+			rl.event(_song_t, "wrong", {"lane": lane, "note": n.index, "off": snappedf(off, 0.0001)}))
+		session.input_locked.connect(func(until: float) -> void: rl.event(_song_t, "locked", {"until": snappedf(until, 0.0001)}))
+		session.health_changed.connect(func(h: int, d: int) -> void: rl.event(_song_t, "health", {"health": h, "delta": d}))
+		session.unison_changed.connect(func(level: int) -> void: rl.event(_song_t, "unison", {"level": level}))
 	session.unison_changed.connect(_on_unison)
 	session.hold_started.connect(func(lane: int) -> void: Sound.hold_start(lane))
 	session.hold_ended.connect(func(lane: int, _kept: bool) -> void: Sound.hold_stop(lane))
@@ -292,21 +277,18 @@ func build() -> void:
 	session.stray.connect(_on_stray)
 	session.stomp_landed.connect(_on_stomp)
 	session.still_kept.connect(_on_still_kept)
+	session.played_under.connect(_on_played_under)
 	session.failed.connect(_on_failed)
 
-	# The count-in and the stand-still moment: over the procession in the Piazza, else over the top of
-	# the lanes, far from the hit line where the next notes are read.
-	if session.piazza:
-		banner = scene
-	else:
-		banner = Control.new()
-		banner.name = "Banner"
-		banner.mouse_filter = Control.MOUSE_FILTER_IGNORE
-		banner.anchor_right = 1.0
-		banner.anchor_bottom = BANNER_SHARE
-		lanes.add_child(banner)
-	if pixel:
-		banner.z_index = PixelFilter.Z_OVER
+	# The count-in and the stand-still moment: over the top of the lanes, far from the hit line where
+	# the next notes are read.
+	banner = Control.new()
+	banner.name = "Banner"
+	banner.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	banner.anchor_right = 1.0
+	banner.anchor_bottom = BANNER_SHARE
+	lanes.add_child(banner)
+	banner.z_index = PixelFilter.Z_OVER
 	count_view = CountInView.new()
 	count_view.name = "CountIn"
 	banner.add_child(count_view)
@@ -317,7 +299,7 @@ func build() -> void:
 	_bell_cue = bell_cue_on(difficulty)
 	Sound.set_key(song.key_root)
 	Sound.row_bells(0)
-	Sound.ambience("crowd+fire" if session.piazza else UIKit.ambience_for(song.stop))
+	Sound.ambience(UIKit.ambience_for(song.stop))
 	resized.connect(_layout_router)
 	_start.call_deferred()
 
@@ -362,6 +344,9 @@ func _start() -> void:
 func _settle() -> void:
 	if DisplayServer.get_name() == "headless":
 		return   # nothing is drawn, so nothing holds a frame (and tests expect the song at once)
+	await get_tree().process_frame
+	if lanes != null:
+		lanes.warm(session.notes.any(func(n: Note) -> bool: return n.kind == Note.Kind.BELL or n.kind == Note.Kind.RING))
 	var until := Time.get_ticks_msec() + int(SETTLE_MAX * 1000.0)
 	var steady := 0
 	var last := Time.get_ticks_usec()
@@ -420,7 +405,7 @@ func _begin_count(music_t: float) -> void:
 	var length := Sound.count_in(song.bpm)
 	if length <= 0.0:
 		length = 4.0 * _spb
-	_count_from = _clock + AudioServer.get_output_latency()
+	_count_from = _clock + conductor.heard_delay()   # the digits follow the sticks as heard
 	_resume_at = _clock + length
 	_played = false
 	_tick_count()
@@ -428,7 +413,7 @@ func _begin_count(music_t: float) -> void:
 
 func _layout_router() -> void:
 	if router != null and lanes != null:
-		router.buttons_rect = lanes.buttons_global_rect()
+		router.buttons_rect = lanes.tap_global_rect()
 
 
 func _process(delta: float) -> void:
@@ -453,9 +438,13 @@ func _process(delta: float) -> void:
 		autoplay.update(t)
 	else:
 		session.update(t)
+		_count_frame(t, delta)
 	_song_t = t
-	var tv := _visual_time(t, delta)
+	var tv := _visual_time(t, delta) + _lead
 	lanes.song_time = tv
+	if run_log != null:
+		var p := conductor.player
+		run_log.frame(t, tv, delta, p.get_playback_position() if p.playing else -1.0, AudioServer.get_time_since_last_mix(), false)
 	var beat := (tv - song.offset_for(session.remix)) / _spb
 	lanes.beat_pulse = 1.0 - fposmod(beat, 1.0) if beat >= 0.0 else 0.0
 	_set_beat(beat)
@@ -464,14 +453,50 @@ func _process(delta: float) -> void:
 	if backdrop != null:
 		var hb := hud.get_global_transform() * Vector2(0.0, hud.frames_bottom())
 		backdrop.set_hud_bottom((backdrop.get_global_transform().affine_inverse() * hb).y)
-	if cue != null:
-		cue.song_time = tv
 	_schedule(t)
+	if not _no_lift:
+		conductor.set_lift(lift.tick(delta, _spb))
 	_count_in(t)
 	if ghost != null:
 		scene.set_ghost_delta(ghost.lead_seconds(session.score, t))
 	if session.is_over(t) and _finish_at < 0.0:
 		_end_fade()
+
+
+func _count_frame(t: float, delta: float) -> void:
+	if session.notes.is_empty() or t < session.notes[0].t or t > session.end_time():
+		return
+	_frames[0] += 1
+	_frames[1] += delta
+	if delta > SLOW_FRAME:
+		_frames[2] += 1
+	_frames[3] = maxf(_frames[3], delta)
+
+
+## Saves the run log once, when the run ends (finished) or the screen goes (left: quit, restart).
+func _save_run(how: String) -> void:
+	if run_log == null or run_log.header.has("ended"):
+		return
+	run_log.header["ended"] = how
+	run_log.header["frame_stats"] = frame_stats()
+	run_log.save()
+
+
+# The start arguments that can go in a JSON file.
+func _plain_args() -> Dictionary:
+	var out := {}
+	for k in args:
+		var v: Variant = args[k]
+		if v == null or v is bool or v is int or v is float or v is String:
+			out[k] = v
+	return out
+
+
+## {fps, slow (frames over SLOW_FRAME), worst (s)} over the notes of this run so far ({} before any).
+func frame_stats() -> Dictionary:
+	if _frames[0] < 10:
+		return {}
+	return {"fps": _frames[0] / maxf(_frames[1], 0.001), "slow": _frames[2], "worst": _frames[3]}
 
 
 ## The song time the screen shows. The song's clock is read when the frame is worked out, which
@@ -498,9 +523,12 @@ func _set_beat(beat: float) -> void:
 
 
 ## Things that happen on the music, not on the player: the Issohadore's call with off-beat steps (a
-## touch early so it is heard on time), standing still.
+## touch early so it is heard on time), every note's accent (as if hit on time: the tune swells and a
+## step's lane tone sounds; a miss is corrected afterwards), standing still.
 func _schedule(t: float) -> void:
-	var lead := AudioServer.get_output_latency()
+	# The whole sound delay, not just the output latency: with Bluetooth headphones (200 ms on
+	# Daniele's) the call and the cue otherwise came a fifth of a second after the music.
+	var lead := conductor.heard_delay()
 	var notes := session.notes
 	while _sched < notes.size():
 		var n := notes[_sched]
@@ -509,6 +537,11 @@ func _schedule(t: float) -> void:
 			break
 		if n.call:
 			Sound.call_out()
+		if n.kind != Note.Kind.REST and n.t > _last_accent_t + 0.01 and not _no_lift:
+			_last_accent_t = n.t
+			lift.accent()
+		if not _no_lift:
+			_cue(n)
 		_sched += 1
 	# The bell cue: on Easy and Medium the music's rim clicks come before many beats with no bell, so
 	# a soft tick of its own comes half a beat before each bell or full ring (heard on time, like the
@@ -523,6 +556,16 @@ func _schedule(t: float) -> void:
 		if _bell_cue and not n.done and n.t > t:
 			Sound.ui("cue")
 		_bell_sched += 1
+	# a hold's small bell at its end, unless it was let go
+	var k := 0
+	while k < _hold_ends.size():
+		var h: Note = _hold_ends[k]
+		if h.end_t - lead > t:
+			k += 1
+			continue
+		if h.judgement != "let_go" and h.judgement != "miss":
+			Sound.cued(Sound.hold_done.bind(h.lane))
+		_hold_ends.remove_at(k)
 	var still := false
 	for i in range(maxi(_sched - 8, 0), mini(_sched + 8, notes.size())):
 		var n := notes[i]
@@ -532,8 +575,25 @@ func _schedule(t: float) -> void:
 	if still != _still:
 		_still = still
 		scene.set_still(still)
-		if cue != null:
-			cue.still = still
+
+
+## A note's sounds, played on its beat as if hit on time (heard on the beat whatever the sound delay);
+## a miss distorts them afterwards (Sound.miss). Steps and holds: the lane's soft tone; bells and full
+## rings: the bell and its on-time accent; stomps: the stomp. A hold's end chime waits in _hold_ends.
+func _cue(n: Note) -> void:
+	match n.kind:
+		Note.Kind.STEP, Note.Kind.HOLD:
+			Sound.cued(Sound.note_accent.bind(n.lane))
+			if n.kind == Note.Kind.HOLD:
+				_hold_ends.append(n)
+		Note.Kind.BELL, Note.Kind.RING:
+			Sound.cued(func() -> void:
+				Sound.bell(BellSets.STANDARD, n.up, "perfect")
+				Sound.bell_accent(n.up, "perfect", _bell_chain + 1))
+			if n.kind == Note.Kind.RING and n.lane >= 0:
+				Sound.cued(Sound.note_accent.bind(n.lane))
+		Note.Kind.STOMP:
+			Sound.cued(Sound.stomp.bind(n.lane, "perfect"))
 
 
 ## Song start: "4 3 2 1" on the music's own count-in sticks (beats -4..-1), then "Get ready" with the
@@ -568,6 +628,7 @@ func _on_stepped(lane: int) -> void:
 	# miss; every other touch knocks its step.
 	if j == "wrong" or j == "stray":
 		Sound.miss()
+		lift.miss()
 	elif not _stomp_sounded:
 		play_step(lane, _tap_quality if _tap_hit else "")
 	lanes.press(lane)
@@ -577,8 +638,11 @@ func _on_stepped(lane: int) -> void:
 
 
 ## The step's knock at the hit's quality (Sound: "good" a little softer, "ok" dull and short), in the
-## same frame as the judgement; a stray tap (quality "") knocks plain.
+## same frame as the judgement; a stray tap (quality "") knocks plain. Off by default (Profile's
+## step_knocks): a step on time is heard as the song's tune coming up (lift), not as a knock.
 static func play_step(lane: int, quality: String) -> void:
+	if not bool(Profile.get_setting("step_knocks")):
+		return
 	if quality != "":
 		Sound.step(lane, quality)
 	else:
@@ -604,17 +668,32 @@ func _on_rang(result: Dictionary) -> void:
 	var strength := float(result.get("strength", 0.5))
 	# Strength is how hard the flick was; harder flicks ring heavier.
 	var up := bool(result.get("up", true))
-	Sound.bell(_bell_set, up, q, strength)
+	# A bell note already rang on the music (_schedule), heard on its beat; only a tilt with no bell
+	# to ring (free) or one in a stand-still (silence) sounds now.
+	if q == "free" or q == "silence":
+		Sound.bell(BellSets.STANDARD, up, q, strength)
 	scene.jolt("bell")
 	if q == "perfect" or q == "good":
 		# On time: the bell strikes. The accent grows along a chain of on-time bells.
 		_bell_chain += 1
-		Sound.bell_accent(up, q, _bell_chain)
 		_bell_strike(up, q)
 	elif q != "free":
 		_bell_chain = 0
 	if q == "free" or q == "silence":
 		UIKit.vibrate(12)
+
+
+## Hold and play: a note hit on time while a hold is held runs light up the held lane too, so the
+## held note answers every stroke the free thumb (or the tilt) plays under it.
+func _on_played_under(hold: Note, _note: Note) -> void:
+	lanes.lane_pulse(hold.lane, StreetSkin.K_HOLD[3], 0.9)
+
+
+## The phone tilted in a stand-still (gently, short of a ring): the load gives the Mamuthone away with
+## a soft clank, and the stand-still is broken (the session judged it "silence").
+func _on_moved_still(_note: Note) -> void:
+	Sound.bell(BellSets.STANDARD, true, "silence", 0.2)
+	UIKit.vibrate(12)
 
 
 ## A bell rung on time, the tilt's reward (stomp-sized, but the tilt's own): the strap strikes across
@@ -632,11 +711,18 @@ func _bell_strike(up: bool, quality: String) -> void:
 
 func _on_judged(note: Note, judgement: String, offset: float) -> void:
 	if judgement == "wrong":
-		# Shown on the button actually pressed (_on_wrong_step); the row stumbles.
+		# Shown on the button actually pressed (_on_wrong_step); the row stumbles, the tune drops.
 		scene.jolt("miss")
+		lift.miss()
 		return
 	var good := judgement in ["perfect", "good", "held"]
 	var soft := judgement in ["early", "late"]
+	if good:
+		lift.hit(judgement)
+	elif soft:
+		lift.ok()
+	elif judgement in ["miss", "silence", "let_go"]:
+		lift.miss()
 	var quality := judgement
 	if not quality in ["perfect", "good", "early", "late", "miss", "held"]:
 		quality = "miss"
@@ -670,8 +756,6 @@ func _on_judged(note: Note, judgement: String, offset: float) -> void:
 	var word_key: String = JUDGE_WORDS.get(judgement, "")
 	if word_key != "":
 		words.show_word(tr(word_key), side, lanes.word_spot(lane), quality)
-		if cue != null:
-			cue.hit(quality, tr(word_key))
 	if side != "" and not is_step:
 		# Steps say their side with the step tick; the lasting timing ticks are for the bells.
 		lanes.add_offset(offset, lane if lane >= 0 else 1)
@@ -691,11 +775,10 @@ func _on_judged(note: Note, judgement: String, offset: float) -> void:
 
 ## A step, call or hold hit on time (Perfect, Good, or a hold kept to its end): light runs up its
 ## lane to the procession in the note's colour; a call hit on time makes the Issohadore crack his rope;
-## a hold kept to its end rings a small bell at the lane's pitch, knocks the screen and flares the fire.
+## a hold kept to its end knocks the screen and flares the fire (its small bell rang on the music).
 func _on_time_step(note: Note, judgement: String) -> void:
 	if judgement == "held":
 		lanes.lane_pulse(note.lane, StreetSkin.K_HOLD[3], 1.6)
-		Sound.hold_done(note.lane)
 		knock(Vector2(0.0, 3.0))
 		if backdrop != null:
 			backdrop.kick(0.5)
@@ -726,8 +809,8 @@ func note_colour(note: Note) -> Color:
 ## button (placeholders the art and sound passes replace, see handoff/stomp.md). judged has already
 ## drawn the burst and word.
 func _on_stomp(note: Note, judgement: String, _offset: float, both: bool) -> void:
+	# The stomp's sound already played on its beat (_schedule).
 	if both:
-		Sound.stomp(note.lane, step_quality(judgement))
 		_stomp_sounded = true
 		if scene.has_method("stomp"):
 			scene.stomp()
@@ -735,7 +818,6 @@ func _on_stomp(note: Note, judgement: String, _offset: float, both: bool) -> voi
 			scene.jolt("ring")
 		UIKit.vibrate(40)
 	else:
-		Sound.stomp_half(note.lane)
 		words.show_word(tr("judge_one_thumb"), "", lanes.word_spot(note.lane), "early")
 	lanes.stomp_hit(note.lane, judgement, both)
 	if both:
@@ -817,8 +899,6 @@ func _on_still_kept(_note: Note, points: float) -> void:
 	scene.set_unison(session.unison_level)
 	scene.settle()
 	UIKit.vibrate(20)
-	if cue != null:
-		cue.hit("held", tr("judge_still_kept"))
 
 
 func _on_unison(level: int) -> void:
@@ -853,6 +933,8 @@ func pos_of(note: Note) -> Vector2:
 func _on_failed() -> void:
 	if failed or done:
 		return
+	if run_log != null:
+		run_log.event(_song_t, "failed")
 	failed = true
 	done = true
 	if _pause_panel != null:
@@ -877,8 +959,7 @@ func _open_fail_menu() -> void:
 	if _fail_panel != null or not is_inside_tree():
 		return
 	_fail_panel = FailMenu.new()
-	if pixel:
-		_fail_panel.z_index = PixelFilter.Z_OVER + 10
+	_fail_panel.z_index = PixelFilter.Z_OVER + 10
 	_fail_panel.name = "FailMenu"
 	add_child(_fail_panel)
 	(_fail_panel as FailMenu).chosen.connect(_on_pause_choice)
@@ -890,6 +971,8 @@ func _open_fail_menu() -> void:
 func pause() -> void:
 	if done or failed or session == null or _pause_panel != null:
 		return
+	if run_log != null:
+		run_log.event(_song_t, "pause")
 	if _resume_at >= 0.0:
 		# Focus lost (or pause pressed) during a count-in: stop the count and ask again. The music
 		# is still waiting on its bar line, so nothing is lost.
@@ -911,14 +994,15 @@ func _open_pause_menu() -> void:
 	paused = true
 	Sound.ui("tap")
 	_pause_panel = PauseMenu.new()
-	if pixel:
-		_pause_panel.z_index = PixelFilter.Z_OVER + 10
+	_pause_panel.z_index = PixelFilter.Z_OVER + 10
 	_pause_panel.name = "PauseMenu"
 	add_child(_pause_panel)
 	(_pause_panel as PauseMenu).chosen.connect(_on_pause_choice)
 
 
 func _on_pause_choice(what: String) -> void:
+	if run_log != null:
+		run_log.event(_song_t, "menu", {"choice": what})
 	match what:
 		"resume":
 			_pause_panel.queue_free()
@@ -946,10 +1030,8 @@ func _on_pause_choice(what: String) -> void:
 func _tick_count() -> void:
 	var left := _resume_at - _clock
 	if left > 0.0:
-		var tv := _count_music_t - left
+		var tv := _count_music_t - left + _lead
 		lanes.song_time = tv
-		if cue != null:
-			cue.song_time = tv
 		var k := maxf((_clock - _count_from) / _spb, 0.0)
 		count_view.show_digit(clampi(4 - floori(k), 1, 4), fposmod(k, 1.0))
 		lanes.beat_pulse = 1.0 - fposmod(k, 1.0)
@@ -1006,22 +1088,19 @@ func _finish() -> void:
 		return
 	done = true
 	router.enabled = false
+	_save_run("finished")
 	if bool(args.get("embedded", false)):
 		finished.emit(session)
-		return
-	if session.piazza and args.has("round"):
-		var round: Dictionary = (args.round as Dictionary).duplicate(true)
-		round.scores[int(round.turn)] = session.score
-		round.turn = int(round.turn) + 1
-		app.replace("piazza", {"round": round})
 		return
 	var record := {}
 	if autoplay == null:
 		record = Profile.record_result(session)
-	app.replace("results", {"session": session, "record": record, "play_args": args, "ghost": ghost})
+	app.replace("results", {"session": session, "record": record, "play_args": args, "ghost": ghost,
+			"frames": frame_stats(), "run_saved": run_log.saved_path if run_log != null else ""})
 
 
 func _exit_tree() -> void:
+	_save_run("left")
 	if conductor != null:
 		conductor.pause()
 	_end_sound()

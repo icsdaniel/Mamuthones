@@ -52,6 +52,7 @@ jobs:
           GODOT_ANDROID_KEYSTORE_DEBUG_USER: androiddebugkey
           GODOT_ANDROID_KEYSTORE_DEBUG_PASSWORD: android
         run: |
+          sed -i "s|const SHA := \"dev\"|const SHA := \"${GITHUB_SHA::7} ${GITHUB_REF_NAME}\"|" game/scripts/core/build_info.gd
           ./godot --headless --path game --import
           mkdir -p build/android
           ./godot --headless --path game --export-debug "Android APK" ../build/android/mamuthones.apk

@@ -1,43 +1,49 @@
 class_name PixelFigure
 extends Node2D
-## A figure of the pixel look as a puppet: its parts (tools/art/pixel3d/bake_figures.py) slide,
-## swing and squash on their own, so it moves smoothly instead of swapping drawings.
+## A figure of the pixel look (tools/art/pixel3d/bake_ai_figures.py), bobbing in pieces, timed on
+## the Rift of the NecroDancer clip Daniele sent (StreetBackdrop._bob): on the beat the body drops at
+## once while the feet stay planted, holds a frame and is back up 0.1 s after the beat. Never a jump.
+## The head nods deeper than the body and comes back a moment after it; the Mamuthone's bells and the
+## Issohadore's coil of rope are heavy: they fall a moment late, come back up late and swing a pixel
+## out toward the road while they are low.
 ##
-## On every beat the figure bobs as in Daniele's recording: the body drops at once and springs back
-## within a tenth of a second while the feet stay planted (the legs squash under it). The head
-## follows a moment later; the bells (the Mamuthone's) and the rope (the Issohadore's) are heavy and
-## loose: they lag behind the drop, overshoot it and swing on their straps until the next beat. Over
-## each bar the figure also leans a little from side to side, the parts at the back moving further
-## than the ones in front, so the cut-outs read as a body in depth. Never a jump.
+## Kept clean (Daniele, 2026-10-08): the pieces are cut from the one finished picture, so at rest they
+## put it back together exactly; the body has what they cover filled in with the picture around it
+## (mirrored, so the fleece's strands carry on instead of a dark smudge trailing the piece), and
+## each piece stays within a few pixels of its joint. Every move follows one smooth curve on whole
+## art px, never shaking back and forth.
 ##
-## The origin is the feet (bottom centre of every part's picture).
+## The origin is the feet (the pictures' bottom centre).
 
 const DIR := "res://art/pixel/"
-## name: [[part, pivot rule, depth], ...] back to front. Pivot rules: "feet" the bottom centre of the
-## picture, "neck" the bottom centre of the part, "strap" the top centre of the part, "hand" its top
-## right. Depth: how far behind (+) or in front (-) of the body the part is, for the sway.
-const PARTS := {
-	"mamuthone": [["legs", "feet", 0.0], ["body", "feet", 0.0], ["back_bells", "strap", 1.0], ["front_bells", "strap", -0.6], ["head", "neck", -0.2]],
-	"issohadore": [["legs", "feet", 0.0], ["body", "feet", 0.0], ["rope", "hand", -0.7], ["head", "neck", -0.2]],
+## The row (art px from the top) each figure's body is split at: the shins, just under the
+## Mamuthone's fleece and the Issohadore's trousers, which drop over them (a cut higher shows its
+## straight edge). Every piece is above it.
+const KNEE := {"mamuthone": 146, "issohadore": 138}
+## name: [[piece, kind], ...] back to front. Kinds: "head" nods, "load" swings.
+const PIECES := {
+	"mamuthone": [["back_bells", "load"], ["front_bells", "load"], ["head", "head"]],
+	"issohadore": [["rope", "load"], ["head", "head"]],
 }
-const DROP := 6.0             ## how far the body drops on the beat, art px
-const LEGS_H := 0.32          ## the share of the figure's height the legs take (they squash)
-const HEAD_LAG := 0.025       ## seconds the head follows the body late
-const SWING_LAG := 0.04       ## ... the bells and the rope
-const SWING := 10.0            ## degrees the bells and the rope swing after the drop
-const SWING_HZ := 3.2         ## how fast they swing
-const SWING_DAMP := 5.0       ## how fast the swing dies away
-const RING_SWING := 22.0      ## degrees the load and the rope swing when a bell is rung on time
+const DROP := 8.0             ## art px the body drops on the beat (about 5% of the figure, as in the clip)
+const NOD := 3.0              ## art px the head drops further than the body
+const HEAD_LAG := 0.033       ## seconds the head stays down after the body starts back up
+const LOAD_LAG := 0.033       ## seconds the bells and the rope fall and rise late
+const REACH := 3.0            ## art px a piece may be off its joint at all (bake_ai_figures.py fills 4 behind it)
+const LOAD_OFF := 2.0         ## art px they can be off their straps, at most
+const LOAD_OUT := 1.0         ## art px they swing out toward the road while low
+const RING_THROW := 2.0       ## art px the load is thrown up (a tilt up) or down when a bell is rung on time
+const RING_SWING := 22.0      ## degrees the painted figures' load swings when a bell is rung on time
 const RING_HZ := 4.5
 const RING_DAMP := 6.0
-const RING_THROW := 4.0       ## art px the load is thrown up (a tilt up) or down by the ring
-const SWAY := 1.2             ## art px the figure leans across a bar
-const SWAY_DEPTH := 1.6       ## extra art px for a part at depth 1
+const RING_DIP := 3.0         ## art px the body dips again when a bell is rung on time
 
 var figure := "mamuthone"
-var mirror := false           ## leans toward the road on the left (false) or the right (true)
+var mirror := false           ## the road is to the left (true) or the right (false)
 var reduced_motion := false
-var _parts: Array = []        ## [Sprite2D, rule, depth, rest position]
+var _upper: Sprite2D
+var _legs: Sprite2D
+var _pieces: Array = []       ## [Sprite2D, kind]
 var _size := Vector2.ONE
 
 
@@ -45,23 +51,35 @@ func _init(p_figure := "mamuthone") -> void:
 	figure = p_figure
 
 
+## The body as two slices of its picture (the legs stay planted, the rest drops over them, so the
+## seam is always exact), then the pieces over it.
 func _ready() -> void:
-	for spec: Array in PARTS[figure]:
-		var tex: Texture2D = load(DIR + "%s_%s.png" % [figure, spec[0]])
-		if tex == null:
-			continue
-		var s := Sprite2D.new()
-		s.name = str(spec[0]).capitalize().replace(" ", "")
-		s.texture = tex
-		s.centered = false
-		s.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
-		_size = tex.get_size()
-		var pivot := _pivot(tex, str(spec[1]))
-		# the picture stays where it is; only its pivot moves to the joint
-		s.position = pivot
-		s.offset = -_feet() - pivot
-		add_child(s)
-		_parts.append([s, str(spec[1]), float(spec[2]), pivot])
+	var tex: Texture2D = load(DIR + "%s_body.png" % figure)
+	if tex == null:
+		return
+	_size = tex.get_size()
+	var knee := float(KNEE.get(figure, roundi(_size.y * 0.7)))
+	_legs = _sprite(tex, "Legs", knee, _size.y)
+	_upper = _sprite(tex, "Upper", 0.0, knee)
+	for spec: Array in PIECES.get(figure, []):
+		var pt: Texture2D = load(DIR + "%s_%s.png" % [figure, spec[0]])
+		if pt != null:
+			_pieces.append([_sprite(pt, str(spec[0]).capitalize().replace(" ", ""), 0.0, _size.y), str(spec[1])])
+
+
+func _sprite(tex: Texture2D, n: String, top: float, bottom: float) -> Sprite2D:
+	var s := Sprite2D.new()
+	s.name = n
+	s.texture = tex
+	s.centered = false
+	s.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
+	s.use_parent_material = true    # a portrait's cut (StreetBackdrop) set on the figure
+	s.region_enabled = true
+	s.region_rect = Rect2(0.0, top, _size.x, bottom - top)
+	# the origin is the feet, the bottom centre on a whole art px
+	s.offset = Vector2(-floorf(_size.x * 0.5), top - _size.y)
+	add_child(s)
+	return s
 
 
 ## The figure's height in art px (its pictures').
@@ -69,64 +87,42 @@ func art_height() -> float:
 	return _size.y
 
 
-## The feet in the pictures: the bottom centre, on a whole art px so the parts stay on the grid.
-func _feet() -> Vector2:
-	return Vector2(floorf(_size.x * 0.5), _size.y)
-
-
-## The part's joint, relative to the feet (art px).
-func _pivot(tex: Texture2D, rule: String) -> Vector2:
-	var img := tex.get_image()
-	var used := img.get_used_rect() if img != null else Rect2i(Vector2i.ZERO, Vector2i(_size))
-	var feet := _feet()
-	var p := feet
-	match rule:
-		"neck":
-			p = Vector2(used.position.x + used.size.x * 0.5, used.end.y)
-		"strap":
-			p = Vector2(used.position.x + used.size.x * 0.5, used.position.y)
-		"hand":
-			p = Vector2(used.end.x, used.position.y)
-	return p - feet
-
-
-## Poses the puppet t seconds after the last beat; bar is the beat's place in its bar (0..4).
-## The swing (degrees) of the load `age` seconds after a bell rung on time (0 when long gone).
+## The swing (degrees) of the painted figures' load `age` seconds after a bell rung on time.
 static func ring_swing(age: float) -> float:
 	if age < 0.0 or age > 1.0:
 		return 0.0
 	return RING_SWING * sin(TAU * RING_HZ * age) * exp(-RING_DAMP * age)
 
 
-## `ring`: seconds since a bell was rung on time (the load is thrown `ring_up` and swings hard).
-func pose(t: float, bar: float, still := false, ring := 9.0, ring_up := true) -> void:
+## Poses the figure t seconds after the last beat (bar: the beat's place in its bar, kept for the
+## callers). `ring`: seconds since a bell was rung on time: the body dips again and the load is
+## thrown up (a tilt up) or down.
+func pose(t: float, _bar: float, still := false, ring := 9.0, ring_up := true) -> void:
+	if _upper == null:
+		return
 	var m := 0.35 if reduced_motion else 1.0
-	var d := 0.0 if still else StreetBackdrop._bob(t) * DROP * m
-	var dh := 0.0 if still else StreetBackdrop._bob(t - HEAD_LAG) * DROP * 1.15 * m
-	var ds := 0.0 if still else StreetBackdrop._bob(t - SWING_LAG) * DROP * 1.3 * m
-	var ts := maxf(0.0, t - SWING_LAG)
-	var swing := 0.0 if still else SWING * m * sin(TAU * SWING_HZ * ts) * exp(-SWING_DAMP * ts)
-	if ring >= 0.0 and ring < 1.0:
-		swing += ring_swing(ring) * m
-		ds += (-1.0 if ring_up else 1.0) * RING_THROW * m * exp(-ring * 12.0) * sin(minf(ring * 30.0, PI * 0.5))
-	var lean := sin(bar / 4.0 * TAU) * (0.0 if reduced_motion else 1.0)
+	var bob := 0.0 if still else StreetBackdrop._bob(t)
+	var rung := not still and ring >= 0.0 and ring < 0.5
+	var dip := StreetBackdrop._bob(ring) * RING_DIP / DROP if rung else 0.0
+	# whole art px, so the pictures stay on their grid
+	var body := roundf(maxf(bob, dip) * DROP * m)
+	_upper.position = Vector2(0.0, body)
 	var toward := -1.0 if mirror else 1.0
-	for e: Array in _parts:
+	for e: Array in _pieces:
 		var s: Sprite2D = e[0]
-		var rest: Vector2 = e[3]
-		var depth: float = e[2]
-		var x := lean * (SWAY + SWAY_DEPTH * depth)
-		# every part slides by whole art px, so it stays crisp on the lens's grid; only the small
-		# loose parts (bells, rope) turn as they swing
-		match str(e[1]):
-			"feet":
-				if s.name == "Legs":
-					s.position = rest
-					s.scale = Vector2(1.0, 1.0 - roundf(d) / (_size.y * LEGS_H))
-				else:
-					s.position = rest + Vector2(roundf(x), roundf(d))
-			"neck":
-				s.position = rest + Vector2(roundf(x + toward * 0.4 * dh), roundf(dh))
-			_:
-				s.position = rest + Vector2(roundf(x), roundf(ds))
-				s.rotation = deg_to_rad(swing) * toward
+		var y := body
+		var x := 0.0
+		if not still:
+			if e[1] == "head":
+				# down with the body and a little further, back up a moment after it
+				var h := maxf(maxf(bob, StreetBackdrop._bob(t - HEAD_LAG)), dip)
+				y = maxf(body, roundf(h * (DROP + NOD) * m))
+			else:
+				var l := StreetBackdrop._bob(t - LOAD_LAG)
+				y = body + clampf(roundf(l * DROP * m) - body, -LOAD_OFF, LOAD_OFF)
+				x = roundf(maxf(bob, l) * LOAD_OUT * m) * toward
+				if rung:
+					y += roundf(StreetBackdrop._bob(ring) * RING_THROW * m) * (-1.0 if ring_up else 1.0)
+				# never further off than the body is filled in behind it
+				y = body + clampf(y - body, -REACH, REACH)
+		s.position = Vector2(x, y)

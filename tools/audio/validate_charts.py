@@ -298,8 +298,6 @@ def check_chart(song: dict, name: str, notes: list, audio_len: float | None):
         if k not in KINDS:
             errs.append(f"{where}: unknown kind {k!r}")
             continue
-        if kind == "piazza" and k != "bell":
-            errs.append(f"{where}: piazza charts hold bells only")
         if k in ("step", "hold", "ring", "stomp"):
             if n.get("lane") not in (0, 1, 2):
                 errs.append(f"{where}: {k} needs lane 0, 1 or 2")
@@ -455,14 +453,11 @@ def check_song(song: dict, audio_len: float | None = None):
         return errs, {}
     if set(song["title"]) != {"en", "it"}:
         errs.append("title needs en and it")
-    if song["kind"] not in ("story", "piazza", "tutorial"):
+    if song["kind"] not in ("story", "tutorial"):
         errs.append(f"bad kind {song['kind']}")
     if not song["audio"].startswith("res://audio/music/"):
         errs.append("audio must live in res://audio/music/")
-    if song["kind"] == "piazza":
-        if set(song["charts"]) != {"piazza"}:
-            errs.append("piazza songs have exactly one chart named piazza")
-    elif set(song["charts"]) != set(DIFFS):
+    if set(song["charts"]) != set(DIFFS):
         errs.append(f"charts must be {DIFFS}")
     if song["kind"] == "tutorial":
         topics = [ls.get("topic") for ls in song.get("lessons", [])]
@@ -507,7 +502,7 @@ def check_song(song: dict, audio_len: float | None = None):
             if ls["topic"] == "lanes" and len({n.get('lane') for n in inside}) < 3:
                 errs.append("lesson lanes must use all three lanes")
     # difficulty order: density rises from easy to expert, and so do the bells (story songs)
-    if song["kind"] != "piazza" and all(summaries.get(d) for d in DIFFS):
+    if all(summaries.get(d) for d in DIFFS):
         counts = [summaries[d]["notes"] for d in DIFFS]
         if counts != sorted(counts):
             errs.append(f"note counts do not rise with difficulty: {counts}")

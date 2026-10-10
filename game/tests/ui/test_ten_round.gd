@@ -1,7 +1,7 @@
 extends TestCase
 ## The "what makes it a 10" round: early/late on steps readable without words (a tick at the lane,
 ## cool above the hit line, warm below, gone in 0.3 s; a duller knock on Ok), the kept stand-still's
-## moment and its share on results, and the daily's invitation before anyone has played.
+## moment and its share on results.
 
 
 static func _auto(s: Session) -> Session:
@@ -29,7 +29,7 @@ func test_step_ticks_say_early_or_late_at_a_glance() -> void:
 	check_eq(script.step_quality("late"), "ok", "an Ok step (late) knocks dull")
 	check_eq(script.step_quality("miss"), "", "a miss has no step quality")
 	UIHarness.fresh_profile()
-	var app := UIHarness.make_app(tree, "play", {"song_id": "fires", "difficulty": "hard", "bell_set": "light"})
+	var app := UIHarness.make_app(tree, "play", {"song_id": "fires", "difficulty": "hard"})
 	await UIHarness.frames(tree, 3)
 	var play := app.current()
 	var s: Session = play.get("session")
@@ -82,7 +82,7 @@ func test_kept_still_has_its_moment_and_share() -> void:
 	check_eq(results.still_share(50.0, 1000), 5, "5% of the score")
 	check_eq(results.still_share(1.0, 100000), 1, "a tiny share still shows as 1%")
 	UIHarness.fresh_profile()
-	var app := UIHarness.make_app(tree, "play", {"song_id": "fires", "difficulty": "hard", "bell_set": "light"})
+	var app := UIHarness.make_app(tree, "play", {"song_id": "fires", "difficulty": "hard"})
 	await UIHarness.frames(tree, 3)
 	var play := app.current()
 	var s: Session = play.get("session")
@@ -99,26 +99,3 @@ func test_kept_still_has_its_moment_and_share() -> void:
 	UIHarness.free_app(app)
 	UIHarness.restore_profile()
 
-
-func test_daily_invites_before_anyone_has_played() -> void:
-	UIHarness.fresh_profile()
-	var date := {"year": 2026, "month": 10, "day": 3}
-	var app := UIHarness.make_app(tree, "daily", {"date": date})
-	await UIHarness.settle(tree)
-	var screen := app.current()
-	check(screen.find_child("Boards", true, false) == null, "no empty scores link before anyone has played")
-	var best := screen.find_child("Best", true, false) as Label
-	check_eq(best.text, tr("daily_be_first"), "an invitation instead: be the first today")
-	UIHarness.free_app(app)
-	# After a daily run the scores link comes back.
-	var pick := Daily.for_date(date)
-	var s := Session.new(SongLibrary.get_song(str(pick.song_id)), "easy", "light", {"daily": str(pick.key), "mirror": bool(pick.mirror)})
-	Profile.record_result(_auto(s))
-	if check(not Profile.daily_best(str(pick.key)).is_empty(), "the run counts as today's daily"):
-		app = UIHarness.make_app(tree, "daily", {"date": date})
-		await UIHarness.settle(tree)
-		screen = app.current()
-		check(screen.find_child("Boards", true, false) != null, "then today's scores are one tap away")
-		check(not (screen.find_child("Best", true, false) as Label).text.contains(tr("daily_be_first")), "and the invitation is gone")
-		UIHarness.free_app(app)
-	UIHarness.restore_profile()

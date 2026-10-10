@@ -106,8 +106,6 @@ func build() -> void:
 	for item in [
 		["StoryMap", "title_story", func() -> void: app.open("story")],
 		["FreePlay", "title_free", func() -> void: app.open("free_play")],
-		["Piazza", "title_piazza", func() -> void: app.open("piazza")],
-		["Daily", "title_daily", func() -> void: app.open("daily")],
 		["Workshop", "title_workshop", func() -> void: app.open("workshop")],
 		["Leaderboards", "title_boards", _boards],
 		["Tutorial", "title_tutorial", func() -> void: app.open("tutorial")],

@@ -5,7 +5,8 @@ extends Control
 ## carved frames with glowing orange edges - health as hearts on the left, the unison multiplier in
 ## a big hexagonal badge in the middle (its lower rim fills with the streak toward the next level),
 ## the score on the right. The ghost line (ahead or behind your best) and the song's section are
-## kept but not shown. A small pause button sits at the top right.
+## kept but not shown. A small pause button sits at the top right. Under the badge, the combo counts
+## the hits in a row from the first one (Daniele, 2026-10-10), hidden while it is 0.
 ## Node names (Score, Ghost, Health, Unison, Pause, Progress) are what the tests look for.
 
 signal pause_pressed
@@ -28,9 +29,6 @@ const PANEL_H := 64.0
 const BADGE := Vector2(122.0, 112.0)
 
 var session: Session
-## The pixel look: the HUD's words and figures are the pixel type (PxType), set over PixelFilter's
-## lens so they stay crisp; the frames under it come out as pixel art through the lens.
-var pixel := false
 var ghost: Ghost
 var _score: Label
 var _unison: Label
@@ -51,6 +49,10 @@ var _punch := 0.0
 var beat := -1000.0          ## the song's beat now, for the badge's bounce
 var _bounce := 0.0           ## 1 on the beat, falling away
 var _punched := 0
+var _combo: Label
+var _combo_word: Label
+var _combo_shown := 0
+var _combo_pop := 0.0
 
 
 func _init() -> void:
@@ -64,9 +66,6 @@ static func font(bold := true) -> Font:
 
 ## In the pixel look: the bitmap face that stands in for a smooth font size, over the lens.
 func pstyle(l: Label, size: int, color: Color, bold := true, outline := 6) -> void:
-	if not pixel:
-		style(l, size, color, bold, outline)
-		return
 	var face := "caps"
 	if size >= 56:
 		face = "big"
@@ -112,7 +111,7 @@ func setup(p_session: Session, p_ghost: Ghost) -> void:
 	_ghost.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
 	_ghost.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	add_child(_ghost)
-	# Health: five hearts, two points each (hidden where health is off: Piazza, lessons, autoplay).
+	# Health: five hearts, two points each (hidden where health is off: lessons, autoplay).
 	_health = HealthPips.new()
 	_health.name = "Health"
 	_health.session = session
@@ -140,6 +139,21 @@ func setup(p_session: Session, p_ghost: Ghost) -> void:
 		_pause.add_theme_stylebox_override(st, StyleBoxEmpty.new())
 	_pause.draw.connect(_draw_pause)
 	add_child(_pause)
+	_combo = Label.new()
+	_combo.name = "Combo"
+	pstyle(_combo, 36, INK, true, 6)
+	_combo.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	_combo.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_combo.visible = false
+	add_child(_combo)
+	_combo_word = Label.new()
+	_combo_word.name = "ComboWord"
+	_combo_word.text = tr("hud_combo")
+	pstyle(_combo_word, 18, GOLD_INK, false, 4)
+	_combo_word.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	_combo_word.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_combo_word.visible = false
+	add_child(_combo_word)
 	_section = Label.new()
 	_section.name = "Section"
 	pstyle(_section, 24, GOLD_INK, false, 5)
@@ -196,15 +210,18 @@ func _layout() -> void:
 	_score.size = right.size - Vector2(36.0, 0.0)
 	_ghost.position = Vector2(right.position.x, right.end.y + 8.0)
 	_ghost.size = Vector2(right.size.x - 10.0, 30.0)
-	if pixel:
-		# the pixel type runs wider: the line wraps onto two, right-aligned under the score
-		_ghost.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-		_ghost.size.y = 54.0
+	# the pixel type runs wider: the line wraps onto two, right-aligned under the score
+	_ghost.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	_ghost.size.y = 54.0
 	_health.position = left.get_center() - _health.size * 0.5
 	_section.position = Vector2(left.position.x + 12.0, left.end.y + 8.0)
 	_section.size = Vector2(left.size.x, 30.0)
 	_unison.position = badge.position
 	_unison.size = badge.size
+	_combo.position = Vector2(badge.get_center().x - 80.0, badge.end.y + 24.0)
+	_combo.size = Vector2(160.0, 40.0)
+	_combo_word.position = Vector2(badge.get_center().x - 80.0, badge.end.y + 60.0)
+	_combo_word.size = Vector2(160.0, 22.0)
 	_pause.position = Vector2(line.y + 34.0, line.z + 16.0) - _pause.size * 0.5
 	_frames.position = Vector2.ZERO
 	_frames.size = size
@@ -225,15 +242,67 @@ func _to_frames(p: Vector2) -> Vector2:
 	return p
 
 
+## The pixel look's frames are Daniele's pictures (art/ai/hud_*.png, 2026-10-08), each in three
+## slices: its two ends kept to their shape at the frame's height, its middle stretched between
+## them. Made once per size at one texel per cell (the HUD is drawn one px per cell), every texel
+## wholly in or out, so they stay crisp.
+const SLICE := {"hud_plate": 240, "hud_bar": 90}   ## each picture's end width, its own px
+static var _sliced := {}
+
+
+static func sliced(key: String, cells: Vector2i) -> Texture2D:
+	cells = cells.max(Vector2i(2, 2))
+	var k := "%s_%d_%d" % [key, cells.x, cells.y]
+	if _sliced.has(k):
+		return _sliced[k]
+	var tex: Texture2D = null
+	var path := "res://art/ai/%s.png" % key
+	if ResourceLoader.exists(path):
+		var src := (load(path) as Texture2D).get_image()
+		src.decompress()
+		src.convert(Image.FORMAT_RGBA8)
+		var w := src.get_width()
+		var h := src.get_height()
+		var cap_src := int(SLICE.get(key, 0))
+		var cap := clampi(roundi(cap_src * float(cells.y) / h), 0, cells.x / 2)
+		var out := Image.create(cells.x, cells.y, false, Image.FORMAT_RGBA8)
+		var parts := [[0, cap_src, 0, cap], [cap_src, w - cap_src, cap, cells.x - cap], [w - cap_src, w, cells.x - cap, cells.x]]
+		if cap_src == 0:
+			parts = [[0, w, 0, cells.x]]
+		for part: Array in parts:
+			var dw: int = part[3] - part[2]
+			if dw <= 0:
+				continue
+			var piece := src.get_region(Rect2i(part[0], 0, part[1] - part[0], h))
+			piece.resize(dw, cells.y, Image.INTERPOLATE_LANCZOS)
+			out.blit_rect(piece, Rect2i(0, 0, dw, cells.y), Vector2i(part[2], 0))
+		for y in cells.y:
+			for x in cells.x:
+				var c := out.get_pixel(x, y)
+				c.a = 1.0 if c.a > 0.5 else 0.0
+				out.set_pixel(x, y, c)
+		tex = ImageTexture.create_from_image(out)
+	_sliced[k] = tex
+	return tex
+
+
+## Draws picture `key` over r (base px), snapped to whole cells.
+func _picture(ci: CanvasItem, key: String, r: Rect2, mod := Color.WHITE) -> void:
+	var px := PxArt.PX
+	var cells := Vector2i((r.size / px).round())
+	var tex := sliced(key, cells)
+	if tex != null:
+		ci.draw_texture_rect(tex, Rect2(PxArt.snap2(r.position), Vector2(cells) * px), false, mod)
+
+
 ## A carved frame: a dark panel with pointed ends, an orange edge glowing outward, a thin inner line,
 ## and a small diamond at each point.
 func _panel(ci: CanvasItem, r: Rect2, glow := 1.0) -> void:
-	var t := r.size.y * 0.5
-	var pts := PackedVector2Array([r.position + Vector2(t * 0.6, 0), Vector2(r.end.x - t * 0.6, r.position.y), Vector2(r.end.x, r.get_center().y),
-		r.end - Vector2(t * 0.6, 0), Vector2(r.position.x + t * 0.6, r.end.y), Vector2(r.position.x, r.get_center().y)])
-	_shape(ci, pts, glow)
-	for p in [pts[5], pts[2]]:
-		_diamond(ci, p, 9.0)
+	# the plate's diamonds stand out past the frame's points, as the drawn ones did
+	var grow := r.size.y * 0.16
+	var rr := r.grow_individual(grow, grow * 0.35, grow, grow * 0.35)
+	_glow_round(ci, rr, glow)
+	_picture(ci, "hud_plate", rr)
 
 
 ## A frame in relief: a thick slab standing out of the screen (its lower sides show below it), a
@@ -324,22 +393,20 @@ static func _quad(ci: CanvasItem, q: Array, col: Color) -> void:
 	ci.draw_primitive(PackedVector2Array([pts[0], pts[2], pts[3]]), PackedColorArray([col, col, col]), PackedVector2Array())
 
 
+## A soft orange glow round a pixel frame, as the drawn frames have.
+func _glow_round(ci: CanvasItem, r: Rect2, glow: float) -> void:
+	var t := r.size.y * 0.5
+	var pts := PackedVector2Array([r.position + Vector2(t * 0.6, 0), Vector2(r.end.x - t * 0.6, r.position.y), Vector2(r.end.x, r.get_center().y),
+		r.end - Vector2(t * 0.6, 0), Vector2(r.position.x + t * 0.6, r.end.y), Vector2(r.position.x, r.get_center().y), r.position + Vector2(t * 0.6, 0)])
+	for k in 3:
+		ci.draw_polyline(pts, Color(1.0, 0.5, 0.1, 0.1 * glow), 16.0 - k * 5.0, true)
+
+
 ## A cut diamond stud: four facets lit from the top left, on a dark base that shows below it.
 func _diamond(ci: CanvasItem, at: Vector2, r: float, col := EDGE_HOT) -> void:
-	var p := _to_frames(at)
-	var t := p + Vector2(0, -r)
-	var rt := p + Vector2(r, 0)
-	var bt := p + Vector2(0, r)
-	var lf := p + Vector2(-r, 0)
-	var d := Vector2(0, 3.0)
-	ci.draw_colored_polygon(PackedVector2Array([t + Vector2(0, -2), rt + Vector2(2, 0), rt + d + Vector2(2, 0), bt + d + Vector2(0, 2), lf + d + Vector2(-2, 0), lf + Vector2(-2, 0)]), OUTLINE)
-	_quad(ci, [lf, bt, bt + d, lf + d], SIDE)
-	_quad(ci, [bt, rt, rt + d, bt + d], SIDE.darkened(0.4))
-	var c := p + Vector2(-r * 0.12, -r * 0.12)
-	ci.draw_colored_polygon(PackedVector2Array([t, c, lf]), col.lightened(0.35))
-	ci.draw_colored_polygon(PackedVector2Array([t, rt, c]), col)
-	ci.draw_colored_polygon(PackedVector2Array([lf, c, bt]), EDGE)
-	ci.draw_colored_polygon(PackedVector2Array([c, rt, bt]), EDGE_DARK)
+	# Daniele's stud, tinted toward the badge's colour when it is not plain gold
+	var tint := Color.WHITE if col == EDGE_HOT else Color.WHITE.lerp(col, 0.5) * 1.2
+	_picture(ci, "hud_stud", Rect2(at - Vector2(r, r) * 1.25, Vector2(r, r) * 2.5), tint)
 
 
 func _draw_frames() -> void:
@@ -351,6 +418,26 @@ func _draw_frames() -> void:
 	# the progress line between two diamonds
 	var a := _to_frames(Vector2(line.x + 14.0, line.z))
 	var e := _to_frames(Vector2(line.y - 14.0, line.z))
+	# Daniele's bar, its groove filling with a glowing rod as the song goes on
+	var bh := 21.0
+	var bar := Rect2(Vector2(line.x, line.z - bh * 0.5), Vector2(line.y - line.x, bh))
+	_picture(ci, "hud_bar", bar)
+	var px := PxArt.PX
+	var g0 := PxArt.snap2(Vector2(bar.position.x + bh * 0.9, line.z - px))
+	var gx1 := bar.end.x - bh * 0.9
+	var fw := roundf((lerpf(g0.x, gx1, clampf(_progress, 0.0, 1.0)) - g0.x) / px) * px
+	if fw >= px:
+		ci.draw_rect(Rect2(g0, Vector2(fw, px)), EDGE_HOT)
+		ci.draw_rect(Rect2(g0 + Vector2(0.0, px), Vector2(fw, px)), EDGE)
+	if session.health_on:
+		_panel(ci, b[0])
+	_panel(ci, b[2])
+	_draw_badge(ci, b)
+
+
+func _draw_line_frames(ci: CanvasItem, a: Vector2, e: Vector2) -> void:
+	var b := _boxes()
+	var line: Vector3 = b[3]
 	# a groove for the progress, lit along its lower lip; the filled part a round glowing rod in it
 	ci.draw_line(a, e, OUTLINE, 11.0)
 	ci.draw_line(a, e, Color(0.1, 0.05, 0.04, 0.95), 8.0)
@@ -363,9 +450,9 @@ func _draw_frames() -> void:
 		ci.draw_line(a + Vector2(0, -1.5), fx + Vector2(0, -1.5), EDGE_HOT, 2.0)
 	for p in [Vector2(line.x + 8.0, line.z), Vector2(line.y - 8.0, line.z)]:
 		_diamond(ci, p, 8.0)
-	if session.health_on:
-		_panel(ci, b[0])
-	_panel(ci, b[2])
+
+
+func _draw_badge(ci: CanvasItem, b: Array) -> void:
 	# the badge: a tall hexagon, flaring when a level is gained; its lower rim fills with the streak.
 	# It bounces on every beat, and grows and burns hotter in colour as the multiplier rises.
 	var r: Rect2 = b[1]
@@ -401,7 +488,8 @@ func _draw_frames() -> void:
 			ci.draw_line(p1, p1.lerp(p2, k - 1.0), pal[1], 5.0)
 	for p in [hx[0], hx[3]]:
 		_diamond(ci, p, 8.0 * sc, Color.WHITE.lerp(pal[1], 1.0 - fl))
-	for sx: float in [-1.0, 1.0]:
+	# the little spurs at its foot (the pixel look's badge stands on its own: they read as stray marks)
+	for sx: float in []:
 		var c := _to_frames(Vector2(ctr.x + sx * (r.size.x * 0.5 * sc + 10.0), ctr.y + r.size.y * 0.5 * sc - 8.0))
 		ci.draw_colored_polygon(PackedVector2Array([c + Vector2(-sx * 10.0, -8.0), c + Vector2(sx * 6.0, 8.0), c + Vector2(-sx * 14.0, 8.0)]), pal[0])
 
@@ -439,16 +527,8 @@ func badge_scale() -> float:
 func _draw_pause() -> void:
 	var down := _pause.button_pressed or _pause.is_hovered()
 	var c := _pause.size * 0.5 + (Vector2(0, DEPTH * 0.5) if down else Vector2.ZERO)
-	var r := 21.0
-	var pts := PackedVector2Array()
-	for i in 6:
-		var a := TAU * float(i) / 6.0
-		pts.append(c + Vector2(cos(a), sin(a)) * r)
-	_shape(_pause, pts, 0.6)
-	for sx: float in [-1.0, 1.0]:
-		var bar := Rect2(c.x + sx * 6.0 - 3.0, c.y - 9.0, 6.0, 18.0)
-		_pause.draw_rect(Rect2(bar.position + Vector2(0, 2.0), bar.size), Color("#3a1404"))
-		_pause.draw_rect(bar, INK)
+	var sz := Vector2(48.0, 53.0)
+	_picture(_pause, "hud_pause", Rect2(c - sz * 0.5, sz), Color(0.8, 0.8, 0.8) if down else Color.WHITE)
 
 
 func set_pause_visible(v: bool) -> void:
@@ -471,6 +551,16 @@ func tick(t: float, delta: float) -> void:
 	_punch = move_toward(_punch, 0.0, delta * 0.8)
 	_score.pivot_offset = _score.size * 0.5
 	_score.scale = Vector2.ONE * (1.0 + _punch)
+	if session.combo != _combo_shown:
+		if session.combo > _combo_shown and not UIKit.reduced_motion():
+			_combo_pop = 0.25
+		_combo_shown = session.combo
+		_combo.text = str(_combo_shown)
+	_combo.visible = _combo_shown > 0
+	_combo_word.visible = _combo.visible
+	_combo_pop = move_toward(_combo_pop, 0.0, delta * 1.5)
+	_combo.pivot_offset = _combo.size * 0.5
+	_combo.scale = Vector2.ONE * (1.0 + _combo_pop)
 	_streak = float(session.unison_streak) / float(Session.UNISON_STEP) if session.unison_level < 5 else 1.0
 	# the badge bounces on the beat: a quick swell, easing back before the next one
 	_bounce = 0.0 if beat < 0.0 else pow(1.0 - fposmod(beat, 1.0), 3.0) * (0.35 if UIKit.reduced_motion() else 1.0)

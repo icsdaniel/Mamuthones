@@ -10,16 +10,14 @@ extends Node
 ##   signal changed
 ##   get_setting(key) / set_setting(key, value)      keys in DEFAULT_SETTINGS
 ##   has_flag(name) / set_flag(name, on := true)     first-run flags, see FLAGS
-##   get_look() -> {mask: Dictionary, fleece, straps, bell_set} / set_look(part, value)
-##   piazza_players() -> Array[String] / set_piazza_players(names)
-##   record_piazza(name, score) / piazza_best(name) -> int
+##   get_look() -> {mask: Dictionary, fleece, straps} / set_look(part, value)
 ##   calibration() -> Dictionary ({} = not calibrated) / set_calibration(d)
 ##   audio_offset() -> float seconds (the "audio_offset" setting)
-##   best(song_key, difficulty) -> {} or {score, accuracy, bells, ghost, slam, plays}
+##   visual_offset() -> float seconds the notes are drawn early (the "visual_offset" setting)
+##   best(song_key, difficulty) -> {} or {score, accuracy, grade, full_combo, ghost, slam, plays}
 ##   all_bests() -> {"song:difficulty": entry}
-##   daily_best(date_key, difficulty := "") -> {} or {score, song_id, difficulty, bells}
 ##       (one per difficulty; with no difficulty, the best of that day at any difficulty)
-##   record_result(session) -> {prev_best, new_best, bells, unlocked: [{kind, id, part?}], carving_gained}
+##   record_result(session) -> {prev_best, new_best, grade, prev_grade, unlocked: [{kind, id, part?}], carving_gained}
 ##   save(), load_profile(path := PATH), reset()
 ##   plays() -> total finished runs
 
@@ -31,21 +29,23 @@ const DEFAULT_SETTINGS := {
 	"language": "",          # "" = follow the phone
 	"vibration": true,
 	"slam": false,
-	"reduced_motion": false,
+	"reduced_motion": false,  # kept for older profiles: true reads as animations "calm"
+	"animations": "full",     # "full", "calm" or "off" (UIKit.animations)
 	"note_speed": 1.0,
 	"music_volume": 1.0,
 	"sfx_volume": 1.0,
 	"audio_offset": 0.0,     # seconds, from the tap test or set by hand
+	"visual_offset": 0.06,   # seconds the notes are drawn early (screen and touch delay); see visual_offset()
 	"bell_cue": true,        # the bell cue shown at Easy and Medium
-	"art_style": "pixel",    # the play screen's look: "pixel" (pixel art in 3D motion) or "painted"
+	"step_knocks": false,    # a knock on each step button (off: hits on time bring up the song's tune instead)
 }
 const FLAGS: Array[String] = ["language_chosen", "headphones_seen", "calibrated", "latency_tested", "tutorial_done"]
 const FLEECES: Array[String] = ["black", "dark_brown"]
 const STRAPS: Array[String] = ["natural", "dark"]
-const MAX_PIAZZA_PLAYERS := 6
 ## Allowed ranges for number settings; values outside are clamped.
 const RANGES := {
 	"audio_offset": Vector2(-0.5, 0.5),
+	"visual_offset": Vector2(-0.1, 0.25),
 	"note_speed": Vector2(0.5, 3.0),
 	"music_volume": Vector2(0.0, 1.0),
 	"sfx_volume": Vector2(0.0, 1.0),
@@ -60,9 +60,6 @@ var _flags: Dictionary = {}
 var _look: Dictionary = {}
 var _calibration: Dictionary = {}
 var _bests: Dictionary = {}
-var _daily: Dictionary = {}
-var _piazza_players: Array[String] = []
-var _piazza_bests: Dictionary = {}
 var _plays := 0
 var _dirty := false
 ## What happened on the last load: "new", "ok", "backup", "corrupt", "future".
@@ -105,6 +102,14 @@ func audio_offset() -> float:
 	return float(get_setting("audio_offset"))
 
 
+## Seconds the play screen draws the notes ahead of the song's clock. The sound delay test times the
+## ears (music out, touch in), but a player reading the notes also waits for the screen (a frame shows
+## two or so refreshes after it is worked out) and for the touch to arrive; on a phone that is about
+## 60 ms, the default. The results screen can even it out from a song's own hits.
+func visual_offset() -> float:
+	return float(get_setting("visual_offset"))
+
+
 func has_flag(flag: String) -> bool:
 	return bool(_flags.get(flag, false))
 
@@ -116,7 +121,7 @@ func set_flag(flag: String, on := true) -> void:
 	_touch()
 
 
-# ---------------------------------------------------------------- look, calibration, piazza
+# ---------------------------------------------------------------- look, calibration
 
 
 func get_look() -> Dictionary:
@@ -135,9 +140,6 @@ func set_look(part: String, value: Variant) -> void:
 		"straps":
 			if not str(value) in STRAPS:
 				return
-		"bell_set":
-			if not BellSets.is_valid(str(value)):
-				return
 		_:
 			return
 	_look[part] = value
@@ -155,31 +157,6 @@ func set_calibration(d: Dictionary) -> void:
 	_touch()
 
 
-func piazza_players() -> Array[String]:
-	return _piazza_players.duplicate()
-
-
-func set_piazza_players(names: Array) -> void:
-	_piazza_players.clear()
-	for n in names:
-		var s := str(n).strip_edges().left(24)
-		if s != "" and not s in _piazza_players and _piazza_players.size() < MAX_PIAZZA_PLAYERS:
-			_piazza_players.append(s)
-	_touch()
-
-
-func record_piazza(player: String, score: int) -> bool:
-	if score <= int(_piazza_bests.get(player, -1)):
-		return false
-	_piazza_bests[player] = score
-	_touch()
-	return true
-
-
-func piazza_best(player: String) -> int:
-	return int(_piazza_bests.get(player, 0))
-
-
 # ---------------------------------------------------------------- bests
 
 
@@ -192,34 +169,15 @@ func all_bests() -> Dictionary:
 	return _bests
 
 
-func daily_best(date_key: String, difficulty := "") -> Dictionary:
-	if difficulty != "":
-		var e = _daily.get(date_key + "." + difficulty, {})
-		if e is Dictionary and not e.is_empty():
-			return e.duplicate()
-		# Saved before dailies were per difficulty: one entry under the bare date.
-		var old = _daily.get(date_key, {})
-		return old.duplicate() if old is Dictionary and str(old.get("difficulty", "")) == difficulty else {}
-	var top := {}
-	for k in _daily:
-		var e = _daily[k]
-		if (str(k) == date_key or str(k).begins_with(date_key + ".")) and e is Dictionary \
-				and (top.is_empty() or int(e.get("score", 0)) > int(top.get("score", 0))):
-			top = e
-	return top.duplicate()
-
-
 func plays() -> int:
 	return _plays
 
 
-## Call once when a run ends. Keeps the best score (with its ghost), the best accuracy and bells,
-## records the daily, sends ladder scores (never slam, practice or Piazza runs) and reports what the
+## Call once when a run ends. Keeps the best score (with its ghost), the best accuracy and grade,
+## sends ladder scores (never slam or practice runs) and reports what the
 ## run unlocked.
 func record_result(session: Session) -> Dictionary:
-	var out := {"prev_best": 0, "new_best": false, "bells": session.bells(), "unlocked": [], "carving_gained": 0}
-	if session.piazza:
-		return out
+	var out := {"prev_best": 0, "new_best": false, "grade": session.grade_rank(), "prev_grade": -1, "unlocked": [], "carving_gained": 0}
 	var before := Progression.snapshot(self)
 	var points_before := Progression.carving_points(self)
 	var key := session.song_key() + ":" + session.difficulty
@@ -227,6 +185,7 @@ func record_result(session: Session) -> Dictionary:
 	var prev: Dictionary = _bests.get(key, {})
 	var prev_score := int(prev.get("score", 0))
 	out.prev_best = prev_score
+	out.prev_grade = Progression.entry_grade(prev) if not prev.is_empty() else -1
 	_plays += 1
 	if not practice:
 		var e := prev.duplicate()
@@ -236,23 +195,18 @@ func record_result(session: Session) -> Dictionary:
 			e.score = session.score
 			e.ghost = Ghost.from_session(session).to_dict()
 			e.slam = session.slam
-			e.bell_set = session.bell_set
 			e.date = Time.get_date_string_from_system(true)
 		e.accuracy = maxf(float(prev.get("accuracy", 0.0)), session.accuracy())
-		e.bells = maxi(int(prev.get("bells", 0)), session.bells())
+		e.grade = maxi(out.prev_grade, session.grade_rank())
+		e.full_combo = bool(prev.get("full_combo", false)) or session.full_combo()
+		e.erase("bells")
+		e.erase("bell_set")   # bell sets were removed (2026-10-09)
 		e.max_unison = maxi(int(prev.get("max_unison", 0)), int(session.stats.max_unison))
 		_bests[key] = e
-		# Only the real procession of that day counts as a daily.
-		if Daily.matches(session):
-			var d := daily_best(session.daily, session.difficulty)
-			if d.is_empty() or session.score > int(d.get("score", 0)):
-				_daily[session.daily + "." + session.difficulty] = {"score": session.score, "song_id": session.song_key(), "difficulty": session.difficulty, "bells": session.bells(), "slam": session.slam}
 		if session.ladder_ok():
 			var lb := _leaderboards()
 			if lb != null:
 				lb.submit(board_id(session.song_key(), session.difficulty), session.score)
-				if Daily.matches(session):
-					lb.submit(Daily.board_for(session.daily, session.difficulty), session.score)
 	var after := Progression.snapshot(self)
 	for k in after:
 		if before.has(k):
@@ -280,12 +234,9 @@ static func board_id(song_key: String, difficulty: String) -> String:
 func reset() -> void:
 	_settings = DEFAULT_SETTINGS.duplicate()
 	_flags = {}
-	_look = {"mask": _default_mask(), "fleece": FLEECES[0], "straps": STRAPS[0], "bell_set": "light"}
+	_look = {"mask": _default_mask(), "fleece": FLEECES[0], "straps": STRAPS[0]}
 	_calibration = {}
 	_bests = {}
-	_daily = {}
-	_piazza_players = []
-	_piazza_bests = {}
 	_plays = 0
 	_dirty = false
 
@@ -334,9 +285,6 @@ func save() -> bool:
 	cfg.set_value("look", "values", _look)
 	cfg.set_value("calibration", "values", _calibration)
 	cfg.set_value("bests", "values", _bests)
-	cfg.set_value("daily", "values", _daily)
-	cfg.set_value("piazza", "players", Array(_piazza_players))
-	cfg.set_value("piazza", "bests", _piazza_bests)
 	cfg.set_value("stats", "plays", _plays)
 	var tmp := path + ".tmp"
 	if write_sealed(cfg, tmp) != OK or _open_checked(tmp) == null:
@@ -437,7 +385,7 @@ func _read(cfg: ConfigFile, version: int) -> void:
 				_flags[str(k)] = f[k]
 	var l = cfg.get_value("look", "values", {})
 	if l is Dictionary:
-		for part in ["mask", "fleece", "straps", "bell_set"]:
+		for part in ["mask", "fleece", "straps"]:
 			if l.has(part):
 				set_look(part, l[part])
 	var c = cfg.get_value("calibration", "values", {})
@@ -449,19 +397,6 @@ func _read(cfg: ConfigFile, version: int) -> void:
 			var e = b[k]
 			if e is Dictionary and typeof(e.get("score", null)) in [TYPE_INT, TYPE_FLOAT]:
 				_bests[str(k)] = e
-	var d = cfg.get_value("daily", "values", {})
-	if d is Dictionary:
-		for k in d:
-			if d[k] is Dictionary:
-				_daily[str(k)] = d[k]
-	var pp = cfg.get_value("piazza", "players", [])
-	if pp is Array:
-		set_piazza_players(pp)
-	var pb = cfg.get_value("piazza", "bests", {})
-	if pb is Dictionary:
-		for k in pb:
-			if typeof(pb[k]) in [TYPE_INT, TYPE_FLOAT]:
-				_piazza_bests[str(k)] = int(pb[k])
 	var n = cfg.get_value("stats", "plays", 0)
 	_plays = int(n) if typeof(n) in [TYPE_INT, TYPE_FLOAT] else 0
 	_dirty = false

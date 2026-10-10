@@ -19,8 +19,14 @@ extends Control
 signal stepped(lane: int)
 signal lifted(lane: int)
 signal rang(result: Dictionary)
+## Every tilt the detector fired, heard or not (rang leaves out tilts with no bell near).
+signal tilted(result: Dictionary)
+## The phone moved in a stand-still and broke it (note: the stand-still).
+signal moved_still(note: Note)
 signal pause_requested
 
+## Seconds into a stand-still before moving counts: the tail of a bell rung just before it settles.
+const STILL_GRACE := 0.15
 const KEY_LANES := {KEY_A: 0, KEY_S: 1, KEY_D: 2, KEY_J: 3, KEY_K: 4, KEY_L: 5}   ## 3-5: second thumb
 
 var session: Session:
@@ -38,6 +44,8 @@ var _last_motion_t := -INF
 var detector: BellDetector
 ## Set to a MotionLog to record readings, touches and rings (for checking detection on real phones).
 var motion_log: MotionLog
+## Set to a RunLog to record every touch (inside the button zone or not) and what it did.
+var run_log: RunLog
 
 ## Session.tap's result for the latest press, read by stepped's handlers ({} before any).
 var last_tap: Dictionary = {}
@@ -91,6 +99,8 @@ func _input(event: InputEvent) -> void:
 		return
 	if event is InputEventScreenTouch:
 		var e := event as InputEventScreenTouch
+		if run_log != null:
+			_log_touch(e)
 		if e.pressed:
 			if not buttons_rect.has_point(e.position):
 				return
@@ -107,7 +117,11 @@ func _input(event: InputEvent) -> void:
 			_touches.erase(e.index)
 			get_viewport().set_input_as_handled()
 	elif event is InputEventScreenDrag:
-		if _touches.has((event as InputEventScreenDrag).index):
+		var dr := event as InputEventScreenDrag
+		if _touches.has(dr.index):
+			if run_log != null:
+				run_log.event(now(), "drag", {"id": dr.index, "x": roundi(dr.position.x), "y": roundi(dr.position.y),
+					"lane_now": lane_at(dr.position.x), "lane": _touches[dr.index].lane})
 			get_viewport().set_input_as_handled()
 	elif event is InputEventKey:
 		var k := event as InputEventKey
@@ -115,6 +129,9 @@ func _input(event: InputEvent) -> void:
 			return
 		var code := k.physical_keycode
 		var t := now()
+		if run_log != null:
+			_event_real = run_log.now()
+			run_log.event(t, "key", {"code": OS.get_keycode_string(code), "down": k.pressed})
 		if KEY_LANES.has(code):
 			var slot: int = KEY_LANES[code]
 			if k.pressed:
@@ -182,10 +199,51 @@ func feed_motion(t: float, acc: Vector3, gyro_dps: Vector3) -> void:
 	_last_motion_t = t
 	if motion_log != null:
 		motion_log.add_reading(t, acc, gyro_dps)
+	_watch_still(t)
 	if detector.feed(t, acc, gyro_dps):
-		if motion_log != null:
-			motion_log.add_ring(detector.last_t)
-		rang.emit(session.ring(detector.last_t, true, detector.last_strength))
+		_tilt_rang(detector.last_t, t, false)
+	else:
+		# A slow tilt that rang too early gets a second try at its peak, if a bell is due then.
+		var peak := detector.take_retry()
+		if not is_nan(peak) and session.bell_due(peak):
+			detector.used()
+			_tilt_rang(peak, t, true)
+	if detector.watching_still() and not is_nan(detector.moved_at):
+		var broke := session.moved(detector.moved_at)
+		detector.end_still()
+		if broke != null:
+			moved_still.emit(broke)
+
+
+func _tilt_rang(at: float, t: float, retry: bool) -> void:
+	if motion_log != null:
+		motion_log.add_ring(at)
+	var rr := session.ring(at, true, detector.last_strength)
+	if not retry and rr.get("quality") in ["free", "miss"]:
+		detector.forgive()
+	if run_log != null:
+		var bn: Note = rr.get("note")
+		run_log.event(at, "ring", {"tilt": true, "up": rr.get("up"), "q": rr.get("quality"),
+			"j": rr.get("judgement"), "note": bn.index if bn != null else -1, "strength": snappedf(detector.last_strength, 0.01),
+			"threshold": snappedf(detector.threshold, 0.1), "fed_at": snappedf(t, 0.0001), "retry": retry})
+	tilted.emit(rr)
+	# A tilt with no bell anywhere near is not shown or heard: holding the phone moves it all the
+	# time, and every small lobe over the threshold rang out (Daniele, 2026-10-10: 69 of 113 rings in
+	# a Rope Expert run). A tilt in a stand-still still rings, as it costs points.
+	if rr.get("quality") == "free":
+		return
+	rang.emit(rr)
+
+
+# In a stand-still the detector watches for any tilt (from STILL_GRACE in, until it ends or breaks).
+func _watch_still(t: float) -> void:
+	var rest := session.rest_at(t)
+	if rest == null or rest.judgement == "silence":
+		if detector.watching_still():
+			detector.end_still()
+		return
+	if not detector.watching_still() and t >= rest.t + STILL_GRACE:
+		detector.watch_still(t)
 
 
 func _press(lane: int, t: float, id: int) -> void:
@@ -196,13 +254,40 @@ func _press(lane: int, t: float, id: int) -> void:
 	_pressed[lane] += 1
 	var r: Dictionary = session.tap(lane, t, id) if session != null else {}
 	last_tap = r
+	if run_log != null:
+		var n: Note = r.get("note")
+		run_log.event(t, "press", {"id": id, "lane": lane, "j": r.get("judgement", ""),
+			"note": n.index if n != null else -1, "off": snappedf(float(r.get("offset", 0.0)), 0.0001),
+			"stomp": r.get("stomp", ""), "handled_ms": snappedf((run_log.now() - _event_real) * 1000.0, 0.01)})
 	stepped.emit(lane)
+	# A full ring tapped while the phone is already tilting: that tilt is its bell half.
+	var rn: Note = r.get("note")
+	if rn != null and rn.kind == Note.Kind.RING and r.get("judgement", "") == "" and is_nan(rn.bell_at) \
+			and detector != null and not session.slam and detector.tilting_for(t) >= BellDetector.HELD_TILT:
+		detector.claim(t)
+		_tilt_rang(t, t, true)
 	if not r.get("ring", {}).is_empty():
+		if run_log != null:
+			run_log.event(t, "ring", {"tilt": false, "q": r.ring.get("quality"), "j": r.ring.get("judgement")})
 		rang.emit(r.ring)
+
+
+var _event_real := 0.0
+
+
+# Every touch, before anything else: where it landed, whether it was in the button zone, and the
+# song time it was stamped with.
+func _log_touch(e: InputEventScreenTouch) -> void:
+	_event_real = run_log.now()
+	run_log.event(now(), "down" if e.pressed else "up", {"id": e.index, "x": roundi(e.position.x),
+		"y": roundi(e.position.y), "in_zone": buttons_rect.has_point(e.position), "lane": lane_at(e.position.x),
+		"canceled": e.canceled, "tracked": _touches.has(e.index)})
 
 
 func _lift(lane: int, t: float, id: int) -> void:
 	_pressed[lane] = maxi(0, _pressed[lane] - 1)
 	if session != null:
 		session.release(t, id)
+	if run_log != null:
+		run_log.event(t, "release", {"id": id, "lane": lane})
 	lifted.emit(lane)

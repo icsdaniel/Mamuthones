@@ -56,7 +56,7 @@ sensor access, so headless tests can drive them.
 }
 ```
 
-- `kind` is `story`, `piazza` (bells only; one chart named `piazza`) or `tutorial`.
+- `kind` is `story` or `tutorial`.
 - `key_root` is the MIDI note of the song's tonic, so step and hold sounds can be pitched to fit
   (`Sound.set_key(key_root)`).
 - `sections` name the song's parts in beats (intro, verse, build, climax, outro...) for the progress
@@ -86,16 +86,16 @@ sensor access, so headless tests can drive them.
   empty), `length`, `preview`, `difficulties()`, `notes(difficulty) -> Array[Note]`, `time_of(beat)`.
 - `Note`: `kind` (`Note.Kind.STEP/HOLD/BELL/RING/STOMP/REST`), `t`, `end_t`, `lane`, `up` (bells, rings),
   `dir`, `call`, `beat`, plus play state (`done`, `holding`, `finished`, `hit_at`, `judgement`).
-- `Session.new(song: SongData, difficulty: String, bell_set: String, options := {})`, options
-  `slam: bool`, `piazza: bool`, `remix: bool`. Times are seconds of song time.
+- `Session.new(song: SongData, difficulty: String, options := {})`, options
+  `slam: bool`, `remix: bool`. Times are seconds of song time.
   - Input: `tap(lane, t, touch_id)`, `release(t, touch_id)`, `ring(t) -> Dictionary`
     (`{up: bool, quality: "perfect"|"good"|"ok"|"miss"|"silence"|"free"}` so the bell sound can match).
   - `update(t)` every frame; `is_over(t)`.
   - Signals: `judged(note, judgement, offset)` with judgement `perfect|good|early|late|miss|wrong|held|let_go|silence`,
     `unison_changed(level)`, `hold_started(lane)`, `hold_ended(lane, kept)`.
-  - State: `score`, `unison_level` (0–5), `unison_mult()`, `weight()`, `combo`, `max_combo`, `stats`,
+  - State: `score`, `unison_level` (0–5), `unison_mult()`, `combo`, `max_combo`, `stats`,
     `accuracy()`, `bells()` (0–3), `input_log` (for ghosts), `score_timeline` (time, score pairs).
-- `BellSets`: `ids()`, `weight(id)`, `window_scale(id)`, `name(id, lang)`.
+- `BellSets`: `STANDARD` (the bells everyone plays) and `IDS` (the looks the art can draw).
 - `Calibrator`, `BellDetector`, `MotionReader`: tilt calibration and detection (see design section 2).
 - `LatencyTest`: feeds tap times against click times, returns a median offset and a spread.
 - `Conductor` (Node): owns the music `AudioStreamPlayer`; `play(song, remix)`, `song_time()` (smooth,
@@ -108,12 +108,11 @@ sensor access, so headless tests can drive them.
   human-like errors) and emits `stepped(lane)` and `rang(result)` like `InputRouter`, for
   demos, recordings and tests.
 - `Ghost`: `from_session(session)`, `score_at(t)`, `to_dict()`, `from_dict()`.
-- `Progression`: story order, `is_unlocked(song_id)`, `remix_unlocked(song_id)`, `bell_set_unlocked(id)`,
+- `Progression`: story order, `is_unlocked(song_id)`, `remix_unlocked(song_id)`,
   `carving_points()`, `mask_option_unlocked(part, option)`.
-- `Daily`: `for_date(date_dict) -> {song_id, difficulty, mirror}` from a hash of the date.
 - `Profile` (autoload): versioned `user://profile.cfg`, corrupted files fall back to a fresh profile
   without crashing. Settings, calibration, audio offset, per song+difficulty bests `{score, accuracy,
-  bells, ghost}`, look (`mask`, `fleece`, `straps`, `bell_set`), piazza players, first-run flags.
+  bells, ghost}`, look (`mask`, `fleece`, `straps`), first-run flags.
   `record_result(session) -> {prev_best, new_best, unlocked: [...]}`. Signal `changed`.
 - `Leaderboards` (autoload): `available()`, `submit(board_id, score)`, `show()`; a local backend now,
   with Game Center and Google Play Games backends to plug in at export time.

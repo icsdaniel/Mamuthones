@@ -75,18 +75,18 @@ design rule caps the aspect at 5.
 - 10: Verified on a real iPhone and a real Android phone (needs a person).
 
 ## 8. Progression and replay
-- 6: Seven story stops unlock in order; free play; bests saved per song and difficulty.
-- 7: Mask carving, bell sets, sheepskin and straps work and show in the procession; remixes unlock.
-- 8: Ghost runs, the daily procession and the Piazza pass-and-play mode work; each stop gives a new
-  reason to replay (bells to earn, remix, carving points).
+- 6: Seven story stops in order, all playable from the start; free play; bests saved per song and difficulty.
+- 7: Mask carving, sheepskin and straps work and show in the procession; remixes unlock.
+- 8: Ghost runs work; each stop gives a new
+  reason to replay (grades to raise, remix, carving points).
 - 9: A player can see at a glance what to do next and what they are close to unlocking.
 - 10: Players want to finish every song at every difficulty.
 
 ## 9. Scoring clarity and uniqueness
 - 6: Score follows the formula in the design, tested.
-- 7: Unison and weight are shown and explained in the tutorial or results.
-- 8: The results screen breaks the score into accuracy, unison and weight, and shows early/late tendency.
-- 9: The scoring makes the game's own ideas (unison, stillness, weight) the way to a high score.
+- 7: Unison is shown and explained in the tutorial or results.
+- 8: The results screen breaks the score into accuracy and unison, and shows early/late tendency.
+- 9: The scoring makes the game's own ideas (unison, stillness) the way to a high score.
 - 10: Players talk about their unison, not their combo.
 
 ## 10. Respect and authenticity
@@ -110,7 +110,7 @@ design rule caps the aspect at 5.
 ## 12. Scope and business fit
 - 6: Offline; no servers, ads, accounts or analytics.
 - 7: Everything is earned by play; nothing affects score that could be bought.
-- 8: Leaderboards and daily work without online services and plug in to Game Center / Play Games.
+- 8: Leaderboards work without online services and plug in to Game Center / Play Games.
 - 9: Store listing material exists: description in EN/IT, screenshots, icon, privacy statement (no data
   collected).
 - 10: Priced and positioned against Rotaeno with a clear reason to buy.

@@ -39,10 +39,10 @@ const DISC_H := 0.1                  ## how thick a disc stands, in lane widths
 const FORE := 0.42                   ## how much the road's depth is foreshortened on screen
 const SIDES := 24                    ## a disc's facets round its edge
 const ROPE_W := 0.2                  ## the rope's width, in lane widths
+const ROPE_PIC_W := 18                ## cells across the rope's picture is shrunk to (the pixel look)
 const STRAP_D := 0.42                ## the bell strap's depth along the road, in lane widths
-## The pixel look (PixelFilter over the screen): bursts and sparks are drawn as opaque pixel shapes
-## (no soft glows or fades, which the lens would turn to mud): flashes, stamped rings and square embers.
-static var pixel := false
+## Bursts and sparks are drawn as opaque pixel shapes (no soft glows or fades, which turn to mud on the
+## pixel grid): flashes, stamped rings and square embers.
 
 
 static func _a(c: Color, a: float) -> Color:
@@ -182,6 +182,168 @@ static func disc_glow(ci: CanvasItem, c: Vector2, rx: float, k: Array, alpha: fl
 	_glow(ci, c, Vector2(rx * 1.5, rx * FORE * 2.6) * (1.0 + 0.4 * _near), _a(k[3], (0.3 + 0.45 * _near) * alpha * glow))
 
 
+## Daniele's pictures of the notes and the rings (game/art/ai, drawn by an outside image AI, 2026-10-08), by key,
+## and each shrunk to the sizes it is shown at: one picture pixel per screen cell, so it stays crisp.
+static var _ai := {}
+static var _ai_sized := {}
+## Per picture, halvings of it (the picture itself first): a size is shrunk from the smallest one at
+## least twice its size, so a bell bar 64 cells wide is not shrunk from a picture 1982 wide each time
+## it reaches a new size (that took 7 ms a size, and a bar sliding down the road meets dozens).
+static var _ai_mips := {}
+
+
+static func ai_tex(key: String, size: Vector2i) -> Texture2D:
+	if not _ai.has(key):
+		# "<name>!flip": the picture upside down; "<name>!mirror": left for right
+		var path := "res://art/ai/%s.png" % key.trim_suffix("!flip").trim_suffix("!mirror")
+		var img: Image = null
+		if ResourceLoader.exists(path):
+			img = (load(path) as Texture2D).get_image()
+			if img != null:
+				img.decompress()
+				if key.ends_with("!flip"):
+					img.flip_y()
+				elif key.ends_with("!mirror"):
+					img.flip_x()
+		_ai[key] = img if img != null and not img.is_empty() else null
+		if _ai[key] != null:
+			var mips: Array[Image] = [img]
+			while mips[-1].get_width() >= 16 and mips[-1].get_height() >= 16:
+				var half := mips[-1].duplicate() as Image
+				half.resize(maxi(1, half.get_width() / 2), maxi(1, half.get_height() / 2), Image.INTERPOLATE_LANCZOS)
+				mips.append(half)
+			_ai_mips[key] = mips
+	var src: Image = _ai[key]
+	if src == null:
+		return null
+	size = size.max(Vector2i.ONE)
+	var k := "%s_%d_%d" % [key, size.x, size.y]
+	if not _ai_sized.has(k):
+		for m: Image in _ai_mips[key]:
+			if m.get_width() >= size.x * 2 and m.get_height() >= size.y * 2:
+				src = m
+		var img := src.duplicate() as Image
+		img.resize(size.x, size.y, Image.INTERPOLATE_LANCZOS)
+		# a cell is the note's or the road's, never half of each
+		if img.get_format() != Image.FORMAT_RGBA8:
+			img.convert(Image.FORMAT_RGBA8)
+		var data := img.get_data()
+		for i in range(3, data.size(), 4):
+			data[i] = 255 if data[i] > 127 else 0
+		img.set_data(size.x, size.y, false, Image.FORMAT_RGBA8, data)
+		_ai_sized[k] = ImageTexture.create_from_image(img)
+	return _ai_sized[k]
+
+
+## Shrinks, before the song starts, every size of the pictures a bell bar takes as it slides down
+## the road (its beam, its cowbells, its arrows) and when it is rung, and the hit rings' gold and red,
+## so none is shrunk mid-song in the frames a bell comes (each was a hitch of 7 ms or more). Only for the pixel look, which draws them from the pictures.
+static func warm(lv: LaneView, field: Rect2) -> void:
+	if ai_tex("bar_up", Vector2i.ONE) == null:
+		return
+	field.position = Vector2.ZERO
+	# from where bars come into view to just past the hit line (a missed bar sweeping on past it,
+	# bigger, can still meet a new size)
+	var y := -field.size.y * 0.1
+	var end := LaneSkin.hit_line_y(field) + field.size.y * 0.03
+	while y < end:
+		var b := _bell_size(lv, field, y)
+		if b.lw >= 2.0:
+			ai_tex("bar_up", b.cells)
+			ai_tex("bar_down", b.cells)
+			if b.lw >= 6.0:
+				ai_tex("bar_bell", b.bell)
+				ai_tex("bar_arrow", b.arrow)
+				ai_tex("bar_arrow!flip", b.arrow)
+		y += 1.0
+	ai_tex("bar_bell", Vector2i.ONE)
+	# a bell rung on time: its cowbells thrown off the strap (bell_strike), at each size a strike has
+	var lw: float = lv.road_scale(LaneSkin.hit_line_y(field)) * _lane(field)
+	for q: float in [1.0, 0.8]:
+		for chain in 6:
+			var bs := lw * 0.42 * q * (1.0 + 0.07 * float(chain))
+			ai_tex("bar_bell", ai_cells(Vector2(-bs * 0.42, -bs * 1.2), Vector2(bs * 0.42, 0.0)))
+	# the hit rings burning gold or red, at the size the grey ones are drawn
+	for k: String in _ai_sized.keys():
+		if k.begins_with("ring_idle_"):
+			var wh := k.trim_prefix("ring_idle_").split("_")
+			for key in ["ring_gold", "ring_red"]:
+				ai_tex(key, Vector2i(int(wh[0]), int(wh[1])))
+
+
+## A bell bar's sizes at flat depth y, as _bell_pic draws it: {lw, cells (the beam), bell, arrow}.
+static func _bell_size(lv: LaneView, field: Rect2, y: float) -> Dictionary:
+	var lane := _lane(field)
+	var lw: float = lv.road_scale(y) * lane
+	var x0 := -field.size.x * 0.02
+	var x1 := field.size.x * 1.02
+	var hw := (x1 - x0) * 0.5
+	var f := _frame3(lv, field, (x0 + x1) * 0.5, y, hw, STRAP_D * lw * FORE)
+	var h := DISC_H * 0.7
+	var quad := PackedVector2Array([f.call(Vector3(-1, h, -1)), f.call(Vector3(1, h, -1)), f.call(Vector3(1, 0, 1)), f.call(Vector3(-1, 0, 1))])
+	var s := lw * 0.34
+	var a := lw * 0.25
+	var hh := lw * 0.23
+	return {"lw": lw, "cells": bar_cells(quad),
+		"bell": ai_cells(Vector2(-s * 0.35, -s), Vector2(s * 0.35, 0.0)),
+		"arrow": ai_cells(Vector2(-a, -hh * 1.4), Vector2(a, hh * 0.4))}
+
+
+## The beam's picture size for its quad on screen: few sizes (a beam slides down every frame), its
+## width in steps of 8 cells.
+static func bar_cells(quad: PackedVector2Array) -> Vector2i:
+	var w := quad[1].x - quad[0].x
+	var tall := quad[2].y - quad[1].y
+	return Vector2i(maxi(8, roundi(w / PxArt.PX / 8.0) * 8), maxi(3, roundi(tall / PxArt.PX)))
+
+
+## The pixel look's note from its picture: the picture stretched over the disc it stands for (r lane
+## widths across, h thick, lying on the road at flat (cx, y)), so it sits and shrinks down the road
+## exactly as the drawn disc did. False when there is no picture (the disc is drawn instead).
+static func ai_disc(lv, field: Rect2, cx: float, y: float, r: float, key: String, alpha := 1.0, h := DISC_H, glow := 1.0) -> bool:
+	if key != "knot":
+		key = "note_" + key
+	if ai_tex(key, Vector2i.ONE) == null:
+		return false
+	var lane := _lane(field)
+	var lw: float = lv.road_scale(y) * lane
+	var f := _frame3(lv, field, cx, y, r * lane, 2.0 * r * lw * FORE)
+	if alpha <= 0.01 or lw < 2.0:
+		return true
+	var lo := Vector2(INF, INF)
+	var hi := -lo
+	for level: float in [0.0, h]:
+		for i in 16:
+			var an := TAU * float(i) / 16.0
+			var q: Vector2 = f.call(Vector3(cos(an), level, sin(an)))
+			lo = lo.min(q)
+			hi = hi.max(q)
+	if paint_glow:
+		disc_glow(lv, f.call(Vector3.ZERO), r * lw, K_STEP if key == "note_step" else K_HOLD, alpha, glow)
+	ai_draw(lv, key, lo, hi, Color(1.0, 1.0, 1.0, alpha))
+	return true
+
+
+## Picture `key` over the box lo..hi in whole cells: shrunk to the cells it covers, drawn one to one.
+static func ai_draw(ci: CanvasItem, key: String, lo: Vector2, hi: Vector2, mod := Color.WHITE) -> void:
+	var px := PxArt.PX
+	var cells := ai_cells(lo, hi)
+	var tex := ai_tex(key, cells)
+	if tex == null:
+		return
+	var at := PxArt.snap2((lo + hi) * 0.5 - Vector2(cells) * px * 0.5)
+	ci.draw_texture_rect(tex, Rect2(at, Vector2(cells) * px), false, mod)
+
+
+## The picture size (cells) ai_draw shows a picture at between lo and hi on screen.
+static func ai_cells(lo: Vector2, hi: Vector2) -> Vector2i:
+	var cells := Vector2i(((hi - lo) / PxArt.PX).round())
+	if cells.x > 40:
+		# past the sheet's sizes (a missed note sweeping past the line): fewer sizes to shrink to
+		cells = (cells / 4) * 4
+	return cells
+
+
 ## A disc lying on the road centred at flat (cx, y), radius r lane widths, h thick. k: its glaze.
 ## Returns a Callable mapping (u, v) on its top (the unit circle) to the screen, for its pattern.
 static func disc(lv, field: Rect2, cx: float, y: float, r: float, k: Array, alpha := 1.0, h := DISC_H, glow := 1.0, sides := SIDES) -> Callable:
@@ -205,7 +367,7 @@ static func disc(lv, field: Rect2, cx: float, y: float, r: float, k: Array, alph
 	faces.append(cap)
 	if paint_glow:
 		disc_glow(lv, f.call(Vector3.ZERO), r * lw, k, alpha, glow)
-	solid(lv, f, verts, faces, Vector3(r, 1.0, r), k, alpha, maxf(PxArt.PX * 0.75 if pixel else 2.0, lw * 0.02), -0.4)
+	solid(lv, f, verts, faces, Vector3(r, 1.0, r), k, alpha, maxf(PxArt.PX * 0.75, lw * 0.02), -0.4)
 	return top
 
 
@@ -242,17 +404,14 @@ static func _pintadera(lv, top: Callable, lw: float, col: Color, alpha: float, t
 ## sixteenth (a quarter of a beat off), which the pixel look shows in silver.
 static func step(lv, field: Rect2, cx: float, y: float, alpha: float, small := false, call := false, six := false) -> void:
 	var lw: float = lv.road_scale(y) * _lane(field)
-	if pixel:
-		# the pixel look keeps every tap round and full size; the kind shows in its colour: blue on
-		# the beat, violet on the half-beat (or a triplet), silver on a sixteenth, pink for a call
-		var k: Array = K_CALL if call else (K_SIX if six else (K_OFF if small else K_STEP))
-		var top := disc(lv, field, cx, y, DISC_R, k, alpha)
-		_pintadera(lv, top, lw, CREAM, 0.92 * alpha)
-		_dot(lv, top, lw, k[2], alpha)
+	# the pixel look keeps every tap round and full size; the kind shows in its colour: blue on
+	# the beat, violet on the half-beat (or a triplet), silver on a sixteenth, pink for a call
+	var k: Array = K_CALL if call else (K_SIX if six else (K_OFF if small else K_STEP))
+	if ai_disc(lv, field, cx, y, DISC_R, "call" if call else ("six" if six else ("offbeat" if small else "step")), alpha):
 		return
-	var top := disc(lv, field, cx, y, OFF_R if small else DISC_R, K_STEP, alpha)
-	_pintadera(lv, top, lw * (OFF_R if small else DISC_R) / DISC_R, CREAM, 0.92 * alpha, 8 if small else 12)
-	_dot(lv, top, lw, K_STEP[2], alpha)
+	var top := disc(lv, field, cx, y, DISC_R, k, alpha)
+	_pintadera(lv, top, lw, CREAM, 0.92 * alpha)
+	_dot(lv, top, lw, k[2], alpha)
 
 
 static func _dot(lv, top: Callable, lw: float, col: Color, alpha: float) -> void:
@@ -262,6 +421,8 @@ static func _dot(lv, top: Callable, lw: float, col: Color, alpha: float) -> void
 
 ## A heal: a green pintadera with su coccu, the black charm bead set in silver, at its heart.
 static func heal(lv, field: Rect2, cx: float, y: float, alpha: float) -> void:
+	if ai_disc(lv, field, cx, y, DISC_R, "heal", alpha):
+		return
 	var lw: float = lv.road_scale(y) * _lane(field)
 	var top := disc(lv, field, cx, y, DISC_R, K_HEAL, alpha)
 	_pintadera(lv, top, lw, CREAM, alpha)
@@ -276,6 +437,8 @@ static func heal(lv, field: Rect2, cx: float, y: float, alpha: float) -> void:
 
 ## A hold's head: a gold pintadera.
 static func hold_head(lv, field: Rect2, cx: float, y: float, alpha: float, lit: bool) -> void:
+	if ai_disc(lv, field, cx, y, DISC_R, "hold", alpha, DISC_H, 1.6 if lit else 1.0):
+		return
 	var lw: float = lv.road_scale(y) * _lane(field)
 	var top := disc(lv, field, cx, y, DISC_R, K_HOLD, alpha, DISC_H, 1.6 if lit else 1.0)
 	_pintadera(lv, top, lw, CREAM, alpha)
@@ -284,6 +447,8 @@ static func hold_head(lv, field: Rect2, cx: float, y: float, alpha: float, lit: 
 
 ## A stomp: a big disc of black mask wood with a bronze rim and two bare feet, thicker than a step.
 static func stomp(lv, field: Rect2, cx: float, y: float, alpha: float) -> void:
+	if ai_disc(lv, field, cx, y, STOMP_R, "stomp", alpha, DISC_H * 1.6, 1.4):
+		return
 	var lw: float = lv.road_scale(y) * _lane(field)
 	var top := disc(lv, field, cx, y, STOMP_R, K_WOOD, alpha, DISC_H * 1.6, 1.4)
 	if lw < 6.0 or alpha <= 0.01:
@@ -319,6 +484,9 @@ static func rope(lv: LaneView, field: Rect2, cx: float, ya: float, yb: float, li
 	var metric := Vector3(ROPE_W * 0.5, 1.0, maxf(yb - ya, 1.0) / lane * 0.5 / FORE)
 	if lit:
 		_glow(lv, f.call(Vector3(0, 0, 1)), Vector2(hw * 4.0, hw * 2.0), _a(K_ROPE[3], 0.6 * alpha))
+	if _rope_pic(lv, f, ya, yb, lane, lit, alpha):
+		_rope_sparks(lv, f, h, yb, lane, lit)
+		return
 	# faces are drawn back to front by hand: the cord is not closed, so it is outlined as a band
 	var band := PackedVector2Array([f.call(Vector3(-1, 0, -1)), f.call(Vector3(-1, 0, 1)), f.call(Vector3(1, 0, 1)), f.call(Vector3(1, 0, -1))])
 	var tb := PackedVector2Array([f.call(Vector3(-1, 0, -1)), f.call(Vector3(-0.3, h, -1)), f.call(Vector3(0.3, h, -1)), f.call(Vector3(1, 0, -1)), f.call(Vector3(1, 0, 1)), f.call(Vector3(0.3, h, 1)), f.call(Vector3(-0.3, h, 1)), f.call(Vector3(-1, 0, 1))])
@@ -349,15 +517,46 @@ static func rope(lv: LaneView, field: Rect2, cx: float, ya: float, yb: float, li
 		yy -= step_y
 	if lit:
 		lv.draw_line(f.call(Vector3(-0.3, h, -1)), f.call(Vector3(-0.3, h, 1)), _a(RIM, 0.6 * alpha), 2.0, true)
+	_rope_sparks(lv, f, h, yb, lane, lit)
+
+
+static func _rope_sparks(lv: LaneView, f: Callable, h: float, yb: float, lane: float, lit: bool) -> void:
+	if lit:
 		# sparks fly off the rope where it runs into the slot while it is held
 		var at: Vector2 = f.call(Vector3(0, h, 1))
 		var lw: float = lv.road_scale(yb) * lane
 		for i in 3:
 			var age := fposmod(lv._clock + float(i) * 0.11, 0.33)
-			if pixel:
-				_embers_px(lv, at, lw * 0.6, age, 4, int(lv._clock / 0.33) * 5 + i, PX_HOT, 0.8)
-			else:
-				_embers(lv, at, lw * 0.6, age, 4, int(lv._clock / 0.33) * 5 + i, K_ROPE[0], 0.8)
+			_embers_px(lv, at, lw * 0.6, age, 4, int(lv._clock / 0.33) * 5 + i, PX_HOT, 0.8)
+
+
+## The pixel look's rope from Daniele's picture, laid along the hold through the cord's frame f: the
+## picture repeats down the road, its twist fixed to the rope's far end (the hold's end) so it travels
+## with it. False when there is no picture.
+static func _rope_pic(lv: LaneView, f: Callable, ya: float, yb: float, lane: float, lit: bool, alpha: float) -> bool:
+	var tex := ai_tex("rope", Vector2i(ROPE_PIC_W, roundi(ROPE_PIC_W * 794.0 / 143.0)))
+	if tex == null:
+		return false
+	# one picture's length along the road, flat px: its own shape, at the rope's width, foreshortened
+	var tile := lane * ROPE_W * (794.0 / 143.0) * 0.5 / FORE
+	var span := maxf(yb - ya, 1.0)
+	var mod := Color(1.0, 1.0, 1.0, alpha) if lit else Color(0.85, 0.85, 0.85, alpha)
+	# in pieces that never cross a picture's end, so each piece maps into the one picture
+	var q := tile * 0.25
+	var d := 0.0
+	var guard := 0
+	while d < span and guard < 256:
+		guard += 1
+		var e := minf(span, (floorf(d / q + 0.001) + 1.0) * q)
+		var v0 := fposmod(d, tile) / tile
+		var v1 := v0 + (e - d) / tile
+		var z0 := -1.0 + 2.0 * d / span
+		var z1 := -1.0 + 2.0 * e / span
+		var pts := PackedVector2Array([f.call(Vector3(-1, 0, z0)), f.call(Vector3(1, 0, z0)), f.call(Vector3(1, 0, z1)), f.call(Vector3(-1, 0, z1))])
+		var uvs := PackedVector2Array([Vector2(0, v0), Vector2(1, v0), Vector2(1, v1), Vector2(0, v1)])
+		lv.draw_polygon(pts, PackedColorArray([mod, mod, mod, mod]), uvs, tex)
+		d = e
+	return true
 
 
 ## A bell note: the Mamuthone's leather bell strap across the whole road at flat depth y, a bronze
@@ -379,6 +578,9 @@ static func bell(lv: LaneView, field: Rect2, y: float, up: bool, alpha := 1.0, p
 	if alpha <= 0.01 or lw < 2.0:
 		return
 	_glow(lv, f.call(Vector3.ZERO), Vector2(hw * 1.1, lw * 0.35), _a(k[3], 0.3 * alpha))
+	if ai_tex("bar_up", Vector2i.ONE) != null:
+		_bell_pic(lv, f, h, lane, lw, y, up, alpha, not pal.is_empty(), cowbells)
+		return
 	solid(lv, f, verts, faces, Vector3(hw / lane, 1.0, STRAP_D * 0.5), k, alpha, maxf(2.0, lw * 0.02), -0.4)
 	if lw < 6.0:
 		return
@@ -406,9 +608,35 @@ static func bell(lv: LaneView, field: Rect2, y: float, up: bool, alpha := 1.0, p
 		_convex(lv, tri, _a(RIM, alpha))
 
 
+## The pixel look's bell note from Daniele's pictures: the red (up) or blue (down) beam across the
+## road through the strap's frame f, his bells at the lane dividers, his arrow in each lane (upside
+## down for a tilt down). hot: lit up by a strike.
+static func _bell_pic(lv: LaneView, f: Callable, h: float, lane: float, lw: float, y: float, up: bool, alpha: float, hot: bool, cowbells: bool) -> void:
+	var mod := Color(1.45, 1.4, 1.3, alpha) if hot else Color(1.0, 1.0, 1.0, alpha)
+	var quad := PackedVector2Array([f.call(Vector3(-1, h, -1)), f.call(Vector3(1, h, -1)), f.call(Vector3(1, 0, 1)), f.call(Vector3(-1, 0, 1))])
+	var tall := quad[2].y - quad[1].y
+	var tex := ai_tex("bar_up" if up else "bar_down", bar_cells(quad))
+	lv.draw_polygon(quad, PackedColorArray([mod, mod, mod, mod]), PackedVector2Array([Vector2(0, 0), Vector2(1, 0), Vector2(1, 1), Vector2(0, 1)]), tex)
+	if lw < 6.0:
+		return
+	var top := (quad[0].y + quad[2].y) * 0.5 - h * lw
+	for i in (2 if cowbells else 0):
+		var at := Vector2(lv.project(Vector2(lane * float(i + 1), y)).x, top + tall * 0.25)
+		var s := lw * 0.34
+		ai_draw(lv, "bar_bell", at - Vector2(s * 0.35, s), at + Vector2(s * 0.35, 0.0), mod)
+	for i in 3:
+		var c := Vector2(lv.project(Vector2(lane * (float(i) + 0.5), y)).x, top - lw * 0.02)
+		var a := lw * 0.25
+		var hh := lw * 0.23
+		ai_draw(lv, "bar_arrow" if up else "bar_arrow!flip", c - Vector2(a, hh * 1.4), c + Vector2(a, hh * 0.4), mod)
+
+
 ## A bronze cowbell standing with its mouth on the ground at `at` (screen), s tall: a flared body,
 ## lit on the left, a dark mouth, a loop on top.
 static func _cowbell(lv: LaneView, at: Vector2, s: float, alpha: float) -> void:
+	if ai_tex("bar_bell", Vector2i.ONE) != null:
+		ai_draw(lv, "bar_bell", at - Vector2(s * 0.42, s * 1.2), at + Vector2(s * 0.42, 0.0), Color(1.0, 1.0, 1.0, alpha))
+		return
 	var body := PackedVector2Array([at + Vector2(-s * 0.42, 0.0), at + Vector2(-s * 0.3, -s * 0.85), at + Vector2(-s * 0.18, -s), at + Vector2(s * 0.18, -s),
 		at + Vector2(s * 0.3, -s * 0.85), at + Vector2(s * 0.42, 0.0)])
 	lv.draw_circle(at + Vector2(0, -s * 1.05), s * 0.14 + 2.0, _a(OUTLINE, alpha))
@@ -454,40 +682,7 @@ static func burst(ci: CanvasItem, at: Vector2, quality: String, age: float, sc: 
 	var lw := sc * 240.0
 	if ci is LaneView:
 		lw = sc * (ci as LaneView).field_rect().size.x / 3.0
-	if pixel:
-		_burst_px(ci, at, quality, age, tt, lw)
-		return true
-	var e := 1.0 - pow(1.0 - tt, 3.0)
-	var a := pow(1.0 - tt, 1.4)
-	var seed := int(absf(at.x) * 13.0) + quality.length() * 7
-	if quality == "miss":
-		_ring(ci, at, Vector2(lw * DISC_R, lw * DISC_R * FORE) * (1.0 + 0.3 * e), maxf(2.0, lw * 0.03), Color(0.75, 0.15, 0.12, 0.8 * a))
-		_embers(ci, at, lw, age, 5, seed, Color(0.45, 0.4, 0.4), 0.5)
-		return true
-	var col: Color = {
-		"perfect": Color("#fffbe8"), "good": Color("#ffd35a"), "ok": Color("#ff9a3a"), "early": Color("#ff9a3a"),
-		"late": Color("#ff9a3a"), "heal": Color("#8affb8"), "held": Color("#ffe27a"), "stomp": Color("#ffc060"),
-	}.get(quality, Color("#ffd35a"))
-	var big := 1.6 if quality == "stomp" else (1.25 if quality == "perfect" else 1.0)
-	# light rising from the lane
-	var pw := lw * 0.42 * (1.0 - 0.3 * tt)
-	var ph := lw * (0.9 + 0.7 * e) * big
-	ci.draw_polygon(PackedVector2Array([at + Vector2(-pw, 0), at + Vector2(pw, 0), at + Vector2(pw * 0.6, -ph), at + Vector2(-pw * 0.6, -ph)]),
-		PackedColorArray([Color(col, 0.65 * a), Color(col, 0.65 * a), Color(col, 0.0), Color(col, 0.0)]))
-	_glow(ci, at, Vector2(lw * (0.7 + 0.4 * e), lw * (0.35 + 0.2 * e)) * big, Color(col, 0.9 * a))
-	# the stamp: the pintadera's rim and teeth pressed into the road, spreading a little as it fades
-	var r: float = lw * DISC_R * (1.0 + 0.25 * e) * big
-	var top := func(p: Vector2) -> Vector2: return at + Vector2(p.x * r, p.y * r * FORE)
-	var sa := a * a
-	_ring(ci, at, Vector2(r, r * FORE) * 0.86, maxf(2.0, lw * 0.03), Color(col, sa))
-	for i in 12:
-		var a0 := TAU * float(i) / 12.0
-		var a1 := TAU * float(i + 1) / 12.0
-		var am := (a0 + a1) * 0.5
-		ci.draw_colored_polygon(PackedVector2Array([top.call(Vector2(cos(a0), sin(a0)) * 0.46), top.call(Vector2(cos(am), sin(am)) * 0.7), top.call(Vector2(cos(a1), sin(a1)) * 0.46)]), Color(col, 0.8 * sa))
-	# the outer shock ring
-	_ring(ci, at, Vector2(r, r * FORE) * (1.0 + 0.9 * e), maxf(2.0, lw * 0.04 * (1.0 - tt)), Color(col, 0.8 * a))
-	_embers(ci, at, lw * big, age, 14 if quality == "stomp" else 10, seed, col, 1.0)
+	_burst_px(ci, at, quality, age, tt, lw)
 	return true
 
 
@@ -628,16 +823,15 @@ static func draw_notes(lv: LaneView, field: Rect2) -> void:
 					items.append([y, "note", n, rects[maxi(n.lane, 0)].get_center().x, lv._haze(y, field)])
 	# the pixel look tints each lane's slot with the colour of the note coming down it, more as it nears
 	var incoming: Array = [null, null, null]
-	if pixel:
-		var reach := _lane(field) * 4.0
-		for it in items:
-			var n: Note = it[2]
-			var lane := n.lane
-			if lane < 0 or lane > 2 or str(it[1]) == "knot" or n.kind == Note.Kind.BELL:
-				continue
-			var near := clampf(1.0 - (hl - float(it[0])) / reach, 0.0, 1.0)
-			if near > 0.0 and (incoming[lane] == null or near > float(incoming[lane][1])):
-				incoming[lane] = [_kind(lv, n, str(it[1]) == "hold"), near]
+	var reach := _lane(field) * 4.0
+	for it in items:
+		var n: Note = it[2]
+		var lane := n.lane
+		if lane < 0 or lane > 2 or str(it[1]) == "knot" or n.kind == Note.Kind.BELL:
+			continue
+		var near := clampf(1.0 - (hl - float(it[0])) / reach, 0.0, 1.0)
+		if near > 0.0 and (incoming[lane] == null or near > float(incoming[lane][1])):
+			incoming[lane] = [_kind(lv, n, str(it[1]) == "hold"), near]
 	_hit_line(lv, field, rects, hl, incoming)
 	for c in lv.chords_shown(shown):
 		cord(lv, field, rects[c[1]].get_center().x, rects[c[2]].get_center().x, float(c[0]), lv._haze(c[0], field))
@@ -648,7 +842,7 @@ static func draw_notes(lv: LaneView, field: Rect2) -> void:
 		var cx: float = it[3]
 		var a: float = it[4]
 		_near = clampf(1.0 - (hl - y) / (_lane(field) * 2.5), 0.0, 1.0)
-		if pixel and atlas != null and atlas.ready_for(lv) and _stamp(lv, field, str(it[1]), n, cx, y, a):
+		if atlas != null and atlas.ready_for(lv) and _stamp(lv, field, str(it[1]), n, cx, y, a):
 			continue
 		match str(it[1]):
 			"knot":
@@ -732,6 +926,8 @@ static func _stamp(lv: LaneView, field: Rect2, what: String, n: Note, cx: float,
 
 ## The rope's far end: a small knot of hemp.
 static func _knot(lv, field: Rect2, cx: float, y: float, alpha: float) -> void:
+	if ai_disc(lv, field, cx, y, ROPE_W * 1.35, "knot", alpha, ROPE_W * 0.9, 0.6):
+		return
 	disc(lv, field, cx, y, ROPE_W * 0.85, K_ROPE, alpha, ROPE_W * 0.6, 0.6)
 
 
@@ -748,11 +944,11 @@ static func _kind(lv: LaneView, n: Note, hold: bool) -> Array:
 		Note.Kind.STEP:
 			if n.heal:
 				return K_HEAL
-			if pixel and n.call:
+			if n.call:
 				return K_CALL
-			if pixel and lv._sixteenth(n):
+			if lv._sixteenth(n):
 				return K_SIX
-			if pixel and lv._off_beat(n):
+			if lv._off_beat(n):
 				return K_OFF
 	return K_STEP
 
@@ -785,9 +981,22 @@ static func _hit_line(lv: LaneView, field: Rect2, rects: Array[Rect2], hl: float
 	var r: Vector2 = lv.project(Vector2(field.size.x * 1.02, hl))
 	var env := lv.beat_env()
 	var lw: float = lv.road_scale(hl) * _lane(field)
-	lv.draw_line(l, r, Color(OUTLINE, 0.75), 10.0, true)
-	lv.draw_line(l, r, Color(1.0, 0.95, 0.85, 0.75 + 0.25 * env), 3.0, true)
 	var slots := _slots(lv, field, rects, hl, lw)
+	# the line runs between the slots, never across their hollows (the pixel look's rings are open)
+	var cuts: Array[Vector2] = [l]
+	for slot: Array in slots:
+		var sil: PackedVector2Array = slot[1]
+		var x0 := INF
+		var x1 := -INF
+		for q in sil:
+			x0 = minf(x0, q.x)
+			x1 = maxf(x1, q.x)
+		cuts.append(Vector2(x0, l.y + (r.y - l.y) * (x0 - l.x) / (r.x - l.x)))
+		cuts.append(Vector2(x1, l.y + (r.y - l.y) * (x1 - l.x) / (r.x - l.x)))
+	cuts.append(r)
+	for c in range(0, cuts.size(), 2):
+		lv.draw_line(cuts[c], cuts[c + 1], Color(OUTLINE, 0.75), 10.0, true)
+		lv.draw_line(cuts[c], cuts[c + 1], Color(1.0, 0.95, 0.85, 0.75 + 0.25 * env), 3.0, true)
 	for lane in 3:
 		var g := lv._lane_glow(lane)
 		var cue := 1.0 if lv._cued(lane) else 0.0
@@ -796,10 +1005,14 @@ static func _hit_line(lv: LaneView, field: Rect2, rects: Array[Rect2], hl: float
 		var sil: PackedVector2Array = slot[1]
 		var ring: PackedVector2Array = slot[2]
 		_glow(lv, slot[0], Vector2(lw * 0.6, lw * 0.28), Color(1.0, 0.85, 0.55, 0.25 * cue + 0.6 * g))
-		ci_poly(lv, sil, Color(0.04, 0.03, 0.08, 0.6))
+		# the slot's hollow: the road under it shaded (warm in the pixel look, so it sits in the firelight)
+		ci_poly(lv, sil, Color(0.1, 0.04, 0.02, 0.55))
 		if g > 0.01:
 			ci_poly(lv, sil, Color(1.0, 0.97, 0.9, 0.7 * g))
-		lv.draw_polyline(ring, Color(OUTLINE, 0.9), 12.0 if pixel else 9.0, true)
+		if ai_tex("ring_idle", Vector2i.ONE) != null:
+			_ring_pic(lv, sil, k, g, incoming[lane], lv.get("_lock_on") == true)
+			continue
+		lv.draw_polyline(ring, Color(OUTLINE, 0.9), 12.0, true)
 		var rim := Color(CREAM, 0.75 + 0.25 * k)
 		if incoming[lane] != null:
 			# the slot takes the coming note's colour: which kind, and how close, before it lands
@@ -808,7 +1021,34 @@ static func _hit_line(lv: LaneView, field: Rect2, rects: Array[Rect2], hl: float
 			ci_poly(lv, sil, _a(kk[1], 0.35 * near * near))
 			rim = rim.lerp(kk[0], near)
 			lv.draw_polyline(slot[3], _a(kk[0], 0.8 * near), 3.0, true)
-		lv.draw_polyline(ring, rim, 5.0 if pixel else 3.5, true)
+		lv.draw_polyline(ring, rim, 5.0, true)
+
+
+## The pixel look's hit slot from Daniele's ring pictures, over the slot's outline sil: the grey ring
+## takes the coming note's colour as it nears, burns gold when the lane is struck, red while the
+## buttons are locked.
+static func _ring_pic(lv: LaneView, sil: PackedVector2Array, k: float, g: float, incoming, locked: bool) -> void:
+	var lo := Vector2(INF, INF)
+	var hi := -lo
+	for q in sil:
+		lo = lo.min(q)
+		hi = hi.max(q)
+	# the ring's band sits on the outline, half outside it
+	var grow := Vector2(1.0, 0.75) * PxArt.PX * 1.5
+	lo -= grow
+	hi += grow
+	var mod := Color(1.0, 1.0, 1.0).lerp(Color(1.15, 1.1, 1.0), k - 0.6)
+	if incoming != null:
+		var kk: Array = incoming[0]
+		var near: float = incoming[1]
+		ci_poly(lv, sil, _a(kk[1], 0.35 * near * near))
+		mod = mod.lerp(kk[0] * 1.25, near)
+	if locked:
+		ai_draw(lv, "ring_red", lo, hi)
+		return
+	ai_draw(lv, "ring_idle", lo, hi, mod)
+	if g > 0.05:
+		ai_draw(lv, "ring_gold", lo, hi, Color(1.0, 1.0, 1.0, clampf(g * 1.5, 0.0, 1.0)))
 
 
 # ------------------------------------------------------------------ the bell strike

@@ -35,13 +35,9 @@ const LEVEL_EXTRAS := {
 static func check_song(song: SongData) -> Array[String]:
 	var out: Array[String] = []
 	out.append_array(song.errors)
-	if song.kind == "piazza":
-		if not song.charts.has("piazza"):
-			out.append("%s: a piazza song needs a chart named piazza" % song.id)
-	else:
-		for d in SongData.DIFFICULTIES:
-			if not song.charts.has(d):
-				out.append("%s: missing chart %s" % [song.id, d])
+	for d in SongData.DIFFICULTIES:
+		if not song.charts.has(d):
+			out.append("%s: missing chart %s" % [song.id, d])
 	for d in song.charts:
 		out.append_array(check(song, d))
 	return out
@@ -74,8 +70,6 @@ static func check(song: SongData, difficulty: String) -> Array[String]:
 		if not Note.KIND_NAMES.has(k):
 			out.append("%s: unknown kind '%s'" % [at, k])
 			continue
-		if song.kind == "piazza" and not k in ["bell", "rest"]:
-			out.append("%s: piazza charts have only bells and rests" % at)
 		if song.kind == "story" and LEVEL_EXTRAS.has(difficulty) and not k in LEVEL_EXTRAS[difficulty]:
 			out.append("%s: %s is not used at %s (design section 4)" % [at, k, difficulty])
 		if song.kind == "story" and LEVEL_EXTRAS.has(difficulty) and bool(item.get("call", false)):
@@ -175,7 +169,7 @@ static func triplet_feel(song: SongData, notes: Array) -> Array[bool]:
 static func _check_spacing(song: SongData, difficulty: String, notes: Array, where: String) -> Array[String]:
 	var out: Array[String] = []
 	if not HAND_GAP.has(difficulty):
-		return out   # piazza: bells only, checked above
+		return out
 	var spb := 60.0 / maxf(song.bpm, 1.0)
 	var feel := triplet_feel(song, notes)
 	var third_at := {}

@@ -63,13 +63,12 @@ func _prepare_profile() -> void:
 		var s: SongData = story[i]
 		for d in ["easy", "hard"]:
 			if d in s.difficulties():
-				profile.record_result(_played(s, d, "light", i != 2))
+				profile.record_result(_played(s, d, i != 2))
 	profile.set_look("fleece", "dark_brown")
-	profile.set_piazza_players(["Giovanni", "Maria", "Antonio", "Grazia"])
 
 
-static func _played(song: SongData, diff: String, bells: String, good: bool, until := INF) -> Session:
-	var s := Session.new(song, diff, bells)
+static func _played(song: SongData, diff: String, good: bool, until := INF) -> Session:
+	var s := Session.new(song, diff)
 	var auto := Autoplay.new(s, true, 7 if good else 99)
 	var t := s.notes[0].t - 1.0 if not s.notes.is_empty() else 0.0
 	var end := minf(s.end_time(), until)
@@ -94,59 +93,50 @@ func _shots() -> Array:
 		{"file": "story", "screen": "story"},
 		{"file": "stop_card", "screen": "stop_card", "args": {"song_id": fires_id}},
 		{"file": "free_play", "screen": "free_play"},
-		{"file": "daily", "screen": "daily"},
 		{"file": "boards", "screen": "boards"},
-		{"file": "piazza", "screen": "piazza"},
-		{"file": "piazza_turn", "screen": "piazza", "args": {"round": _round(1)}},
-		{"file": "piazza_ranking", "screen": "piazza_ranking", "args": {"round": _round(4)}, "wait": 1.4},
 		{"file": "settings", "screen": "settings"},
 		{"file": "credits", "screen": "credits"},
 		{"file": "workshop", "screen": "workshop", "setup": "tab_mask", "wait": 0.8},
-		{"file": "workshop_bells", "screen": "workshop", "setup": "tab_bells", "wait": 0.8},
 		{"file": "workshop_dress", "screen": "workshop", "setup": "tab_dress", "wait": 0.8},
 		{"file": "tutorial", "screen": "tutorial", "args": {"song_id": tut_id, "first_run": true}, "wait": 1.2},
-		{"file": "play_fires", "screen": "play", "args": {"song_id": fires_id, "difficulty": "hard", "bell_set": "light", "autoplay": true, "human": true}, "setup": "advance:0.42"},
-		{"file": "play_showcase", "screen": "play", "args": {"song_id": fires_id, "difficulty": "hard", "bell_set": "light", "autoplay": true}, "setup": "moment:showcase", "wait": 0.1},
-		{"file": "play_dense", "screen": "play", "args": {"song_id": fires_id, "difficulty": "hard", "bell_set": "light", "autoplay": true}, "setup": "moment:dense", "wait": 0.1},
-		{"file": "play_hold", "screen": "play", "args": {"song_id": "bonfires", "difficulty": "medium", "bell_set": "light", "autoplay": true}, "setup": "moment:hold", "wait": 0.1},
-		{"file": "play_bell", "screen": "play", "args": {"song_id": fires_id, "difficulty": "hard", "bell_set": "light", "autoplay": true}, "setup": "moment:bell", "wait": 0.1},
-		{"file": "play_still", "screen": "play", "args": {"song_id": fires_id, "difficulty": "hard", "bell_set": "light", "autoplay": true}, "setup": "moment:still", "wait": 0.1},
-		{"file": "play_miss", "screen": "play", "args": {"song_id": fires_id, "difficulty": "hard", "bell_set": "light", "autoplay": true}, "setup": "moment:miss", "wait": 0.05},
+		{"file": "play_fires", "screen": "play", "args": {"song_id": fires_id, "difficulty": "hard", "autoplay": true, "human": true}, "setup": "advance:0.42"},
+		{"file": "play_showcase", "screen": "play", "args": {"song_id": fires_id, "difficulty": "hard", "autoplay": true}, "setup": "moment:showcase", "wait": 0.1},
+		{"file": "play_dense", "screen": "play", "args": {"song_id": fires_id, "difficulty": "hard", "autoplay": true}, "setup": "moment:dense", "wait": 0.1},
+		{"file": "play_hold", "screen": "play", "args": {"song_id": "bonfires", "difficulty": "medium", "autoplay": true}, "setup": "moment:hold", "wait": 0.1},
+		{"file": "play_bell", "screen": "play", "args": {"song_id": fires_id, "difficulty": "hard", "autoplay": true}, "setup": "moment:bell", "wait": 0.1},
+		{"file": "play_still", "screen": "play", "args": {"song_id": fires_id, "difficulty": "hard", "autoplay": true}, "setup": "moment:still", "wait": 0.1},
+		{"file": "play_miss", "screen": "play", "args": {"song_id": fires_id, "difficulty": "hard", "autoplay": true}, "setup": "moment:miss", "wait": 0.05},
 		{"file": "play_countin", "screen": "play", "args": {"song_id": fires_id, "difficulty": "hard", "bell_set": "light"}, "setup": "moment:countin", "wait": 0.05},
 		{"file": "play_ready", "screen": "play", "args": {"song_id": fires_id, "difficulty": "hard", "bell_set": "light"}, "setup": "moment:ready", "wait": 0.05},
 		{"file": "play_resume", "screen": "play", "args": {"song_id": fires_id, "difficulty": "hard", "bell_set": "light"}, "setup": "resume", "wait": 0.0},
-		{"file": "play_early", "screen": "play", "args": {"song_id": fires_id, "difficulty": "hard", "bell_set": "light", "autoplay": true}, "setup": "moment:early", "wait": 0.08},
-		{"file": "play_late", "screen": "play", "args": {"song_id": fires_id, "difficulty": "hard", "bell_set": "light", "autoplay": true}, "setup": "moment:late", "wait": 0.08},
-		{"file": "play_still_kept", "screen": "play", "args": {"song_id": fires_id, "difficulty": "hard", "bell_set": "light", "autoplay": true}, "setup": "moment:stillkept", "wait": 0.1},
-		{"file": "play_locked", "screen": "play", "args": {"song_id": fires_id, "difficulty": "hard", "bell_set": "light", "autoplay": true}, "setup": "moment:locked", "wait": 0.05},
-		{"file": "play_wrong", "screen": "play", "args": {"song_id": fires_id, "difficulty": "hard", "bell_set": "light", "autoplay": true}, "setup": "moment:wrong", "wait": 0.05},
-		{"file": "play_chord_medium", "screen": "play", "args": {"song_id": "carnival", "difficulty": "medium", "bell_set": "light", "autoplay": true}, "setup": "moment:chord", "wait": 0.05},
-		{"file": "play_chord_hard", "screen": "play", "args": {"song_id": "carnival", "difficulty": "hard", "bell_set": "light", "autoplay": true}, "setup": "moment:chord", "wait": 0.05},
-		{"file": "play_chord_expert", "screen": "play", "args": {"song_id": "shrove", "difficulty": "expert", "bell_set": "light", "autoplay": true}, "setup": "moment:chord", "wait": 0.05},
-		{"file": "play_sixteenths", "screen": "play", "args": {"song_id": "shrove", "difficulty": "expert", "bell_set": "light", "autoplay": true}, "setup": "moment:six", "wait": 0.05},
-		{"file": "play_stomp", "screen": "play", "args": {"song_id": "rope", "difficulty": "hard", "bell_set": "light", "autoplay": true}, "setup": "moment:stomp", "wait": 0.05},
-		{"file": "play_stomp_outer", "screen": "play", "args": {"song_id": "rope", "difficulty": "expert", "bell_set": "light", "autoplay": true}, "setup": "moment:stomp", "wait": 0.05},
-		{"file": "play_stomped", "screen": "play", "args": {"song_id": "rope", "difficulty": "hard", "bell_set": "light", "autoplay": true}, "setup": "moment:stomped", "wait": 0.02},
-		{"file": "play_tutorial", "screen": "play", "args": {"song_id": tut_id, "difficulty": "easy", "bell_set": "light", "autoplay": true}, "setup": "advance:0.25"},
-		{"file": "pause", "screen": "play", "args": {"song_id": fires_id, "difficulty": "medium", "bell_set": "light", "autoplay": true}, "setup": "pause"},
+		{"file": "play_early", "screen": "play", "args": {"song_id": fires_id, "difficulty": "hard", "autoplay": true}, "setup": "moment:early", "wait": 0.08},
+		{"file": "play_late", "screen": "play", "args": {"song_id": fires_id, "difficulty": "hard", "autoplay": true}, "setup": "moment:late", "wait": 0.08},
+		{"file": "play_still_kept", "screen": "play", "args": {"song_id": fires_id, "difficulty": "hard", "autoplay": true}, "setup": "moment:stillkept", "wait": 0.1},
+		{"file": "play_locked", "screen": "play", "args": {"song_id": fires_id, "difficulty": "hard", "autoplay": true}, "setup": "moment:locked", "wait": 0.05},
+		{"file": "play_wrong", "screen": "play", "args": {"song_id": fires_id, "difficulty": "hard", "autoplay": true}, "setup": "moment:wrong", "wait": 0.05},
+		{"file": "play_chord_medium", "screen": "play", "args": {"song_id": "carnival", "difficulty": "medium", "autoplay": true}, "setup": "moment:chord", "wait": 0.05},
+		{"file": "play_chord_hard", "screen": "play", "args": {"song_id": "carnival", "difficulty": "hard", "autoplay": true}, "setup": "moment:chord", "wait": 0.05},
+		{"file": "play_chord_expert", "screen": "play", "args": {"song_id": "shrove", "difficulty": "expert", "autoplay": true}, "setup": "moment:chord", "wait": 0.05},
+		{"file": "play_sixteenths", "screen": "play", "args": {"song_id": "shrove", "difficulty": "expert", "autoplay": true}, "setup": "moment:six", "wait": 0.05},
+		{"file": "play_break_coming", "screen": "play", "args": {"song_id": "rope", "difficulty": "hard", "autoplay": true}, "setup": "moment:break_coming", "wait": 0.05},
+		{"file": "play_break", "screen": "play", "args": {"song_id": "rope", "difficulty": "hard", "autoplay": true}, "setup": "moment:break", "wait": 0.05},
+		{"file": "play_break_moved", "screen": "play", "args": {"song_id": "rope", "difficulty": "hard", "autoplay": true}, "setup": "moment:moved", "wait": 0.1},
+		{"file": "play_hold_play_medium", "screen": "play", "args": {"song_id": "piazza", "difficulty": "medium", "autoplay": true}, "setup": "moment:holdplay", "wait": 0.05},
+		{"file": "play_hold_play_hard", "screen": "play", "args": {"song_id": "bonfires", "difficulty": "hard", "autoplay": true}, "setup": "moment:holdplay", "wait": 0.05},
+		{"file": "play_hold_bell", "screen": "play", "args": {"song_id": "shrove", "difficulty": "hard", "autoplay": true}, "setup": "moment:holdbell", "wait": 0.05},
+		{"file": "play_stomp", "screen": "play", "args": {"song_id": "rope", "difficulty": "hard", "autoplay": true}, "setup": "moment:stomp", "wait": 0.05},
+		{"file": "play_stomp_outer", "screen": "play", "args": {"song_id": "rope", "difficulty": "expert", "autoplay": true}, "setup": "moment:stomp", "wait": 0.05},
+		{"file": "play_stomped", "screen": "play", "args": {"song_id": "rope", "difficulty": "hard", "autoplay": true}, "setup": "moment:stomped", "wait": 0.02},
+		{"file": "play_tutorial", "screen": "play", "args": {"song_id": tut_id, "difficulty": "easy", "autoplay": true}, "setup": "advance:0.25"},
+		{"file": "pause", "screen": "play", "args": {"song_id": fires_id, "difficulty": "medium", "autoplay": true}, "setup": "pause"},
 		{"file": "results", "screen": "results", "setup": "results", "wait": 1.3},
 		# Health: full, mid-run at 6 with a healing step on the road, low at 2, and the fail menu.
-		{"file": "play_health_full", "screen": "play", "args": {"song_id": fires_id, "difficulty": "hard", "bell_set": "light", "autoplay": true, "health": true}, "setup": "moment:dense", "wait": 0.1},
-		{"file": "play_health_mid", "screen": "play", "args": {"song_id": fires_id, "difficulty": "hard", "bell_set": "light", "autoplay": true, "health": true}, "setup": "moment:heal", "health": 6, "wait": 0.1},
-		{"file": "play_health_low", "screen": "play", "args": {"song_id": fires_id, "difficulty": "hard", "bell_set": "light", "autoplay": true, "health": true}, "setup": "moment:dense", "health": 2, "wait": 0.3},
-		{"file": "play_fail", "screen": "play", "args": {"song_id": fires_id, "difficulty": "hard", "bell_set": "light", "autoplay": true, "health": true}, "setup": "fail", "wait": 1.2},
+		{"file": "play_health_full", "screen": "play", "args": {"song_id": fires_id, "difficulty": "hard", "autoplay": true, "health": true}, "setup": "moment:dense", "wait": 0.1},
+		{"file": "play_health_mid", "screen": "play", "args": {"song_id": fires_id, "difficulty": "hard", "autoplay": true, "health": true}, "setup": "moment:heal", "health": 6, "wait": 0.1},
+		{"file": "play_health_low", "screen": "play", "args": {"song_id": fires_id, "difficulty": "hard", "autoplay": true, "health": true}, "setup": "moment:dense", "health": 2, "wait": 0.3},
+		{"file": "play_fail", "screen": "play", "args": {"song_id": fires_id, "difficulty": "hard", "autoplay": true, "health": true}, "setup": "fail", "wait": 1.2},
 	]
-	var piazza := SongLibrary.piazza()
-	if not piazza.is_empty():
-		shots.append({"file": "play_piazza_hit", "screen": "play", "args": {"song_id": piazza[0].id, "difficulty": "piazza", "bell_set": "light", "piazza": true, "autoplay": true, "round": _round(1)}, "setup": "moment:rang", "wait": 0.05})
-		shots.append({"file": "play_piazza", "screen": "play", "args": {"song_id": piazza[0].id, "difficulty": "piazza", "bell_set": "light", "piazza": true, "autoplay": true, "round": _round(1)}, "setup": "advance:0.3"})
 	return shots
-
-
-func _round(turn: int) -> Dictionary:
-	var songs := SongLibrary.piazza()
-	return {"song_id": songs[0].id if not songs.is_empty() else "", "players": ["Giovanni", "Maria", "Antonio", "Grazia"],
-		"scores": [48250, 51900, 39600, 45100], "turn": turn}
 
 
 func _render(shot: Dictionary, size: Vector2i, locale: String, dir: String) -> void:
@@ -283,6 +273,28 @@ func _moment(screen: Node, what: String) -> void:
 				if k > most_six:
 					most_six = k
 					target = t0 - 2.7   # the 120 frames of the walk there also run about 2 s of real time
+		"break_coming", "break", "moved":
+			# the break: the stand-still with the busiest run into it (the music stops dead mid-climax)
+			var most := -1
+			for n in s.notes:
+				if n.kind != Note.Kind.REST:
+					continue
+				var k := s.notes.filter(func(m: Note) -> bool: return m.kind != Note.Kind.REST and m.t < n.t and m.t > n.t - 2.0).size()
+				if k > most:
+					most = k
+					target = n.t - (3.4 if what == "break_coming" else 1.7)   # the walk there overshoots ~2 s
+		"holdplay", "holdbell":
+			# a hold with notes (or a bell) played under it: just after the first one under it is hit
+			for h in s.notes:
+				if h.kind != Note.Kind.HOLD or h.t < from * 0.5:
+					continue
+				var under: Array[Note] = []
+				for m in s.notes:
+					if m != h and m.t > h.t + 0.01 and m.t <= h.end_t and (m.is_bell() if what == "holdbell" else m.kind == Note.Kind.STEP):
+						under.append(m)
+				if under.size() >= (1 if what == "holdbell" else 2):
+					target = under[0].t - (1.9 if what == "holdplay" else 2.4)   # the walk there overshoots ~2 s
+					break
 		"countin":
 			target = song_time_of(s, -2.35)
 		"ready":
@@ -381,6 +393,17 @@ func _moment(screen: Node, what: String) -> void:
 			lanes.set_process(false)
 	if what == "showcase":
 		_showcase(screen, s, c.song_time())
+	if what == "moved":
+		# The player tips the phone a little in the break: the stand-still is broken.
+		for k in 240:
+			var r: Note = s.rest_at(c.song_time())
+			if r != null and c.song_time() >= r.t + 0.3:
+				break
+			c.advance(1.0 / 60.0)
+			await process_frame
+		var broke: Note = s.moved(c.song_time())
+		if broke != null:
+			screen.call("_on_moved_still", broke)
 	if what == "locked":
 		# Mashing: three random taps lock the buttons; a press while locked rattles the middle lock.
 		var lanes: Control = screen.get("lanes")
@@ -467,11 +490,11 @@ static func song_time_of(s: Session, beat: float) -> float:
 func _results_args() -> Dictionary:
 	var story := SongLibrary.story()
 	var song: SongData = story[1] if story.size() > 1 else story[0]
-	var s := _played(song, "hard", "village", true)
+	var s := _played(song, "hard", true)
 	var ghost := Ghost.new()
 	ghost.final_score = int(s.score * 0.93)
 	var next := story[2].id if story.size() > 2 else song.id
 	return {"session": s, "ghost": ghost,
-		"record": {"prev_best": ghost.final_score, "new_best": true, "bells": s.bells(), "carving_gained": 2,
+		"record": {"prev_best": ghost.final_score, "new_best": true, "grade": s.grade_rank(), "carving_gained": 2,
 			"unlocked": [{"kind": "remix", "id": song.remix_id() if song.has_remix() else song.id}, {"kind": "song", "id": next}]},
-		"play_args": {"song_id": song.id, "difficulty": "hard", "bell_set": "village"}}
+		"play_args": {"song_id": song.id, "difficulty": "hard"}}

@@ -51,15 +51,6 @@ static func story() -> Array[SongData]:
 	return out
 
 
-static func piazza() -> Array[SongData]:
-	_ensure()
-	var out: Array[SongData] = []
-	for s in _songs:
-		if s.kind == "piazza":
-			out.append(s)
-	return out
-
-
 static func _ensure() -> void:
 	if _loaded:
 		return

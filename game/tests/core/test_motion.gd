@@ -267,34 +267,26 @@ func test_full_ring_tap_and_tilt_together() -> void:
 		check_eq(rings, 6, "%s: a tap and a tilt together still ring once each" % mode)
 
 
-func test_adapts_to_softer_flicks() -> void:
-	var peaks := []
-	for i in 40:
-		peaks.append(lerpf(420.0, 170.0, i / 39.0))   # tired arms: 420 -> 170 °/s
-	var counts := []
-	for adapt: bool in [false, true]:
-		var sy := Synth.new(12)
-		sy.gyro_noise = 5.0
-		for i in 40:
-			sy.flick(1.0 + i * 0.75, i % 2 == 0, peaks[i], 12, 0.22)
-		var det := _detector(80.0)
-		det.threshold = 190.0
-		det.base_threshold = 190.0
-		det.adapt = adapt
-		counts.append(_run(det, sy, 32.0).size())
-	check(counts[0] < 40, "without adapting, soft flicks are lost (%d of 40)" % counts[0])
-	check_eq(counts[1], 40, "adapting keeps every flick")
-
-
-func test_adapt_has_a_floor() -> void:
-	var det := _detector()
-	det.threshold = 200.0
-	det.base_threshold = 200.0
+## The threshold comes from the calibration and stays put: soft song tilts are met by setting it at
+## PLAY_SHARE of the calibrated flick, not by following the player mid-song.
+func test_threshold_is_fixed_from_the_calibration() -> void:
+	var det := BellDetector.from_calibration({"mode": "gyro", "threshold": 150.0, "median_peak": 333.0, "axis": 0, "up_sign": 1}, true)
+	check_near(det.threshold, 333.0 * BellDetector.PLAY_SHARE, 1e-3, "a song threshold under the sharp calibration flicks")
+	det.set_bpm(120.0)
 	var sy := Synth.new(13)
-	sy.gyro_noise = 40.0   # heavy jiggling, no flicks
+	sy.gyro_noise = 25.0   # a jiggling hand, no flicks
+	var start := det.threshold
 	var rings := _run(det, sy, 30.0)
-	check(det.threshold >= 120.0 - 1e-6, "never below 60 %% of the calibration (%s)" % det.threshold)
+	check_eq(det.threshold, start, "jiggling never moves it")
 	check_eq(rings.size(), 0, "jiggling does not ring")
+	# Softening flicks (tired arms: 420 -> 170 °/s) all ring at a threshold set from a 420 calibration.
+	var tired := Synth.new(12)
+	tired.gyro_noise = 5.0
+	for i in 40:
+		tired.flick(1.0 + i * 0.75, i % 2 == 0, lerpf(420.0, 170.0, i / 39.0), 12, 0.22)
+	var d2 := BellDetector.from_calibration({"mode": "gyro", "threshold": 190.0, "median_peak": 420.0, "axis": 0, "up_sign": 1}, true)
+	d2.set_bpm(80.0)
+	check_eq(_run(d2, tired, 32.0).size(), 40, "every softer flick still rings")
 
 
 func test_motion_reader() -> void:
@@ -463,7 +455,6 @@ func test_typical_flick_rings_at_half_strength() -> void:
 			for share: float in [1.0, 0.6, 1.6]:
 				var det := BellDetector.from_calibration(calib, true)
 				det.set_bpm(100.0)
-				det.adapt = false
 				var sy := Synth.new(int(hz + fps + share * 10.0))
 				sy.gyro_noise = 4.0
 				for i in 20:
@@ -493,7 +484,6 @@ const CONFIRM_BOUND := 0.030   # BellDetector.CONFIRM plus a margin
 
 func _sound_lags(mode: String, hz: float, fps: float, peak_share: float) -> Array[float]:
 	var det := _detector(100.0, mode)
-	det.adapt = false
 	var sy := Synth.new(int(hz) + int(fps))
 	sy.jitter = 0.0
 	sy.acc_noise = 0.0
@@ -578,3 +568,167 @@ func test_held_readings_are_stamped_earlier() -> void:
 		err_fast += (float(fast[i][0]) - (1.0 + i * 0.7)) / 10.0
 		err_held += (float(held[i]) - (1.0 + i * 0.7)) / 10.0
 	check(absf(err_held - err_fast) < 0.012, "held-sample rings land where instant ones do (%.4f vs %.4f)" % [err_held, err_fast])
+
+
+# Gyro readings at 100 Hz from half-sine lobes [start, length, peak °/s] on the tilt axis.
+func _lobes_run(det: BellDetector, lobes: Array, t1: float, forgive_at: Array = []) -> Array[float]:
+	var rings: Array[float] = []
+	var t := 0.0
+	while t < t1:
+		var v := 0.0
+		for l in lobes:
+			if t >= l[0] and t <= l[0] + l[1]:
+				v += l[2] * sin(PI * (t - l[0]) / l[1])
+		if det.feed(t, Vector3.ZERO, Vector3(v, 0.0, 0.0)):
+			rings.append(det.last_t)
+			if forgive_at.any(func(x): return absf(x - det.last_t) < 0.05):
+				det.forgive()
+		t += 0.01
+	return rings
+
+
+## Daniele's 2026-10-10 run: in fast passages each tap shook the phone just over the threshold a
+## moment before a bell, and the ring it made (matching no bell) swallowed the real flick after it.
+func test_a_ring_that_rang_nothing_does_not_swallow_the_next_flick() -> void:
+	# A small lobe at 1.0 s (just over 180), the real flick the other way 0.15 s later, at 144 bpm.
+	var lobes := [[1.0, 0.05, 210.0], [1.07, 0.12, -150.0], [1.15, 0.12, -500.0]]
+	var kept := _lobes_run(_detector(144.0), lobes, 2.0)
+	check_eq(kept.size(), 1, "without forgive the flick after the stray lobe is lost")
+	var freed := _lobes_run(_detector(144.0), lobes, 2.0, [1.0])
+	check_eq(freed.size(), 2, "forgiven: the real flick still rings")
+	if freed.size() == 2:
+		check(absf(freed[1] - 1.17) < 0.03, "and on time (%.3f)" % freed[1])
+	# A forgiven ring's own lobe never rings twice, and a flick that matched holds its return lobe back.
+	var one := _lobes_run(_detector(144.0), [[1.0, 0.2, 400.0]], 2.0, [1.0])
+	check_eq(one.size(), 1, "one long lobe, forgiven, still one ring")
+	var flick := _lobes_run(_detector(144.0), [[1.0, 0.1, 400.0], [1.1, 0.1, -300.0]], 2.0)
+	check_eq(flick.size(), 1, "a down-and-up flick that rang a bell rings once")
+
+
+## Daniele's 2026-10-10 ring at 66 s: one slow tilt crossed the threshold 226 ms before the beat and
+## peaked 25 ms before it. The early ring rang nothing, so each peak of the lobe is offered again.
+func test_a_slow_tilt_that_rang_too_early_offers_its_peak() -> void:
+	var det := _detector(144.0)
+	# Two humps: up to 300 at 1.10, a dip to 220, up to 420 at 1.24, then down.
+	var tries: Array[float] = []
+	var rings: Array[float] = []
+	var t := 0.9
+	while t < 1.6:
+		var v := 0.0
+		if t >= 1.0 and t <= 1.36:
+			v = 300.0 * sin(PI * clampf((t - 1.0) / 0.2, 0.0, 1.0)) * (1.0 if t < 1.1 else 0.0)
+			v = maxf(v, 220.0 if t >= 1.1 and t < 1.16 else 0.0)
+			if t >= 1.16:
+				v = 420.0 * sin(PI * clampf((t - 1.08) / 0.32, 0.0, 1.0))
+		if det.feed(t, Vector3.ZERO, Vector3(v, 0.0, 0.0)):
+			rings.append(det.last_t)
+			det.forgive()
+		var r := det.take_retry()
+		if not is_nan(r):
+			tries.append(r)
+		t += 0.01
+	check_eq(rings.size(), 1, "one ring for one slow tilt")
+	check(tries.size() >= 1 and absf(tries[-1] - 1.24) < 0.02, "its last peak is offered (%s)" % str(tries))
+	# Taken: nothing more from that lobe.
+	var det2 := _detector(144.0)
+	var after := 0
+	t = 0.9
+	while t < 1.6:
+		var v := 0.0
+		if t >= 1.0 and t <= 1.3:
+			v = 400.0 * sin(PI * (t - 1.0) / 0.3) * (1.0 + 0.3 * sin(t * 90.0))
+		if det2.feed(t, Vector3.ZERO, Vector3(v, 0.0, 0.0)):
+			det2.forgive()
+		var r := det2.take_retry()
+		if not is_nan(r):
+			after += 1
+			det2.used()
+		t += 0.01
+	check(after <= 1, "a used retry ends the tries (%d)" % after)
+	# A ring that matched a bell is never offered again.
+	var det3 := _detector(144.0)
+	var offered := 0
+	t = 0.9
+	while t < 1.6:
+		var v := 400.0 * sin(PI * (t - 1.0) / 0.3) if t >= 1.0 and t <= 1.3 else 0.0
+		det3.feed(t, Vector3.ZERO, Vector3(v, 0.0, 0.0))
+		if not is_nan(det3.take_retry()):
+			offered += 1
+		t += 0.01
+	check_eq(offered, 0, "no retry without forgive")
+
+
+## A full ring's tap that lands while the phone is already turning steadily takes that tilt; a tap's
+## own knock (starting with the tap) does not count as turning (Daniele's rings at 66.3 s).
+func test_tilting_for_tells_a_held_tilt_from_a_knock() -> void:
+	var det := _detector(144.0)
+	var t := 0.0
+	while t < 1.0:
+		det.feed(t, Vector3.ZERO, Vector3(0.0 if t < 0.8 else 120.0, 0.0, 0.0))   # 2/3 of the threshold from 0.8 s
+		t += 0.01
+	check(det.tilting_for(1.0) >= BellDetector.HELD_TILT, "turning steadily for 0.2 s (%.2f)" % det.tilting_for(1.0))
+	var knock := _detector(144.0)
+	t = 0.0
+	while t < 1.0:
+		knock.feed(t, Vector3.ZERO, Vector3(150.0 if t >= 0.98 else 0.0, 0.0, 0.0))
+		t += 0.01
+	check(knock.tilting_for(1.0) < BellDetector.HELD_TILT, "a knock that just started is not a held tilt")
+	det.claim(1.0)
+	check_eq(det.last_t, 1.0, "claimed as the lobe's ring")
+	check(not det.feed(1.01, Vector3.ZERO, Vector3(300.0, 0.0, 0.0)), "and the same lobe does not ring again")
+
+
+# Feeds sy into det with the stand-still watch on from `from`; returns moved_at (NAN when still).
+func _still_run(det: BellDetector, sy: Synth, from: float, t1: float) -> float:
+	det.watch_still(from)
+	for t in sy.frames(0.0, t1):
+		var s := sy.sample(t)
+		det.feed(t, s[0], s[1])
+	return det.moved_at
+
+
+func test_stand_still_any_tilt_breaks_it() -> void:
+	# A gentle tilt, far under a ring, still moves the phone.
+	for mode: String in ["gyro", "accel"]:
+		var sy := Synth.new(31)
+		sy.gyro_noise = 5.0
+		sy.acc_noise = 0.2
+		sy.flick(1.0, true, 110.0, 4.0, 0.25)    # about 60 % of the ring threshold
+		var det := _detector(120.0, mode)
+		var rings := 0
+		det.watch_still(0.5)
+		for t in sy.frames(0.0, 2.0):
+			var s := sy.sample(t)
+			if det.feed(t, s[0], s[1]):
+				rings += 1
+		check_eq(rings, 0, "%s: the soft tilt does not ring" % mode)
+		check(not is_nan(det.moved_at) and absf(det.moved_at - 1.0) < 0.1, "%s: but it breaks the stand-still (%.3f)" % [mode, det.moved_at])
+	# A slow lean (25° over a second, never fast) breaks it too, by the angle.
+	var lean := Synth.new(32)
+	lean.gyro_noise = 4.0
+	lean.lean(1.0, false, 40.0, 1.0, 0.5)
+	var at := _still_run(_detector(), lean, 0.5, 2.5)
+	check(not is_nan(at) and at > 1.2 and at < 2.0, "a slow 25° lean breaks the stand-still (%.3f)" % at)
+
+
+func test_stand_still_survives_holding_steady() -> void:
+	# Hand tremor, sensor noise, thumb taps on the screen and a slight sway: still.
+	for mode: String in ["gyro", "accel"]:
+		var sy := Synth.new(33)
+		sy.gyro_noise = 8.0
+		sy.acc_noise = 0.4
+		for i in 6:
+			sy.tap(0.7 + i * 0.37, 30.0, 0.008, 30.0)
+		sy.lean(0.6, true, 12.0, 1.5, 0.2)    # an 11° drift over 1.5 s
+		check(is_nan(_still_run(_detector(120.0, mode), sy, 0.5, 3.0)), "%s: holding the phone steady keeps the stand-still" % mode)
+	# Watching stops with end_still; nothing is reported after it.
+	var late := Synth.new(34)
+	late.flick(1.5, true, 400.0, 12.0, 0.2)
+	var det := _detector()
+	det.watch_still(0.5)
+	for t in late.frames(0.0, 2.0):
+		if t > 1.0:
+			det.end_still()
+		var s := late.sample(t)
+		det.feed(t, s[0], s[1])
+	check(is_nan(det.moved_at), "a tilt after the stand-still ended does not count")

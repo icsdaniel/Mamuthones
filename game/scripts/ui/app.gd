@@ -11,13 +11,11 @@ const SCREENS := {
 	"headphones": "res://scripts/ui/screens/headphones_screen.gd",
 	"calibration": "res://scripts/ui/screens/calibration_screen.gd",
 	"latency": "res://scripts/ui/screens/latency_screen.gd",
+	"screen_delay": "res://scripts/ui/screens/screen_delay_screen.gd",
 	"title": "res://scripts/ui/screens/title_screen.gd",
 	"story": "res://scripts/ui/screens/story_screen.gd",
 	"stop_card": "res://scripts/ui/screens/stop_card_screen.gd",
 	"free_play": "res://scripts/ui/screens/free_play_screen.gd",
-	"piazza": "res://scripts/ui/screens/piazza_screen.gd",
-	"piazza_ranking": "res://scripts/ui/screens/piazza_ranking_screen.gd",
-	"daily": "res://scripts/ui/screens/daily_screen.gd",
 	"settings": "res://scripts/ui/screens/settings_screen.gd",
 	"credits": "res://scripts/ui/screens/credits_screen.gd",
 	"workshop": "res://scripts/ui/screens/workshop_screen.gd",
@@ -45,6 +43,7 @@ func _ready() -> void:
 	UIKit.apply_root(self)
 	backdrop = MenuBackdrop.new()
 	backdrop.reduced_motion = UIKit.reduced_motion()
+	backdrop.still = UIKit.animations_off()
 	add_child(backdrop)
 	screen_changed.connect(_on_screen_changed)
 	_layer = Control.new()
@@ -63,7 +62,8 @@ func _ready() -> void:
 	if start_screen != "":
 		open(start_screen, start_args)
 	else:
-		open(UIKit.first_screen())
+		var first := UIKit.first_screen()
+		open(first, {"first_run": true} if first == "calibration" else {})
 
 
 func current() -> Screen:
@@ -138,6 +138,7 @@ func rebuild_all() -> void:
 func _on_screen_changed(screen: Screen) -> void:
 	backdrop.visible = screen == null or not screen.screen_name() in OWN_BACKDROP
 	backdrop.reduced_motion = UIKit.reduced_motion()
+	backdrop.still = UIKit.animations_off()
 
 
 func overlay() -> Control:
