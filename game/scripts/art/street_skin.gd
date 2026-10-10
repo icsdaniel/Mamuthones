@@ -192,13 +192,25 @@ static var _ai_sized := {}
 static var _ai_mips := {}
 
 
+## One of Daniele's pictures in game/art/ai as an Image of its own (safe to change). They are imported
+## as images, not textures: they are only ever shrunk on the CPU, so none is sent to the GPU (a texture
+## had to be read back from it, and took video memory for the whole song).
+static func ai_image(path: String) -> Image:
+	var r: Resource = load(path)
+	if r is Image:
+		return (r as Image).duplicate() as Image
+	if r is Texture2D:
+		return (r as Texture2D).get_image()
+	return null
+
+
 static func ai_tex(key: String, size: Vector2i) -> Texture2D:
 	if not _ai.has(key):
 		# "<name>!flip": the picture upside down; "<name>!mirror": left for right
-		var path := "res://art/ai/%s.png" % key.trim_suffix("!flip").trim_suffix("!mirror")
+		var path := "res://art/ai/%s.webp" % key.trim_suffix("!flip").trim_suffix("!mirror")
 		var img: Image = null
 		if ResourceLoader.exists(path):
-			img = (load(path) as Texture2D).get_image()
+			img = ai_image(path)
 			if img != null:
 				img.decompress()
 				if key.ends_with("!flip"):

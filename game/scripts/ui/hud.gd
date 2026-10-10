@@ -232,9 +232,9 @@ static func sliced(key: String, cells: Vector2i) -> Texture2D:
 	if _sliced.has(k):
 		return _sliced[k]
 	var tex: Texture2D = null
-	var path := "res://art/ai/%s.png" % key
+	var path := "res://art/ai/%s.webp" % key
 	if ResourceLoader.exists(path):
-		var src := (load(path) as Texture2D).get_image()
+		var src := StreetSkin.ai_image(path)
 		src.decompress()
 		src.convert(Image.FORMAT_RGBA8)
 		var w := src.get_width()

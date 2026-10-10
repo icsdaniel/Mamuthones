@@ -1,0 +1,14 @@
+[remap]
+
+importer="image"
+type="Image"
+uid="uid://byt5w3be4aj65"
+path="res://.godot/imported/btn_pressed.webp-7981fae09658c12bb205a66918db6a27.image"
+
+[deps]
+
+source_file="res://art/ai/btn_pressed.webp"
+dest_files=["res://.godot/imported/btn_pressed.webp-7981fae09658c12bb205a66918db6a27.image"]
+
+[params]
+
