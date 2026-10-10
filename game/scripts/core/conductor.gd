@@ -123,6 +123,13 @@ func _audio_lead() -> float:
 	return _latency() + _offset_used
 
 
+## How long after the game plays a sound the player hears it: output latency plus the player's
+## sound delay (Bluetooth headphones add 150-250 ms). A sound meant to be heard at song time t has to
+## be played at t - heard_delay(). 0 in recordings, which mix in step with the frames.
+func heard_delay() -> float:
+	return 0.0 if _recording() else _latency() + _offset_used
+
+
 func _start_audio(t: float) -> void:
 	_audio_started = true
 	if player.stream != null:

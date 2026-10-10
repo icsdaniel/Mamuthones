@@ -117,3 +117,39 @@ func test_sound_delay_test_saves_its_result() -> void:
 	check_near(Profile.audio_offset(), 0.12, 0.006, "the measured delay is saved")
 	UIHarness.free_app(app)
 	UIHarness.restore_profile()
+
+
+## Daniele's Bluetooth headphones (2026-10-10): the test measured 200 ms, then every step knock came a
+## fifth of a second after his thumb. A long delay turns the step sounds off; a short one later turns
+## them back on only if the test turned them off. Nothing on the test's screen moves with the clicks.
+func test_a_long_sound_delay_turns_the_step_sounds_off() -> void:
+	UIHarness.fresh_profile()
+	var lat: GDScript = load(App.SCREENS["latency"])
+	check_eq(lat.step_sounds_for(0.03), "", "a short delay changes nothing")
+	check(bool(Profile.get_setting("step_sounds")), "step sounds stay on")
+	check_eq(lat.step_sounds_for(0.2), "lat_sounds_off", "200 ms: the player is told")
+	check(not bool(Profile.get_setting("step_sounds")), "and the step sounds are off")
+	check_eq(lat.step_sounds_for(0.03), "lat_sounds_on", "back on the phone's speaker: told again")
+	check(bool(Profile.get_setting("step_sounds")), "and they are back on")
+	Profile.set_setting("step_sounds", false)
+	check_eq(lat.step_sounds_for(0.03), "", "turned off by hand: a short delay leaves them off")
+	check(not bool(Profile.get_setting("step_sounds")), "still off")
+	var app := UIHarness.make_app(tree, "latency", {})
+	await UIHarness.settle(tree)
+	check(app.current().get("_pulses") == null, "the drum does not pulse with the clicks")
+	UIHarness.free_app(app)
+	UIHarness.restore_profile()
+
+
+## Sounds the game plays on the music (the Issohadore's call, the bell cue, the count-in digits) are
+## timed by the whole sound delay, as the music is, not by the output latency alone.
+func test_sounds_on_the_music_lead_by_the_whole_sound_delay() -> void:
+	var c := Conductor.new()
+	c.use_audio = false
+	c.audio_offset = 0.2
+	c.play(SongLibrary.get_song("fires"))
+	check_near(c.heard_delay(), 0.2 + AudioServer.get_output_latency(), 1e-6, "heard 200 ms after it is played")
+	c.free()
+	var src := FileAccess.get_file_as_string("res://scripts/ui/screens/play_screen.gd")
+	check(src.contains("var lead := conductor.heard_delay()"), "the call and the cue are scheduled by it")
+	check(src.contains("_count_from = _clock + conductor.heard_delay()"), "and the count-in digits")
