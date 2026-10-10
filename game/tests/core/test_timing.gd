@@ -608,7 +608,7 @@ func test_web_motion_rings_at_60_hz() -> void:
 			var reader := MotionReader.new()
 			var rings := []
 			var det := r.detector
-			r.rang.connect(func(_x): rings.append([det.last_up, det.last_t]))
+			r.tilted.connect(func(_x): rings.append([det.last_up, det.last_t]))
 			var k := 0
 			var frame_t := 0.003
 			var per_frame := {}
@@ -636,3 +636,19 @@ func test_web_motion_rings_at_60_hz() -> void:
 				check_eq(wrong_way, 0, "%s: up and down read the right way" % what)
 			r.queue_free()
 
+
+
+## A tilt with no bell near rings nothing out loud (Daniele, 2026-10-10: holding the phone rang the
+## bell all song long); a tilt on a bell still rings.
+func test_a_tilt_with_no_bell_near_is_silent() -> void:
+	var s := Session.new(_song([]), "easy")
+	var r := _router(s)
+	var heard := []
+	var fired := []
+	r.rang.connect(func(x): heard.append(x))
+	r.tilted.connect(func(x): fired.append(x))
+	r.call("_tilt_rang", 1.0, 1.0, false)
+	check_eq(fired.size(), 1, "the tilt fired")
+	check_eq(fired[0].get("quality"), "free", "with no bell near")
+	check(heard.is_empty(), "and nothing rang out")
+	r.queue_free()

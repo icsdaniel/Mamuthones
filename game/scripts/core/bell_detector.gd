@@ -263,6 +263,11 @@ func _reading_age() -> float:
 func forgive() -> void:
 	if not _armed:
 		_forgiven = true
+	# Nor does it teach the threshold: stray lobes from holding the phone are small, and learning
+	# from them lowered it to the minimum within 35 s (Daniele's 2026-10-10 Rope Expert run, calibrated
+	# at 84 °/s), so ever smaller movements rang.
+	_peak_until = -INF
+	_peak = 0.0
 
 
 ## The peak time of a forgiven lobe that just ended (NAN when there is none); each is offered once.
