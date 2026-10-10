@@ -686,3 +686,21 @@ func test_tilting_for_tells_a_held_tilt_from_a_knock() -> void:
 	det.claim(1.0)
 	check_eq(det.last_t, 1.0, "claimed as the lobe's ring")
 	check(not det.feed(1.01, Vector3.ZERO, Vector3(300.0, 0.0, 0.0)), "and the same lobe does not ring again")
+
+
+## Daniele's 2026-10-10 Rope Expert run: small lobes from holding the phone rang no bell, yet their
+## peaks taught the detector that his flicks were soft, and the threshold sank from 84 to the minimum
+## within 35 s. Rings that matched nothing no longer teach it.
+func test_stray_rings_do_not_lower_the_threshold() -> void:
+	var lobes := []
+	var at := []
+	for i in 12:
+		lobes.append([1.0 + i * 0.8, 0.1, 200.0 if i % 2 == 0 else -200.0])
+		at.append(1.0 + i * 0.8)
+	var taught := _detector(120.0)
+	_lobes_run(taught, lobes, 11.0)
+	check(taught.threshold < 150.0, "rings that matched a bell teach the threshold (%.1f)" % taught.threshold)
+	var stray := _detector(120.0)
+	var rings := _lobes_run(stray, lobes, 11.0, at)
+	check_eq(rings.size(), 12, "every stray lobe was seen")
+	check_near(stray.threshold, 180.0, 1e-3, "stray rings leave the threshold where calibration put it")
