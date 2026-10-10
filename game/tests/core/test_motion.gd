@@ -578,3 +578,38 @@ func test_held_readings_are_stamped_earlier() -> void:
 		err_fast += (float(fast[i][0]) - (1.0 + i * 0.7)) / 10.0
 		err_held += (float(held[i]) - (1.0 + i * 0.7)) / 10.0
 	check(absf(err_held - err_fast) < 0.012, "held-sample rings land where instant ones do (%.4f vs %.4f)" % [err_held, err_fast])
+
+
+# Gyro readings at 100 Hz from half-sine lobes [start, length, peak °/s] on the tilt axis.
+func _lobes_run(det: BellDetector, lobes: Array, t1: float, forgive_at: Array = []) -> Array[float]:
+	var rings: Array[float] = []
+	var t := 0.0
+	while t < t1:
+		var v := 0.0
+		for l in lobes:
+			if t >= l[0] and t <= l[0] + l[1]:
+				v += l[2] * sin(PI * (t - l[0]) / l[1])
+		if det.feed(t, Vector3.ZERO, Vector3(v, 0.0, 0.0)):
+			rings.append(det.last_t)
+			if forgive_at.any(func(x): return absf(x - det.last_t) < 0.05):
+				det.forgive()
+		t += 0.01
+	return rings
+
+
+## Daniele's 2026-10-10 run: in fast passages each tap shook the phone just over the threshold a
+## moment before a bell, and the ring it made (matching no bell) swallowed the real flick after it.
+func test_a_ring_that_rang_nothing_does_not_swallow_the_next_flick() -> void:
+	# A small lobe at 1.0 s (just over 180), the real flick the other way 0.15 s later, at 144 bpm.
+	var lobes := [[1.0, 0.05, 210.0], [1.07, 0.12, -150.0], [1.15, 0.12, -500.0]]
+	var kept := _lobes_run(_detector(144.0), lobes, 2.0)
+	check_eq(kept.size(), 1, "without forgive the flick after the stray lobe is lost")
+	var freed := _lobes_run(_detector(144.0), lobes, 2.0, [1.0])
+	check_eq(freed.size(), 2, "forgiven: the real flick still rings")
+	if freed.size() == 2:
+		check(absf(freed[1] - 1.17) < 0.03, "and on time (%.3f)" % freed[1])
+	# A forgiven ring's own lobe never rings twice, and a flick that matched holds its return lobe back.
+	var one := _lobes_run(_detector(144.0), [[1.0, 0.2, 400.0]], 2.0, [1.0])
+	check_eq(one.size(), 1, "one long lobe, forgiven, still one ring")
+	var flick := _lobes_run(_detector(144.0), [[1.0, 0.1, 400.0], [1.1, 0.1, -300.0]], 2.0)
+	check_eq(flick.size(), 1, "a down-and-up flick that rang a bell rings once")

@@ -197,6 +197,8 @@ func feed_motion(t: float, acc: Vector3, gyro_dps: Vector3) -> void:
 		if motion_log != null:
 			motion_log.add_ring(detector.last_t)
 		var rr := session.ring(detector.last_t, true, detector.last_strength)
+		if rr.get("quality") in ["free", "miss"]:
+			detector.forgive()
 		if run_log != null:
 			var bn: Note = rr.get("note")
 			run_log.event(detector.last_t, "ring", {"tilt": true, "up": rr.get("up"), "q": rr.get("quality"),

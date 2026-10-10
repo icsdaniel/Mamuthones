@@ -20,6 +20,12 @@ extends RefCounted
 ## - Adapts during a song: if flicks get softer, the threshold follows 45 % of the recent peaks,
 ##   and repeated near-misses (clear lobes just under the threshold) lower it, never below 60 %
 ##   of the calibrated value nor above it.
+## - A small ring that rang no bell (forgive(), peaking under FORGIVE_PEAK of the typical flick)
+##   does not hold the next one back: the detector re-arms as soon as that lobe is over. In fast
+##   passages each tap shakes the phone a little over the threshold, and those lobes rang just ahead
+##   of a bell; the lockout and the calm wait then swallowed the real flick that followed (five of
+##   the nine misses at the end of Daniele's 2026-10-10 Piazza Hard run). A full-size flick keeps
+##   the lockout, so its return lobe never rings a second time.
 
 signal rang(t: float, up: bool)
 
@@ -40,6 +46,7 @@ const TOUCH_WINDOW := 0.10    ## seconds after a touch during which accel rings 
 const PEAK_WATCH := 0.15
 const NEAR := 0.6             ## near-miss: a sustained lobe above this share of the threshold
 const ADAPT_FLOOR := 0.6
+const FORGIVE_PEAK := 0.75    ## a forgiven lobe re-arms only if it peaked under this × typical_peak
 ## The threshold never climbs over the calibrated one: after a few hard flicks it had risen to
 ## 1.2 × on Daniele's phone (2026-10-09 run log) and a normal flick that peaked under it was lost.
 const ADAPT_CEIL := 1.0
@@ -72,6 +79,8 @@ var rise_time := 0.045
 var sample_interval := 1.0 / 60.0
 
 var _armed := true
+var _forgiven := false        # the last ring rang nothing: re-arm once its lobe is over
+var _lobe_max := 0.0          # highest reading of the lobe that last rang
 var _calm_since := NAN
 var _cand_t := NAN
 var _cand_first := NAN
@@ -126,6 +135,7 @@ func lockout() -> float:
 
 func reset() -> void:
 	_armed = true
+	_forgiven = false
 	_calm_since = NAN
 	_cand_t = NAN
 	_rise_since = NAN
@@ -164,6 +174,12 @@ func feed(t: float, acc: Vector3, gyro_dps: Vector3) -> bool:
 	elif _peak_until > -INF:
 		_learn_peak(_peak)
 		_peak_until = -INF
+	if not _armed and _forgiven:
+		if v >= threshold * SUSTAIN:
+			_lobe_max = maxf(_lobe_max, v)
+		else:
+			_armed = _lobe_max < FORGIVE_PEAK * typical_peak
+			_forgiven = false
 	if not _armed:
 		if v < threshold * 0.5:
 			if is_nan(_calm_since):
@@ -217,8 +233,17 @@ func _reading_age() -> float:
 	return 0.5 * sample_interval if _held_seen > 0.0 else 0.0
 
 
+## The last ring matched no bell (the session found nothing in its window): it holds nothing back,
+## so a real flick right after a stray lobe still rings.
+func forgive() -> void:
+	if not _armed:
+		_forgiven = true
+
+
 func _fire() -> void:
 	_armed = false
+	_forgiven = false
+	_lobe_max = _cand_peak
 	_calm_since = NAN
 	last_t = _cand_t - _reading_age()
 	var s := signf(_cand_vec[axis]) * up_sign
