@@ -267,34 +267,26 @@ func test_full_ring_tap_and_tilt_together() -> void:
 		check_eq(rings, 6, "%s: a tap and a tilt together still ring once each" % mode)
 
 
-func test_adapts_to_softer_flicks() -> void:
-	var peaks := []
-	for i in 40:
-		peaks.append(lerpf(420.0, 170.0, i / 39.0))   # tired arms: 420 -> 170 °/s
-	var counts := []
-	for adapt: bool in [false, true]:
-		var sy := Synth.new(12)
-		sy.gyro_noise = 5.0
-		for i in 40:
-			sy.flick(1.0 + i * 0.75, i % 2 == 0, peaks[i], 12, 0.22)
-		var det := _detector(80.0)
-		det.threshold = 190.0
-		det.base_threshold = 190.0
-		det.adapt = adapt
-		counts.append(_run(det, sy, 32.0).size())
-	check(counts[0] < 40, "without adapting, soft flicks are lost (%d of 40)" % counts[0])
-	check_eq(counts[1], 40, "adapting keeps every flick")
-
-
-func test_adapt_has_a_floor() -> void:
-	var det := _detector()
-	det.threshold = 200.0
-	det.base_threshold = 200.0
+## The threshold comes from the calibration and stays put: soft song tilts are met by setting it at
+## PLAY_SHARE of the calibrated flick, not by following the player mid-song.
+func test_threshold_is_fixed_from_the_calibration() -> void:
+	var det := BellDetector.from_calibration({"mode": "gyro", "threshold": 150.0, "median_peak": 333.0, "axis": 0, "up_sign": 1}, true)
+	check_near(det.threshold, 333.0 * BellDetector.PLAY_SHARE, 1e-3, "a song threshold under the sharp calibration flicks")
+	det.set_bpm(120.0)
 	var sy := Synth.new(13)
-	sy.gyro_noise = 40.0   # heavy jiggling, no flicks
+	sy.gyro_noise = 25.0   # a jiggling hand, no flicks
+	var start := det.threshold
 	var rings := _run(det, sy, 30.0)
-	check(det.threshold >= 120.0 - 1e-6, "never below 60 %% of the calibration (%s)" % det.threshold)
+	check_eq(det.threshold, start, "jiggling never moves it")
 	check_eq(rings.size(), 0, "jiggling does not ring")
+	# Softening flicks (tired arms: 420 -> 170 °/s) all ring at a threshold set from a 420 calibration.
+	var tired := Synth.new(12)
+	tired.gyro_noise = 5.0
+	for i in 40:
+		tired.flick(1.0 + i * 0.75, i % 2 == 0, lerpf(420.0, 170.0, i / 39.0), 12, 0.22)
+	var d2 := BellDetector.from_calibration({"mode": "gyro", "threshold": 190.0, "median_peak": 420.0, "axis": 0, "up_sign": 1}, true)
+	d2.set_bpm(80.0)
+	check_eq(_run(d2, tired, 32.0).size(), 40, "every softer flick still rings")
 
 
 func test_motion_reader() -> void:
@@ -463,7 +455,6 @@ func test_typical_flick_rings_at_half_strength() -> void:
 			for share: float in [1.0, 0.6, 1.6]:
 				var det := BellDetector.from_calibration(calib, true)
 				det.set_bpm(100.0)
-				det.adapt = false
 				var sy := Synth.new(int(hz + fps + share * 10.0))
 				sy.gyro_noise = 4.0
 				for i in 20:
@@ -493,7 +484,6 @@ const CONFIRM_BOUND := 0.030   # BellDetector.CONFIRM plus a margin
 
 func _sound_lags(mode: String, hz: float, fps: float, peak_share: float) -> Array[float]:
 	var det := _detector(100.0, mode)
-	det.adapt = false
 	var sy := Synth.new(int(hz) + int(fps))
 	sy.jitter = 0.0
 	sy.acc_noise = 0.0
@@ -686,21 +676,3 @@ func test_tilting_for_tells_a_held_tilt_from_a_knock() -> void:
 	det.claim(1.0)
 	check_eq(det.last_t, 1.0, "claimed as the lobe's ring")
 	check(not det.feed(1.01, Vector3.ZERO, Vector3(300.0, 0.0, 0.0)), "and the same lobe does not ring again")
-
-
-## Daniele's 2026-10-10 Rope Expert run: small lobes from holding the phone rang no bell, yet their
-## peaks taught the detector that his flicks were soft, and the threshold sank from 84 to the minimum
-## within 35 s. Rings that matched nothing no longer teach it.
-func test_stray_rings_do_not_lower_the_threshold() -> void:
-	var lobes := []
-	var at := []
-	for i in 12:
-		lobes.append([1.0 + i * 0.8, 0.1, 200.0 if i % 2 == 0 else -200.0])
-		at.append(1.0 + i * 0.8)
-	var taught := _detector(120.0)
-	_lobes_run(taught, lobes, 11.0)
-	check(taught.threshold < 150.0, "rings that matched a bell teach the threshold (%.1f)" % taught.threshold)
-	var stray := _detector(120.0)
-	var rings := _lobes_run(stray, lobes, 11.0, at)
-	check_eq(rings.size(), 12, "every stray lobe was seen")
-	check_near(stray.threshold, 180.0, 1e-3, "stray rings leave the threshold where calibration put it")

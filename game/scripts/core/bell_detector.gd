@@ -17,9 +17,10 @@ extends RefCounted
 ## - One flick = one ring: a down-and-up flick has two lobes, so after a ring the detector waits
 ##   0.45 beat (bells written half a beat apart stay playable) AND for the signal to stay below half
 ##   the threshold for 50 ms (the dip between the two lobes of a slow flick is shorter than that).
-## - Adapts during a song: if flicks get softer, the threshold follows 45 % of the recent peaks,
-##   and repeated near-misses (clear lobes just under the threshold) lower it, never below 60 %
-##   of the calibrated value nor above it.
+## - The threshold is fixed for the whole song: PLAY_SHARE of the calibrated flick's peak, as song
+##   tilts are softer than the sharp ones calibration asks for. It used to follow the player during a
+##   song, but stray lobes from holding the phone taught it to sink, and a calibration should mean
+##   the same thing from the first beat to the last (Daniele, 2026-10-10).
 ## - A small ring that rang no bell (forgive(), peaking under FORGIVE_PEAK of the typical flick)
 ##   does not hold the next one back: the detector re-arms as soon as that lobe is over. In fast
 ##   passages each tap shakes the phone a little over the threshold, and those lobes rang just ahead
@@ -47,29 +48,22 @@ const CONFIRM_FAST := 0.005
 const SLOPE := 0.25           ## rising-slope readings lie between this share and the full threshold
 const MAX_GAP := 0.06         ## seconds; a longer gap between readings breaks interpolation
 const TOUCH_WINDOW := 0.10    ## seconds after a touch during which accel rings need more proof
-const PEAK_WATCH := 0.15
-const NEAR := 0.6             ## near-miss: a sustained lobe above this share of the threshold
-## The threshold may follow softer play down to 40 % of the calibrated one: Daniele calibrated with
-## big flicks (peaks 333 °/s, threshold 150) and played much softer, and at the old 60 % floor his
-## soft ring tilts never crossed it (2026-10-10 run).
-const ADAPT_FLOOR := 0.4
 const RETRY_DROP := 0.8       ## a forgiven lobe has passed a peak once it falls under this × that peak
 const HELD_TILT := 0.06       ## seconds of steady turning before a full ring's tap that make its tilt
 const FORGIVE_PEAK := 0.75    ## a forgiven lobe re-arms only if it peaked under this × typical_peak
-## The threshold never climbs over the calibrated one: after a few hard flicks it had risen to
-## 1.2 × on Daniele's phone (2026-10-09 run log) and a normal flick that peaked under it was lost.
-const ADAPT_CEIL := 1.0
+## Song threshold as a share of the calibrated flick's peak. Daniele calibrated with big flicks
+## (peaks 333 °/s) and played much softer; replaying his six 2026-10-10 runs, 0.3 catches every bell
+## the old adaptive threshold did.
+const PLAY_SHARE := 0.3
 const DEFAULTS := {"gyro": 150.0, "accel": 10.0}
 const RANGES := {"gyro": Vector2(60.0, 600.0), "accel": Vector2(4.0, 25.0)}
 
 var mode := "gyro"
 var threshold := 150.0
-var base_threshold := 150.0
 var axis := 0
 var up_sign := 1
 var reliable := false
 var bpm := 120.0
-var adapt := true
 ## Time and direction of the last ring.
 var last_t := -INF
 var last_up := true
@@ -107,11 +101,6 @@ var _prev_t := -INF
 var _last_vec := Vector3(NAN, NAN, NAN)
 var _held_seen := 0.0         # > 0 while repeated readings are being seen (sensor slower than frames)
 var _last_touch := -INF
-var _peak := 0.0
-var _peak_until := -INF
-var _recent: Array[float] = []
-var _near_n := 0
-var _near_count := 0
 
 
 static func from_calibration(d: Dictionary, has_gyro := true) -> BellDetector:
@@ -126,13 +115,14 @@ func configure(d: Dictionary, has_gyro := true) -> void:
 		mode = "gyro" if has_gyro else "accel"
 	var r: Vector2 = RANGES[mode]
 	threshold = clampf(float(d.get("threshold", DEFAULTS[mode])), r.x, r.y) if d.get("mode", "") == mode else DEFAULTS[mode]
-	base_threshold = threshold
 	# Without a calibration: tilting the top edge is rotation about x, or acceleration along z.
 	axis = clampi(int(d.get("axis", 0 if mode == "gyro" else 2)), 0, 2) if d.get("mode", "") == mode else (0 if mode == "gyro" else 2)
 	up_sign = 1 if int(d.get("up_sign", 1)) >= 0 else -1
 	var calibrated: bool = d.get("mode", "") == mode
 	var med := float(d.get("median_peak", 0.0)) if calibrated else 0.0
 	typical_peak = med if med > threshold else threshold / Calibrator.SHARE
+	if med > 0.0:
+		threshold = clampf(minf(threshold, med * PLAY_SHARE), r.x, r.y)
 	rise_time = clampf(float(d.get("rise_time", 0.045)), 0.02, 0.15)
 	reliable = bool(d.get("reliable", false))
 	reset()
@@ -159,8 +149,6 @@ func reset() -> void:
 	_prev_t = -INF
 	_last_vec = Vector3(NAN, NAN, NAN)
 	last_t = -INF
-	_peak_until = -INF
-	_near_n = 0
 
 
 ## A finger touched the screen at time t (taps shake the phone).
@@ -183,12 +171,6 @@ func feed(t: float, acc: Vector3, gyro_dps: Vector3) -> bool:
 		# A real sensor never repeats itself exactly unless the reading is being held.
 		_held_seen = 1.0
 	var fired := false
-	# Watch the peak of the last ring, for adapting.
-	if t <= _peak_until:
-		_peak = maxf(_peak, v)
-	elif _peak_until > -INF:
-		_learn_peak(_peak)
-		_peak_until = -INF
 	if not _armed and _forgiven:
 		if v > _lobe_max:
 			_lobe_max = v
@@ -236,8 +218,6 @@ func feed(t: float, acc: Vector3, gyro_dps: Vector3) -> bool:
 				if fast:
 					fired = true
 					_fire()
-			else:
-				_watch_near(v, t)
 		elif v >= threshold * SUSTAIN:
 			_cand_peak = maxf(_cand_peak, v)
 			_predict(v, t)
@@ -263,11 +243,6 @@ func _reading_age() -> float:
 func forgive() -> void:
 	if not _armed:
 		_forgiven = true
-	# Nor does it teach the threshold: stray lobes from holding the phone are small, and learning
-	# from them lowered it to the minimum within 35 s (Daniele's 2026-10-10 Rope Expert run, calibrated
-	# at 84 °/s), so ever smaller movements rang.
-	_peak_until = -INF
-	_peak = 0.0
 
 
 ## The peak time of a forgiven lobe that just ended (NAN when there is none); each is offered once.
@@ -315,9 +290,6 @@ func _fire() -> void:
 	last_up = s >= 0.0
 	last_strength = strength_of(maxf(_cand_peak, _cand_pred))
 	_cand_t = NAN
-	_near_n = 0
-	_peak = 0.0
-	_peak_until = last_t + PEAK_WATCH
 	rang.emit(last_t, last_up)
 
 
@@ -340,39 +312,3 @@ func _predict(v: float, t: float) -> void:
 	var mid := (v + _prev_v) * 0.5
 	_cand_pred = maxf(_cand_pred, sqrt(pow(slope / w, 2.0) + mid * mid))
 
-
-func _learn_peak(p: float) -> void:
-	if not adapt or p <= 0.0:
-		return
-	_recent.append(p)
-	if _recent.size() > 8:
-		_recent.remove_at(0)
-	if _recent.size() < 4:
-		return
-	var s := _recent.duplicate()
-	s.sort()
-	var target: float = s[s.size() >> 1] * Calibrator.SHARE
-	threshold = _clamp_adapt(lerpf(threshold, target, 0.3))
-
-
-# Sustained lobes (30 ms or more) that rise above NEAR × threshold but never cross it look like
-# softened flicks. Three of them lower the threshold by 10 %.
-func _watch_near(v: float, t: float) -> void:
-	if not adapt:
-		return
-	if v > threshold * NEAR:
-		if _near_n == 0:
-			_cand_first = t
-		_near_n += 1
-	elif v < threshold * 0.3:
-		if _near_n >= 2 and _prev_t - _cand_first >= 0.03 and _prev_t - _last_touch > TOUCH_WINDOW:
-			_near_count += 1
-			if _near_count >= 3:
-				_near_count = 0
-				threshold = _clamp_adapt(threshold * 0.9)
-		_near_n = 0
-
-
-func _clamp_adapt(x: float) -> float:
-	var r: Vector2 = RANGES[mode]
-	return clampf(clampf(x, base_threshold * ADAPT_FLOOR, base_threshold * ADAPT_CEIL), r.x, r.y)

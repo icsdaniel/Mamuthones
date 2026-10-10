@@ -113,7 +113,7 @@ func test_calibration_check_marks_tilts_and_not_sway() -> void:
 	var screen := app.current()
 	screen.call("_on_finished", {"mode": "gyro", "threshold": 120.0, "axis": 0, "up_sign": 1, "reliable": true, "median_peak": 300.0})
 	var graph: TiltGraph = screen.get("graph")
-	check_near(graph.threshold, 120.0, 1e-3, "the graph draws the calibrated threshold")
+	check_near(graph.threshold, 300.0 * BellDetector.PLAY_SHARE, 1e-3, "the graph draws the song's threshold")
 	# Sway: 40 °/s wobbles for half a second, then one tilt toward the player peaking at 300.
 	for i in 30:
 		r.frame = [{"age": 0.0, "linear": Vector3.ZERO, "rotation_dps": Vector3(40.0 * sin(i * 0.7), 0, 0)}]
