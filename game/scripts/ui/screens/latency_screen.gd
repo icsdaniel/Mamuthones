@@ -1,12 +1,17 @@
 extends Screen
 ## The audio-delay tap test: four clicks to listen, then twelve to tap along with on the big drum.
-## Nothing flashes with the clicks (that would measure the eyes, not the ears). The median delay
-## becomes the audio offset. Uneven taps are explained and the test repeats.
+## Nothing on screen moves with the clicks (that would measure the eyes, not the ears; Daniele,
+## 2026-10-10: the drum used to pulse with each click, ahead of Bluetooth headphones' sound): only the
+## player's own taps strike the drum. The median delay becomes the audio offset. Uneven taps are
+## explained and the test repeats. A delay of LATE_SOUND or more (Bluetooth) turns the step sounds
+## off, since every knock would come that late after the thumb; a later short delay turns them back on
+## if the test was what turned them off.
 ## args: first_run (bool) continues to the title (the tutorial stays optional); otherwise back.
 
 const BPM := LatencyTest.BPM
 const LISTEN := 4
 const COUNT := 12
+const LATE_SOUND := 0.12
 
 var test := LatencyTest.new()
 var _running := false
@@ -20,7 +25,6 @@ var _actions: VBoxContainer
 var _meter: TendencyMeter
 var _taps := 0
 var _drum: SetupArtView
-var _pulses: Array[float] = []   ## heard times of clicks still to show on the drum
 
 
 func build() -> void:
@@ -42,7 +46,7 @@ func build() -> void:
 	_pad.action_mode = BaseButton.ACTION_MODE_BUTTON_PRESS
 	_pad.button_down.connect(_on_tap)
 	box.add_child(_pad)
-	# Art's frame drum fills the pad: it pulses with every click as it is heard, and with every tap.
+	# Art's frame drum fills the pad: it pulses with every tap (never with the clicks).
 	_drum = SetupArtView.new()
 	_drum.name = "Drum"
 	_drum.kind = "drum"
@@ -97,7 +101,6 @@ func _begin() -> void:
 	_meter.visible = false
 	_detail.text = ""
 	_start_us = Time.get_ticks_usec()
-	_pulses.clear()
 	_click_times = LatencyTest.click_times(BPM, LISTEN + COUNT, 0.6)
 	_next_click = 0
 	_running = true
@@ -123,15 +126,11 @@ func _process(_delta: float) -> void:
 	while _next_click < _click_times.size() and _click_times[_next_click] - lead <= now:
 		Sound.step(1)
 		var heard := maxf(_click_times[_next_click], now + lead) + AudioServer.get_output_latency()
-		_pulses.append(heard)
 		if _next_click >= LISTEN:
 			test.add_click(heard)
 		_next_click += 1
 		if _next_click == LISTEN:
 			_status.text = tr("lat_tap_now")
-	while not _pulses.is_empty() and _pulses[0] <= now:
-		_pulses.pop_front()
-		_drum.strike(1.0)
 	if _next_click >= _click_times.size() and now > _click_times[-1] + 0.8:
 		_running = false
 		_finish()
@@ -160,6 +159,9 @@ func _finish() -> void:
 		Profile.set_flag("latency_tested", true)
 		_status.text = tr("lat_done") % ms
 		_detail.text = tr("lat_done_body")
+		var note := step_sounds_for(float(r.offset))
+		if note != "":
+			_detail.text += "\n" + tr(note)
 		Sound.ui("unlock")
 		var go := UIKit.button(tr("ui_continue"), _next, UIKit.PRIMARY)
 		go.name = "Continue"
@@ -181,8 +183,24 @@ func _finish() -> void:
 		_actions.add_child(skip)
 
 
+## Turns the step sounds off for a long sound delay and back on for a short one when this test had
+## turned them off. Returns the string key to tell the player, or "".
+static func step_sounds_for(offset: float) -> String:
+	if offset >= LATE_SOUND:
+		if bool(Profile.get_setting("step_sounds")):
+			Profile.set_setting("step_sounds", false)
+			Profile.set_flag("step_sounds_auto_off", true)
+			return "lat_sounds_off"
+	elif Profile.has_flag("step_sounds_auto_off"):
+		Profile.set_flag("step_sounds_auto_off", false)
+		Profile.set_setting("step_sounds", true)
+		return "lat_sounds_on"
+	return ""
+
+
 func _keep(offset: float) -> void:
 	Profile.set_setting("audio_offset", offset)
+	step_sounds_for(offset)
 	Profile.set_flag("latency_tested", true)
 	_next()
 

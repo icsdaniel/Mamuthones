@@ -404,7 +404,7 @@ func _begin_count(music_t: float) -> void:
 	var length := Sound.count_in(song.bpm)
 	if length <= 0.0:
 		length = 4.0 * _spb
-	_count_from = _clock + AudioServer.get_output_latency()
+	_count_from = _clock + conductor.heard_delay()   # the digits follow the sticks as heard
 	_resume_at = _clock + length
 	_played = false
 	_tick_count()
@@ -522,7 +522,9 @@ func _set_beat(beat: float) -> void:
 ## Things that happen on the music, not on the player: the Issohadore's call with off-beat steps (a
 ## touch early so it is heard on time), standing still.
 func _schedule(t: float) -> void:
-	var lead := AudioServer.get_output_latency()
+	# The whole sound delay, not just the output latency: with Bluetooth headphones (200 ms on
+	# Daniele's) the call and the cue otherwise came a fifth of a second after the music.
+	var lead := conductor.heard_delay()
 	var notes := session.notes
 	while _sched < notes.size():
 		var n := notes[_sched]
@@ -746,8 +748,9 @@ func note_colour(note: Note) -> Color:
 ## button (placeholders the art and sound passes replace, see handoff/stomp.md). judged has already
 ## drawn the burst and word.
 func _on_stomp(note: Note, judgement: String, _offset: float, both: bool) -> void:
-	if both:
+	if both and bool(Profile.get_setting("step_sounds")):
 		Sound.stomp(note.lane, step_quality(judgement))
+	if both:
 		_stomp_sounded = true
 		if scene.has_method("stomp"):
 			scene.stomp()
@@ -755,7 +758,8 @@ func _on_stomp(note: Note, judgement: String, _offset: float, both: bool) -> voi
 			scene.jolt("ring")
 		UIKit.vibrate(40)
 	else:
-		Sound.stomp_half(note.lane)
+		if bool(Profile.get_setting("step_sounds")):
+			Sound.stomp_half(note.lane)
 		words.show_word(tr("judge_one_thumb"), "", lanes.word_spot(note.lane), "early")
 	lanes.stomp_hit(note.lane, judgement, both)
 	if both:
