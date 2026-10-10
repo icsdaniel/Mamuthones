@@ -634,8 +634,8 @@ func test_accuracy_and_grades() -> void:
 	s.tap(1, _bt(7) + 0.06, 0)            # good
 	s.tap(1, _bt(8) + 0.12, 0)            # late
 	s.update(100)                         # miss
-	check_near(s.accuracy(), (6 + 1.4 + 0.3) / 10.0, 1e-9, "accuracy formula")
-	check_eq(s.grade(), "D", "77 % is a D")
+	check_near(s.accuracy(), (6 + 2 + 0.5) / 10.0, 1e-9, "accuracy formula: Good counts in full, Ok half")
+	check_eq(s.grade(), "B", "85 % is a B")
 	check(not s.full_combo(), "a miss is no full combo")
 	var want := {0.0: "F", 0.59: "F", 0.60: "E", 0.69: "E", 0.70: "D", 0.78: "C", 0.85: "B", 0.90: "A", 0.95: "S", 0.97: "S", 0.98: "S+", 1.0: "S+"}
 	for acc in want:

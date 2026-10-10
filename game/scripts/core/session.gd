@@ -286,7 +286,9 @@ func unison_mult() -> float:
 	return UNISON_MULTS[unison_level]
 
 
-## (Perfect + 0.7 Good + 0.3 Early/Late) / all judgeable notes of the chart (unplayed count as 0).
+## (Perfect + Good + 0.5 Early/Late) / all judgeable notes of the chart (unplayed count as 0).
+## Good counts in full (Daniele, 2026-10-10: a run of only Perfects and Goods, no Ok and no miss, is
+## an S+; the old 0.7 for Good felt far too punishing). Perfects still score more points.
 func accuracy() -> float:
 	if stats.total == 0:
 		return 0.0
@@ -301,7 +303,7 @@ func running_accuracy() -> float:
 
 
 func _acc_sum() -> float:
-	return stats.perfect + 0.7 * stats.good + 0.3 * (stats.early + stats.late)
+	return stats.perfect + stats.good + OK_ACC * (stats.early + stats.late)
 
 
 ## Letter grades, worst to best. A run's grade comes from its accuracy (GRADE_MIN, the least accuracy
@@ -309,6 +311,7 @@ func _acc_sum() -> float:
 ## (no miss, wrong step, stray tap, lost hold or bell rung into a stand-still) is its own mark beside
 ## the grade. The rank is the index in GRADES (F = 0 .. S+ = 7).
 const GRADES: Array[String] = ["F", "E", "D", "C", "B", "A", "S", "S+"]
+const OK_ACC := 0.5            ## what an Ok (early/late) counts for in accuracy
 const GRADE_MIN: Array[float] = [0.0, 0.60, 0.70, 0.78, 0.85, 0.90, 0.95, 0.98]
 const RANK_D := 2
 const RANK_B := 4

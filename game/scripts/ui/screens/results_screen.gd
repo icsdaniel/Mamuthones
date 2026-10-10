@@ -251,9 +251,15 @@ func _tendency(box: Container) -> void:
 	var row := HBoxContainer.new()
 	row.add_theme_constant_override("separation", 16)
 	c.add_child(row)
-	tl.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	tl.size_flags_stretch_ratio = 1.2
-	row.add_child(tl)
+	# The words, and under them the fix when there is one, sit beside the meter: the card stays short
+	# enough to end above the buttons even when the footer offers the next stop.
+	var left := VBoxContainer.new()
+	left.add_theme_constant_override("separation", 10)
+	left.alignment = BoxContainer.ALIGNMENT_CENTER
+	left.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	left.size_flags_stretch_ratio = 1.2
+	row.add_child(left)
+	left.add_child(tl)
 	var meter := TendencyMeter.new()
 	meter.name = "Meter"
 	meter.offsets = session.hit_offsets
@@ -266,11 +272,13 @@ func _tendency(box: Container) -> void:
 		var key := "res_fix_late" if shift > 0.0 else "res_fix_early"
 		var fix := UIKit.button(tr(key) % roundi(absf(shift) * 1000.0), func() -> void: pass, UIKit.QUIET)
 		fix.name = "FixTiming"
+		fix.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+		fix.custom_minimum_size.x = 0
 		fix.pressed.connect(func() -> void:
 			Profile.set_setting("visual_offset", Profile.visual_offset() + shift)
 			fix.text = tr("res_fixed")
 			fix.disabled = true)
-		c.add_child(fix)
+		left.add_child(fix)
 	var saved := str(args.get("run_saved", ""))
 	if saved != "":
 		if saved.begins_with("user://"):

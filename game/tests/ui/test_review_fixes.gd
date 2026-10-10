@@ -179,7 +179,7 @@ func test_results_offer_to_even_out_a_steady_lean() -> void:
 		if check(fix != null, "%s: a fix button under the timing" % sz):
 			var fold := (res.find_child("Footer", true, false) as Control).get_global_rect().position.y
 			var tend := res.find_child("Tendency", true, false) as Control
-			check(tend.get_global_rect().end.y <= fold + 1.0, "%s: the timing card still ends above the fold" % sz)
+			check(tend.get_global_rect().end.y <= fold + 1.0, "%s: the timing card still ends above the fold (%d > %d)" % [sz, tend.get_global_rect().end.y, fold])
 			check(fix.text.contains("45"), "it says by how much (%s)" % fix.text)
 			var fl := res.find_child("Frames", true, false) as Label
 			check(fl != null and fl.text.contains("58") and fl.text.contains("41"), "the smoothness line (%s)" % (fl.text if fl else "none"))
