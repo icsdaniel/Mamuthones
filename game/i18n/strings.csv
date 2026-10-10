@@ -70,8 +70,8 @@ lat_uneven,The taps were uneven,I tocchi erano irregolari
 lat_few,Not enough taps,Troppo pochi tocchi
 lat_uneven_body,"Try again and tap with the sound, not ahead of it. Headphones help.","Riprova e batti insieme al suono, senza anticiparlo. Con le cuffie è più facile."
 lat_again,Try again,Riprova
-lat_sounds_off,"That is a long delay, as with Bluetooth headphones: every step knock would come that late after your thumb, so step sounds are now off (Settings). The music and the notes stay in time.","È un ritardo lungo, come con le cuffie Bluetooth: ogni colpo dei passi arriverebbe così in ritardo dopo il pollice, quindi i suoni dei passi ora sono spenti (Impostazioni). Musica e note restano a tempo."
-lat_sounds_on,Step sounds are back on.,I suoni dei passi sono di nuovo accesi.
+lat_sounds_off,"That is a long delay, as with Bluetooth headphones: every stomp or button knock would come that late after your thumb, so they are now off (Settings). The music and the notes stay in time.","È un ritardo lungo, come con le cuffie Bluetooth: ogni pestata o colpo dei pulsanti arriverebbe così in ritardo dopo il pollice, quindi ora sono spenti (Impostazioni). Musica e note restano a tempo."
+lat_sounds_on,Stomp sounds are back on.,I suoni delle pestate sono di nuovo accesi.
 title_continue,Play: %s,Gioca: %s
 title_procession,The procession,La processione
 title_story,Story,Storia

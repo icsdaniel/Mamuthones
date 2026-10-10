@@ -761,7 +761,7 @@ func note_colour(note: Note) -> Color:
 ## button (placeholders the art and sound passes replace, see handoff/stomp.md). judged has already
 ## drawn the burst and word.
 func _on_stomp(note: Note, judgement: String, _offset: float, both: bool) -> void:
-	if both and bool(Profile.get_setting("step_sounds")):
+	if both and not Profile.has_flag("late_sound"):
 		Sound.stomp(note.lane, step_quality(judgement))
 	if both:
 		_stomp_sounded = true
@@ -771,7 +771,7 @@ func _on_stomp(note: Note, judgement: String, _offset: float, both: bool) -> voi
 			scene.jolt("ring")
 		UIKit.vibrate(40)
 	else:
-		if bool(Profile.get_setting("step_sounds")):
+		if not Profile.has_flag("late_sound"):
 			Sound.stomp_half(note.lane)
 		words.show_word(tr("judge_one_thumb"), "", lanes.word_spot(note.lane), "early")
 	lanes.stomp_hit(note.lane, judgement, both)
