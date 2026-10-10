@@ -63,10 +63,9 @@ var banner: Control               ## over the top of the lanes: count-in and sta
 var lanes: LaneView
 var backdrop: StreetBackdrop     ## the street picture, the fire and the swaying portraits (songs)
 var words: JudgementWords
-var filter: PixelFilter           ## the pixel look's lens over the whole screen (art style "pixel")
-var world: SubViewportContainer   ## the pixel look: the street, lanes and HUD drawn at the base size
+var filter: PixelFilter           ## a lens over the whole screen (only when the World picture is off)
+var world: SubViewportContainer   ## the street, lanes and HUD drawn at one pixel per art pixel
 var world_vp: SubViewport
-var pixel := false                ## the play screen is in the pixel look
 var paused := false
 var done := false
 
@@ -125,14 +124,12 @@ func build() -> void:
 	if gd is Dictionary and not (gd as Dictionary).is_empty():
 		ghost = Ghost.from_dict(gd)
 
-	pixel = str(Profile.get_setting("art_style")) == "pixel"
-	StreetSkin.pixel = pixel
 	# The pixel look draws the street, the lanes and the HUD straight into one small picture, one
 	# pixel per art pixel (a third of the base size each way), and shows it enlarged with hard edges.
 	# That is the pixel art itself: no filter reads the screen back and no other picture is drawn,
-	# so a phone does far less work per frame than for the painted look at full resolution.
+	# so a phone does far less work per frame than for a picture drawn at full resolution.
 	var host: Node = self
-	if pixel and not OS.has_environment("NO_WORLD"):
+	if not OS.has_environment("NO_WORLD"):
 		world = SubViewportContainer.new()
 		world.name = "World"
 		world.stretch = true
@@ -161,9 +158,8 @@ func build() -> void:
 		if host_theme == null:
 			host_theme = WoodcutTheme.build()
 	backdrop = StreetBackdrop.new()
-	PxType.smooth = not bool(args.get("embedded", false)) and not pixel
+	PxType.smooth = false
 	backdrop.name = "Backdrop"
-	backdrop.pixel = pixel
 	backdrop.own_cells = world == null
 	backdrop.bell_set = BellSets.STANDARD
 	var bg: Control = backdrop
@@ -190,7 +186,6 @@ func build() -> void:
 	col.add_child(hud_margin)
 	hud = Hud.new()
 	hud.name = "Hud"
-	hud.pixel = pixel
 	hud_margin.add_child(hud)
 	hud.setup(session, ghost)
 	hud.pause_pressed.connect(pause)
@@ -226,15 +221,13 @@ func build() -> void:
 	lanes.spb = _spb
 	backdrop.lanes = lanes
 	lanes.street = backdrop
-	lanes.pixel = pixel
 	_field_box.add_child(lanes)
 	words = JudgementWords.new()
 	words.set_anchors_preset(Control.PRESET_FULL_RECT)
-	if pixel:
-		words.z_index = PixelFilter.Z_OVER
+	words.z_index = PixelFilter.Z_OVER
 	lanes.add_child(words)
 
-	if pixel and world == null and not OS.has_environment("NO_LENS"):
+	if world == null and not OS.has_environment("NO_LENS"):
 		filter = PixelFilter.new()
 		filter.name = "PixelFilter"
 		host.add_child(filter)
@@ -256,6 +249,7 @@ func build() -> void:
 	add_child(router)
 	router.stepped.connect(_on_stepped)
 	router.rang.connect(_on_rang)
+	router.moved_still.connect(_on_moved_still)
 	router.pause_requested.connect(pause)
 	if auto:
 		router.enabled = false
@@ -283,6 +277,7 @@ func build() -> void:
 	session.stray.connect(_on_stray)
 	session.stomp_landed.connect(_on_stomp)
 	session.still_kept.connect(_on_still_kept)
+	session.played_under.connect(_on_played_under)
 	session.failed.connect(_on_failed)
 
 	# The count-in and the stand-still moment: over the top of the lanes, far from the hit line where
@@ -293,8 +288,7 @@ func build() -> void:
 	banner.anchor_right = 1.0
 	banner.anchor_bottom = BANNER_SHARE
 	lanes.add_child(banner)
-	if pixel:
-		banner.z_index = PixelFilter.Z_OVER
+	banner.z_index = PixelFilter.Z_OVER
 	count_view = CountInView.new()
 	count_view.name = "CountIn"
 	banner.add_child(count_view)
@@ -350,6 +344,9 @@ func _start() -> void:
 func _settle() -> void:
 	if DisplayServer.get_name() == "headless":
 		return   # nothing is drawn, so nothing holds a frame (and tests expect the song at once)
+	await get_tree().process_frame
+	if lanes != null:
+		lanes.warm(session.notes.any(func(n: Note) -> bool: return n.kind == Note.Kind.BELL or n.kind == Note.Kind.RING))
 	var until := Time.get_ticks_msec() + int(SETTLE_MAX * 1000.0)
 	var steady := 0
 	var last := Time.get_ticks_usec()
@@ -686,6 +683,19 @@ func _on_rang(result: Dictionary) -> void:
 		UIKit.vibrate(12)
 
 
+## Hold and play: a note hit on time while a hold is held runs light up the held lane too, so the
+## held note answers every stroke the free thumb (or the tilt) plays under it.
+func _on_played_under(hold: Note, _note: Note) -> void:
+	lanes.lane_pulse(hold.lane, StreetSkin.K_HOLD[3], 0.9)
+
+
+## The phone tilted in a stand-still (gently, short of a ring): the load gives the Mamuthone away with
+## a soft clank, and the stand-still is broken (the session judged it "silence").
+func _on_moved_still(_note: Note) -> void:
+	Sound.bell(BellSets.STANDARD, true, "silence", 0.2)
+	UIKit.vibrate(12)
+
+
 ## A bell rung on time, the tilt's reward (stomp-sized, but the tilt's own): the strap strikes across
 ## the road, the street lights under every lane, the whole screen is knocked the way the phone was
 ## tilted, the bonfire flares and the Mamuthone's load swings.
@@ -949,8 +959,7 @@ func _open_fail_menu() -> void:
 	if _fail_panel != null or not is_inside_tree():
 		return
 	_fail_panel = FailMenu.new()
-	if pixel:
-		_fail_panel.z_index = PixelFilter.Z_OVER + 10
+	_fail_panel.z_index = PixelFilter.Z_OVER + 10
 	_fail_panel.name = "FailMenu"
 	add_child(_fail_panel)
 	(_fail_panel as FailMenu).chosen.connect(_on_pause_choice)
@@ -985,8 +994,7 @@ func _open_pause_menu() -> void:
 	paused = true
 	Sound.ui("tap")
 	_pause_panel = PauseMenu.new()
-	if pixel:
-		_pause_panel.z_index = PixelFilter.Z_OVER + 10
+	_pause_panel.z_index = PixelFilter.Z_OVER + 10
 	_pause_panel.name = "PauseMenu"
 	add_child(_pause_panel)
 	(_pause_panel as PauseMenu).chosen.connect(_on_pause_choice)

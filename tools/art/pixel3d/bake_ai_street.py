@@ -1,4 +1,4 @@
-"""The street from Daniele's second outside-AI set (game/art/ai/street.png, 2026-10-08) as the pixel
+"""The street from Daniele's second outside-AI set (tools/art/sources/ai/street.png, 2026-10-08) as the pixel
 look's street:
 
     python3 tools/art/pixel3d/bake_ai_street.py
@@ -19,7 +19,7 @@ import cv2
 import pixelate as px
 import bake_street
 
-SRC = os.path.join(px.GAME, "art/ai/street.png")
+os.path.join(px.GAME, "../tools/art/sources/ai/street.png")   # the source picture is kept out of the game
 IMG = (941, 1672)                     # StreetBackdrop.IMG
 RAILS = [(609.17, -0.45827), (510.90, -0.14397), (445.17, 0.12678), (356.72, 0.43025)]
 FAR_Y = 468.0

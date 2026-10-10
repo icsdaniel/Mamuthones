@@ -24,7 +24,9 @@ const DUCK_DB := 3.0
 const DUCK_ATTACK := 0.015
 const DUCK_HOLD := 0.13
 const DUCK_RELEASE := 0.12
-const BELL_SETS: Array[String] = ["light", "village", "full"]
+## The one load everyone plays with (BellSets.STANDARD; the Light and Full loads were removed
+## with the bell sets, Daniele 2026-10-09, and their samples with them to keep the app light).
+const BELL_SETS: Array[String] = ["village"]
 ## Index = quality slot used by bell(): perfect, good, ok, miss, early, late.
 const QUALITIES: Array[String] = ["perfect", "good", "ok", "miss", "early", "late"]
 const QUALITY_TAKES: Array[int] = [3, 3, 3, 3, 2, 2]
@@ -640,13 +642,8 @@ func _row_joins(quality: String) -> bool:
 	return false
 
 
-func _alias(set_id: String) -> String:
-	match set_id.to_lower():
-		"full_load", "fullload", "heavy", "full":
-			return "full"
-		"light", "first":
-			return "light"
-	return "village"
+func _alias(_set_id: String) -> String:
+	return BellSets.STANDARD
 
 
 func _make_buses() -> void:

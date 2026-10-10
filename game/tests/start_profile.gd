@@ -1,7 +1,7 @@
 extends SceneTree
 ## Logs the play screen's first seconds: each frame's length and how far song time moved in it,
 ## to find hitches at the start of a song.
-##   godot --path game -s res://tests/start_profile.gd -- [song] [difficulty] [style=pixel|painted]
+##   godot --path game -s res://tests/start_profile.gd -- [song] [difficulty]
 
 var _t0 := 0
 var _last := 0
@@ -17,10 +17,6 @@ func _init() -> void:
 	var song_id := a[0] if a.size() > 0 and not "=" in a[0] else "shrove"
 	var diff := a[1] if a.size() > 1 and not "=" in a[1] else "expert"
 	await process_frame
-	var profile: Node = root.get_node("/root/Profile")
-	for x in a:
-		if x.begins_with("style="):
-			profile.set_setting("art_style", x.substr(6))
 	var app: Control = load("res://scenes/main.tscn").instantiate()
 	app.set("start_screen", "play")
 	app.set("start_args", {"song_id": song_id, "difficulty": diff, "remix": false,

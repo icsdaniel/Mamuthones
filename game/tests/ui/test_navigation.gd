@@ -268,9 +268,7 @@ func test_two_taps_to_a_song_and_lanes_dominate() -> void:
 		print("  %s: lanes %.0f%% of height, %.0f%% of width" % [sz, lanes.size.y / h * 100.0, lanes.size.x / play.size.x * 100.0])
 		check(lanes.size.y >= h * 0.8, "%s: the lanes are the stage (%.0f%% of the height)" % [sz, lanes.size.y / h * 100.0])
 		check(lanes.size.x >= minf(play.size.x * 0.95, 890.0), "%s: the road's near end fills the width (%.0f px)" % [sz, lanes.size.x])
-		for fig in street._figures:
-			var fh := fig.texture.get_size().y * fig.scale.y
-			check(fh >= 160.0, "%s: the portrait figure %s is big enough to read (%.0f px)" % [sz, fig.texture.resource_path.get_file(), fh])
+		check_eq(street._puppets.size(), 2, "%s: both portraits have their figure" % sz)
 		UIHarness.free_app(app)
 		UIHarness.restore_profile()
 

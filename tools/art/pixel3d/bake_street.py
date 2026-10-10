@@ -1,4 +1,4 @@
-"""The street as pixel art: Daniele's street picture (game/art/street/street.png) on the play
+"""The street as pixel art: Daniele's street picture (tools/art/sources/street/street.png) on the play
 screen's grid, one texel per 3 x 3 base px cell on the 720 x 1440 base screen.
 
     python3 tools/art/pixel3d/bake_street.py
@@ -12,7 +12,7 @@ from PIL import Image
 import cv2
 import pixelate as px
 
-SRC = os.path.join(px.GAME, "art/street/street.png")
+os.path.join(px.GAME, "../tools/art/sources/street/street.png")
 OUT = os.path.join(px.GAME, "art/pixel/street.png")
 CELL = 3.0 / max(720.0 / 941.0, 1440.0 / 1672.0)   # picture px per cell on the base screen
 K = 56   # colours in the street's own palette

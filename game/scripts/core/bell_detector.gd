@@ -30,6 +30,11 @@ extends RefCounted
 ##   crossed 226 ms before the beat and peaked 25 ms before it, one smooth lobe. When a ring rang
 ##   nothing, the time of its lobe's peak is offered as a second try (take_retry()) once the lobe is
 ##   over; the caller rings it only if a bell is due then.
+## - Stand-stills: between watch_still() and end_still() the detector also watches for any tilt at
+##   all, much softer than a ring. The phone has moved (moved_at is set) when the signal stays over
+##   STILL_SHARE of the calibrated threshold for STILL_SUSTAIN, or, in gyro mode, when the phone has
+##   turned more than STILL_ANGLE degrees about the tilt axis since the watch began (a slow tilt).
+##   A hand's tremor, a thumb tap's few-ms jolt and the sensor's drift stay well under both.
 
 signal rang(t: float, up: bool)
 
@@ -59,6 +64,9 @@ const FORGIVE_PEAK := 0.75    ## a forgiven lobe re-arms only if it peaked under
 ## The threshold never climbs over the calibrated one: after a few hard flicks it had risen to
 ## 1.2 × on Daniele's phone (2026-10-09 run log) and a normal flick that peaked under it was lost.
 const ADAPT_CEIL := 1.0
+const STILL_SHARE := 0.35     ## share of the calibrated threshold that counts as moving in a stand-still
+const STILL_SUSTAIN := 0.04   ## seconds the signal must stay over it (a tap's jolt is a few ms)
+const STILL_ANGLE := 20.0     ## degrees turned about the tilt axis that break a stand-still (gyro)
 const DEFAULTS := {"gyro": 150.0, "accel": 10.0}
 const RANGES := {"gyro": Vector2(60.0, 600.0), "accel": Vector2(4.0, 25.0)}
 
@@ -112,6 +120,13 @@ var _peak_until := -INF
 var _recent: Array[float] = []
 var _near_n := 0
 var _near_count := 0
+## Stand-still watch (see watch_still): when it began (INF = not watching), the angle turned since,
+## the first reading of the current movement, and the time the phone was found to have moved.
+var _still_from := INF
+var _still_angle := 0.0
+var _still_prev_t := NAN
+var _move_since := NAN
+var moved_at := NAN
 
 
 static func from_calibration(d: Dictionary, has_gyro := true) -> BellDetector:
@@ -161,6 +176,44 @@ func reset() -> void:
 	last_t = -INF
 	_peak_until = -INF
 	_near_n = 0
+
+
+## Starts watching for any tilt from time t (a stand-still began); moved_at is cleared.
+func watch_still(t: float) -> void:
+	_still_from = t
+	_still_angle = 0.0
+	_still_prev_t = NAN
+	_move_since = NAN
+	moved_at = NAN
+
+
+## Stops watching (the stand-still ended or was already broken).
+func end_still() -> void:
+	_still_from = INF
+	_move_since = NAN
+
+
+func watching_still() -> bool:
+	return _still_from < INF
+
+
+func _watch_still(t: float, v: float, signed_v: float) -> void:
+	if t < _still_from or not is_nan(moved_at):
+		return
+	if mode == "gyro":
+		if not is_nan(_still_prev_t):
+			_still_angle += signed_v * clampf(t - _still_prev_t, 0.0, MAX_GAP)
+		_still_prev_t = t
+		if absf(_still_angle) > STILL_ANGLE:
+			moved_at = t
+			return
+	if v > base_threshold * STILL_SHARE:
+		if is_nan(_move_since):
+			_move_since = t
+		elif t - _move_since >= STILL_SUSTAIN - 1e-6:
+			moved_at = _move_since
+	else:
+		_move_since = NAN
 
 
 ## A finger touched the screen at time t (taps shake the phone).
@@ -216,6 +269,8 @@ func feed(t: float, acc: Vector3, gyro_dps: Vector3) -> bool:
 			_above_since = t
 	else:
 		_above_since = NAN
+	if _still_from < INF:
+		_watch_still(t, v, vec[axis])
 	if v < threshold * SLOPE:
 		_rise_since = NAN
 	elif is_nan(_rise_since) and v < threshold and not _lobe_over:

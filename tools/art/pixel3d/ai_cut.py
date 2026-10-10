@@ -16,6 +16,8 @@ from scipy import ndimage
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 OUT = os.path.join(HERE, "../../../game/art/ai")
+# the street and the two figures are sources for bake_ai_street.py / bake_ai_figures.py, not shipped
+SOURCES = os.path.join(HERE, "../sources/ai")
 
 # sheet -> names of its pieces, in reading order (top to bottom, then left to right)
 SHEETS = {
@@ -79,12 +81,13 @@ def pieces(fg, n):
 
 def main(src, only=None):
     os.makedirs(OUT, exist_ok=True)
+    os.makedirs(SOURCES, exist_ok=True)
     for sheet, names in SHEETS.items():
         if only and sheet not in only:
             continue
         rgba = np.asarray(Image.open(os.path.join(src, sheet)).convert("RGBA")).copy()
         if names is None:
-            Image.fromarray(rgba[..., :3]).save(os.path.join(OUT, "street.png"))
+            Image.fromarray(rgba[..., :3]).save(os.path.join(SOURCES, "street.png"))
             continue
         fg = mask_of(rgba, sheet in HOLES)
         if len(names) == 1:
@@ -99,7 +102,7 @@ def main(src, only=None):
             out = rgba.copy()
             out[..., 3] = np.where(fg & m, 255, 0)
             out[out[..., 3] == 0, :3] = 0
-            Image.fromarray(out[t:b, l:r]).save(os.path.join(OUT, name + ".png"))
+            Image.fromarray(out[t:b, l:r]).save(os.path.join(SOURCES if name in ("mamuthone", "issohadore") else OUT, name + ".png"))
             print(name, (r - l, b - t))
 
 

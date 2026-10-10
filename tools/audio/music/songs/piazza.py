@@ -172,6 +172,8 @@ def build():
         if bar % 2 == 0:
             s.bell_cue(b + bar * 4 + 1.5, rank=3, big=False)   # Expert's off-beat bell
     s.ev("crowd", b, 32, None, 0.7)
+    # the break: the whole row stops dead in the middle of the run, and comes back in on the bar
+    s.stop(b + 14, 2, tempt="shake")
 
     # ---- outro: last strokes and the roar
     b = s.sec("outro", 4, 1)

@@ -173,7 +173,7 @@ func _on_move(_index: int, up: bool, _strength: float) -> void:
 	if absf(_angle) < 0.2:
 		_angle = 0.55 if up else -0.55
 	graph.mark(graph.now, up)
-	Sound.bell("light", up, "perfect")
+	Sound.bell(BellSets.STANDARD, up, "perfect")
 	UIKit.vibrate(25)
 	_update_instruction()
 
@@ -188,7 +188,7 @@ func _feed_check() -> void:
 		graph.push(at, vec[check.axis] * check.up_sign)
 		if check.feed(at, acc, rot):
 			graph.mark(check.last_t, check.last_up)
-			Sound.bell("light", check.last_up, "perfect")
+			Sound.bell(BellSets.STANDARD, check.last_up, "perfect")
 			UIKit.vibrate(25)
 
 

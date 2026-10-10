@@ -129,6 +129,8 @@ def build():
     s.drums(b, 8, "t.ttt.t.T.ttt.tt")
     for bar in range(8):
         s.bell_cue(b + bar * 4, rank=3, big=False)
+    # the break: the whole row stops dead in the middle of the run, and comes back in on the bar
+    s.stop(b + 14, 2, tempt="shake")
 
     # ---- outro: the drone, the last leap, a halt, the final stroke
     b = s.sec("outro", 4, 1)

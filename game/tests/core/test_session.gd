@@ -492,6 +492,21 @@ func test_stand_still() -> void:
 	check_near(s.score_breakdown().penalties, 200.0, 1e-9, "penalties in the breakdown")
 
 
+func test_moving_breaks_a_stand_still_once() -> void:
+	var s := Session.new(make(steps(4) + [{"b": 4, "k": "rest", "len": 4}]), "easy")
+	for i in 4:
+		s.tap(1, _bt(i), 0)
+	check(s.moved(_bt(3)) == null, "moving outside a stand-still is free")
+	var before := s.score
+	check(s.moved(_bt(5)) != null, "moving inside one breaks it")
+	check_eq(s.score, before - Session.STILL_PENALTY, "and costs like a ring")
+	check(s.moved(_bt(6)) == null, "a broken stand-still is broken once by moving")
+	s.ring(_bt(5) + 0.05)
+	check_eq(s.stats.silence, 1, "the ring that follows the same tilt is not charged again")
+	s.update(_bt(9))
+	check_eq(s.stats.still_kept, 0, "not kept")
+
+
 func test_score_never_shown_below_zero_but_penalty_kept() -> void:
 	# Design: score = max(0, points - penalties) over the whole run, not clamped at each step.
 	var z := Session.new(make([{"b": 0, "k": "rest"}, {"b": 4, "k": "step", "lane": 0}]), "easy")
@@ -605,6 +620,35 @@ func test_note_lock_in_fast_streams() -> void:
 	e.tap(1, _bt(1) + 0.005, 0)
 	check_eq(e.notes[0].side, "early", "a Perfect 30 ms early is on the early side")
 	check_eq(e.notes[1].side, "", "5 ms is dead on")
+
+
+func test_hold_and_play_adds_to_the_hold() -> void:
+	# A hold on Left with steps on Right and a bell under it; the second hold has nothing under it.
+	var s := Session.new(make([{"b": 0, "k": "hold", "lane": 0, "len": 4}, {"b": 1, "k": "step", "lane": 2},
+			{"b": 2, "k": "bell"}, {"b": 3, "k": "step", "lane": 2}, {"b": 8, "k": "hold", "lane": 0, "len": 4}]), "easy")
+	var under := []
+	s.played_under.connect(func(h, n): under.append([h.index, n.index]))
+	s.tap(0, _bt(0), 1)
+	s.tap(2, _bt(1), 2)
+	s.release(_bt(1) + 0.1, 2)
+	s.ring(_bt(2))
+	s.tap(2, _bt(3) + 0.1, 3)    # an Ok: played, but not on time
+	check_eq(under, [[0, 1], [0, 2]], "the step and the bell played on time under the hold")
+	var before: float = s.score_breakdown().holds
+	s.update(_bt(4))
+	check_near(s.score_breakdown().holds - before, float(Session.HOLD_BONUS + 2 * Session.TIE_BONUS), 1e-6, "kept: the hold's bonus grows with what was played under it")
+	s.tap(0, _bt(8), 4)
+	before = s.score_breakdown().holds
+	s.update(_bt(12))
+	check_near(s.score_breakdown().holds - before, float(Session.HOLD_BONUS), 1e-6, "a plain hold earns the plain bonus")
+
+
+func test_half_beat_in_a_sixteenth_pair_is_quick() -> void:
+	var s := Session.new(make([{"b": 0, "k": "step", "lane": 0}, {"b": 0.5, "k": "step", "lane": 1}, {"b": 0.75, "k": "step", "lane": 2},
+			{"b": 2, "k": "step", "lane": 0}, {"b": 2.5, "k": "step", "lane": 1}, {"b": 3, "k": "step", "lane": 2}]), "easy")
+	check(s.notes[1].quick, "a half-beat followed a quarter beat later reads with the sixteenth")
+	check(not s.notes[2].quick, "the sixteenth itself is silver by its own beat")
+	check(not s.notes[4].quick, "a lone half-beat stays violet")
 
 
 func test_reused_touch_id_ends_old_hold() -> void:

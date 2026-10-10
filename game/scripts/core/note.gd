@@ -36,6 +36,10 @@ var step_at := NAN       ## full rings: time of the step half; stomps: time of t
 var bell_at := NAN       ## full rings: time of the bell half
 var touch_id := -1       ## holds: the touch holding it; stomps: the first thumb's touch
 var thumbs := 0          ## stomps: thumbs that landed (0, 1 or 2)
+## Steps: a half-beat note that is half of a sixteenth pair (another lane note a quarter beat before
+## or after it): drawn silver with the sixteenth, since the two are played as one quick double.
+var quick := false
+var tied := 0            ## holds: other notes played on time (Perfect or Good) while it was held
 
 
 func uses_lane() -> bool:

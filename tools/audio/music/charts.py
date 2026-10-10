@@ -5,7 +5,9 @@ sung syllable, a reed note, a bell cue's landing, a rope crack (a two-thumb stom
 per difficulty, which layers of the music the player follows; then rules refine the result:
 
 - bells on strong cues only (the score's bell cues always have a rim click before them);
-- holds on long sung or piped notes; stand-stills exactly where the music stops;
+- holds on long sung or piped notes, and while one thumb holds the other plays on (and from Hard
+  the phone rings a bell); stand-stills exactly where the music stops, and in the climax the music
+  stops dead in the middle of the run, so the notes run right up to the stand-still;
 - lanes follow the melody's contour inside each phrase (low left, high right), so a phrase and its
   answer mirror each other when the music does; each song's signature motif has hand-set lanes;
 - but the thumbs come first: no one-thumb jacks (same-lane runs are broken up whatever the pitch),
@@ -85,6 +87,18 @@ CHORDS = {
     "hard": dict(max_rank=2, every=4.0, energy=1, grid="beat", clear=1.0),
     "expert": dict(max_rank=3, every=2.0, energy=1, grid="half", clear=0.5),
 }
+
+# Hold and play: while one thumb holds, the free thumb keeps playing what the music plays under the
+# held note, on its two buttons. grid: where those steps may sit (beats); min_len: the shortest hold
+# that gets them; bell: from this many beats into a hold (and that far before its end) a bell may
+# ring while the note is held (None: no bells in holds).
+HOLD_PLAY = {
+    "medium": dict(grid=1.0, min_len=1.5, bell=None),
+    "hard": dict(grid=0.5, min_len=1.5, bell=1.0),
+    "expert": dict(grid=0.25, min_len=1.5, bell=0.75),
+}
+# The run into a stand-still in a climax (this many beats before it) is never thinned.
+BREAK_RUN = 2.0
 
 PRIO = {"rest": 0, "stomp": 1, "ring": 2, "bell": 3, "hold": 4, "call": 5, "step": 6}
 ROLE_PRIO = {"mel": 0, "fast": 1, "pulse": 2, "chorus": 3, "perc": 4}
@@ -352,6 +366,12 @@ class Charter:
             near = min((abs(n.b - bb) for bb in bell_bs), default=99)
             if near < 1e-6:
                 bl = bell_bs[n.b]
+                if n.k == "hold" and lv >= 1 and n.len >= 3.0 - 1e-6 and s.section_at(n.b).energy <= 2 \
+                        and bl.tag not in ("ring", "triple"):
+                    # a long sung note in a calmer section is held (and played under) rather than rung
+                    notes_drop.add(id(bl))
+                    out.append(n)
+                    continue
                 # rings where the score marks a leap (the bell cue lands with a step); at Expert
                 # also on the strongest bells, the rest of Expert's bells stay free of the steps
                 sig_climax = n.k == "step" and n.sig is not None and self.in_climax(n.b) and lv >= 1
@@ -403,6 +423,7 @@ class Charter:
                 self.balance(groups)
                 self.break_jacks(laned)
                 notes = self.fix_hands(notes, diff)
+            notes = self.hold_play(notes, diff)
 
         notes.sort(key=lambda n: (n.b, PRIO[n.k]))
         # bells alternate automatically; make sure no bell pair is too close
@@ -649,16 +670,21 @@ class Charter:
 
     def fix_hands(self, notes, diff):
         s = self.s
+        tutorial = s.kind == "tutorial"
         notes.sort(key=lambda n: (n.b, PRIO[n.k]))
-        # holds: at easy/medium nothing else during a hold; at hard+ the other hand plays on
+        # holds: at Easy nothing else during a hold; from Medium the other hand plays on (Medium on
+        # the beats), and from Hard a bell may ring while the note is held
         holds = [n for n in notes if n.k == "hold"]
-        # below Expert a bell never lands on a held note: the hold lets go a beat before the bell
+        play = HOLD_PLAY.get(diff) if s.kind != "tutorial" else None
         if diff != "expert":
+            # a bell never lands at a hold's ends: the hold lets go a beat before the bell (half a
+            # beat at Hard; there a bell well inside a long hold stays, rung while it is held)
             bell_bs = [n.b for n in notes if n.k in ("bell", "ring")]
             for h in holds:
-                nxt = [b for b in bell_bs if h.b + 1e-6 < b <= h.b + h.len + 1.0 + 1e-6]
+                nxt = [b for b in bell_bs if h.b + 1e-6 < b <= h.b + h.len + 1.0 + 1e-6
+                       and not self.bell_in_hold(h, b, play)]
                 if nxt:
-                    ln = int((min(nxt) - 1.0 - h.b) * 2) / 2
+                    ln = int((min(nxt) - (1.0 if diff in ("easy", "medium") else 0.5) - h.b) * 2) / 2
                     if ln >= 1.0:
                         h.len = min(h.len, ln)
         keep = []
@@ -670,9 +696,11 @@ class Charter:
                 if h.b - 1e-6 <= n.b <= h.b + h.len + 1e-6:
                     if n.lane == h.lane or n.k in ("stomp", "hold"):
                         bad = True
-                    elif diff in ("easy", "medium") and n.k != "rest":
+                    elif (diff == "easy" or (diff == "medium" and tutorial)) and n.k != "rest":
                         bad = True
-                    elif n.k in ("bell", "ring") and diff == "hard":
+                    elif n.k in ("bell", "ring") and not self.bell_in_hold(h, n.b, play):
+                        bad = True
+                    elif play is not None and n.k == "step" and not self.on_grid(n.b - h.b, play["grid"]):
                         bad = True
                     elif n.lane is not None and h.lane != 1 and n.lane != 1 and n.lane == h.lane:
                         bad = True
@@ -716,6 +744,86 @@ class Charter:
                 elif n.k in ("step", "ring", "hold", "stomp"):
                     drop.add(i)
             notes = [n for j, n in enumerate(notes) if j not in drop]
+        return notes
+
+    @staticmethod
+    def on_grid(x, grid):
+        return abs(x / grid - round(x / grid)) < 1e-3
+
+    @staticmethod
+    def bell_in_hold(h, b, play):
+        """May a bell at b ring while h is held? Only from Hard, well inside a long enough hold."""
+        if play is None or play["bell"] is None:
+            return False
+        return h.b + play["bell"] - 1e-6 <= b <= h.b + h.len - play["bell"] + 1e-6
+
+    def hold_play(self, notes, diff):
+        """Hold and play. While one thumb holds, the free thumb keeps playing: under a hold that has
+        nothing in it yet, the music's own strokes (the pulse, the tune, the chorus, the drums) on
+        the hold's grid become steps for the free thumb, rocking between its two buttons (the far
+        outer one and the middle; a middle hold leaves the free thumb its own outer button). From Hard
+        a bell cue well inside a long hold is rung too, with the note still held: the step that tilt
+        would crowd gives way to it. Every added note passes the hand and jack rules, or goes."""
+        s = self.s
+        play = HOLD_PLAY.get(diff)
+        if play is None or s.kind == "tutorial":
+            return notes
+        meta = {"bpm": s.bpm, "kind": s.kind, "stop": s.stop_no,
+                "sections": [{"name": x.name, "b": x.b, "len": x.len} for x in s.sections]}
+
+        def ok(ns):
+            d = [x.json() for x in sorted(ns, key=lambda x: (x.b, PRIO[x.k]))]
+            _, hfn, cfn = V.rule_fns(meta, diff, d)
+            return not V.assign_hands(d, hfn, cfn) and not V.jacks(d, s.spb)
+
+        bell_clear = {"medium": 0.5, "hard": 0.5}.get(diff) or V.RULES["bell_clear_s"]["expert"] / s.spb
+        for h in sorted([n for n in notes if n.k == "hold"], key=lambda n: n.b):
+            if h.len < play["min_len"] - 1e-6:
+                continue
+            lo, hi = h.b, h.b + h.len
+            inside = [n for n in notes if n is not h and lo + 1e-6 < n.b <= hi + 1e-6 and n.k != "rest"]
+            if any(n.k in ("step", "ring") for n in inside):
+                continue
+            if any(r.k == "rest" and r.b < hi + 1.0 and r.b + r.len > lo for r in notes):
+                continue
+            grid = play["grid"] if h.lane != 1 else max(play["grid"], 1.0)
+            # a bell rung while held, from Hard: the strongest bell cue well inside the hold
+            bell = None
+            if play["bell"] is not None and h.len >= 2 * play["bell"] - 1e-6 \
+                    and not any(n.k in ("bell", "ring") for n in inside):
+                cues = [c for c in s.cands if c.role == "bell" and self.bell_in_hold(h, c.b, play)
+                        and self.audible(c)]
+                if cues:
+                    c = min(cues, key=lambda c: (c.rank, c.b))
+                    bell = N(c.b, "bell", c.rank, "bell", None, c.stem, tag="hold_bell", src=c)
+            taken = {round(n.b, 4) for n in notes}
+            cands = {}
+            for c in s.cands:
+                if c.role in ("pulse", "mel", "chorus", "perc", "fast") and lo + grid - 1e-6 <= c.b <= hi + 1e-6 \
+                        and self.on_grid(c.b - lo, grid) and self.audible(c) and round(c.b, 4) not in taken \
+                        and (diff == "expert" or V.on_eighth(c.b)):
+                    if bell is not None and abs(c.b - bell.b) < bell_clear - 1e-6:
+                        continue
+                    cur = cands.get(round(c.b, 4))
+                    if cur is None or (c.rank, ROLE_PRIO.get(c.role, 5)) < (cur.rank, ROLE_PRIO.get(cur.role, 5)):
+                        cands[round(c.b, 4)] = c
+            # the free thumb's line: one stroke per grid step at most, from the strongest layer
+            if bell is not None and ok(notes + [bell]):
+                notes = notes + [bell]
+            best = notes
+            for free in ([[2, 1]] if h.lane == 0 else [[0, 1]] if h.lane == 2 else [[0], [2]]):
+                trial = list(notes)
+                k = 0
+                for b in sorted(cands):
+                    c = cands[b]
+                    m = N(c.b, "step", c.rank, c.role, c.pitch, c.stem, lane=free[k % len(free)], tag="hold_play", src=c)
+                    if ok(trial + [m]) and not self.hidden(trial + [m], m):
+                        trial.append(m)
+                        k += 1
+                if len(trial) > len(best):
+                    best = trial
+            notes = best
+        notes.sort(key=lambda n: (n.b, PRIO[n.k]))
         return notes
 
     def hidden(self, notes, n):
@@ -767,7 +875,13 @@ class Charter:
             if excess <= 0:
                 continue
             # candidates to drop: plain steps, weakest first, spread through the section
+            # the run into a stand-still in the climax stays whole (the music stops dead in it), and
+            # so does the free thumb's line under a hold
+            breaks = [r.b for r in notes if r.k == "rest" and s.section_at(r.b).energy >= 3]
+            held = [(h.b, h.b + h.len) for h in notes if h.k == "hold"]
             pool = [n for n in inside if n.k == "step" and not n.call and n.tag != "triple_step"
+                    and not any(0 < rb - n.b <= BREAK_RUN + 1e-6 for rb in breaks)
+                    and not any(a + 1e-6 < n.b <= z + 1e-6 for a, z in held)
                     and (n.sig is None or diff == "easy"
                          or (int((n.b + 1e-6) // s.bpb) % 2 == 1 and sec.energy < 3))]
             # the same place in every four-bar phrase is thinned the same way: music that repeats

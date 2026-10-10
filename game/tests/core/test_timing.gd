@@ -315,6 +315,37 @@ func _song(chart: Array) -> SongData:
 	return SongData.from_dict({"id": "r", "bpm": 120, "offset": 1.0, "charts": {"easy": chart}})
 
 
+func test_router_tilt_breaks_a_stand_still() -> void:
+	# 120 bpm, offset 1 s: the stand-still runs from 2.0 s to 4.0 s; a bell sits at 5.0 s.
+	var s := Session.new(_song([{"b": 0, "k": "step", "lane": 1}, {"b": 2, "k": "rest", "len": 4}, {"b": 8, "k": "bell"}]), "easy")
+	var r := _router(s)
+	var rang := []
+	var broke := []
+	r.rang.connect(func(x): rang.append(x))
+	r.moved_still.connect(func(n): broke.append(n))
+	# Steady hands through the first second of the stand-still, then a soft tilt (70 °/s, well
+	# under the 150 °/s ring) at 3.2 s.
+	for i in 150:
+		var t := 1.8 + i / 60.0
+		var dt := t - 3.2
+		var g := 70.0 * sin(PI * dt / 0.3) if dt >= 0.0 and dt < 0.3 else 3.0 * sin(t * 40.0)
+		r.feed_motion(t, Vector3.ZERO, Vector3(g, 0, 0))
+	check(rang.is_empty(), "the soft tilt rang nothing")
+	check_eq(broke.size(), 1, "but it broke the stand-still, once")
+	check_eq(s.stats.silence, 1, "counted like a ring into it")
+	check_eq(s.notes[1].judgement, "silence", "the stand-still is broken")
+	s.update(5.5)
+	check_eq(s.stats.still_kept, 0, "and earns nothing")
+	# A stand-still held steady to its end is kept.
+	var s2 := Session.new(_song([{"b": 0, "k": "step", "lane": 1}, {"b": 2, "k": "rest", "len": 4}]), "easy")
+	var r2 := _router(s2)
+	for i in 150:
+		var t := 1.8 + i / 60.0
+		r2.feed_motion(t, Vector3.ZERO, Vector3(4.0 * sin(t * 40.0), 0, 0))
+	s2.update(4.5)
+	check_eq(s2.stats.still_kept, 1, "steady hands keep it")
+
+
 func test_router_touches_and_holds() -> void:
 	var s := Session.new(_song([{"b": 0, "k": "step", "lane": 0}, {"b": 2, "k": "step", "lane": 2}, {"b": 4, "k": "hold", "lane": 1, "len": 2}]), "easy")
 	var r := _router(s)
