@@ -742,7 +742,30 @@ func _find_lane_note(lane: int, t: float, touch_id: int = -1) -> Note:
 		# them landed 130-160 ms ahead of their note, where they did nothing and the note was then
 		# missed (2026-10-10 Carnival Expert run).
 		n = _lane_note_within(lane, t, touch_id, EARLY_REACH, 0.0)
+	# A tap nearer to a note of this lane that is already taken is a second tap on that one, not an
+	# early tap on the next. Taking the next note made every later tap take the note after its own:
+	# the notes then vanished before reaching the line, as if the song had sped up (Daniele,
+	# 2026-10-10, after anticipating a note). A player running ahead hit the taken note early too, so
+	# the next one is expected as early: rushed taps still take their note.
+	if n != null and n.t > t:
+		var m := _taken_before(lane, n)
+		var at := NAN if m == null else (m.step_at if not is_nan(m.step_at) else m.hit_at)
+		if not is_nan(at):
+			var ahead := minf(at - m.t, 0.0)
+			if absf(t - m.t) < absf(t - (n.t + ahead)):
+				return null
 	return n
+
+
+# The lane's last taken note before n (null if the one before it is still open or there is none).
+func _taken_before(lane: int, n: Note) -> Note:
+	var i := n.index - 1
+	while i >= 0 and n.t - notes[i].t < 1.0:
+		var m := notes[i]
+		if m.lane == lane and m.uses_lane():
+			return m if m.done else null
+		i -= 1
+	return null
 
 
 # The first open note of the lane due between `late` seconds before t and `early` seconds after it.

@@ -1035,3 +1035,46 @@ func test_a_tap_just_before_the_window_takes_its_note_as_ok() -> void:
 	var d := Session.new(make([{"b": 0, "k": "step", "lane": 1}, {"b": 0.5, "k": "step", "lane": 1}]), "easy")
 	var late := d.tap(1, _bt(0) + 0.1, 0)
 	check(late.note == d.notes[0], "a late tap takes the note behind it, not the next one")
+
+
+## Daniele (2026-10-10): anticipating one note made the rest seem to speed up. One tap ahead took the
+## first note early; each honest tap after it then took the next note early, so every note vanished
+## before reaching the line. A tap nearer a note already taken is a second tap on it instead.
+func test_one_early_tap_does_not_shift_the_rest() -> void:
+	var chart := []
+	for i in 12:
+		chart.append({"b": i * 0.28, "k": "step", "lane": 1})
+	var s := Session.new(make(chart), "easy")
+	var first := s.tap(1, _bt(0) - 0.1, 0)
+	check(first.note == s.notes[0], "the early tap takes the first note")
+	var shifted := 0
+	for i in 12:
+		var t := _bt(i * 0.28) + 0.01
+		s.update(t)
+		var r := s.tap(1, t, i + 1)
+		var rn: Note = r.get("note")
+		if rn != null and rn.index != i:
+			shifted += 1
+		s.release(t + 0.03, i + 1)
+	check_eq(shifted, 0, "no honest tap takes the note after its own")
+	for i in range(1, 12):
+		check_eq(s.notes[i].judgement, "perfect", "note %d is hit on time" % i)
+
+
+## Running ahead is not a second tap: taps 110 ms early on notes 140 ms apart each take their own note
+## (Daniele's Carnival Expert run rushed this way).
+func test_rushed_taps_still_take_their_own_notes() -> void:
+	var chart := []
+	for i in 10:
+		chart.append({"b": i * 0.28, "k": "step", "lane": 1})
+	var s := Session.new(make(chart), "easy")
+	var own := 0
+	for i in 10:
+		var t := _bt(i * 0.28) - 0.11
+		s.update(t)
+		var r := s.tap(1, t, i)
+		var rn: Note = r.get("note")
+		if rn != null and rn.index == i:
+			own += 1
+		s.release(t + 0.03, i)
+	check_eq(own, 10, "every rushed tap takes its own note")
