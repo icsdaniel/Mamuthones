@@ -73,6 +73,7 @@ func _sprite(tex: Texture2D, n: String, top: float, bottom: float) -> Sprite2D:
 	s.texture = tex
 	s.centered = false
 	s.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
+	s.use_parent_material = true    # a portrait's cut (StreetBackdrop) set on the figure
 	s.region_enabled = true
 	s.region_rect = Rect2(0.0, top, _size.x, bottom - top)
 	# the origin is the feet, the bottom centre on a whole art px

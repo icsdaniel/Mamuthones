@@ -51,8 +51,21 @@ static func language() -> String:
 	return l if l != "" else I18n.system_locale()
 
 
+## Settings: "full", "calm" (less movement: the old Reduced motion) or "off" (nothing moves but the
+## notes and the hit feedback, for the smoothest play on any phone).
+static func animations() -> String:
+	var a := str(Profile.get_setting("animations"))
+	if a == "full" and bool(Profile.get_setting("reduced_motion")):
+		return "calm"
+	return a
+
+
 static func reduced_motion() -> bool:
-	return bool(Profile.get_setting("reduced_motion"))
+	return animations() != "full"
+
+
+static func animations_off() -> bool:
+	return animations() == "off"
 
 
 static func first_screen() -> String:

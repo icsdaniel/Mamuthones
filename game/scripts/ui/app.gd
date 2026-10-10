@@ -43,6 +43,7 @@ func _ready() -> void:
 	UIKit.apply_root(self)
 	backdrop = MenuBackdrop.new()
 	backdrop.reduced_motion = UIKit.reduced_motion()
+	backdrop.still = UIKit.animations_off()
 	add_child(backdrop)
 	screen_changed.connect(_on_screen_changed)
 	_layer = Control.new()
@@ -137,6 +138,7 @@ func rebuild_all() -> void:
 func _on_screen_changed(screen: Screen) -> void:
 	backdrop.visible = screen == null or not screen.screen_name() in OWN_BACKDROP
 	backdrop.reduced_motion = UIKit.reduced_motion()
+	backdrop.still = UIKit.animations_off()
 
 
 func overlay() -> Control:
