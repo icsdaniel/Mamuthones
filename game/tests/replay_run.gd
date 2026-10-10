@@ -47,6 +47,14 @@ func _init() -> void:
 						det.forgive()
 					if det.last_t >= lo and det.last_t <= hi:
 						print("  ring %.3f %s" % [det.last_t, rr.get("quality")])
+				elif not old:
+					var peak := det.take_retry()
+					if not is_nan(peak) and s.bell_due(peak):
+						det.used()
+						rings += 1
+						var rr := s.ring(peak, true, det.last_strength)
+						if peak >= lo and peak <= hi:
+							print("  retry %.3f %s" % [peak, rr.get("quality")])
 			"t":
 				det.note_touch(t)
 			"press":

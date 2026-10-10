@@ -194,17 +194,27 @@ func feed_motion(t: float, acc: Vector3, gyro_dps: Vector3) -> void:
 	if motion_log != null:
 		motion_log.add_reading(t, acc, gyro_dps)
 	if detector.feed(t, acc, gyro_dps):
-		if motion_log != null:
-			motion_log.add_ring(detector.last_t)
-		var rr := session.ring(detector.last_t, true, detector.last_strength)
-		if rr.get("quality") in ["free", "miss"]:
-			detector.forgive()
-		if run_log != null:
-			var bn: Note = rr.get("note")
-			run_log.event(detector.last_t, "ring", {"tilt": true, "up": rr.get("up"), "q": rr.get("quality"),
-				"j": rr.get("judgement"), "note": bn.index if bn != null else -1, "strength": snappedf(detector.last_strength, 0.01),
-				"threshold": snappedf(detector.threshold, 0.1), "fed_at": snappedf(t, 0.0001)})
-		rang.emit(rr)
+		_tilt_rang(detector.last_t, t, false)
+	else:
+		# A slow tilt that rang too early gets a second try at its peak, if a bell is due then.
+		var peak := detector.take_retry()
+		if not is_nan(peak) and session.bell_due(peak):
+			detector.used()
+			_tilt_rang(peak, t, true)
+
+
+func _tilt_rang(at: float, t: float, retry: bool) -> void:
+	if motion_log != null:
+		motion_log.add_ring(at)
+	var rr := session.ring(at, true, detector.last_strength)
+	if not retry and rr.get("quality") in ["free", "miss"]:
+		detector.forgive()
+	if run_log != null:
+		var bn: Note = rr.get("note")
+		run_log.event(at, "ring", {"tilt": true, "up": rr.get("up"), "q": rr.get("quality"),
+			"j": rr.get("judgement"), "note": bn.index if bn != null else -1, "strength": snappedf(detector.last_strength, 0.01),
+			"threshold": snappedf(detector.threshold, 0.1), "fed_at": snappedf(t, 0.0001), "retry": retry})
+	rang.emit(rr)
 
 
 func _press(lane: int, t: float, id: int) -> void:

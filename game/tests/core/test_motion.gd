@@ -613,3 +613,56 @@ func test_a_ring_that_rang_nothing_does_not_swallow_the_next_flick() -> void:
 	check_eq(one.size(), 1, "one long lobe, forgiven, still one ring")
 	var flick := _lobes_run(_detector(144.0), [[1.0, 0.1, 400.0], [1.1, 0.1, -300.0]], 2.0)
 	check_eq(flick.size(), 1, "a down-and-up flick that rang a bell rings once")
+
+
+## Daniele's 2026-10-10 ring at 66 s: one slow tilt crossed the threshold 226 ms before the beat and
+## peaked 25 ms before it. The early ring rang nothing, so each peak of the lobe is offered again.
+func test_a_slow_tilt_that_rang_too_early_offers_its_peak() -> void:
+	var det := _detector(144.0)
+	# Two humps: up to 300 at 1.10, a dip to 220, up to 420 at 1.24, then down.
+	var tries: Array[float] = []
+	var rings: Array[float] = []
+	var t := 0.9
+	while t < 1.6:
+		var v := 0.0
+		if t >= 1.0 and t <= 1.36:
+			v = 300.0 * sin(PI * clampf((t - 1.0) / 0.2, 0.0, 1.0)) * (1.0 if t < 1.1 else 0.0)
+			v = maxf(v, 220.0 if t >= 1.1 and t < 1.16 else 0.0)
+			if t >= 1.16:
+				v = 420.0 * sin(PI * clampf((t - 1.08) / 0.32, 0.0, 1.0))
+		if det.feed(t, Vector3.ZERO, Vector3(v, 0.0, 0.0)):
+			rings.append(det.last_t)
+			det.forgive()
+		var r := det.take_retry()
+		if not is_nan(r):
+			tries.append(r)
+		t += 0.01
+	check_eq(rings.size(), 1, "one ring for one slow tilt")
+	check(tries.size() >= 1 and absf(tries[-1] - 1.24) < 0.02, "its last peak is offered (%s)" % str(tries))
+	# Taken: nothing more from that lobe.
+	var det2 := _detector(144.0)
+	var after := 0
+	t = 0.9
+	while t < 1.6:
+		var v := 0.0
+		if t >= 1.0 and t <= 1.3:
+			v = 400.0 * sin(PI * (t - 1.0) / 0.3) * (1.0 + 0.3 * sin(t * 90.0))
+		if det2.feed(t, Vector3.ZERO, Vector3(v, 0.0, 0.0)):
+			det2.forgive()
+		var r := det2.take_retry()
+		if not is_nan(r):
+			after += 1
+			det2.used()
+		t += 0.01
+	check(after <= 1, "a used retry ends the tries (%d)" % after)
+	# A ring that matched a bell is never offered again.
+	var det3 := _detector(144.0)
+	var offered := 0
+	t = 0.9
+	while t < 1.6:
+		var v := 400.0 * sin(PI * (t - 1.0) / 0.3) if t >= 1.0 and t <= 1.3 else 0.0
+		det3.feed(t, Vector3.ZERO, Vector3(v, 0.0, 0.0))
+		if not is_nan(det3.take_retry()):
+			offered += 1
+		t += 0.01
+	check_eq(offered, 0, "no retry without forgive")

@@ -26,6 +26,10 @@ extends RefCounted
 ##   of a bell; the lockout and the calm wait then swallowed the real flick that followed (five of
 ##   the nine misses at the end of Daniele's 2026-10-10 Piazza Hard run). A full-size flick keeps
 ##   the lockout, so its return lobe never rings a second time.
+## - A slow tilt crosses the threshold well before it peaks: Daniele's ring at 66 s (2026-10-10 run)
+##   crossed 226 ms before the beat and peaked 25 ms before it, one smooth lobe. When a ring rang
+##   nothing, the time of its lobe's peak is offered as a second try (take_retry()) once the lobe is
+##   over; the caller rings it only if a bell is due then.
 
 signal rang(t: float, up: bool)
 
@@ -46,6 +50,7 @@ const TOUCH_WINDOW := 0.10    ## seconds after a touch during which accel rings 
 const PEAK_WATCH := 0.15
 const NEAR := 0.6             ## near-miss: a sustained lobe above this share of the threshold
 const ADAPT_FLOOR := 0.6
+const RETRY_DROP := 0.8       ## a forgiven lobe has passed a peak once it falls under this × that peak
 const FORGIVE_PEAK := 0.75    ## a forgiven lobe re-arms only if it peaked under this × typical_peak
 ## The threshold never climbs over the calibrated one: after a few hard flicks it had risen to
 ## 1.2 × on Daniele's phone (2026-10-09 run log) and a normal flick that peaked under it was lost.
@@ -81,6 +86,9 @@ var sample_interval := 1.0 / 60.0
 var _armed := true
 var _forgiven := false        # the last ring rang nothing: re-arm once its lobe is over
 var _lobe_max := 0.0          # highest reading of the lobe that last rang
+var _lobe_max_t := -INF       # when it was read
+var _retry_t := NAN           # the peak of a forgiven lobe, offered once by take_retry()
+var _offered_t := -INF        # the last peak offered
 var _calm_since := NAN
 var _cand_t := NAN
 var _cand_first := NAN
@@ -136,6 +144,7 @@ func lockout() -> float:
 func reset() -> void:
 	_armed = true
 	_forgiven = false
+	_retry_t = NAN
 	_calm_since = NAN
 	_cand_t = NAN
 	_rise_since = NAN
@@ -175,9 +184,14 @@ func feed(t: float, acc: Vector3, gyro_dps: Vector3) -> bool:
 		_learn_peak(_peak)
 		_peak_until = -INF
 	if not _armed and _forgiven:
-		if v >= threshold * SUSTAIN:
-			_lobe_max = maxf(_lobe_max, v)
-		else:
+		if v > _lobe_max:
+			_lobe_max = v
+			_lobe_max_t = t - _reading_age()
+		elif fresh and v < RETRY_DROP * _lobe_max and _lobe_max_t > _offered_t and _lobe_max_t > last_t + 0.02:
+			# Past a peak (a slow tilt can have two): offer it while the bell's window is still open.
+			_retry_t = _lobe_max_t
+			_offered_t = _lobe_max_t
+		if v < threshold * SUSTAIN:
 			_armed = _lobe_max < FORGIVE_PEAK * typical_peak
 			_forgiven = false
 	if not _armed:
@@ -240,10 +254,26 @@ func forgive() -> void:
 		_forgiven = true
 
 
+## The peak time of a forgiven lobe that just ended (NAN when there is none); each is offered once.
+func take_retry() -> float:
+	var r := _retry_t
+	_retry_t = NAN
+	return r
+
+
+## A retry rang a bell: the rest of that lobe offers nothing more.
+func used() -> void:
+	_offered_t = INF
+	_retry_t = NAN
+
+
 func _fire() -> void:
 	_armed = false
 	_forgiven = false
 	_lobe_max = _cand_peak
+	_lobe_max_t = _cand_t - _reading_age()
+	_retry_t = NAN
+	_offered_t = -INF
 	_calm_since = NAN
 	last_t = _cand_t - _reading_age()
 	var s := signf(_cand_vec[axis]) * up_sign

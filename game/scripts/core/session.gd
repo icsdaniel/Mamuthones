@@ -568,6 +568,11 @@ func ring(t: float, tilt: bool = true, strength: float = 0.5) -> Dictionary:
 	return {"up": up, "quality": "miss" if near else "free", "judgement": "", "offset": 0.0, "side": "", "strength": st, "note": null}
 
 
+## True when a bell (or the tilt half of a full ring) can still be rung at t.
+func bell_due(t: float, tilt: bool = true) -> bool:
+	return _find_bell(t, (win_tilt if tilt and not slam else win_touch).z) != null
+
+
 ## Call every frame with the current song time.
 func update(t: float) -> void:
 	_track_top(t)
