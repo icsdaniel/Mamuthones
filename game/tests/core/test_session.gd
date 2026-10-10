@@ -51,8 +51,10 @@ func test_fixture_loads() -> void:
 
 func test_judgement_windows() -> void:
 	# One step per beat, hit with a chosen offset each; boundaries on both sides.
-	var offs := [0.0, 0.040, -0.040, 0.042, -0.080, 0.080, -0.082, 0.082, -0.125, 0.125, -0.127, 0.127]
-	var want := ["perfect", "perfect", "perfect", "good", "good", "good", "early", "late", "early", "late", "miss", "miss"]
+	# Just before the Ok window an early tap still takes its note as Ok (EARLY_REACH); just after it a
+	# late one does not, and beyond EARLY_REACH an early one does not either.
+	var offs := [0.0, 0.040, -0.040, 0.042, -0.080, 0.080, -0.082, 0.082, -0.125, 0.125, -0.127, 0.127, -0.2]
+	var want := ["perfect", "perfect", "perfect", "good", "good", "good", "early", "late", "early", "late", "early", "miss", "miss"]
 	var s := Session.new(make(steps(offs.size())), "easy")
 	var got := []
 	s.judged.connect(func(_n, j, _o): got.append(j))
@@ -68,7 +70,7 @@ func test_judgement_windows() -> void:
 	check_eq(cleaned, want, "judgements by offset")
 	check_eq(s.stats.perfect, 3, "perfects")
 	check_eq(s.stats.good, 3, "goods")
-	check_eq(s.stats.early, 2, "earlies")
+	check_eq(s.stats.early, 3, "earlies")
 	check_eq(s.stats.late, 2, "lates")
 	check_eq(s.stats.miss, 2, "misses")
 
@@ -972,3 +974,20 @@ func test_a_late_arriving_tilt_inside_its_window_counts() -> void:
 	s.tap(2, _bt(4), 1)
 	s.update(_bt(4) + maxf(s.win_touch.z, tilt_ok) + Session.TILT_GRACE + 0.01)
 	check_eq(ring_note.judgement, "miss", "a full ring with no tilt is still missed after the grace")
+
+
+## A tap a little earlier than the Ok window still takes its lane's next note as an Ok when nothing
+## else is in the window (Daniele's Carnival Expert run: 17 taps 130-160 ms early did nothing).
+func test_a_tap_just_before_the_window_takes_its_note_as_ok() -> void:
+	var s := Session.new(make(steps(4)), "easy")
+	var ok := s.win_touch.z
+	var r := s.tap(1, _bt(0) - (ok + 0.03), 0)
+	check(r.note == s.notes[0], "the note is taken")
+	check_eq(r.judgement, "early", "as an early Ok")
+	check_eq(s.stats.stray, 0, "not a stray")
+	var r2 := s.tap(1, _bt(1) - Session.EARLY_REACH - 0.03, 1)
+	check(r2.note == null, "further than EARLY_REACH: nothing")
+	# A note still in its window is always preferred to the next one early.
+	var d := Session.new(make([{"b": 0, "k": "step", "lane": 1}, {"b": 0.5, "k": "step", "lane": 1}]), "easy")
+	var late := d.tap(1, _bt(0) + 0.1, 0)
+	check(late.note == d.notes[0], "a late tap takes the note behind it, not the next one")
