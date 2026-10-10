@@ -212,7 +212,6 @@ func _on_finished(result: Dictionary) -> void:
 	if not result.is_empty():
 		check = BellDetector.from_calibration(result, reader.has_gyro())
 		check.set_bpm(100.0)
-		check.adapt = false
 		graph.threshold = check.threshold
 		_hint.text = tr("cal_check_body") + "\n" + tr("cal_done_body")
 	Sound.ui("unlock")
