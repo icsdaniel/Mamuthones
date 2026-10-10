@@ -2,7 +2,7 @@ extends SceneTree
 ## Measures how heavy the play screen is: starts a song in Autoplay at a dense spot and prints the
 ## average and worst frame times, and how much of them the scripts take.
 ##   godot --path game --rendering-driver opengl3 --resolution 1080x2400 -s res://tests/bench.gd -- \
-##       [song] [difficulty] [from=<beat>] [style=pixel|painted] [frames=<n>] [anim=full|calm|off]
+##       [song] [difficulty] [from=<beat>] [frames=<n>] [anim=full|calm|off]
 ##       [warm=<ms>] [hide=<Node>]
 ## Absolute numbers on a desktop or a software renderer are not a phone's; compare runs instead.
 
@@ -38,8 +38,6 @@ func _init() -> void:
 		if x.begins_with("from="):
 			start.from_beat = float(x.substr(5))
 			start.to_beat = start.from_beat + 64.0
-		elif x.begins_with("style="):
-			profile.set_setting("art_style", x.substr(6))
 		elif x == "vpint":
 			root.content_scale_mode = Window.CONTENT_SCALE_MODE_VIEWPORT
 			root.content_scale_stretch = Window.CONTENT_SCALE_STRETCH_INTEGER

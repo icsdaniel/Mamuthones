@@ -1,5 +1,5 @@
 """The Mamuthone and the Issohadore as pixel-art puppets, cut from Daniele's figures
-(game/art/street/<figure>_bob_0.png, his standing pose) into parts that slide on their own:
+(tools/art/sources/street/<figure>_bob_0.png, his standing pose) into parts that slide on their own:
 
     python3 tools/art/pixel3d/bake_figures.py
 
@@ -20,7 +20,7 @@ import cv2
 from scipy import ndimage
 import pixelate as px
 
-SRC = os.path.join(px.GAME, "art/street")
+os.path.join(px.GAME, "../tools/art/sources/street")   # the source pictures are kept out of the game
 OUT = os.path.join(px.GAME, "art/pixel")
 H = 172   # cells tall (the figure in its portrait on the base screen; 118, then 140, until Daniele asked for figures that fill their portraits, 2026-10-05)
 

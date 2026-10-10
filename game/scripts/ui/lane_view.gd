@@ -564,8 +564,6 @@ var perspective := true          ## false: the flat lanes (tests may flatten)
 ## the lanes follow its painted lines: project() asks the street where a flat point lies, and this
 ## control draws the notes, the hit line, the bursts and the buttons over it (_draw_street).
 var street: StreetBackdrop
-## The pixel look (PixelFilter over the screen): the buttons are drawn as pixel art on its grid.
-var pixel := false
 var beat := -1000.0              ## the song's beat now (fractional), for the beads on the rails
 var spb := 0.0                   ## seconds per beat (0: no beads)
 var fire_dim := 0.0              ## 0..1 the fire burns low (health): the road's light dims with it
@@ -580,7 +578,7 @@ var _fx: Control                 ## additive, over the notes: hit bursts
 func _ready() -> void:
 	if street != null:
 		perspective = false
-	if street != null and pixel and not OS.has_environment("NO_ATLAS"):
+	if street != null and not OS.has_environment("NO_ATLAS"):
 		# the notes are painted once into a sheet and stamped from it: drawing them each frame was the lag
 		var at := NoteAtlas.new(self)
 		add_child(at)
@@ -1427,62 +1425,7 @@ func _street_chevron(pos: Vector2, side: String, age: float, size_k := 1.0) -> v
 ## middle one), lit gold while pressed, hot on a hit, dull red on a miss, their edge glowing when a
 ## note is about to reach their lane.
 func _draw_street_buttons() -> void:
-	if pixel:
-		_draw_pixel_buttons()
-		return
-	var r := buttons_rect()
-	var span := _screen_span()
-	var panel := Rect2(span.x, r.position.y, span.y - span.x, r.size.y + 400.0)
-	draw_rect(panel, Color("#0b0a10"))
-	draw_rect(Rect2(panel.position, Vector2(panel.size.x, 3.0)), Color("#ffb04a") * Color(1, 1, 1, 0.6 + 0.4 * beat_env()))
-	var w := r.size.x / 3.0
-	var pad := 7.0
-	for lane in 3:
-		var br := Rect2(r.position.x + w * lane + pad, r.position.y + pad + 4.0, w - pad * 2.0, r.size.y - pad * 2.0 - 4.0)
-		var st := _button_state(lane)
-		var sb := StyleBoxFlat.new()
-		sb.set_corner_radius_all(18)
-		sb.set_border_width_all(3)
-		sb.bg_color = BTN_BG
-		sb.border_color = BTN_EDGE
-		var foot := BTN_BONE
-		match st:
-			"cued":
-				sb.border_color = Color("#ffc445")
-				sb.shadow_color = Color("#ff9a2a66")
-				sb.shadow_size = 10
-			"pressed":
-				sb.bg_color = Color("#4a3014")
-				sb.border_color = Color("#ffe08a")
-				sb.shadow_color = Color("#ffb04a88")
-				sb.shadow_size = 14
-			"hit":
-				sb.bg_color = Color("#c47a1c")
-				sb.border_color = Color("#fff2c0")
-				sb.shadow_color = Color("#ffc445aa")
-				sb.shadow_size = 18
-				foot = Color("#fffaf0")
-			"miss":
-				sb.bg_color = Color("#3a1212")
-				sb.border_color = Color("#a83030")
-				foot = BTN_BONE.darkened(0.4)
-		draw_style_box(sb, br)
-		# a lit lip along the top, the lane's slot light carried down onto the button
-		var lip := Color("#ffb04a")
-		var la := 0.35 + 0.25 * beat_env()
-		match st:
-			"cued":
-				la = 0.9
-			"pressed", "hit":
-				lip = Color("#fff2c0")
-				la = 1.0
-		draw_rect(Rect2(br.position.x + 18.0, br.position.y + 5.0, br.size.x - 36.0, 6.0), Color(lip, la))
-		var feet := [-1.0, 1.0] if lane == 1 else ([-1.0] if lane == 0 else [1.0])
-		var fs := minf(br.size.x, br.size.y) * 0.25
-		for i in feet.size():
-			var ox := 0.0 if feet.size() == 1 else (float(i) - 0.5) * fs * 1.5
-			_footprint(br.get_center() + Vector2(ox, 0.0), fs, feet[i], foot)
-	_draw_street_marks(r, w)
+	_draw_pixel_buttons()
 
 
 # ------------------------------------------------------------------ the pixel look's buttons
@@ -1557,7 +1500,7 @@ func _px(o: Vector2, x: float, y: float, w: float, h: float, col: Color) -> void
 ## is needed mid-song: the buttons pressed and lit, and (bells: a song with bells) the bell bars at
 ## every size down the road. Each was a hitch of 25 ms or more on its first press, hit or bell.
 func warm(bells: bool) -> void:
-	if street == null or not pixel:
+	if street == null:
 		return
 	for lane in 3:
 		var cr := _button_cells(lane)

@@ -38,7 +38,6 @@ const DEFAULT_SETTINGS := {
 	"visual_offset": 0.06,   # seconds the notes are drawn early (screen and touch delay); see visual_offset()
 	"bell_cue": true,        # the bell cue shown at Easy and Medium
 	"step_knocks": false,    # a knock on each step button (off: hits on time bring up the song's tune instead)
-	"art_style": "pixel",    # the play screen's look: "pixel" (pixel art in 3D motion) or "painted"
 }
 const FLAGS: Array[String] = ["language_chosen", "headphones_seen", "calibrated", "latency_tested", "tutorial_done"]
 const FLEECES: Array[String] = ["black", "dark_brown"]

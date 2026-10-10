@@ -154,7 +154,7 @@ func _on_move(_index: int, up: bool, _strength: float) -> void:
 	_flash = 1.0
 	if absf(_angle) < 0.2:
 		_angle = 0.55 if up else -0.55
-	Sound.bell("light", up, "perfect")
+	Sound.bell(BellSets.STANDARD, up, "perfect")
 	UIKit.vibrate(25)
 	_update_instruction()
 

@@ -1,7 +1,7 @@
 class_name StreetBackdrop
 extends Control
-## The play screen's street, from Daniele's own picture (art/street/street.png, the empty-street
-## reference in mockups/lowpoly): the road of Mamoiada at night with its four glowing lines running
+## The play screen's street, from Daniele's second street picture laid as pixel art (art/ai/street_laid.png,
+## from tools/art/sources/ai/street.png): the road of Mamoiada at night with its four glowing lines running
 ## up to the bonfire. The lanes are the picture's own: LaneView asks flat_to_local() where a point of
 ## its flat field lies, and the answer follows the painted lines (each lane between two of them) with
 ## a true perspective along the road.
@@ -18,7 +18,6 @@ extends Control
 ## It stands in for FireBackdrop (beat, dim, kick) and SideRows (jolt, stomp, set_still, ...), so the
 ## play screen drives it the same way.
 
-const STREET := "res://art/street/street.png"
 const PIXEL_STREET := "res://art/ai/street_laid.png"   ## the pixel look's street: Daniele's second street picture laid into this one's frame at full size, lines painted on (tools/art/pixel3d/bake_ai_street.py); drawn smoothed into the one-px-per-cell street, so every cell takes one even sample of it (a 270-wide copy drawn NEAREST gave cells of uneven sizes)
 const IMG := Vector2(941.0, 1672.0)
 ## The painted lines, x = a + b * y in the picture's pixels: the road's edges and the lane dividers.
@@ -35,11 +34,8 @@ const EDGE_PAD := 0.035
 ## The picture is shown this much bigger than it takes to cover the screen (top aligned, centred
 ## across), so the road's far end and the notes there are bigger (Daniele, 2026-10-05).
 const ZOOM := 1.2
-## The portrait frames' corners (picture px, the left one; the right mirrors it), from the play-screen
-## reference.
-## Raised by FRAME_LIFT (Daniele, 2026-10-05) so more of the street and the notes' road shows.
-const FRAME := [Vector2(-12, 232), Vector2(226, 296), Vector2(272, 612), Vector2(-12, 748)]
-## The pixel look's portraits (Daniele, 2026-10-08): a shallower lower edge that hides the figures'
+## The portrait frames' corners (picture px, the left one; the right mirrors it), raised by
+## FRAME_LIFT (Daniele, 2026-10-05): a shallower lower edge (2026-10-08) hides the figures'
 ## legs, so they stand in their frames from the knees up and the cut is level across them.
 const FRAME_PIXEL := [Vector2(-12, 226), Vector2(300, 276), Vector2(262, 560), Vector2(-12, 636)]
 ## The art row (from the top of a pixel figure's 172) its portrait's lower edge cuts at: just under
@@ -48,23 +44,10 @@ const PIXEL_CUT := [124.0, 134.0]
 const BEAM := 22.0             ## base px: the depth of the beam along a pixel portrait's lower edge
 const FIGURE_IN := 24.0           ## picture px each figure stands in from its portrait's middle, toward the road (mirrored)
 const ISSO_RIGHT := 16.0          ## picture px the Issohadore (left portrait) then moves further right (Daniele, 2026-10-05)
-const FIGURE_FILL := 1.12          ## a painted figure's height, as a share of its portrait's
 const FRAME_GROW := 140.0 / 118.0   ## the portraits grew with the pixel figures (bake_figures.py H, 118 -> 140)
 const FRAME_LIFT := Vector2(20.0, 55.0)   ## picture px the portraits' top and bottom edges are raised (as far as the HUD's words allow; the puppets keep their size)
-## The figures' bob, from Daniele's three-pose sheets (2026-09-30). Each figure has three pictures,
-## art/street/<figure>_bob_0/1/2.png: 0 the rest pose, 1 the drop on the beat, 2 halfway back up,
-## all on one canvas size with the feet at the bottom centre (tools/art/street/cut_figures.py makes
-## them from a sheet). The timing lives here, in seconds after each beat, and never depends on the
-## pictures: replacing the pictures keeps it. Timed on Daniele's reference clip (30 fps).
-const STAND := 0
-const DROP := 1
-const HALF := 2
-const DROP_TIME := 0.067             ## seconds after the beat the drop pose shows
-const HALF_TIME := 0.12              ## ... then the halfway pose until this long after the beat (long enough to show at 30 fps)
-const POSE_BOB := 0.5                ## a figure's own sink with its poses, as a share of BOB
-const BOB_LEAN := 2.0                ## degrees a figure leans toward the road at the bottom of the drop
+## The figures' bob on each beat, timed on Daniele's reference clip (30 fps).
 const BOB := 0.1                     ## how far a figure drops on the beat, share of its portrait's height
-const BOB_SQUASH := 0.03             ## how much it squashes at the bottom of the drop
 const BOB_HOLD := 0.03               ## seconds it stays down after the beat
 const BOB_BACK := 0.1                ## seconds after the beat it is back up
 
@@ -82,9 +65,6 @@ var unison := 0
 var hud_bottom := -INF
 const HUD_GAP := 6.0
 var bell_set := "village"
-## The pixel look (set before this enters the tree): the street as pixel art, and the figures as
-## puppets whose parts slide (PixelFigure) instead of Daniele's three-pose pictures.
-var pixel := false
 
 ## The picture on screen: scale, x offset, and the stretch below STRETCH_FROM.
 var pic_scale := 1.0
@@ -104,10 +84,8 @@ var _mat: ShaderMaterial
 var _glow: Control                   ## additive: lines pulsing, lanterns, hit flashes
 var _sparks: CPUParticles2D
 var _frames: Array[Node2D] = []
-var _figures: Array[Sprite2D] = []
 var _puppets: Array[PixelFigure] = []
 var _cuts: Array[ShaderMaterial] = []   ## per portrait: cuts its figure at the frame's lower edge
-var _poses: Array = []               ## per figure, its poses (STAND, DROP, HALF), all the same size, feet at the bottom centre
 var _glow_tex: Texture2D
 var _flashes: Array = []             ## [local pos, t0, strength]
 var _clock := 0.0
@@ -130,7 +108,7 @@ func _init() -> void:
 func _ready() -> void:
 	_pic = TextureRect.new()
 	_pic.name = "StreetPicture"
-	_pic.texture = load(PIXEL_STREET if pixel else STREET)
+	_pic.texture = load(PIXEL_STREET)
 	_pic.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
 	_pic.stretch_mode = TextureRect.STRETCH_SCALE
 	_pic.texture_filter = CanvasItem.TEXTURE_FILTER_LINEAR   # the pixel look's cells come from the viewport it is drawn into
@@ -158,7 +136,7 @@ func _ready() -> void:
 	_still.texture = _bake.get_texture()
 	_still.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
 	_still.stretch_mode = TextureRect.STRETCH_SCALE
-	_still.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST if pixel else CanvasItem.TEXTURE_FILTER_LINEAR
+	_still.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
 	_still.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	_fire_mat = _mat.duplicate() as ShaderMaterial
 	_fire_pic = TextureRect.new()
@@ -169,7 +147,7 @@ func _ready() -> void:
 	_fire_pic.texture_filter = CanvasItem.TEXTURE_FILTER_LINEAR
 	_fire_pic.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	_fire_pic.material = _fire_mat
-	if pixel and own_cells:
+	if own_cells:
 		# the pixel look draws the street at one texel per cell of the lens, then shows it scaled
 		# up: a ninth of the work, and crisp on the grid
 		_vp = SubViewport.new()
@@ -204,10 +182,9 @@ func _ready() -> void:
 	add.blend_mode = CanvasItemMaterial.BLEND_MODE_ADD
 	_glow.material = add
 	add_child(_glow)
-	if pixel:
-		# the pixel look's light stays on the street, under the portraits: added over them it washed
-		# the figures' few colours out (the Mamuthone's dark fleece turned tan)
-		move_child(_glow, _frames[0].get_index())
+	# the pixel look's light stays on the street, under the portraits: added over them it washed
+	# the figures' few colours out (the Mamuthone's dark fleece turned tan)
+	move_child(_glow, _frames[0].get_index())
 	_sparks = _make_sparks()
 	add_child(_sparks)
 	animations = not UIKit.animations_off()
@@ -519,22 +496,15 @@ func motion_on() -> bool:
 
 
 ## The figures bob on every beat, after the character in Daniele's recording: on the beat each drops
-## at once (BOB of its portrait's height, a slight squash with it), holds there for a moment, and
+## at once, holds there for a moment, and
 ## springs back up within a tenth of a second, then stands still until the next beat. Never a jump.
 func _bob_figures() -> void:
-	var down := 0.0
 	var spb := lanes.spb if lanes != null and lanes.spb > 0.0 else 0.5
-	if beat > -999.0 and not still:
-		down = _bob((beat - floorf(beat)) * spb)
 	var m := 0.35 if reduced_motion else 1.0
 	var age := _clock - _jolt_at
 	var shake := 0.0
-	match _jolt_kind:
-		"miss":
-			shake = sin(age * 28.0) * exp(-age * 7.0)
-		"stomp":
-			down = maxf(down, _bob(age) * 1.4)
-	_dance_pose()
+	if _jolt_kind == "miss":
+		shake = sin(age * 28.0) * exp(-age * 7.0)
 	if not _puppets.is_empty():
 		var t := 99.0
 		var bar := 0.0
@@ -552,42 +522,6 @@ func _bob_figures() -> void:
 			p.pose(t, bar, still, r, _bell_up or r != ring)
 			var at: Vector2 = p.get_meta("base_pos", p.position)
 			p.position = at + Vector2(shake * 0.02 * float(p.get_meta("frame_h", 0.0)), 0.0) * m
-		return
-	for i in _figures.size():
-		var s := _figures[i]
-		var posed := i < _poses.size()
-		var base: Vector2 = s.get_meta("base_scale", Vector2.ONE)
-		var at: Vector2 = s.get_meta("base_pos", s.position)
-		var h: float = s.get_meta("frame_h", 0.0)
-		# the poses carry part of the drop themselves: a smaller sink, no squash
-		s.position = at + Vector2(shake * 0.02 * h, down * BOB * (POSE_BOB if posed else 1.0) * h) * m
-		# a slight lean toward the road with the drop (the left portrait's road is to its right)
-		var rock := PixelFigure.ring_swing(_clock - _bell_at) * 0.25
-		s.rotation = deg_to_rad(BOB_LEAN * down + rock) * m * (1.0 if i == 0 else -1.0)
-		var q := 0.0 if posed else BOB_SQUASH * down * m
-		s.scale = base * Vector2(1.0 + q * 0.6, 1.0 - q)
-
-
-## The figures' pose for this moment of the beat: the drop just after the beat, halfway back up,
-## then standing until the next beat.
-func _dance_pose() -> void:
-	var pose := STAND
-	var spb := lanes.spb if lanes != null and lanes.spb > 0.0 else 0.5
-	if beat > -999.0 and not still:
-		pose = pose_at((beat - floorf(beat)) * spb, reduced_motion)
-	for i in mini(_poses.size(), _figures.size()):
-		var tex: Texture2D = _poses[i][pose]
-		if _figures[i].texture != tex:
-			_figures[i].texture = tex
-
-
-## Which pose (STAND, DROP, HALF) shows t seconds after a beat.
-static func pose_at(t: float, reduced := false) -> int:
-	if t >= 0.0 and t < DROP_TIME:
-		return DROP
-	if t >= 0.0 and t < HALF_TIME and not reduced:
-		return HALF
-	return STAND
 
 
 ## How far down a figure is (1 = the full drop) t seconds after the beat: down at once, held for a
@@ -612,9 +546,8 @@ func _make_frame(i: int) -> Node2D:
 	panel.name = "Panel"
 	panel.color = Color.WHITE
 	panel.vertex_colors = PackedColorArray([Color("#1a0f10"), Color("#1a0f10"), Color("#3a1a0e"), Color("#3a1a0e")])
-	if pixel:
-		# warmer firelight behind the pixel figures, so the Mamuthone's dark fleece stands out of it
-		panel.vertex_colors = PackedColorArray([Color("#2a1a1c"), Color("#2a1a1c"), Color("#6a3416"), Color("#6a3416")])
+	# warmer firelight behind the pixel figures, so the Mamuthone's dark fleece stands out of it
+	panel.vertex_colors = PackedColorArray([Color("#2a1a1c"), Color("#2a1a1c"), Color("#6a3416"), Color("#6a3416")])
 	root.add_child(panel)
 	# the figure's layer, over the frame: the figure is cut at the frame's lower edge by CUT_SHADER
 	# (see _place_frames), not by clip_children, which costs every frame a render pass of its own
@@ -623,28 +556,12 @@ func _make_frame(i: int) -> Node2D:
 	var cut := ShaderMaterial.new()
 	cut.shader = _cut_shader()
 	_cuts.append(cut)
-	if pixel:
-		var pup := PixelFigure.new("issohadore" if i == 0 else "mamuthone")
-		pup.name = "Figure"
-		pup.mirror = i == 1
-		pup.material = cut
-		stand.add_child(pup)
-		_puppets.append(pup)
-	var fig := Sprite2D.new()
-	fig.name = "Figure"
-	var poses: Array[Texture2D] = []
-	for k in [STAND, DROP, HALF]:
-		poses.append(load("res://art/street/%s_bob_%d.png" % ["issohadore" if i == 0 else "mamuthone", k]))
-	_poses.append(poses)
-	fig.texture = poses[STAND]
-	fig.material = cut
-	fig.centered = false
-	fig.texture_filter = CanvasItem.TEXTURE_FILTER_LINEAR
-	var ts := fig.texture.get_size()
-	fig.offset = Vector2(-ts.x * 0.5, -ts.y)           # the feet are the pivot
-	if not pixel:
-		stand.add_child(fig)
-		_figures.append(fig)
+	var pup := PixelFigure.new("issohadore" if i == 0 else "mamuthone")
+	pup.name = "Figure"
+	pup.mirror = i == 1
+	pup.material = cut
+	stand.add_child(pup)
+	_puppets.append(pup)
 	var border := Line2D.new()
 	border.name = "Frame"
 	border.closed = true
@@ -662,19 +579,18 @@ func _make_frame(i: int) -> Node2D:
 	halo.material = add
 	root.add_child(halo)
 	root.add_child(stand)
-	if pixel:
-		# a carved beam along the lower edge, over the figure, so the cut at its knees reads as the
-		# figure standing behind a ledge (Daniele, 2026-10-08)
-		var beam := Polygon2D.new()
-		beam.name = "Beam"
-		beam.vertex_colors = PackedColorArray([Color("#5a2e14"), Color("#5a2e14"), Color("#2a140a"), Color("#2a140a")])
-		root.add_child(beam)
-		for n in ["BeamTop", "BeamLow"]:
-			var l := Line2D.new()
-			l.name = n
-			l.width = 5.0 if n == "BeamTop" else 3.0
-			l.default_color = Color("#ffb347") if n == "BeamTop" else Color("#1a0c06")
-			root.add_child(l)
+	# a carved beam along the lower edge, over the figure, so the cut at its knees reads as the
+	# figure standing behind a ledge (Daniele, 2026-10-08)
+	var beam := Polygon2D.new()
+	beam.name = "Beam"
+	beam.vertex_colors = PackedColorArray([Color("#5a2e14"), Color("#5a2e14"), Color("#2a140a"), Color("#2a140a")])
+	root.add_child(beam)
+	for n in ["BeamTop", "BeamLow"]:
+		var l := Line2D.new()
+		l.name = n
+		l.width = 5.0 if n == "BeamTop" else 3.0
+		l.default_color = Color("#ffb347") if n == "BeamTop" else Color("#1a0c06")
+		root.add_child(l)
 	return root
 
 
@@ -691,7 +607,7 @@ func _frame_points(i: int, drop := 0.0) -> PackedVector2Array:
 	# FRAME_GROW from the outer top corner, so the bigger figures fit and stay clear of the HUD
 	var bs := pic_scale / ZOOM
 	var bo := (size.x - IMG.x * bs) * 0.5
-	var frame: Array = FRAME_PIXEL if pixel else FRAME
+	var frame: Array = FRAME_PIXEL
 	var anchor: Vector2 = frame[0] - Vector2(0.0, FRAME_LIFT.x)
 	for k in frame.size():
 		var p: Vector2 = frame[k] - Vector2(0.0, FRAME_LIFT.x if k < 2 else FRAME_LIFT.y)
@@ -703,14 +619,9 @@ func _frame_points(i: int, drop := 0.0) -> PackedVector2Array:
 
 ## The top of figure i's head when it stands in a portrait at pts (its pose at rest).
 func _head_top(i: int, pts: PackedVector2Array) -> float:
-	var top := (pts[0].y + pts[1].y) * 0.5
-	var bottom := (pts[2].y + pts[3].y) * 0.5
-	if pixel:
-		if i >= _puppets.size():
-			return top
-		return _puppet_feet(i, pts).y - _puppets[i].art_height() * PxArt.PX
-	var hf := (bottom - top) * FIGURE_FILL
-	return bottom + hf * 0.1 - hf
+	if i >= _puppets.size():
+		return (pts[0].y + pts[1].y) * 0.5
+	return _puppet_feet(i, pts).y - _puppets[i].art_height() * PxArt.PX
 
 
 func _place_frames() -> void:
@@ -723,8 +634,7 @@ func _place_frames() -> void:
 		var pts := _frame_points(i, drop)
 		var f := _frames[i]
 		(f.get_node("Panel") as Polygon2D).polygon = pts
-		if pixel:
-			_wall_panel(f.get_node("Panel") as Polygon2D, pts, i)
+		_wall_panel(f.get_node("Panel") as Polygon2D, pts, i)
 		# the figure shows above the frame's lower edge only (the line through it, out past its sides)
 		var to_canvas := get_global_transform()
 		var ca := to_canvas * pts[3]
@@ -734,30 +644,12 @@ func _place_frames() -> void:
 		_cuts[i].set_shader_parameter("cut_n", n if n.y > 0.0 else -n)    # pointing down, below the edge
 		(f.get_node("Frame") as Line2D).points = pts
 		(f.get_node("Halo") as Line2D).points = pts
-		if pixel:
-			_place_puppet(i, pts)
-			var down := Vector2(0.0, BEAM)
-			var a := pts[3] - (pts[2] - pts[3]).normalized() * 40.0
-			(f.get_node("Beam") as Polygon2D).polygon = PackedVector2Array([a, pts[2], pts[2] + down, a + down])
-			(f.get_node("BeamTop") as Line2D).points = PackedVector2Array([a, pts[2]])
-			(f.get_node("BeamLow") as Line2D).points = PackedVector2Array([a + down, pts[2] + down])
-			continue
-		var fig := _figures[i]
-		var ts := fig.texture.get_size()
-		# the figure's feet a little below the frame's lower edge, its head near the top
-		var top := (pts[0].y + pts[1].y) * 0.5
-		var bottom := (pts[2].y + pts[3].y) * 0.5
-		# the figure fills its portrait and breaks out of it a little (Daniele, 2026-10-05)
-		var h := (bottom - top) * FIGURE_FILL
-		var sc := h / ts.y
-		var cx := _figure_x(i, pts)
-		fig.position = Vector2(cx, bottom + h * 0.1)
-		fig.set_meta("base_pos", fig.position)
-		fig.set_meta("frame_h", bottom - top)
-		fig.set_meta("base_scale", Vector2(sc, sc))
-		fig.scale = Vector2(sc, sc)
-		if i == 0:
-			fig.flip_h = false
+		_place_puppet(i, pts)
+		var down := Vector2(0.0, BEAM)
+		var a := pts[3] - (pts[2] - pts[3]).normalized() * 40.0
+		(f.get_node("Beam") as Polygon2D).polygon = PackedVector2Array([a, pts[2], pts[2] + down, a + down])
+		(f.get_node("BeamTop") as Line2D).points = PackedVector2Array([a, pts[2]])
+		(f.get_node("BeamLow") as Line2D).points = PackedVector2Array([a + down, pts[2] + down])
 
 
 static var _cut: Shader
@@ -901,7 +793,7 @@ func _draw_glow(ci: CanvasItem) -> void:
 		var f := 0.75 + 0.25 * sin(_clock * (8.0 + i * 1.7) + i * 2.0) * sin(_clock * 13.0 + i)
 		var r := 46.0 * pic_scale / 0.86 * (1.0 + 0.1 * f)
 		# (the pixel look keeps the lanterns' light off the portraits: it washes their few colours out)
-		var la := 0.34 if not pixel else (0.04 if i < 2 else 0.3)
+		var la := 0.04 if i < 2 else 0.3
 		ci.draw_texture_rect(_glow_tex, Rect2(p - Vector2(r, r), Vector2(r, r) * 2.0), false, Color(1.0, 0.62, 0.25, la * f * (1.0 - 0.5 * dim)))
 	# the fire's own breath, and its flare on the beat
 	var fp := to_local_pic(FIRE + Vector2(0, 40))

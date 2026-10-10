@@ -15,7 +15,7 @@ import cv2
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 GAME = os.path.join(HERE, "../../../game")
-ART = os.path.join(GAME, "art/street")
+ART = os.path.join(HERE, "../sources/street")
 OUT = os.path.join(GAME, "art/pixel")
 K = 30
 

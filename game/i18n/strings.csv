@@ -157,9 +157,6 @@ anim_full,Full,Complete
 anim_calm,Calm,Calme
 anim_off,Off,Spente
 set_animations_note,"Off: the street, the fire and the figures stand still and only the notes move, for the smoothest play.","Spente: la strada, il fuoco e le figure restano fermi e si muovono solo le note, per il gioco più fluido."
-set_look,Play screen look,Aspetto della partita
-look_pixel,Pixel,Pixel
-look_painted,Painted,Dipinto
 set_sound,Sound,Suono
 set_music,Music,Musica
 set_sfx,Bells and effects,Campanacci ed effetti

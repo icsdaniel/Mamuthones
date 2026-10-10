@@ -28,9 +28,6 @@ const PANEL_H := 64.0
 const BADGE := Vector2(122.0, 112.0)
 
 var session: Session
-## The pixel look: the HUD's words and figures are the pixel type (PxType), set over PixelFilter's
-## lens so they stay crisp; the frames under it come out as pixel art through the lens.
-var pixel := false
 var ghost: Ghost
 var _score: Label
 var _unison: Label
@@ -64,9 +61,6 @@ static func font(bold := true) -> Font:
 
 ## In the pixel look: the bitmap face that stands in for a smooth font size, over the lens.
 func pstyle(l: Label, size: int, color: Color, bold := true, outline := 6) -> void:
-	if not pixel:
-		style(l, size, color, bold, outline)
-		return
 	var face := "caps"
 	if size >= 56:
 		face = "big"
@@ -196,10 +190,9 @@ func _layout() -> void:
 	_score.size = right.size - Vector2(36.0, 0.0)
 	_ghost.position = Vector2(right.position.x, right.end.y + 8.0)
 	_ghost.size = Vector2(right.size.x - 10.0, 30.0)
-	if pixel:
-		# the pixel type runs wider: the line wraps onto two, right-aligned under the score
-		_ghost.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-		_ghost.size.y = 54.0
+	# the pixel type runs wider: the line wraps onto two, right-aligned under the score
+	_ghost.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	_ghost.size.y = 54.0
 	_health.position = left.get_center() - _health.size * 0.5
 	_section.position = Vector2(left.position.x + 12.0, left.end.y + 8.0)
 	_section.size = Vector2(left.size.x, 30.0)
@@ -281,19 +274,11 @@ func _picture(ci: CanvasItem, key: String, r: Rect2, mod := Color.WHITE) -> void
 ## A carved frame: a dark panel with pointed ends, an orange edge glowing outward, a thin inner line,
 ## and a small diamond at each point.
 func _panel(ci: CanvasItem, r: Rect2, glow := 1.0) -> void:
-	if pixel:
-		# the plate's diamonds stand out past the frame's points, as the drawn ones did
-		var grow := r.size.y * 0.16
-		var rr := r.grow_individual(grow, grow * 0.35, grow, grow * 0.35)
-		_glow_round(ci, rr, glow)
-		_picture(ci, "hud_plate", rr)
-		return
-	var t := r.size.y * 0.5
-	var pts := PackedVector2Array([r.position + Vector2(t * 0.6, 0), Vector2(r.end.x - t * 0.6, r.position.y), Vector2(r.end.x, r.get_center().y),
-		r.end - Vector2(t * 0.6, 0), Vector2(r.position.x + t * 0.6, r.end.y), Vector2(r.position.x, r.get_center().y)])
-	_shape(ci, pts, glow)
-	for p in [pts[5], pts[2]]:
-		_diamond(ci, p, 9.0)
+	# the plate's diamonds stand out past the frame's points, as the drawn ones did
+	var grow := r.size.y * 0.16
+	var rr := r.grow_individual(grow, grow * 0.35, grow, grow * 0.35)
+	_glow_round(ci, rr, glow)
+	_picture(ci, "hud_plate", rr)
 
 
 ## A frame in relief: a thick slab standing out of the screen (its lower sides show below it), a
@@ -395,25 +380,9 @@ func _glow_round(ci: CanvasItem, r: Rect2, glow: float) -> void:
 
 ## A cut diamond stud: four facets lit from the top left, on a dark base that shows below it.
 func _diamond(ci: CanvasItem, at: Vector2, r: float, col := EDGE_HOT) -> void:
-	if pixel:
-		# Daniele's stud, tinted toward the badge's colour when it is not plain gold
-		var tint := Color.WHITE if col == EDGE_HOT else Color.WHITE.lerp(col, 0.5) * 1.2
-		_picture(ci, "hud_stud", Rect2(at - Vector2(r, r) * 1.25, Vector2(r, r) * 2.5), tint)
-		return
-	var p := _to_frames(at)
-	var t := p + Vector2(0, -r)
-	var rt := p + Vector2(r, 0)
-	var bt := p + Vector2(0, r)
-	var lf := p + Vector2(-r, 0)
-	var d := Vector2(0, 3.0)
-	ci.draw_colored_polygon(PackedVector2Array([t + Vector2(0, -2), rt + Vector2(2, 0), rt + d + Vector2(2, 0), bt + d + Vector2(0, 2), lf + d + Vector2(-2, 0), lf + Vector2(-2, 0)]), OUTLINE)
-	_quad(ci, [lf, bt, bt + d, lf + d], SIDE)
-	_quad(ci, [bt, rt, rt + d, bt + d], SIDE.darkened(0.4))
-	var c := p + Vector2(-r * 0.12, -r * 0.12)
-	ci.draw_colored_polygon(PackedVector2Array([t, c, lf]), col.lightened(0.35))
-	ci.draw_colored_polygon(PackedVector2Array([t, rt, c]), col)
-	ci.draw_colored_polygon(PackedVector2Array([lf, c, bt]), EDGE)
-	ci.draw_colored_polygon(PackedVector2Array([c, rt, bt]), EDGE_DARK)
+	# Daniele's stud, tinted toward the badge's colour when it is not plain gold
+	var tint := Color.WHITE if col == EDGE_HOT else Color.WHITE.lerp(col, 0.5) * 1.2
+	_picture(ci, "hud_stud", Rect2(at - Vector2(r, r) * 1.25, Vector2(r, r) * 2.5), tint)
 
 
 func _draw_frames() -> void:
@@ -425,20 +394,17 @@ func _draw_frames() -> void:
 	# the progress line between two diamonds
 	var a := _to_frames(Vector2(line.x + 14.0, line.z))
 	var e := _to_frames(Vector2(line.y - 14.0, line.z))
-	if pixel:
-		# Daniele's bar, its groove filling with a glowing rod as the song goes on
-		var bh := 21.0
-		var bar := Rect2(Vector2(line.x, line.z - bh * 0.5), Vector2(line.y - line.x, bh))
-		_picture(ci, "hud_bar", bar)
-		var px := PxArt.PX
-		var g0 := PxArt.snap2(Vector2(bar.position.x + bh * 0.9, line.z - px))
-		var gx1 := bar.end.x - bh * 0.9
-		var fw := roundf((lerpf(g0.x, gx1, clampf(_progress, 0.0, 1.0)) - g0.x) / px) * px
-		if fw >= px:
-			ci.draw_rect(Rect2(g0, Vector2(fw, px)), EDGE_HOT)
-			ci.draw_rect(Rect2(g0 + Vector2(0.0, px), Vector2(fw, px)), EDGE)
-	else:
-		_draw_line_frames(ci, a, e)
+	# Daniele's bar, its groove filling with a glowing rod as the song goes on
+	var bh := 21.0
+	var bar := Rect2(Vector2(line.x, line.z - bh * 0.5), Vector2(line.y - line.x, bh))
+	_picture(ci, "hud_bar", bar)
+	var px := PxArt.PX
+	var g0 := PxArt.snap2(Vector2(bar.position.x + bh * 0.9, line.z - px))
+	var gx1 := bar.end.x - bh * 0.9
+	var fw := roundf((lerpf(g0.x, gx1, clampf(_progress, 0.0, 1.0)) - g0.x) / px) * px
+	if fw >= px:
+		ci.draw_rect(Rect2(g0, Vector2(fw, px)), EDGE_HOT)
+		ci.draw_rect(Rect2(g0 + Vector2(0.0, px), Vector2(fw, px)), EDGE)
 	if session.health_on:
 		_panel(ci, b[0])
 	_panel(ci, b[2])
@@ -499,7 +465,7 @@ func _draw_badge(ci: CanvasItem, b: Array) -> void:
 	for p in [hx[0], hx[3]]:
 		_diamond(ci, p, 8.0 * sc, Color.WHITE.lerp(pal[1], 1.0 - fl))
 	# the little spurs at its foot (the pixel look's badge stands on its own: they read as stray marks)
-	for sx: float in ([] if pixel else [-1.0, 1.0]):
+	for sx: float in []:
 		var c := _to_frames(Vector2(ctr.x + sx * (r.size.x * 0.5 * sc + 10.0), ctr.y + r.size.y * 0.5 * sc - 8.0))
 		ci.draw_colored_polygon(PackedVector2Array([c + Vector2(-sx * 10.0, -8.0), c + Vector2(sx * 6.0, 8.0), c + Vector2(-sx * 14.0, 8.0)]), pal[0])
 
@@ -537,20 +503,8 @@ func badge_scale() -> float:
 func _draw_pause() -> void:
 	var down := _pause.button_pressed or _pause.is_hovered()
 	var c := _pause.size * 0.5 + (Vector2(0, DEPTH * 0.5) if down else Vector2.ZERO)
-	if pixel:
-		var sz := Vector2(48.0, 53.0)
-		_picture(_pause, "hud_pause", Rect2(c - sz * 0.5, sz), Color(0.8, 0.8, 0.8) if down else Color.WHITE)
-		return
-	var r := 21.0
-	var pts := PackedVector2Array()
-	for i in 6:
-		var a := TAU * float(i) / 6.0
-		pts.append(c + Vector2(cos(a), sin(a)) * r)
-	_shape(_pause, pts, 0.6)
-	for sx: float in [-1.0, 1.0]:
-		var bar := Rect2(c.x + sx * 6.0 - 3.0, c.y - 9.0, 6.0, 18.0)
-		_pause.draw_rect(Rect2(bar.position + Vector2(0, 2.0), bar.size), Color("#3a1404"))
-		_pause.draw_rect(bar, INK)
+	var sz := Vector2(48.0, 53.0)
+	_picture(_pause, "hud_pause", Rect2(c - sz * 0.5, sz), Color(0.8, 0.8, 0.8) if down else Color.WHITE)
 
 
 func set_pause_visible(v: bool) -> void:

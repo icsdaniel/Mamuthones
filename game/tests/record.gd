@@ -2,7 +2,7 @@ extends SceneTree
 ## Starts a song in Autoplay for recording with Godot's movie maker:
 ##   godot --path game --rendering-driver opengl3 --resolution 720x1440 --write-movie out.avi \
 ##       --fixed-fps 60 -s res://tests/record.gd -- <song_id> <difficulty> [remix] [human]
-##       [from=<beat>] [style=pixel|painted] [miss=<rate>] [knocks]
+##       [from=<beat>] [miss=<rate>] [knocks]
 ## miss=<rate>: the human player misses that share of notes; knocks: the step buttons knock (off by
 ## default). Set NO_LIFT=1 in the environment to keep the lift layer down (the song as it was).
 ## Plays the song through to the results screen, holds the results for a few seconds, then quits.
@@ -41,8 +41,6 @@ func _init() -> void:
 		if x.begins_with("from="):
 			start.from_beat = float(x.substr(5))
 			start.to_beat = float(x.substr(5)) + 64.0
-		elif x.begins_with("style="):
-			profile.set_setting("art_style", x.substr(6))
 		elif x.begins_with("miss="):
 			start.miss_rate = float(x.substr(5))
 		elif x == "knocks":

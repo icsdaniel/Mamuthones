@@ -54,19 +54,6 @@ func build() -> void:
 		anims.add_child(ab)
 	box.add_child(anims)
 	box.add_child(UIKit.label(tr("set_animations_note"), UIKit.CAPTION))
-	# the play screen's look: pixel art (the default) or Daniele's painted pictures
-	box.add_child(UIKit.label(tr("set_look"), UIKit.CAPTION))
-	var looks := HBoxContainer.new()
-	looks.name = "Looks"
-	looks.add_theme_constant_override("separation", 12)
-	for style in ["pixel", "painted"]:
-		var lb := UIKit.button(tr("look_" + style), _look.bind(style, looks))
-		lb.toggle_mode = true
-		lb.set_pressed_no_signal(str(Profile.get_setting("art_style")) == style)
-		lb.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-		lb.name = "Look_" + style
-		looks.add_child(lb)
-	box.add_child(looks)
 
 	box.add_child(UIKit.label(tr("set_sound"), UIKit.SUB))
 	_slider(box, "music_volume", tr("set_music"), 0.0, 1.0, 0.05,
@@ -169,9 +156,3 @@ func _animations(a: String, row: Control) -> void:
 	Profile.set_setting("reduced_motion", a != "full")
 	for c in row.get_children():
 		(c as Button).set_pressed_no_signal(c.name == "Anim_" + a)
-
-
-func _look(style: String, row: Control) -> void:
-	Profile.set_setting("art_style", style)
-	for c in row.get_children():
-		(c as Button).set_pressed_no_signal(c.name == "Look_" + style)
