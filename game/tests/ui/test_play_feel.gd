@@ -269,3 +269,18 @@ func test_notes_slide_smoothly() -> void:
 	lv.free()
 
 
+## Note colours tell the rhythm: a sixteenth is silver, and so is a half-beat note inside a run of
+## sixteenths (Daniele: violet there read as a slower note). A plain eighth stays violet.
+func test_half_beats_in_sixteenth_runs_are_silver() -> void:
+	var song := SongData.from_dict({"id": "t", "bpm": 120, "offset": 1.0, "length": 0.0, "charts": {"easy": [
+		{"b": 0, "k": "step", "lane": 1}, {"b": 0.25, "k": "step", "lane": 0}, {"b": 0.5, "k": "step", "lane": 1},
+		{"b": 0.75, "k": "step", "lane": 2}, {"b": 2, "k": "step", "lane": 1}, {"b": 2.5, "k": "step", "lane": 0},
+		{"b": 3, "k": "step", "lane": 1}]}})
+	var lv := LaneView.new()
+	lv.session = Session.new(song, "easy")
+	var n := lv.session.notes
+	check(lv._sixteenth(n[1]) and lv._sixteenth(n[3]), "sixteenths are silver")
+	check(lv._sixteenth(n[2]), "the half beat between them is silver too")
+	check(not lv._sixteenth(n[5]), "a lone eighth stays violet")
+	check(not lv._sixteenth(n[0]) and not lv._sixteenth(n[4]), "on-beat notes are neither")
+	lv.free()
