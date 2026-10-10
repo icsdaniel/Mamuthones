@@ -307,7 +307,8 @@ func _acc_sum() -> float:
 
 
 ## Letter grades, worst to best. A run's grade comes from its accuracy (GRADE_MIN, the least accuracy
-## for each letter), S+ included (Daniele, 2026-10-09: reachable without a full combo). A full combo
+## for each letter), capped by misses (capped_rank). S+ needs no missed note but may have stray taps
+## or Oks (Daniele, 2026-10-09: reachable without a full combo). A full combo
 ## (no miss, wrong step, stray tap, lost hold or bell rung into a stand-still) is its own mark beside
 ## the grade. The rank is the index in GRADES (F = 0 .. S+ = 7).
 const GRADES: Array[String] = ["F", "E", "D", "C", "B", "A", "S", "S+"]
@@ -320,7 +321,20 @@ const RANK_SPLUS := 7
 
 
 func grade_rank() -> int:
-	return rank_for(accuracy())
+	return capped_rank(rank_for(accuracy()), stats.miss + stats.wrong)
+
+
+## Misses cap the grade whatever the accuracy (Daniele, 2026-10-10: an S with 4 misses was too
+## permissive): S+ needs no missed note (miss or wrong step), S at most S_MAX_MISSES.
+const S_MAX_MISSES := 2
+
+
+static func capped_rank(rank: int, misses: int) -> int:
+	if misses > S_MAX_MISSES:
+		return mini(rank, RANK_S - 1)
+	if misses > 0:
+		return mini(rank, RANK_S)
+	return rank
 
 
 func grade() -> String:

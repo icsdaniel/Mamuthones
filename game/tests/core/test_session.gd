@@ -644,6 +644,22 @@ func test_accuracy_and_grades() -> void:
 	check(s.is_over(100.0), "over after the end")
 
 
+func test_misses_cap_the_grade() -> void:
+	var s_plus := Session.GRADES.find("S+")
+	check_eq(Session.capped_rank(s_plus, 0), s_plus, "no miss: S+ stands")
+	check_eq(Session.grade_name(Session.capped_rank(s_plus, 1)), "S", "one miss: at best S")
+	check_eq(Session.grade_name(Session.capped_rank(s_plus, 2)), "S", "two: still S")
+	check_eq(Session.grade_name(Session.capped_rank(s_plus, 4)), "A", "four misses: at best A")
+	check_eq(Session.grade_name(Session.capped_rank(Session.GRADES.find("B"), 9)), "B", "a lower grade is kept")
+	# Played: 98 % Perfect but one note missed.
+	var s := Session.new(make(steps(60)), "easy")
+	for i in 59:
+		s.tap(1, _bt(i), 0)
+	s.update(100)
+	check(s.accuracy() >= 0.98, "accuracy %.3f is S+ by itself" % s.accuracy())
+	check_eq(s.grade(), "S", "but the miss makes it an S")
+
+
 func test_slam_mode() -> void:
 	var s := Session.new(make([{"b": 0, "k": "bell"}, {"b": 2, "k": "step", "lane": 0}, {"b": 4, "k": "rest"}, {"b": 8, "k": "step", "lane": 0}, {"b": 8, "k": "step", "lane": 2}]), "easy", {"slam": true})
 	check(s.slam and not s.ladder_ok(), "slam runs are marked and kept off the ladder")
