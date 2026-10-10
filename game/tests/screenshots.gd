@@ -106,9 +106,9 @@ func _shots() -> Array:
 		{"file": "play_bell", "screen": "play", "args": {"song_id": fires_id, "difficulty": "hard", "autoplay": true}, "setup": "moment:bell", "wait": 0.1},
 		{"file": "play_still", "screen": "play", "args": {"song_id": fires_id, "difficulty": "hard", "autoplay": true}, "setup": "moment:still", "wait": 0.1},
 		{"file": "play_miss", "screen": "play", "args": {"song_id": fires_id, "difficulty": "hard", "autoplay": true}, "setup": "moment:miss", "wait": 0.05},
-		{"file": "play_countin", "screen": "play", "args": {"song_id": fires_id, "difficulty": "hard"}, "setup": "moment:countin", "wait": 0.05},
-		{"file": "play_ready", "screen": "play", "args": {"song_id": fires_id, "difficulty": "hard"}, "setup": "moment:ready", "wait": 0.05},
-		{"file": "play_resume", "screen": "play", "args": {"song_id": fires_id, "difficulty": "hard"}, "setup": "resume", "wait": 0.0},
+		{"file": "play_countin", "screen": "play", "args": {"song_id": fires_id, "difficulty": "hard", "bell_set": "light"}, "setup": "moment:countin", "wait": 0.05},
+		{"file": "play_ready", "screen": "play", "args": {"song_id": fires_id, "difficulty": "hard", "bell_set": "light"}, "setup": "moment:ready", "wait": 0.05},
+		{"file": "play_resume", "screen": "play", "args": {"song_id": fires_id, "difficulty": "hard", "bell_set": "light"}, "setup": "resume", "wait": 0.0},
 		{"file": "play_early", "screen": "play", "args": {"song_id": fires_id, "difficulty": "hard", "autoplay": true}, "setup": "moment:early", "wait": 0.08},
 		{"file": "play_late", "screen": "play", "args": {"song_id": fires_id, "difficulty": "hard", "autoplay": true}, "setup": "moment:late", "wait": 0.08},
 		{"file": "play_still_kept", "screen": "play", "args": {"song_id": fires_id, "difficulty": "hard", "autoplay": true}, "setup": "moment:stillkept", "wait": 0.1},
@@ -118,6 +118,12 @@ func _shots() -> Array:
 		{"file": "play_chord_hard", "screen": "play", "args": {"song_id": "carnival", "difficulty": "hard", "autoplay": true}, "setup": "moment:chord", "wait": 0.05},
 		{"file": "play_chord_expert", "screen": "play", "args": {"song_id": "shrove", "difficulty": "expert", "autoplay": true}, "setup": "moment:chord", "wait": 0.05},
 		{"file": "play_sixteenths", "screen": "play", "args": {"song_id": "shrove", "difficulty": "expert", "autoplay": true}, "setup": "moment:six", "wait": 0.05},
+		{"file": "play_break_coming", "screen": "play", "args": {"song_id": "rope", "difficulty": "hard", "autoplay": true}, "setup": "moment:break_coming", "wait": 0.05},
+		{"file": "play_break", "screen": "play", "args": {"song_id": "rope", "difficulty": "hard", "autoplay": true}, "setup": "moment:break", "wait": 0.05},
+		{"file": "play_break_moved", "screen": "play", "args": {"song_id": "rope", "difficulty": "hard", "autoplay": true}, "setup": "moment:moved", "wait": 0.1},
+		{"file": "play_hold_play_medium", "screen": "play", "args": {"song_id": "piazza", "difficulty": "medium", "autoplay": true}, "setup": "moment:holdplay", "wait": 0.05},
+		{"file": "play_hold_play_hard", "screen": "play", "args": {"song_id": "bonfires", "difficulty": "hard", "autoplay": true}, "setup": "moment:holdplay", "wait": 0.05},
+		{"file": "play_hold_bell", "screen": "play", "args": {"song_id": "shrove", "difficulty": "hard", "autoplay": true}, "setup": "moment:holdbell", "wait": 0.05},
 		{"file": "play_stomp", "screen": "play", "args": {"song_id": "rope", "difficulty": "hard", "autoplay": true}, "setup": "moment:stomp", "wait": 0.05},
 		{"file": "play_stomp_outer", "screen": "play", "args": {"song_id": "rope", "difficulty": "expert", "autoplay": true}, "setup": "moment:stomp", "wait": 0.05},
 		{"file": "play_stomped", "screen": "play", "args": {"song_id": "rope", "difficulty": "hard", "autoplay": true}, "setup": "moment:stomped", "wait": 0.02},
@@ -267,6 +273,28 @@ func _moment(screen: Node, what: String) -> void:
 				if k > most_six:
 					most_six = k
 					target = t0 - 2.7   # the 120 frames of the walk there also run about 2 s of real time
+		"break_coming", "break", "moved":
+			# the break: the stand-still with the busiest run into it (the music stops dead mid-climax)
+			var most := -1
+			for n in s.notes:
+				if n.kind != Note.Kind.REST:
+					continue
+				var k := s.notes.filter(func(m: Note) -> bool: return m.kind != Note.Kind.REST and m.t < n.t and m.t > n.t - 2.0).size()
+				if k > most:
+					most = k
+					target = n.t - (3.4 if what == "break_coming" else 1.7)   # the walk there overshoots ~2 s
+		"holdplay", "holdbell":
+			# a hold with notes (or a bell) played under it: just after the first one under it is hit
+			for h in s.notes:
+				if h.kind != Note.Kind.HOLD or h.t < from * 0.5:
+					continue
+				var under: Array[Note] = []
+				for m in s.notes:
+					if m != h and m.t > h.t + 0.01 and m.t <= h.end_t and (m.is_bell() if what == "holdbell" else m.kind == Note.Kind.STEP):
+						under.append(m)
+				if under.size() >= (1 if what == "holdbell" else 2):
+					target = under[0].t - (1.9 if what == "holdplay" else 2.4)   # the walk there overshoots ~2 s
+					break
 		"countin":
 			target = song_time_of(s, -2.35)
 		"ready":
@@ -365,6 +393,17 @@ func _moment(screen: Node, what: String) -> void:
 			lanes.set_process(false)
 	if what == "showcase":
 		_showcase(screen, s, c.song_time())
+	if what == "moved":
+		# The player tips the phone a little in the break: the stand-still is broken.
+		for k in 240:
+			var r: Note = s.rest_at(c.song_time())
+			if r != null and c.song_time() >= r.t + 0.3:
+				break
+			c.advance(1.0 / 60.0)
+			await process_frame
+		var broke: Note = s.moved(c.song_time())
+		if broke != null:
+			screen.call("_on_moved_still", broke)
 	if what == "locked":
 		# Mashing: three random taps lock the buttons; a press while locked rattles the middle lock.
 		var lanes: Control = screen.get("lanes")

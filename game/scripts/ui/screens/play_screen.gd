@@ -256,6 +256,7 @@ func build() -> void:
 	add_child(router)
 	router.stepped.connect(_on_stepped)
 	router.rang.connect(_on_rang)
+	router.moved_still.connect(_on_moved_still)
 	router.pause_requested.connect(pause)
 	if auto:
 		router.enabled = false
@@ -283,6 +284,7 @@ func build() -> void:
 	session.stray.connect(_on_stray)
 	session.stomp_landed.connect(_on_stomp)
 	session.still_kept.connect(_on_still_kept)
+	session.played_under.connect(_on_played_under)
 	session.failed.connect(_on_failed)
 
 	# The count-in and the stand-still moment: over the top of the lanes, far from the hit line where
@@ -687,6 +689,19 @@ func _on_rang(result: Dictionary) -> void:
 		_bell_chain = 0
 	if q == "free" or q == "silence":
 		UIKit.vibrate(12)
+
+
+## Hold and play: a note hit on time while a hold is held runs light up the held lane too, so the
+## held note answers every stroke the free thumb (or the tilt) plays under it.
+func _on_played_under(hold: Note, _note: Note) -> void:
+	lanes.lane_pulse(hold.lane, StreetSkin.K_HOLD[3], 0.9)
+
+
+## The phone tilted in a stand-still (gently, short of a ring): the load gives the Mamuthone away with
+## a soft clank, and the stand-still is broken (the session judged it "silence").
+func _on_moved_still(_note: Note) -> void:
+	Sound.bell(BellSets.STANDARD, true, "silence", 0.2)
+	UIKit.vibrate(12)
 
 
 ## A bell rung on time, the tilt's reward (stomp-sized, but the tilt's own): the strap strikes across

@@ -47,6 +47,8 @@ signal judged(note: Note, judgement: String, offset: float)
 signal unison_changed(level: int)
 signal hold_started(lane: int)
 signal hold_ended(lane: int, kept: bool)
+## A note was played on time (Perfect or Good) while `hold` was being held: hold and play.
+signal played_under(hold: Note, note: Note)
 ## A tap on `lane` counted as a wrong step against `note` (another lane's note); judged also fires
 ## for that note. The UI marks the pressed button with this.
 signal wrong_step(lane: int, note: Note, offset: float)
@@ -77,6 +79,9 @@ const STOMP_POINTS := {"perfect": 450, "good": 225, "early": 75, "late": 75}
 ## "together" spread over 20-60 ms; 80 ms keeps a deliberate double tap (about 150 ms) apart.
 const STOMP_GAP := 0.080
 const HOLD_BONUS := 150
+## Hold and play: each note played on time while a hold is held adds this to the hold's bonus
+## (scaled like it), paid when the hold is kept to its end.
+const TIE_BONUS := 50
 const END_PAD := 2.0        ## a whole song ends this many seconds after its last note (not at the end of the audio)
 const HOLD_GRACE := 0.120    ## a hold released up to 120 ms before its end still counts as kept
 const STILL_PENALTY := 100
@@ -175,6 +180,7 @@ func _init(p_song: SongData, p_difficulty: String, p_options: Dictionary = {}) -
 	for n in all:
 		n.index = notes.size()
 		notes.append(n)
+	_mark_quick()
 
 	stats = {
 		"perfect": 0, "good": 0, "early": 0, "late": 0, "miss": 0, "wrong": 0,
@@ -567,19 +573,7 @@ func ring(t: float, tilt: bool = true, strength: float = 0.5) -> Dictionary:
 	_next_free_up = not up
 	var rest := _rest_at(t)
 	if rest != null:
-		# Every ring costs, but one shake that rings twice within 150 ms counts once.
-		if t - _last_silence >= SILENCE_DEBOUNCE:
-			rest.judgement = "silence"
-			rest.hit_at = t
-			stats.silence += 1
-			combo = 0
-			unison_streak = 0
-			_raw -= STILL_PENALTY
-			_breakdown.penalties += STILL_PENALTY
-			_set_unison(unison_level - SILENCE_DROP, t)
-			_refresh_score(t)
-			judged.emit(rest, "silence", t - rest.t)
-		_last_silence = t
+		_break_still(rest, t)
 		return {"up": up, "quality": "silence", "judgement": "silence", "offset": 0.0, "side": "", "strength": st, "note": rest}
 	var near := _find_bell(t, 2.0 * w.z) != null
 	return {"up": up, "quality": "miss" if near else "free", "judgement": "", "offset": 0.0, "side": "", "strength": st, "note": null}
@@ -588,6 +582,52 @@ func ring(t: float, tilt: bool = true, strength: float = 0.5) -> Dictionary:
 ## True when a bell (or the tilt half of a full ring) can still be rung at t.
 func bell_due(t: float, tilt: bool = true) -> bool:
 	return _find_bell(t, (win_tilt if tilt and not slam else win_touch).z) != null
+# Half-beat steps next to a sixteenth (a lane note a quarter beat away) read as part of it.
+func _mark_quick() -> void:
+	var laned: Array[Note] = []
+	for n in notes:
+		if n.uses_lane():
+			laned.append(n)
+	for i in laned.size():
+		var n := laned[i]
+		if n.kind != Note.Kind.STEP or absf(fposmod(n.beat, 1.0) - 0.5) > 0.02:
+			continue
+		for j in [i - 1, i + 1]:
+			if j >= 0 and j < laned.size() and absf(absf(laned[j].beat - n.beat) - 0.25) < 0.02:
+				n.quick = true
+
+
+## The phone moved (tilted, however gently) at t. Inside a stand-still that breaks it, like a ring:
+## the Mamuthone's bells give him away. Returns the stand-still it broke, or null (no stand-still at
+## t, or this one already broken: a stand-still is broken once by moving, rings still cost).
+func moved(t: float) -> Note:
+	var rest := _rest_at(t)
+	if rest == null or rest.judgement == "silence":
+		return null
+	input_log.append([t, "moved"])
+	_break_still(rest, t)
+	return rest
+
+
+## The stand-still at t (one is running from its beat to its end), or null.
+func rest_at(t: float) -> Note:
+	return _rest_at(t)
+
+
+# Every ring costs, but one shake that rings twice within 150 ms (or moves and then rings) counts once.
+func _break_still(rest: Note, t: float) -> void:
+	if t - _last_silence >= SILENCE_DEBOUNCE:
+		rest.judgement = "silence"
+		rest.hit_at = t
+		stats.silence += 1
+		combo = 0
+		unison_streak = 0
+		_raw -= STILL_PENALTY
+		_breakdown.penalties += STILL_PENALTY
+		_set_unison(unison_level - SILENCE_DROP, t)
+		_refresh_score(t)
+		judged.emit(rest, "silence", t - rest.t)
+	_last_silence = t
 
 
 ## Call every frame with the current song time.
@@ -784,6 +824,11 @@ func _hit(n: Note, t: float, g: String, off: float, table: Dictionary) -> void:
 	else:
 		unison_streak = 0
 	judged.emit(n, g, off)
+	if (g == "perfect" or g == "good") and n.kind != Note.Kind.HOLD:
+		for h: Note in _holds.values():
+			if h.holding and h != n:
+				h.tied += 1
+				played_under.emit(h, n)
 	if n.heal:
 		_heal()
 
@@ -906,7 +951,7 @@ func _end_hold(n: Note, t: float, kept: bool) -> void:
 	n.finished = true
 	if kept:
 		stats.held += 1
-		var v := HOLD_BONUS * unison_mult()
+		var v := (HOLD_BONUS + TIE_BONUS * n.tied) * unison_mult()
 		_raw += v
 		_breakdown.holds += v
 		_refresh_score(t)

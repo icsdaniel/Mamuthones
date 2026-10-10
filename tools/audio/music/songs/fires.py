@@ -89,6 +89,8 @@ def build():
         s.bell_cue(b + bar * 4 + 2, rank=2 if bar % 2 else 3)
         s.ev("bells", b + bar * 4 + 1, 1, None, 0.35, count=10, spread=0.04)
         s.ev("bells", b + bar * 4 + 3, 1, None, 0.3, count=10, spread=0.04)
+    # the break: the whole row stops dead in the middle of the run, and comes back in on the bar
+    s.stop(b + 14, 2, tempt="shake")
 
     # ---- outro: back to the drone, one last halt, the last stroke, the bells walk away
     b = s.sec("outro", 4, 1)
