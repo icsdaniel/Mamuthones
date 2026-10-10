@@ -1078,3 +1078,21 @@ func test_rushed_taps_still_take_their_own_notes() -> void:
 			own += 1
 		s.release(t + 0.03, i)
 	check_eq(own, 10, "every rushed tap takes its own note")
+
+
+## A wrong step whose note is still hit after it breaks the combo but loses no note, so it does not
+## cap the grade (Daniele, 2026-10-10: two such taps capped a 98.9 % Piazza Hard run at A).
+func test_a_wrong_step_with_its_note_still_hit_loses_no_note() -> void:
+	var s := Session.new(make(steps(4)), "easy")
+	var w := s.tap(0, _bt(0) - 0.08, 0)
+	check_eq(w.judgement, "wrong", "a tap on the wrong button is a wrong step")
+	check_eq(s.combo, 0, "it breaks the combo")
+	s.release(_bt(0) - 0.05, 0)
+	for i in 4:
+		s.update(_bt(i))
+		s.tap(1, _bt(i), i + 1)
+		s.release(_bt(i) + 0.05, i + 1)
+	s.update(_bt(5))
+	check_eq(s.lost_notes(), 0, "no note was lost")
+	check_eq(s.max_combo, 4, "the longest combo counts the hits after it")
+	check_eq(s.grade(), "S+", "every note hit perfectly is not capped")

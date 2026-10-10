@@ -83,6 +83,11 @@ func build() -> void:
 	top.add_child(score_col)
 	score_col.add_child(score)
 	_count_up(score, session.score)
+	var mc := UIKit.label(tr("res_max_combo") % session.max_combo, UIKit.SUB, false, HORIZONTAL_ALIGNMENT_CENTER)
+	mc.name = "MaxCombo"
+	mc.add_theme_font_size_override("font_size", 26)
+	mc.add_theme_color_override("font_color", Palette.BONE_DIM)
+	score_col.add_child(mc)
 	if session.full_combo():
 		# The full combo is its own reward: it lands just after the grade, with a chime and a flare.
 		var fc := UIKit.label(tr("res_full_combo"), UIKit.SUB, false, HORIZONTAL_ALIGNMENT_CENTER)

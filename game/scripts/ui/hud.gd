@@ -5,7 +5,8 @@ extends Control
 ## carved frames with glowing orange edges - health as hearts on the left, the unison multiplier in
 ## a big hexagonal badge in the middle (its lower rim fills with the streak toward the next level),
 ## the score on the right. The ghost line (ahead or behind your best) and the song's section are
-## kept but not shown. A small pause button sits at the top right.
+## kept but not shown. A small pause button sits at the top right. Under the badge, the combo counts
+## the hits in a row from the first one (Daniele, 2026-10-10), hidden while it is 0.
 ## Node names (Score, Ghost, Health, Unison, Pause, Progress) are what the tests look for.
 
 signal pause_pressed
@@ -48,6 +49,10 @@ var _punch := 0.0
 var beat := -1000.0          ## the song's beat now, for the badge's bounce
 var _bounce := 0.0           ## 1 on the beat, falling away
 var _punched := 0
+var _combo: Label
+var _combo_word: Label
+var _combo_shown := 0
+var _combo_pop := 0.0
 
 
 func _init() -> void:
@@ -134,6 +139,21 @@ func setup(p_session: Session, p_ghost: Ghost) -> void:
 		_pause.add_theme_stylebox_override(st, StyleBoxEmpty.new())
 	_pause.draw.connect(_draw_pause)
 	add_child(_pause)
+	_combo = Label.new()
+	_combo.name = "Combo"
+	pstyle(_combo, 36, INK, true, 6)
+	_combo.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	_combo.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_combo.visible = false
+	add_child(_combo)
+	_combo_word = Label.new()
+	_combo_word.name = "ComboWord"
+	_combo_word.text = tr("hud_combo")
+	pstyle(_combo_word, 18, GOLD_INK, false, 4)
+	_combo_word.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	_combo_word.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_combo_word.visible = false
+	add_child(_combo_word)
 	_section = Label.new()
 	_section.name = "Section"
 	pstyle(_section, 24, GOLD_INK, false, 5)
@@ -198,6 +218,10 @@ func _layout() -> void:
 	_section.size = Vector2(left.size.x, 30.0)
 	_unison.position = badge.position
 	_unison.size = badge.size
+	_combo.position = Vector2(badge.get_center().x - 80.0, badge.end.y + 24.0)
+	_combo.size = Vector2(160.0, 40.0)
+	_combo_word.position = Vector2(badge.get_center().x - 80.0, badge.end.y + 60.0)
+	_combo_word.size = Vector2(160.0, 22.0)
 	_pause.position = Vector2(line.y + 34.0, line.z + 16.0) - _pause.size * 0.5
 	_frames.position = Vector2.ZERO
 	_frames.size = size
@@ -527,6 +551,16 @@ func tick(t: float, delta: float) -> void:
 	_punch = move_toward(_punch, 0.0, delta * 0.8)
 	_score.pivot_offset = _score.size * 0.5
 	_score.scale = Vector2.ONE * (1.0 + _punch)
+	if session.combo != _combo_shown:
+		if session.combo > _combo_shown and not UIKit.reduced_motion():
+			_combo_pop = 0.25
+		_combo_shown = session.combo
+		_combo.text = str(_combo_shown)
+	_combo.visible = _combo_shown > 0
+	_combo_word.visible = _combo.visible
+	_combo_pop = move_toward(_combo_pop, 0.0, delta * 1.5)
+	_combo.pivot_offset = _combo.size * 0.5
+	_combo.scale = Vector2.ONE * (1.0 + _combo_pop)
 	_streak = float(session.unison_streak) / float(Session.UNISON_STEP) if session.unison_level < 5 else 1.0
 	# the badge bounces on the beat: a quick swell, easing back before the next one
 	_bounce = 0.0 if beat < 0.0 else pow(1.0 - fposmod(beat, 1.0), 3.0) * (0.35 if UIKit.reduced_motion() else 1.0)
