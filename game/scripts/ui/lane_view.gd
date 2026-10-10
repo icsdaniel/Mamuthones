@@ -1475,9 +1475,9 @@ static func _nine(key: String, cells: Vector2i, cap_src: int) -> Texture2D:
 	if _nine_cache.has(k):
 		return _nine_cache[k]
 	var tex: Texture2D = null
-	var path := "res://art/ai/%s.png" % key.trim_suffix("!white")
+	var path := "res://art/ai/%s.webp" % key.trim_suffix("!white")
 	if ResourceLoader.exists(path):
-		var src := (load(path) as Texture2D).get_image()
+		var src := StreetSkin.ai_image(path)
 		src.decompress()
 		src.convert(Image.FORMAT_RGBA8)
 		var sw := src.get_width()

@@ -1,0 +1,14 @@
+[remap]
+
+importer="image"
+type="Image"
+uid="uid://cas30smrbynck"
+path="res://.godot/imported/btn_idle.webp-3ca744fe10209aef65d0491ee7f16e82.image"
+
+[deps]
+
+source_file="res://art/ai/btn_idle.webp"
+dest_files=["res://.godot/imported/btn_idle.webp-3ca744fe10209aef65d0491ee7f16e82.image"]
+
+[params]
+

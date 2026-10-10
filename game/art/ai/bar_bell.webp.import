@@ -1,0 +1,14 @@
+[remap]
+
+importer="image"
+type="Image"
+uid="uid://5y1dmgagxkwe"
+path="res://.godot/imported/bar_bell.webp-c238068b287f3a9a2e187027c0a839c8.image"
+
+[deps]
+
+source_file="res://art/ai/bar_bell.webp"
+dest_files=["res://.godot/imported/bar_bell.webp-c238068b287f3a9a2e187027c0a839c8.image"]
+
+[params]
+
