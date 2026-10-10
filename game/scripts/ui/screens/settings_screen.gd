@@ -38,7 +38,7 @@ func build() -> void:
 	speed.value_changed.connect(func(v: float) -> void: preview.note_speed = v)
 	_toggle(box, "bell_cue", tr("set_bell_cue"), tr("set_bell_cue_note"))
 	_toggle(box, "vibration", tr("set_vibration"))
-	_toggle(box, "step_sounds", tr("set_step_sounds"), tr("set_step_sounds_note"))
+	_toggle(box, "step_knocks", tr("set_step_knocks"), tr("set_step_knocks_note"))
 	_toggle(box, "slam", tr("set_slam"), tr("set_slam_note"))
 	_toggle(box, "reduced_motion", tr("set_reduced_motion"))
 	# the play screen's look: pixel art (the default) or Daniele's painted pictures

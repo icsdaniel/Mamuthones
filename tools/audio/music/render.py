@@ -6,8 +6,9 @@
     python3 tools/audio/music/render.py --no-remix fires
     options: --stems DIR (default /tmp/mamuthones_stems), --report FILE (JSON measurements)
 
-For each story song it writes game/audio/music/<id>.ogg, <id>_remix.ogg and
-game/data/songs/<id>.json (with charts), keeps every stem as FLAC under the stems folder, and
+For each story song it writes game/audio/music/<id>.ogg, <id>_remix.ogg, their lift layers
+(<id>_lift.ogg, <id>_remix_lift.ogg; see lift.py) and game/data/songs/<id>.json (with charts),
+keeps every stem as FLAC under the stems folder, and
 measures loudness, true peak, chart-to-onset timing, rests and bell cues.
 """
 from __future__ import annotations
@@ -24,6 +25,7 @@ import numpy as np  # noqa: E402
 
 import analyze  # noqa: E402
 import dsp  # noqa: E402
+import lift  # noqa: E402
 import mixer  # noqa: E402
 from charts import chart_song  # noqa: E402
 
@@ -146,6 +148,7 @@ def render_one(sid, opts, report):
     stem_dir = os.path.join(opts["stems"], sid)
     mixer.save_stems(stems, stem_dir)
     y, meas = finish(song, stems, n, sid, opts["quality"])
+    lift.lift_layer(song, stems, n, lift.LIFT, os.path.join(MUSIC, sid + "_lift.ogg"))
     dsp.spectrogram_png(os.path.join(opts["stems"], sid + ".png"), y)
     entry = {"audio": meas, "features": analyze.features(y)}
     heard = analyze.mix_onsets(y)
@@ -170,6 +173,7 @@ def render_one(sid, opts, report):
         rstems, rn = mixer.render_stems(rsong)
         mixer.save_stems(rstems, os.path.join(opts["stems"], sid + "_remix"))
         ry, rmeas = finish(rsong, rstems, rn, sid + "_remix", opts["quality"])
+        lift.lift_layer(rsong, rstems, rn, lift.LIFT_REMIX, os.path.join(MUSIC, sid + "_remix_lift.ogg"))
         dsp.spectrogram_png(os.path.join(opts["stems"], sid + "_remix.png"), ry)
         rsrc = remix.remix_sources(rsong, sources)
         entry["remix"] = {"audio": rmeas, "features": analyze.features(ry),

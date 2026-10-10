@@ -87,6 +87,8 @@ var _audio_count := false        ## the song started at its own count-in (sticks
 var _bar_count := false          ## the song started inside its intro: 4-3-2-1 over the bar before the first note's
 var _tap_hit := false            ## the tap being handled judged a note (set by _on_judged)
 var _tap_quality := ""           ## how well it hit: perfect, good, ok (Sound.step's quality)
+var lift := MusicLift.new()      ## hits on time bring up the song's tune (Conductor.set_lift)
+var _no_lift := OS.has_environment("NO_LIFT")   # before/after recordings: the song alone
 var _clock := 0.0
 var _field_box: Control
 var _still := false
@@ -241,7 +243,7 @@ func build() -> void:
 	conductor.finished.connect(_on_music_finished)
 
 	if auto:
-		autoplay = Autoplay.new(session, bool(args.get("human", false)))
+		autoplay = Autoplay.new(session, bool(args.get("human", false)), 12345, float(args.get("miss_rate", -1.0)))
 		autoplay.stepped.connect(_on_stepped)
 		autoplay.rang.connect(_on_rang)
 	router = InputRouter.new()
@@ -439,6 +441,8 @@ func _process(delta: float) -> void:
 		session.update(t)
 		_count_frame(t, delta)
 	_song_t = t
+	if not _no_lift:
+		conductor.set_lift(lift.tick(delta, _spb))
 	var tv := _visual_time(t, delta) + _lead
 	lanes.song_time = tv
 	if run_log != null:
@@ -588,6 +592,7 @@ func _on_stepped(lane: int) -> void:
 	# miss; every other touch knocks its step.
 	if j == "wrong" or j == "stray":
 		Sound.miss()
+		lift.miss()
 	elif not _stomp_sounded:
 		play_step(lane, _tap_quality if _tap_hit else "")
 	lanes.press(lane)
@@ -597,9 +602,10 @@ func _on_stepped(lane: int) -> void:
 
 
 ## The step's knock at the hit's quality (Sound: "good" a little softer, "ok" dull and short), in the
-## same frame as the judgement; a stray tap (quality "") knocks plain.
+## same frame as the judgement; a stray tap (quality "") knocks plain. Off by default (Profile's
+## step_knocks): a step on time is heard as the song's tune coming up (lift), not as a knock.
 static func play_step(lane: int, quality: String) -> void:
-	if not bool(Profile.get_setting("step_sounds")):
+	if not bool(Profile.get_setting("step_knocks")):
 		return
 	if quality != "":
 		Sound.step(lane, quality)
@@ -654,11 +660,18 @@ func _bell_strike(up: bool, quality: String) -> void:
 
 func _on_judged(note: Note, judgement: String, offset: float) -> void:
 	if judgement == "wrong":
-		# Shown on the button actually pressed (_on_wrong_step); the row stumbles.
+		# Shown on the button actually pressed (_on_wrong_step); the row stumbles, the tune drops.
 		scene.jolt("miss")
+		lift.miss()
 		return
 	var good := judgement in ["perfect", "good", "held"]
 	var soft := judgement in ["early", "late"]
+	if good:
+		lift.hit(judgement)
+	elif soft:
+		lift.ok()
+	elif judgement in ["miss", "silence", "let_go"]:
+		lift.miss()
 	var quality := judgement
 	if not quality in ["perfect", "good", "early", "late", "miss", "held"]:
 		quality = "miss"

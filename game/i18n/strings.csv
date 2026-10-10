@@ -132,8 +132,8 @@ set_timing,Timing,Tempo
 set_calibrate,Redo the tilt calibration,Rifai la taratura del colpo
 set_latency,Sound delay test,Test del ritardo audio
 set_offset,Delay adjustment,Correzione del ritardo
-set_step_sounds,Step sounds,Suoni dei passi
-set_step_sounds_note,"The knock each button makes. On Android it comes a little after your thumb; turn it off if fast passages feel sluggish.","Il colpo di ogni pulsante. Su Android arriva un po' dopo il pollice; spegnilo se i passaggi veloci sembrano lenti."
+set_step_knocks,Button knocks,Colpi dei pulsanti
+set_step_knocks_note,"A knock on every step button. Off, your hits on time bring up the song's tune instead. On Android the knock comes a little after your thumb.","Un colpo a ogni pulsante. Spento, i colpi a tempo fanno risaltare la melodia del brano. Su Android il colpo arriva un po' dopo il pollice."
 set_visual_test,Screen delay test,Test del ritardo dello schermo
 vis_title,Screen delay,Ritardo dello schermo
 vis_intro,"Notes slide onto the ring in silence. Tap the pad the moment each one touches the ring. This measures your eyes and the screen, not the sound.","Le note scendono sull'anello in silenzio. Tocca il riquadro nell'istante in cui ognuna tocca l'anello. Così misuriamo occhi e schermo, non il suono."

@@ -15,6 +15,12 @@ extends Node
 ## Additions beyond the architecture doc: start_time and seek(t), is_playing(), is_paused(),
 ## current_beat(), audio_offset (defaults to Profile's setting), player, and use_audio (false keeps
 ## the music off while keeping the clock, for silent practice).
+##
+## The lift layer: when a song has <audio>_lift.ogg (the parts the taps follow, alone; see
+## tools/audio/music/lift.py) it plays in sync on top of the song, in one AudioStreamSynchronized, so
+## the two never drift apart. set_lift(linear) sets its level (0 silent, 1 doubles those parts); the
+## song itself steps back a little as the layer comes up (LIFT_BED_DB), so the tune steps out of the
+## mix instead of the whole song getting louder. has_lift() says whether this song has one.
 
 signal finished
 
@@ -24,6 +30,9 @@ const PULL := 0.15            ## share of smaller drift corrected per audio upda
 ## belongs to (measured by recording a click track and finding the clicks in the written WAV), so
 ## recordings start the music that much later to stay in sync.
 const MOVIE_AUDIO_SHIFT := 525.0 / 44100.0
+## How far the song steps back under the lift layer at its full level.
+const LIFT_BED_DB := -1.5
+const SILENT_DB := -60.0
 
 var player: AudioStreamPlayer
 var audio_offset := NAN       ## seconds; NAN = read Profile's audio_offset at play()
@@ -42,6 +51,8 @@ var _last_raw := NAN
 var _length := 0.0
 var _finished_sent := false
 var _offset_used := 0.0
+var _sync: AudioStreamSynchronized   # the song and its lift layer, when it has one
+var _lift := 0.0
 
 
 func _init() -> void:
@@ -67,8 +78,17 @@ func play(p_song: SongData, p_remix := false, start_time := 0.0) -> void:
 	_offset_used = 0.0 if _recording() else (audio_offset if not is_nan(audio_offset) else _profile_offset())
 	var path := song.audio_for(remix)
 	player.stream = null
+	_sync = null
 	if use_audio and path != "" and ResourceLoader.exists(path):
 		player.stream = load(path)
+		var lift_path := path.get_basename() + "_lift.ogg"
+		if ResourceLoader.exists(lift_path):
+			_sync = AudioStreamSynchronized.new()
+			_sync.stream_count = 2
+			_sync.set_sync_stream(0, player.stream)
+			_sync.set_sync_stream(1, load(lift_path))
+			player.stream = _sync
+			set_lift(0.0)
 	if player.stream != null:
 		var l := player.stream.get_length()
 		if l > 0.0:
@@ -130,6 +150,23 @@ func resume() -> void:
 func stop() -> void:
 	_playing = false
 	player.stop()
+
+
+func has_lift() -> bool:
+	return _sync != null
+
+
+## The lift layer's level, linear 0..1 (see the class notes). Godot applies it at the next mix.
+func set_lift(linear: float) -> void:
+	_lift = clampf(linear, 0.0, 1.0)
+	if _sync == null:
+		return
+	_sync.set_sync_stream_volume(1, linear_to_db(_lift) if _lift > 0.001 else SILENT_DB)
+	_sync.set_sync_stream_volume(0, LIFT_BED_DB * _lift)
+
+
+func get_lift() -> float:
+	return _lift
 
 
 func is_playing() -> bool:
