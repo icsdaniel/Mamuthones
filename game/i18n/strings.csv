@@ -299,6 +299,8 @@ res_best,Best: %s (%s to go),Record: %s (ne mancano %s)
 res_slam_note,"Played in slam mode: kept on this phone, not on the global ladder.","Giocata in modalità colpo: resta su questo telefono, fuori dalla classifica mondiale."
 tip_still,"Keep the phone still through the grey stand-still bars: any tilt there, even a small one, shakes the bells and costs 100 points and a level of unison.","Tieni fermo il telefono durante le barre grigie delle soste: ogni inclinazione, anche piccola, scuote i campanacci e costa 100 punti e un livello di unisono."
 tip_holds,"Keep holds pressed until their end crosses the line: each hold kept is worth 150 × unison, plus 50 for every note you play on time while holding it.","Tieni premute le note lunghe finché la fine non passa la linea: ognuna vale 150 × unisono, più 50 per ogni nota suonata a tempo mentre la tieni."
+res_max_combo,Longest combo: %d,Combo più lunga: %d
+hud_combo,Combo,Combo
 res_full_combo,Full combo,Combo completa
 tip_bells,"Many bells were missed. Flick sharply and snap back just as the bell touches the line. If the tilt feels off, redo the calibration in Settings.","Molti campanacci sono andati persi. Dai un colpo secco e torna subito indietro proprio quando il campanaccio tocca la linea. Se il colpo non risponde bene, rifai la taratura nelle Impostazioni."
 tip_bells_slam,"Many bells were missed. Press Left and Right at the same instant, just as the bell touches the line.","Molti campanacci sono andati persi. Premi Sinistra e Destra nello stesso istante, proprio quando il campanaccio tocca la linea."

@@ -327,11 +327,20 @@ const RANK_SPLUS := 7
 
 
 func grade_rank() -> int:
-	return capped_rank(rank_for(accuracy()), stats.miss + stats.wrong)
+	return capped_rank(rank_for(accuracy()), lost_notes())
+
+
+## Notes lost: missed, or lost to a wrong step. A wrong step whose note was still hit after it
+## breaks the combo but loses no note (Daniele, 2026-10-10: two such taps capped a 98.9 % run at A).
+func lost_notes() -> int:
+	var n: int = stats.miss
+	for note in notes:
+		n += 1 if note.judgement == "wrong" else 0
+	return n
 
 
 ## Misses cap the grade whatever the accuracy (Daniele, 2026-10-10: an S with 4 misses was too
-## permissive): S+ needs no missed note (miss or wrong step), S at most S_MAX_MISSES.
+## permissive): S+ needs no lost note (see lost_notes), S at most S_MAX_MISSES.
 const S_MAX_MISSES := 2
 
 
