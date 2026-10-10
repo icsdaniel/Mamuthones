@@ -2,6 +2,9 @@ extends Screen
 ## Tilt calibration: three sharp tilts toward you and three away, with live feedback. The phone drawing
 ## follows the real tilt, the meter shows how hard the last move was, each counted tilt rings a bell and
 ## fills a mark. No sensor or too-soft tilts are explained, with slam mode offered instead.
+## A graph under the phone shows the sensor live. Once calibrated it switches to a check: the bell
+## detector built from the new calibration runs as in a song, its threshold drawn as gold lines and each
+## ring marked and heard, so the player sees that holding the phone stays quiet and a tilt rings.
 ## args: first_run (bool) continues to the delay test; otherwise back to settings.
 
 var reader: MotionReader
@@ -20,6 +23,8 @@ var _hint: Label
 var _actions: VBoxContainer
 var _done := false
 var _asking := false             ## web: the "tap to enable motion" prompt is showing
+var graph: TiltGraph
+var check: BellDetector          ## after calibrating: the detector a song would use
 
 
 func build() -> void:
@@ -41,7 +46,7 @@ func build() -> void:
 	_phone = SetupArtView.new()
 	_phone.name = "Phone"
 	_phone.kind = "phone"
-	_phone.custom_minimum_size = Vector2(0, 460)
+	_phone.custom_minimum_size = Vector2(0, 340)
 	_phone.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	box.add_child(_phone)
 	# Three bells for the tilts toward you, three for away: each counted tilt rings one in.
@@ -60,6 +65,10 @@ func build() -> void:
 		else:
 			_marks_down = m
 	box.add_child(marks)
+	graph = TiltGraph.new()
+	graph.name = "TiltGraph"
+	graph.threshold = Calibrator.ROT_TRIGGER
+	box.add_child(graph)
 	_sensor = UIKit.label("", UIKit.CAPTION, true, HORIZONTAL_ALIGNMENT_CENTER)
 	_sensor.name = "Sensor"
 	box.add_child(_sensor)
@@ -83,6 +92,11 @@ func _show_skip() -> void:
 
 func _process(delta: float) -> void:
 	if _done:
+		if check != null:
+			_t += delta
+			reader.read(delta)
+			_feed_check()
+			_feed_phone(reader.rotation_dps.x, delta)
 		return
 	_t += delta
 	reader.read(delta)
@@ -105,7 +119,11 @@ func _process(delta: float) -> void:
 	# Every reading of this frame, each at its own time (the web sends 0-2 per frame), so a short
 	# flick between frames is not lost.
 	for smp in reader.samples:
-		calibrator.feed(_t - float(smp.get("age", 0.0)), smp.get("linear", Vector3.ZERO), smp.get("rotation_dps", Vector3.ZERO), reader.has_gyro())
+		var at := _t - float(smp.get("age", 0.0))
+		calibrator.feed(at, smp.get("linear", Vector3.ZERO), smp.get("rotation_dps", Vector3.ZERO), reader.has_gyro())
+		# Before the axis is known, the graph shows pitch, the turn the phone drawing follows.
+		var rot: Vector3 = smp.get("rotation_dps", Vector3.ZERO)
+		graph.push(at, rot.x)
 	_feed_phone(reader.rotation_dps.x, delta)
 
 
@@ -154,9 +172,24 @@ func _on_move(_index: int, up: bool, _strength: float) -> void:
 	_flash = 1.0
 	if absf(_angle) < 0.2:
 		_angle = 0.55 if up else -0.55
+	graph.mark(graph.now, up)
 	Sound.bell("light", up, "perfect")
 	UIKit.vibrate(25)
 	_update_instruction()
+
+
+## The check after calibrating: every reading through the song's detector, rings marked and heard.
+func _feed_check() -> void:
+	for smp in reader.samples:
+		var at := _t - float(smp.get("age", 0.0))
+		var acc: Vector3 = smp.get("linear", Vector3.ZERO)
+		var rot: Vector3 = smp.get("rotation_dps", Vector3.ZERO)
+		var vec := rot if check.mode == "gyro" else acc
+		graph.push(at, vec[check.axis] * check.up_sign)
+		if check.feed(at, acc, rot):
+			graph.mark(check.last_t, check.last_up)
+			Sound.bell("light", check.last_up, "perfect")
+			UIKit.vibrate(25)
 
 
 func _update_instruction() -> void:
@@ -176,6 +209,12 @@ func _on_finished(result: Dictionary) -> void:
 	Profile.set_setting("slam", false)
 	_instruction.text = tr("cal_done")
 	_hint.text = tr("cal_done_body")
+	if not result.is_empty():
+		check = BellDetector.from_calibration(result, reader.has_gyro())
+		check.set_bpm(100.0)
+		check.adapt = false
+		graph.threshold = check.threshold
+		_hint.text = tr("cal_check_body") + "\n" + tr("cal_done_body")
 	Sound.ui("unlock")
 	for c in _actions.get_children():
 		_actions.remove_child(c)
