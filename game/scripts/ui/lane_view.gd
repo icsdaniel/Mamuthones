@@ -1123,9 +1123,37 @@ func _off_beat(n: Note) -> bool:
 	return fr > 0.12 and fr < 0.88
 
 
-## A sixteenth: a quarter of a beat off (only Expert has them; triplet eighths are not).
+## A sixteenth: a quarter of a beat off (only Expert has them; triplet eighths are not). A half-beat
+## note inside a run of sixteenths is played at the same speed, so it is silver too: violet between
+## two silver notes read as a slower note (Daniele, 2026-10-10).
 func _sixteenth(n: Note) -> bool:
-	return absf(fposmod(n.beat, 0.5) - 0.25) < 0.02
+	if absf(fposmod(n.beat, 0.5) - 0.25) < 0.02:
+		return true
+	if absf(fposmod(n.beat, 1.0) - 0.5) >= 0.02 or session == null:
+		return false
+	if _six_cache_for != session:
+		_six_cache_for = session
+		_six_cache.clear()
+	if not _six_cache.has(n.index):
+		_six_cache[n.index] = _in_sixteenth_run(n)
+	return _six_cache[n.index]
+
+
+var _six_cache := {}                 ## note index -> half-beat note inside a sixteenth run
+var _six_cache_for: Session
+
+
+func _in_sixteenth_run(n: Note) -> bool:
+	var ns := session.notes
+	for dir: int in [-1, 1]:
+		var i: int = n.index + dir
+		while i >= 0 and i < ns.size() and absf(ns[i].beat - n.beat) <= 0.27:
+			var m: Note = ns[i]
+			var gap := absf(m.beat - n.beat)
+			if m.uses_lane() and gap > 0.02 and absf(gap - 0.25) < 0.02:
+				return true
+			i += dir
+	return false
 
 
 ## Notes emerge from the fire's haze at the far end of the road.
