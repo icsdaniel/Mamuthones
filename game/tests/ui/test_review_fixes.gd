@@ -1,6 +1,6 @@
 extends TestCase
 ## The final review's fixes: early/late only off Perfect, the ghost in points after the first note,
-## the results breakdown and timing above the fold, correct tips, the Remix chip beside the
+## the results fitting one screen (breakdown and timing on pages above the fold), correct tips, the Remix chip beside the
 ## difficulties, and the delay slider's range.
 
 
@@ -72,7 +72,7 @@ func test_ghost_line_in_points_after_the_first_note() -> void:
 	UIHarness.restore_profile()
 
 
-func test_results_breakdown_and_timing_above_the_fold() -> void:
+func test_results_fit_one_screen_with_pages() -> void:
 	UIHarness.fresh_profile()
 	var s := _auto("fires", "hard")
 	var args := {"session": s, "record": {"prev_best": int(s.score * 0.9), "new_best": true, "grade": s.grade_rank(), "carving_gained": 2,
@@ -83,16 +83,27 @@ func test_results_breakdown_and_timing_above_the_fold() -> void:
 			var app := UIHarness.make_app(tree, "results", args, sz)
 			await UIHarness.settle(tree)
 			var res := app.current()
+			var h := res.get_viewport_rect().size.y
 			var foot := res.find_child("Footer", true, false) as Control
 			var fold := foot.get_global_rect().position.y
-			for part in ["UnisonHeadline", "Breakdown", "Tendency"]:
-				var ctl := res.find_child(part, true, false) as Control
-				if check(ctl != null, "%s %s: %s is shown" % [loc, sz, part]):
-					check(ctl.get_global_rect().end.y <= fold + 1.0,
-						"%s %s: %s is above the fold (ends %.0f, fold %.0f)" % [loc, sz, part, ctl.get_global_rect().end.y, fold])
+			check(foot.get_global_rect().end.y <= h + 1.0, "%s %s: the footer is on screen (ends %.0f of %.0f)" % [loc, sz, foot.get_global_rect().end.y, h])
 			var score := res.find_child("Score", true, false) as Control
-			var br := res.find_child("Breakdown", true, false) as Control
-			check(score.get_global_rect().end.y <= br.get_global_rect().position.y, "%s %s: the breakdown comes right under the score" % [loc, sz])
+			var pager := res.find_child("Pager", true, false) as Pager
+			check(score.get_global_rect().end.y <= pager.get_global_rect().position.y, "%s %s: the hero comes before the pages" % [loc, sz])
+			check(pager.get_global_rect().end.y <= fold + 1.0, "%s %s: the pages end above the footer" % [loc, sz])
+			check(res.find_children("*", "ScrollBar", true, false).all(func(b: ScrollBar) -> bool: return not b.is_visible_in_tree()),
+				"%s %s: no scroll bar shows" % [loc, sz])
+			# every page, once turned to, shows its parts inside the pager
+			for page in [["Breakdown", "UnisonHeadline"], ["Tendency", "Meter"]]:
+				var i := 1 if page[0] == "Breakdown" else 2
+				pager.go(i, true)
+				await UIHarness.frames(tree, 2)
+				for part in page:
+					var ctl := res.find_child(part, true, false) as Control
+					if check(ctl != null, "%s %s: %s is shown" % [loc, sz, part]):
+						var r := ctl.get_global_rect()
+						check(r.position.x >= pager.get_global_rect().position.x - 1.0 and r.end.y <= fold + 1.0,
+							"%s %s: %s sits on its page above the fold (%s, fold %.0f)" % [loc, sz, part, r, fold])
 			UIHarness.free_app(app)
 	Profile.set_setting("language", "en")
 	I18n.set_locale("en")
@@ -178,7 +189,10 @@ func test_results_offer_to_even_out_a_steady_lean() -> void:
 		var fix := UIHarness.find_button(res, "FixTiming")
 		if check(fix != null, "%s: a fix button under the timing" % sz):
 			var fold := (res.find_child("Footer", true, false) as Control).get_global_rect().position.y
+			(res.find_child("Pager", true, false) as Pager).go(2, true)
+			await UIHarness.frames(tree, 2)
 			var tend := res.find_child("Tendency", true, false) as Control
+			check(fix.get_global_rect().end.y <= fold + 1.0, "%s: the fix button is above the fold" % sz)
 			check(tend.get_global_rect().end.y <= fold + 1.0, "%s: the timing card still ends above the fold (%d > %d)" % [sz, tend.get_global_rect().end.y, fold])
 			check(fix.text.contains("45"), "it says by how much (%s)" % fix.text)
 			var fl := res.find_child("Frames", true, false) as Label

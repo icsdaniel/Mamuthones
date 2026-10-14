@@ -136,21 +136,27 @@ func test_theme() -> void:
 	check(t != null, "theme builds")
 	check(t.default_font != null, "theme has a default font")
 	check(t.default_font_size >= 26, "default text is at least 26 px")
-	for type in ["Button", "AccentButton", "OptionButton"]:
+	for type in ["Button", "AccentButton", "OptionButton", "CompactButton", "IconButton"]:
 		var sb := t.get_stylebox("normal", type)
-		check(sb is PixelBox and (sb as PixelBox).texture != null, "%s is a pixel-art box" % type)
+		check(sb is PxStyle, "%s is a pixel-cornered kit box" % type)
 		check(t.get_stylebox("pressed", type) != null and t.get_stylebox("disabled", type) != null, "%s has pressed/disabled" % type)
-	for type in ["Label", "TitleLabel", "HeaderLabel", "SubheaderLabel", "CaptionLabel", "HudLabel", "PaperLabel", "PaperHeaderLabel", "Button", "CheckButton", "LineEdit"]:
+	# raised buttons sink onto their lip when pressed
+	var up := t.get_stylebox("normal", "AccentButton") as PxStyle
+	var down := t.get_stylebox("pressed", "AccentButton") as PxStyle
+	check(up.lip > 0 and down.sink == up.lip, "the primary sinks onto its lip")
+	for type in ["Label", "TitleLabel", "HeaderLabel", "SubheaderLabel", "OverlineLabel", "ValueLabel", "CaptionLabel", "HudLabel", "PaperLabel", "PaperHeaderLabel", "Button", "CheckButton", "LineEdit"]:
 		check(t.get_font_size("font_size", type) >= 24, "%s text is at least 24 px" % type)
 		check(t.get_font("font", type) != null, "%s has a font" % type)
+	check(t.get_font_size("font_size", "Label") >= 28, "body text is at least 28 px")
 	for icon in ["checked", "unchecked"]:
 		check(t.get_icon(icon, "CheckButton") != null, "CheckButton %s icon" % icon)
 	check(t.get_icon("grabber", "HSlider") != null, "slider grabber icon")
-	check(t.get_stylebox("panel", "CardPanel") is PixelBox, "parchment card panel")
-	check(t.get_stylebox("grabber", "VScrollBar") is PixelBox, "scroll grabber")
+	check(t.get_stylebox("panel", "CardPanel") is PxStyle, "accent card panel")
+	check(t.get_stylebox("grabber", "VScrollBar") is StyleBoxEmpty, "scroll bars are never drawn")
 	# Pixel art: every kit texture is drawn with nearest filtering at whole art pixels.
 	check(ProjectSettings.get_setting("rendering/textures/canvas_textures/default_texture_filter") == 0, "nearest filtering project-wide")
-	check_eq((t.get_stylebox("normal", "Button") as PixelBox).px, 3.0, "one art pixel is three screen pixels")
+	check_eq(up.px, 3.0, "one art pixel is three screen pixels")
+	check_eq(WoodcutTheme.icon("chevron_left").get_width() % 3, 0, "icons are baked at whole art pixels")
 	check_eq(t.get_type_variation_base("AccentButton"), &"Button", "AccentButton is a Button variation")
 
 
@@ -161,6 +167,12 @@ func test_text_contrast() -> void:
 	check(_contrast(Palette.BLACK, Palette.BONE) >= 7.0, "ink on paper")
 	check(_contrast(Palette.EMBER, Palette.NIGHT) >= 4.5, "ember on night")
 	check(_contrast(Palette.BONE, Palette.RED) >= 3.0, "bone on red (large bold only)")
+	# the menu kit's pairs
+	check(_contrast(WoodcutTheme.C_TEXT, WoodcutTheme.C_SURFACE) >= 7.0, "text on a card")
+	check(_contrast(WoodcutTheme.C_TEXT_2, WoodcutTheme.C_SURFACE) >= 4.5, "secondary text on a card")
+	check(_contrast(WoodcutTheme.C_BRONZE, WoodcutTheme.C_SURFACE) >= 4.5, "bronze on a card")
+	check(_contrast(WoodcutTheme.C_TEXT, WoodcutTheme.C_RAISED) >= 7.0, "text on a secondary button")
+	check(_contrast(WoodcutTheme.C_TEXT, WoodcutTheme.C_RED) >= 4.5, "text on the primary button")
 	var th := WoodcutTheme.build()
 	check(_contrast(th.get_color("font_placeholder_color", "LineEdit"), Palette.NIGHT) >= 4.5, "LineEdit placeholder readable")
 	# Progress text sits on the fill: it must not be the ember fill (bone on ember is about 1.5:1).
