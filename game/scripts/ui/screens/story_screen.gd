@@ -93,22 +93,23 @@ func _card(song: SongData, is_next: bool) -> Button:
 	panel.set_anchors_preset(Control.PRESET_FULL_RECT)
 	b.add_child(panel)
 	var text: VBoxContainer = parts[1]
-	var head := HBoxContainer.new()
-	head.add_theme_constant_override("separation", UIKit.S2)
-	head.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	text.add_child(head)
-	var tcol := VBoxContainer.new()
-	tcol.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	tcol.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	tcol.add_theme_constant_override("separation", 0)
-	head.add_child(tcol)
 	var over := tr("story_stop_overline") % song.stop
 	var date := UIKit.stop_date(song)
 	if date != "":
 		over += " · " + date
 	var o := UIKit.overline(over)
 	o.name = "Overline"
-	tcol.add_child(o)
+	text.add_child(o)
+	var head := HBoxContainer.new()
+	head.add_theme_constant_override("separation", UIKit.S2)
+	head.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	text.add_child(head)
+	var tcol := VBoxContainer.new()
+	tcol.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	tcol.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+	tcol.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	tcol.add_theme_constant_override("separation", 0)
+	head.add_child(tcol)
 	var name_l := UIKit.label(UIKit.song_title(song), UIKit.HEADER, false)
 	name_l.name = "Name"
 	UIKit.fit_label(name_l, 28)

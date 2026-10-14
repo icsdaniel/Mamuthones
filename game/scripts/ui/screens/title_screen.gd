@@ -102,7 +102,7 @@ func build() -> void:
 	MenuKit.tab_bar(box, [
 		["StoryMap", "flame", tr("title_story"), func() -> void: app.open("story")],
 		["FreePlay", "note", tr("title_free"), func() -> void: app.open("free_play")],
-		["Workshop", "mask", tr("title_workshop"), func() -> void: app.open("workshop")],
+		["Workshop", "bell", tr("title_workshop"), func() -> void: app.open("workshop")],
 		["Leaderboards", "ladder", tr("title_boards"), _boards],
 	])
 	resized.connect(_layout)
