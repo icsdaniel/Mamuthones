@@ -186,8 +186,8 @@ def main():
     mid_x = (xs.min() + xs.max() + 1) * 0.5
     w = max(4, int(round(MASK_HALF_W * 2 * MASK_UNIT)))
     at = (int(round(mid_x - w * 0.5)), int(round(crown - (CROWN_V - MASK_TOP) * MASK_UNIT)))
-    swatch_fleece = (66, 96, 30, 30)
-    swatch_straps = (80, 132, 30, 30)
+    swatch_fleece = (64, 98, 44, 32)
+    swatch_straps = (78, 130, 32, 32)
     with open(GD, "w") as f:
         f.write('''class_name FigureLookCells
 extends RefCounted

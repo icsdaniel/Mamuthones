@@ -64,7 +64,13 @@ func _prepare_profile() -> void:
 		for d in ["easy", "hard"]:
 			if d in s.difficulties():
 				profile.record_result(_played(s, d, i != 2))
-	profile.set_look("fleece", "dark_brown")
+	# black fleece (the default; the painted picture is dark brown), a carved mask and dark straps, so the play screen shows a look of the player's own
+	var spec := MaskSpec.default()
+	spec["brow"] = "furrowed"
+	spec["nose"] = "long"
+	spec["eyes"] = "almond"
+	profile.set_look("mask", spec)
+	profile.set_look("straps", "dark")
 
 
 static func _played(song: SongData, diff: String, good: bool, until := INF) -> Session:
@@ -98,6 +104,9 @@ func _shots() -> Array:
 		{"file": "credits", "screen": "credits"},
 		{"file": "workshop", "screen": "workshop", "setup": "tab_mask", "wait": 0.8},
 		{"file": "workshop_dress", "screen": "workshop", "setup": "tab_dress", "wait": 0.8},
+		{"file": "workshop_wood", "screen": "workshop", "setup": "tab_wood", "wait": 0.8},
+		{"file": "workshop_straps", "screen": "workshop", "setup": "tab_straps", "wait": 0.8},
+		{"file": "workshop_closeup", "screen": "workshop", "setup": "tab_mask", "args": {"closeup": true}, "wait": 0.8},
 		{"file": "tutorial", "screen": "tutorial", "args": {"song_id": tut_id, "first_run": true}, "wait": 1.2},
 		{"file": "play_fires", "screen": "play", "args": {"song_id": fires_id, "difficulty": "hard", "autoplay": true, "human": true}, "setup": "advance:0.42"},
 		{"file": "play_showcase", "screen": "play", "args": {"song_id": fires_id, "difficulty": "hard", "autoplay": true}, "setup": "moment:showcase", "wait": 0.1},
@@ -170,7 +179,8 @@ func _render(shot: Dictionary, size: Vector2i, locale: String, dir: String) -> v
 	elif setup == "results_fc":
 		args = _results_fc_args()
 	elif setup.begins_with("tab_"):
-		args = {"tab": setup.substr(4)}
+		args = args.duplicate()
+		args["tab"] = setup.substr(4)
 	app.set("start_screen", shot.screen)
 	app.set("start_args", args)
 	vp.add_child(app)

@@ -12,5 +12,5 @@ const MASK_AT := Vector2i(20, 7)
 ## The painted face's box.
 const FACE := Rect2i(24, 11, 18, 31)
 ## Crops of the figure that show a fleece and a strap swatch in the workshop.
-const SWATCH_FLEECE := Rect2i(66, 96, 30, 30)
-const SWATCH_STRAPS := Rect2i(80, 132, 30, 30)
+const SWATCH_FLEECE := Rect2i(64, 98, 44, 32)
+const SWATCH_STRAPS := Rect2i(78, 130, 32, 32)

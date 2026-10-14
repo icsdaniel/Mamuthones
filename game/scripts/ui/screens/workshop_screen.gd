@@ -1,190 +1,271 @@
 extends Screen
-## The workshop: build your own Mamuthone. Carve the mask (every bell earned is a carving point; finer
-## options open as the story goes on), the fleece shade and the straps. A close-up of your own Mamuthone (Art's portrait) at the top changes as you choose, with
-## the part being carved outlined.
-## args: tab (optional: mask or dress).
+## The workshop, on the mobile kit: dress your own Mamuthone, the very figure that bobs beside the
+## Issohadore on the play screen. One screen that fits, no scrolling.
+##   top bar   back · Workshop · the mask close-up (or back to the whole figure)
+##   stage     your pixel Mamuthone (LookStage) large on a stone plinth in the bonfire's light,
+##             bobbing as it waits; it wears every choice at once, with a ring of its bells and a
+##             dip. Tap it for the carved mask up close (the part being carved ringed in bronze).
+##             On the carving pages your carving points sit in its corner.
+##   pages     a segmented control over swipeable pages, each a row of picture swatches:
+##               Mask       brow, eyes, nose, cheeks, mouth (part chips, then the four carvings)
+##               Wood       finish and patina
+##               Sheepskin  black or dark brown (the only real colours)
+##               Straps     natural or dark leather (the bell straps and the gaiters)
+##             A carving not open yet shows a lock and what opens it (the stop, or the points);
+##             tapping it says both (Progression.mask_option_unlocked, MaskSpec.requirement).
+## args: tab (optional: mask, wood, fleece, straps; "dress" = fleece), closeup (bool).
+
+const PAGES := ["mask", "wood", "fleece", "straps"]
+const PARTS := {"mask": ["brow", "eyes", "nose", "cheeks", "mouth"], "wood": ["finish", "patina"]}
+const SWATCH_H := 204.0
+const SWATCH_MASK_UNIT := 12.0
 
 static var tab := "mask"
 static var part := "brow"
+static var wood_part := "finish"
 
-var portrait: MamuthonePortrait
-var mask: MaskView
-var _body: VBoxContainer
-var _tabs := {}
+var stage: LookStage
+var pager: Pager
+var _zoom: Button
+var _points: PanelContainer
+var _pages := {}
 
 
 func build() -> void:
-	var box := UIKit.column(self, true, 14)
-	UIKit.header(box, tr("ws_title"), on_back)
-	portrait = MamuthonePortrait.new()
-	portrait.name = "Portrait"
-	portrait.animate = not UIKit.reduced_motion()
-	portrait.custom_minimum_size = Vector2(0, MamuthonePortrait.ART_H * 3 + 6)
-	box.add_child(portrait)
-	_refresh_look()
-	Profile.changed.connect(_refresh_look)
+	var t := str(args.get("tab", tab))
+	if t == "dress":
+		t = "fleece"
+	tab = t if t in PAGES else "mask"
+	var page := UIKit.scaffold(self, false, UIKit.S3)
+	_zoom = UIKit.icon_button("check", _toggle_closeup, tr("ws_closeup_hint"))
+	_zoom.name = "Closeup"
+	UIKit.top_bar(page.top, tr("ws_title"), on_back, "", _zoom)
+
+	stage = LookStage.new()
+	stage.name = "Stage"
+	stage.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	stage.custom_minimum_size = Vector2(0, 300)
+	stage.tapped.connect(_toggle_closeup)
+	page.body.add_child(stage)
+	_points_tile(stage)
+
+	var items := []
+	for id in PAGES:
+		items.append([id, tr("ws_tab_" + id)])
+	pager = UIKit.paged(page.body, items, PAGES.find(tab))
+	pager.size_flags_vertical = Control.SIZE_FILL
+	pager.custom_minimum_size.y = UIKit.TOUCH + UIKit.S2 + SWATCH_H
+	for id in PAGES:
+		# a hair of room at each side: at fractional screen scales the next page's first column
+		# would otherwise show through the pager's edge
+		var pg := pager.add_page(id.capitalize() + "Page", 0)
+		var m := MarginContainer.new()
+		m.add_theme_constant_override("margin_left", 3)
+		m.add_theme_constant_override("margin_right", 3)
+		m.size_flags_vertical = Control.SIZE_EXPAND_FILL
+		pg.add_child(m)
+		var inner := VBoxContainer.new()
+		inner.add_theme_constant_override("separation", UIKit.S2)
+		m.add_child(inner)
+		_pages[id] = inner
+		_fill(id)
+	pager.page_changed.connect(_on_page)
+	stage.closeup = bool(args.get("closeup", false))
+	_refresh_stage()
+	_on_page(PAGES.find(tab))
+
+
+# ---------------------------------------------------------------- the stage
+
+
+func _points_tile(host: Control) -> void:
+	_points = PanelContainer.new()
+	_points.name = "Points"
+	_points.theme_type_variation = UIKit.TILE
+	_points.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_points.position = Vector2.ZERO
+	_points.custom_minimum_size.x = 216.0
+	host.add_child(_points)
+	var v := VBoxContainer.new()
+	v.add_theme_constant_override("separation", 0)
+	_points.add_child(v)
+	var tag := UIKit.label(tr("ws_points_tag"), UIKit.OVERLINE, false)
+	v.add_child(tag)
 	var row := HBoxContainer.new()
-	row.add_theme_constant_override("separation", 10)
-	box.add_child(row)
-	for t in ["mask", "dress"]:
-		var b := UIKit.button(tr("ws_tab_" + t), _show_tab.bind(t))
-		b.toggle_mode = true
-		b.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-		b.name = "Tab_" + t
-		row.add_child(b)
-		_tabs[t] = b
-	_body = VBoxContainer.new()
-	_body.add_theme_constant_override("separation", 14)
-	box.add_child(_body)
-	_show_tab(str(args.get("tab", tab)))
+	row.add_theme_constant_override("separation", UIKit.S1)
+	v.add_child(row)
+	var val := UIKit.label(str(Progression.carving_points()), UIKit.VALUE, false)
+	val.name = "PointsValue"
+	val.add_theme_color_override("font_color", WoodcutTheme.C_BRONZE_HI)
+	row.add_child(val)
+	var unit := UIKit.label(tr("ws_points_unit"), UIKit.CAPTION, false)
+	unit.add_theme_font_size_override("font_size", 28)
+	unit.size_flags_vertical = Control.SIZE_SHRINK_END
+	row.add_child(unit)
+	_points.reset_size()
 
 
-## Puts the saved look on the portrait (it redraws only when something changed).
-func _refresh_look() -> void:
-	if portrait == null:
-		return
-	var look: Dictionary = Profile.get_look()
-	var m: Dictionary = MaskSpec.sanitize(look.get("mask", {}))
-	var f := str(look.get("fleece", "black"))
-	var st := str(look.get("straps", "natural"))
-	if m != portrait.mask or f != portrait.fleece or st != portrait.straps:
-		portrait.set_look(m, f, st, BellSets.STANDARD)
-		var walking := _body.get_node_or_null("Walking") as ProcessionScene if _body != null else null
-		if walking != null:
-			UIKit.show_look(walking)
-	var hp := part if tab == "mask" else ""
-	if portrait.highlight_part != hp:
-		portrait.highlight_part = hp
+func _refresh_stage() -> void:
+	var hp := ""
+	if tab == "mask":
+		hp = part
+	stage.set_look(Profile.get_look(), hp)
+	_zoom.icon = KitIcons.get_icon("figure" if stage.closeup else "zoom")
 
 
-func _show_tab(t: String) -> void:
-	if not _tabs.has(t):
-		t = "mask"
-	tab = t
-	for k in _tabs:
-		(_tabs[k] as Button).set_pressed_no_signal(k == t)
-	for c in _body.get_children():
-		_body.remove_child(c)
-		c.queue_free()
-	mask = null
-	match t:
-		"mask":
-			_build_mask()
-		_:
-			_build_dress()
-	_refresh_look()
-
-
-## Under the dress choices: your Mamuthone walking in the row, whole, bells and all, so a
-## choice is seen (and heard) on the move. It takes the room left on the page.
-func _walking_row() -> void:
-	var vh := get_viewport_rect().size.y if is_inside_tree() else 1440.0
-	var scene := ProcessionScene.new()
-	scene.name = "Walking"
-	scene.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	scene.custom_minimum_size = Vector2(0, clampf(vh - 1020.0, 240.0, 460.0))
-	scene.auto_bpm = 76.0
-	_body.add_child(scene)
-	scene.set_stop(1)
-	scene.set_unison(2)
-	scene.set_reduced_motion(UIKit.reduced_motion())
-	UIKit.show_look(scene)
-	scene.bell_set = BellSets.STANDARD
-
-
-func _spec() -> Dictionary:
-	return MaskSpec.sanitize(Profile.get_look().get("mask", {}))
-
-
-func _build_mask() -> void:
-	var points := Progression.carving_points()
-	_body.add_child(UIKit.label(tr("ws_points") % points, UIKit.SUB))
-	_body.add_child(UIKit.label(tr("ws_points_note"), UIKit.CAPTION))
-	mask = MaskView.new()
-	mask.name = "Mask"
-	mask.custom_minimum_size = Vector2(0, 360)
-	mask.show_halo = true
-	mask.spec = _spec()
-	mask.highlight_part = part
-	_body.add_child(mask)
-	var parts := GridContainer.new()
-	parts.columns = 4
-	parts.add_theme_constant_override("h_separation", 8)
-	parts.add_theme_constant_override("v_separation", 8)
-	_body.add_child(parts)
-	for p in MaskSpec.PARTS:
-		var b := UIKit.button(MaskSpec.name_of(p, I18n.locale()), _pick_part.bind(p), UIKit.COMPACT)
-		b.toggle_mode = true
-		b.set_pressed_no_signal(p == part)
-		b.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-		b.name = "Part_" + p
-		parts.add_child(b)
-	var opts := GridContainer.new()
-	opts.columns = 2
-	opts.name = "Options"
-	opts.add_theme_constant_override("h_separation", 10)
-	opts.add_theme_constant_override("v_separation", 10)
-	_body.add_child(opts)
-	var spec := _spec()
-	for o in MaskSpec.options(part):
-		var open := Progression.mask_option_unlocked(part, o)
-		var b := Button.new()
-		b.focus_mode = Control.FOCUS_NONE
-		b.toggle_mode = true
-		b.theme_type_variation = UIKit.COMPACT
-		b.custom_minimum_size = Vector2(UIKit.TOUCH, UIKit.TOUCH * 1.15)
-		b.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-		b.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-		b.name = "Opt_" + o
-		var label := MaskSpec.name_of(o, I18n.locale())
-		if not open:
-			var req := MaskSpec.requirement(part, o)
-			label += "\n" + tr("ws_needs") % [int(req.stop), int(req.cost)]
-		b.text = label
-		b.disabled = not open
-		b.set_pressed_no_signal(spec.get(part, "") == o)
-		b.pressed.connect(_carve.bind(o))
-		opts.add_child(b)
-
-
-func _pick_part(p: String) -> void:
-	part = p
+func _toggle_closeup() -> void:
+	stage.closeup = not stage.closeup
 	Sound.ui("tap")
-	_show_tab("mask")
+	_refresh_stage()
 
 
-func _carve(option: String) -> void:
-	var spec := _spec()
-	spec[part] = option
-	Profile.set_look("mask", spec)
+func _on_page(i: int) -> void:
+	tab = PAGES[clampi(i, 0, PAGES.size() - 1)]
+	_points.visible = tab in PARTS
+	_refresh_stage()
+
+
+# ---------------------------------------------------------------- pages
+
+
+func _fill(id: String) -> void:
+	var box: VBoxContainer = _pages[id]
+	for c in box.get_children():
+		box.remove_child(c)
+		c.queue_free()
+	match id:
+		"mask", "wood":
+			_carving(box, id)
+		"fleece":
+			_dress(box, "fleece", MaskSpec.FLEECES, FigureLookCells.SWATCH_FLEECE)
+		"straps":
+			_dress(box, "straps", MaskSpec.STRAPS, FigureLookCells.SWATCH_STRAPS)
+
+
+func _current_part(id: String) -> String:
+	return part if id == "mask" else wood_part
+
+
+## Part chips, then the part's four carvings as swatches of the mask.
+func _carving(box: VBoxContainer, id: String) -> void:
+	var chips := HBoxContainer.new()
+	chips.name = "Parts"
+	chips.add_theme_constant_override("separation", UIKit.S1)
+	box.add_child(chips)
+	var cur := _current_part(id)
+	for p in PARTS[id]:
+		var b := Button.new()
+		b.name = "Part_" + p
+		b.text = MaskSpec.name_of(p, I18n.locale())
+		b.focus_mode = Control.FOCUS_NONE
+		b.custom_minimum_size = Vector2(UIKit.TOUCH, UIKit.TOUCH)
+		b.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		b.clip_text = true
+		_style_chip(b, p == cur)
+		b.pressed.connect(_pick_part.bind(id, p))
+		UIKit.juice(b)
+		UIKit.fit_text(b)
+		chips.add_child(b)
+	var row := HBoxContainer.new()
+	row.name = "Options"
+	row.add_theme_constant_override("separation", UIKit.S2)
+	row.custom_minimum_size.y = SWATCH_H
+	row.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	box.add_child(row)
+	var look := Profile.get_look()
+	var spec := MaskSpec.sanitize(look.get("mask", {}))
+	var have_stop := Progression.highest_stop()
+	var have_pts := Progression.carving_points()
+	for o in MaskSpec.options(cur):
+		var s := spec.duplicate()
+		s[cur] = o
+		var open := Progression.mask_option_unlocked(cur, o)
+		var text := MaskSpec.name_of(o, I18n.locale())
+		if not open:
+			var req := MaskSpec.requirement(cur, o)
+			text = tr("ws_lock_stop") % int(req.stop) if have_stop < int(req.stop) else tr("ws_lock_pts") % int(req.cost)
+		var pic := MaskPixels.texture(s, SWATCH_MASK_UNIT, true, str(look.get("straps", "natural")), "")
+		var sw := Swatch.make(o, pic, text, spec[cur] == o, not open, _carve.bind(id, cur))
+		row.add_child(sw)
+
+
+func _style_chip(b: Button, on: bool) -> void:
+	var sb := PxStyle.make(WoodcutTheme.C_RAISED_HI if on else Color.TRANSPARENT,
+		WoodcutTheme.C_BRONZE if on else Color(WoodcutTheme.C_STROKE, 0.8), WoodcutTheme.R_PILL, Vector4(12, 6, 12, 6))
+	if on:
+		sb.highlight = WoodcutTheme.C_STROKE_HI
+	for st in ["normal", "hover", "pressed", "hover_pressed", "focus", "disabled"]:
+		b.add_theme_stylebox_override(st, sb)
+	var ink: Color = WoodcutTheme.C_BRONZE_HI if on else WoodcutTheme.C_TEXT_2
+	for c in ["font_color", "font_hover_color", "font_pressed_color", "font_hover_pressed_color", "font_focus_color"]:
+		b.add_theme_color_override(c, ink)
+	b.add_theme_font_size_override("font_size", 28)
+
+
+func _pick_part(id: String, p: String) -> void:
+	if id == "mask":
+		part = p
+	else:
+		wood_part = p
+	Sound.ui("tap")
+	_fill(id)
+	_refresh_stage()
+
+
+func _carve(option: String, id: String, p: String) -> void:
+	if not Progression.mask_option_unlocked(p, option):
+		var req := MaskSpec.requirement(p, option)
+		Sound.ui("back")
+		UIKit.toast(self, tr("ws_locked_toast") % [int(req.stop), int(req.cost), Progression.carving_points()])
+		return
+	var spec := MaskSpec.sanitize(Profile.get_look().get("mask", {}))
+	if spec[p] != option:
+		spec[p] = option
+		Profile.set_look("mask", spec)
 	Sound.ui("carve")
 	UIKit.vibrate(15)
-	_show_tab("mask")
+	_mark((_pages[id] as Control).find_child("Options", true, false), option)
+	_refresh_stage()
+	stage.jingle()
 
 
-func _build_dress() -> void:
-	_body.add_child(UIKit.label(tr("ws_fleece"), UIKit.SUB))
-	_choice_row("fleece", MaskSpec.FLEECES)
-	_body.add_child(UIKit.label(tr("ws_straps"), UIKit.SUB))
-	_choice_row("straps", MaskSpec.STRAPS)
-	_body.add_child(UIKit.label(tr("ws_dress_note"), UIKit.CAPTION))
-	_walking_row()
-
-
-func _choice_row(key: String, ids: Array) -> void:
+## Two big swatches: the figure's own pixels in each colour.
+func _dress(box: VBoxContainer, key: String, ids: Array, crop: Rect2i) -> void:
 	var row := HBoxContainer.new()
-	row.add_theme_constant_override("separation", 10)
-	row.name = "Row_" + key
-	_body.add_child(row)
-	var current := str(Profile.get_look().get(key, ids[0]))
+	row.name = "Options"
+	row.add_theme_constant_override("separation", UIKit.S2)
+	row.custom_minimum_size.y = SWATCH_H - 60.0
+	row.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	box.add_child(row)
+	var look := Profile.get_look()
+	var current := str(look.get(key, ids[0]))
 	for id in ids:
-		var b := UIKit.button(tr("ws_%s_%s" % [key, id]), func() -> void:
-			Profile.set_look(key, id)
-			_refresh_look()
-			for c in row.get_children():
-				(c as Button).set_pressed_no_signal(c.name == "Opt_" + str(id)))
-		b.toggle_mode = true
-		b.set_pressed_no_signal(id == current)
-		b.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-		b.name = "Opt_" + str(id)
-		row.add_child(b)
+		var l := look.duplicate(true)
+		l[key] = id
+		var sw := Swatch.make(id, FigureLook.texture("body", l), tr("ws_%s_%s" % [key, id]), id == current, false,
+			_dress_pick.bind(key), Rect2(crop))
+		row.add_child(sw)
+	var note := UIKit.label(tr("ws_%s_note" % key), UIKit.CAPTION, true, HORIZONTAL_ALIGNMENT_CENTER)
+	note.name = "Note"
+	note.add_theme_font_size_override("font_size", 28)
+	box.add_child(note)
+
+
+func _dress_pick(id: String, key: String) -> void:
+	if str(Profile.get_look().get(key, "")) != id:
+		Profile.set_look(key, id)
+	Sound.ui("carve")
+	UIKit.vibrate(15)
+	_mark((_pages[key] as Control).find_child("Options", true, false), id)
+	_refresh_stage()
+	stage.jingle()
+	# the other page's swatches show the figure in this colour too
+	_fill("straps" if key == "fleece" else "fleece")
+
+
+func _mark(row: Node, chosen: String) -> void:
+	if row == null:
+		return
+	for c in row.get_children():
+		if c is Swatch:
+			(c as Swatch).set_state((c as Swatch).id == chosen, (c as Swatch).locked)
