@@ -395,3 +395,16 @@ res_total,Score,Punteggio
 res_new_best_badge,New best +%s,Record +%s
 res_first_best_badge,First best,Primo record
 res_ladder,Scores,Classifiche
+title_hero_sub,Stop %d · %s,Tappa %d · %s
+story_locked_short,Locked,Chiusa
+story_progress,%d of %d stops cleared,%d tappe superate su %d
+story_stop_overline,Stop %d,Tappa %d
+stop_best_at,Best · %s,Record · %s
+set_more,More,Altro
+set_about,About,Informazioni
+set_motion,Motion sensors,Sensori di movimento
+set_display,Display,Schermo
+set_setup,Getting started,Per iniziare
+set_tutorial,The lessons (tutorial),Le lezioni (tutorial)
+boards_not_played,Not played,Non giocata
+lang_choose,Choose your language,Scegli la lingua

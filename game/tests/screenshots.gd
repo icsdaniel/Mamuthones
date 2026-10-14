@@ -96,6 +96,13 @@ func _shots() -> Array:
 		{"file": "boards", "screen": "boards"},
 		{"file": "settings", "screen": "settings"},
 		{"file": "credits", "screen": "credits"},
+		# the menus' other pages (2026-10 menu rework)
+		{"file": "settings_timing", "screen": "settings", "page": 1},
+		{"file": "settings_sound", "screen": "settings", "page": 2},
+		{"file": "settings_more", "screen": "settings", "page": 3},
+		{"file": "credits_list", "screen": "credits", "page": 1},
+		{"file": "stop_card_lessons", "screen": "stop_card", "args": {"song_id": tut_id}},
+		{"file": "screen_delay", "screen": "screen_delay"},
 		{"file": "workshop", "screen": "workshop", "setup": "tab_mask", "wait": 0.8},
 		{"file": "workshop_dress", "screen": "workshop", "setup": "tab_dress", "wait": 0.8},
 		{"file": "tutorial", "screen": "tutorial", "args": {"song_id": tut_id, "first_run": true}, "wait": 1.2},

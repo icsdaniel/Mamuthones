@@ -55,22 +55,25 @@ func _intro(after_fail := false, after_demo := false) -> void:
 	_card.set_anchors_preset(Control.PRESET_FULL_RECT)
 	_card.name = "LessonCard"
 	add_child(_card)
-	var box := UIKit.column(_card, false, 18)
-	UIKit.header(box, tr("tut_title"), on_back)
-	box.add_child(UIKit.label(tr("tut_lesson_n") % [index + 1, lessons.size()], UIKit.CAPTION))
-	box.add_child(ProgressPips.new(lessons.size(), index))
+	_backdrop(_card)
+	var page := UIKit.scaffold(_card, false, UIKit.S3)
+	var box: VBoxContainer = page.body
+	UIKit.top_bar(page.top, tr("tut_title"), on_back, tr("tut_lesson_n") % [index + 1, lessons.size()])
+	var pips := ProgressPips.new(lessons.size(), index)
+	pips.name = "Pips"
+	box.add_child(pips)
 	var t := topic()
 	var slam := bool(Profile.get_setting("slam"))
 	box.add_child(UIKit.label(tr("tut_%s_title" % t), UIKit.TITLE))
 	var pic := LessonPicture.new()
 	pic.topic = t
 	pic.slam = slam
-	pic.custom_minimum_size = Vector2(0, 380)
+	pic.custom_minimum_size = Vector2(0, 260)
 	pic.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	pic.name = "Picture"
 	box.add_child(pic)
 	var body := tr("tut_%s_slam" % t) if slam and t in ["bells", "full"] else tr("tut_%s" % t)
-	var text := UIKit.label(body, UIKit.SUB)
+	var text := UIKit.label(body, UIKit.LEAD)
 	text.name = "Instruction"
 	box.add_child(text)
 	if after_fail:
@@ -83,17 +86,22 @@ func _intro(after_fail := false, after_demo := false) -> void:
 				l.name = "WhyNumbers"
 				why.add_child(l)
 		var fail_key := "tut_fail_%s_slam" % t if slam and t == "full" else "tut_fail_" + t
-		why.add_child(UIKit.label(tr(fail_key), UIKit.PAPER))
+		why.add_child(UIKit.label(tr(fail_key), UIKit.CAPTION))
 	var go := UIKit.button(tr("tut_your_turn") if after_demo else (tr("tut_try_again") if after_fail else tr("tut_try")), _start.bind(false), UIKit.PRIMARY)
 	go.name = "Try"
-	box.add_child(go)
+	page.foot.add_child(go)
+	var row := HBoxContainer.new()
+	row.add_theme_constant_override("separation", UIKit.S2)
+	page.foot.add_child(row)
 	var demo := UIKit.button(tr("tut_show_me"), _start.bind(true), "" if after_fail else UIKit.QUIET)
 	demo.name = "ShowMe"
-	box.add_child(demo)
+	demo.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	row.add_child(demo)
 	if fails >= 3:
 		var skip := UIKit.button(tr("tut_skip"), _next, UIKit.QUIET)
 		skip.name = "Skip"
-		box.add_child(skip)
+		skip.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		row.add_child(skip)
 	if bool(args.get("autoplay", false)):
 		_start.call_deferred(false)
 
@@ -221,7 +229,9 @@ func _well_done(session: Session) -> void:
 	_card.set_anchors_preset(Control.PRESET_FULL_RECT)
 	_card.name = "WellDone"
 	add_child(_card)
-	var box := UIKit.column(_card, false, 18)
+	_backdrop(_card)
+	var page := UIKit.scaffold(_card, false, UIKit.S3)
+	var box: VBoxContainer = page.body
 	UIKit.spacer(box, 0, true)
 	box.add_child(UIKit.label(tr("tut_well_done"), UIKit.TITLE, true, HORIZONTAL_ALIGNMENT_CENTER))
 	var grade := GradeBadge.new(session.grade_rank(), true, session.full_combo())
@@ -233,7 +243,7 @@ func _well_done(session: Session) -> void:
 	UIKit.spacer(box, 0, true)
 	var go := UIKit.button(tr("ui_continue"), _next, UIKit.PRIMARY)
 	go.name = "Continue"
-	box.add_child(go)
+	page.foot.add_child(go)
 	if bool(args.get("autoplay", false)):
 		_next.call_deferred()
 
@@ -255,8 +265,10 @@ func _finale() -> void:
 	_card.set_anchors_preset(Control.PRESET_FULL_RECT)
 	_card.name = "Finale"
 	add_child(_card)
-	var box := UIKit.column(_card, true, 18)
-	UIKit.header(box, tr("tut_title"), on_back)
+	_backdrop(_card)
+	var page := UIKit.scaffold(_card, false, UIKit.S3)
+	var box: VBoxContainer = page.body
+	UIKit.top_bar(page.top, tr("tut_title"), on_back)
 	box.add_child(UIKit.label(tr("tut_unison_title"), UIKit.TITLE))
 	var meter := UnisonMeter.new()
 	meter.custom_minimum_size = Vector2(0, 40)
@@ -264,25 +276,33 @@ func _finale() -> void:
 	meter.fill = 0.5
 	box.add_child(meter)
 	box.add_child(UIKit.label(tr("tut_unison"), ""))
-	box.add_child(UIKit.label(tr("tut_ready"), UIKit.SUB))
+	box.add_child(UIKit.label(tr("tut_ready"), UIKit.LEAD))
 	var go := UIKit.button(tr("tut_play_song"), _play_song, UIKit.PRIMARY)
 	go.name = "PlaySong"
-	box.add_child(go)
+	page.foot.add_child(go)
 	var story := SongLibrary.story()
 	if story.size() > 1:
 		var on := UIKit.button(tr("tut_next_stop") % UIKit.song_title(story[1]), func() -> void:
 			app.reset("title")
 			app.open("stop_card", {"song_id": story[1].id}))
 		on.name = "NextStop"
-		box.add_child(on)
+		page.foot.add_child(on)
 	var later := UIKit.button(tr("tut_later"), func() -> void: app.reset("title"), UIKit.QUIET)
 	later.name = "Later"
-	box.add_child(later)
+	page.foot.add_child(later)
 	if bool(args.get("autoplay", false)):
 		finished_all.emit()
 
 
 signal finished_all
+
+
+## The menus' night behind a card (the tutorial paints its own picture, so the App's is hidden).
+func _backdrop(card: Control) -> void:
+	var b := MenuBackdrop.new()
+	b.reduced_motion = UIKit.reduced_motion()
+	b.still = UIKit.animations_off()
+	card.add_child(b)
 
 
 func _play_song() -> void:

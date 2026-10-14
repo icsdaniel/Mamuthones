@@ -1,6 +1,10 @@
 extends Screen
-## The card before a story stop: the stop's living pixel picture, the stop's name and day, two plain sentences
-## about the moment, then the difficulty (with the best bells for each), the bell set and the remix.
+## The card before a story stop, on the mobile kit: the top bar names the stop (its number and day
+## over its name); the stop's living pixel picture is the hero, flush in a rounded card with the two
+## sentences about the moment under it; then the difficulty as a segmented control (the Remix chip
+## beside its heading once earned, the requirement with a lock while not), the best at that
+## difficulty as a tile with its round grade seal, and Play pinned in the thumb zone (the tutorial
+## stop also offers its lessons there). Fits the screen; nothing scrolls.
 ## args: song_id.
 
 static var last_difficulty := "easy"
@@ -8,8 +12,8 @@ static var last_difficulty := "easy"
 var song: SongData
 var difficulty := "easy"
 var use_remix := false
-var _diff_buttons := {}
-var _best: Label
+var _tabs: HBoxContainer
+var _best_tile: PanelContainer
 
 
 func build() -> void:
@@ -18,83 +22,110 @@ func build() -> void:
 		push_error("stop card: unknown song %s" % args.get("song_id", ""))
 		return
 	difficulty = last_difficulty if last_difficulty in song.difficulties() else song.difficulties()[0]
-	var cols := UIKit.column_with_footer(self, 16)
-	var box := cols[0]
-	var foot := cols[1]
-	UIKit.header(box, tr("stop_n") % song.stop, on_back)
-	# The stop's picture, alive, in its gold frame at the art scale (3 screen px to the art px).
+	var page := UIKit.scaffold(self, false, UIKit.S3)
+	var over := tr("story_stop_overline") % song.stop
+	var date := UIKit.stop_date(song)
+	if date != "":
+		over += " · " + date
+	UIKit.top_bar(page.top, UIKit.song_title(song), on_back, over)
+
+	# The hero: the stop's picture, alive, with the card text under it.
 	var pic := StopPicture.new()
 	pic.name = "Picture"
 	pic.stop = song.stop
 	pic.px = int(PixelFrame.px_for(self))
-	pic.frame_style = "gold"
 	pic.bpm = song.bpm * 0.5
 	pic.animate = not UIKit.reduced_motion()
 	var card := Rect2(Vector2(StopBackdrops.data(song.stop).card), Vector2(StopCells.CARD))
 	pic.focus = card.get_center() + Vector2(0, 8)  # when cropped, keep the feet, lose a little sky
-	pic.custom_minimum_size = Vector2(0, (StopCells.CARD.y - 10 + PixelFrame.DEPTH * 2) * pic.px)
-	box.add_child(pic)
-	var facts := UIKit.card(box, true)
-	facts.add_child(UIKit.label(UIKit.song_title(song), UIKit.PAPER_HEADER))
-	if UIKit.stop_date(song) != "":
-		facts.add_child(UIKit.label(UIKit.stop_date(song), UIKit.PAPER))
-	facts.add_child(UIKit.label(tr("stop_fact_%d" % song.stop), UIKit.PAPER))
+	var parts := MenuKit.picture_card(pic)
+	var hero: PanelContainer = parts[0]
+	hero.name = "Hero"
+	hero.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	page.body.add_child(hero)
+	var holder := hero.find_child("PictureHolder", true, false) as Control
+	holder.custom_minimum_size.y = 210
+	var fact := UIKit.label(tr("stop_fact_%d" % song.stop), "")
+	fact.name = "Fact"
+	fact.add_theme_constant_override("line_spacing", -2)
+	(parts[1] as VBoxContainer).add_child(fact)
 
-	if song.kind == "tutorial":
-		var lessons := UIKit.button(tr("stop_lessons"), func() -> void: app.open("tutorial", {"song_id": song.id}), UIKit.PRIMARY)
-		lessons.name = "Lessons"
-		foot.add_child(lessons)
-
-	# The difficulty heading carries the Remix chip once it is earned, so the reason to replay is in
-	# view next to the difficulty buttons.
+	# The difficulty: heading (with the Remix chip once earned) over the segmented control.
 	var dh := HBoxContainer.new()
-	dh.add_theme_constant_override("separation", 12)
-	box.add_child(dh)
-	var dl := UIKit.label(tr("stop_difficulty"), UIKit.SUB)
+	dh.name = "DifficultyHead"
+	dh.add_theme_constant_override("separation", UIKit.S2)
+	page.body.add_child(dh)
+	var dl := UIKit.overline(tr("stop_difficulty"))
 	dl.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	dl.size_flags_vertical = Control.SIZE_SHRINK_CENTER
 	dh.add_child(dl)
 	if song.has_remix() and Progression.remix_unlocked(song.id):
-		var chip := UIKit.button(tr("stop_remix_chip"), func() -> void: pass)
+		var chip := UIKit.button(tr("stop_remix_chip"), func() -> void: pass, UIKit.CHIP)
 		chip.toggle_mode = true
 		chip.name = "Remix"
-		chip.custom_minimum_size.x = 200
-		chip.toggled.connect(func(on: bool) -> void: use_remix = on)
+		chip.custom_minimum_size = Vector2(160, UIKit.TOUCH)
+		chip.toggled.connect(func(on: bool) -> void:
+			use_remix = on
+			_show_best())
 		dh.add_child(chip)
-	var grid := GridContainer.new()
-	grid.columns = 2
-	grid.add_theme_constant_override("h_separation", 12)
-	grid.add_theme_constant_override("v_separation", 12)
-	box.add_child(grid)
+	var items := []
 	for d in song.difficulties():
-		var b := UIKit.button(tr("diff_" + d), _pick.bind(d))
-		b.toggle_mode = true
-		b.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-		b.name = "Diff_" + d
-		grid.add_child(b)
-		_diff_buttons[d] = b
-	_best = UIKit.label("", UIKit.CAPTION)
-	box.add_child(_best)
+		items.append([d, tr("diff_" + d)])
+	_tabs = UIKit.tabs(page.body, items, difficulty, _pick)
 	if song.has_remix() and not Progression.remix_unlocked(song.id):
-		var r := UIKit.label(tr("stop_remix_locked"), UIKit.CAPTION)
+		var r := MenuKit.lock_line(tr("stop_remix_locked"))
 		r.name = "RemixLocked"
-		box.add_child(r)
+		page.body.add_child(r)
+
+	# The best at the chosen difficulty: a tile with the score and the round seal.
+	_best_tile = PanelContainer.new()
+	_best_tile.name = "Best"
+	_best_tile.theme_type_variation = UIKit.TILE
+	page.body.add_child(_best_tile)
+
+	if song.kind == "tutorial":
+		var lessons := UIKit.button(tr("stop_lessons"), func() -> void: app.open("tutorial", {"song_id": song.id}), UIKit.PRIMARY)
+		lessons.name = "Lessons"
+		page.foot.add_child(lessons)
 	var play := UIKit.button(tr("stop_play"), _play, "" if song.kind == "tutorial" else UIKit.PRIMARY)
 	play.name = "Play"
-	foot.add_child(play)
+	page.foot.add_child(play)
 	_pick(difficulty)
 
 
 func _pick(d: String) -> void:
 	difficulty = d
 	last_difficulty = d
-	for k in _diff_buttons:
-		(_diff_buttons[k] as Button).set_pressed_no_signal(k == d)
-	var best: Dictionary = Profile.best(song.id, d)
+	UIKit.select_tab(_tabs, d)
+	_show_best()
+
+
+func _show_best() -> void:
+	for c in _best_tile.get_children():
+		_best_tile.remove_child(c)
+		c.queue_free()
+	var row := HBoxContainer.new()
+	row.add_theme_constant_override("separation", UIKit.S3)
+	_best_tile.add_child(row)
+	var col := VBoxContainer.new()
+	col.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	col.alignment = BoxContainer.ALIGNMENT_CENTER
+	col.add_theme_constant_override("separation", 0)
+	row.add_child(col)
+	var tag := tr("diff_" + difficulty)
+	if use_remix:
+		tag += " · " + tr("stop_remix_chip")
+	col.add_child(UIKit.overline(tr("stop_best_at") % tag))
+	var best: Dictionary = Profile.best(UIKit.board_song_id(song, use_remix), difficulty)
+	var v := UIKit.label(UIKit.fmt_score(int(best.get("score", 0))) if not best.is_empty() else tr("stop_no_best"), UIKit.VALUE, false)
+	v.name = "BestValue"
 	if best.is_empty():
-		_best.text = tr("stop_no_best")
-	else:
-		_best.text = tr("stop_best") % [UIKit.fmt_score(int(best.get("score", 0))), Session.grade_name(UIKit.grade_of(best))]
+		v.add_theme_font_size_override("font_size", 30)
+		v.add_theme_color_override("font_color", WoodcutTheme.C_TEXT_2)
+	col.add_child(v)
+	var g := MenuKit.grade_mark(UIKit.grade_of(best), bool(best.get("full_combo", false)))
+	g.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+	row.add_child(g)
 
 
 func _play() -> void:

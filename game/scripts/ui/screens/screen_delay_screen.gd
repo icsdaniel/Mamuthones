@@ -24,9 +24,9 @@ var _taps := 0
 
 
 func build() -> void:
-	var box := UIKit.column(self, false, 18)
-	UIKit.header(box, tr("vis_title"), on_back)
-	box.add_child(UIKit.label(tr("vis_title"), UIKit.HEADER, true, HORIZONTAL_ALIGNMENT_CENTER))
+	var page := UIKit.scaffold(self, false, UIKit.S3)
+	var box: VBoxContainer = page.body
+	UIKit.top_bar(page.top, tr("vis_title"), on_back)
 	_status = UIKit.label(tr("vis_intro"), UIKit.LEAD, true, HORIZONTAL_ALIGNMENT_CENTER)
 	_status.name = "Status"
 	box.add_child(_status)
@@ -35,7 +35,7 @@ func build() -> void:
 	pad.focus_mode = Control.FOCUS_NONE
 	pad.flat = true
 	pad.size_flags_vertical = Control.SIZE_EXPAND_FILL
-	pad.custom_minimum_size = Vector2(0, 420)
+	pad.custom_minimum_size = Vector2(0, 320)
 	pad.action_mode = BaseButton.ACTION_MODE_BUTTON_PRESS
 	pad.button_down.connect(_on_tap)
 	box.add_child(pad)
@@ -50,9 +50,7 @@ func build() -> void:
 	box.add_child(_meter)
 	_detail = UIKit.label("", UIKit.CAPTION, true, HORIZONTAL_ALIGNMENT_CENTER)
 	box.add_child(_detail)
-	_actions = VBoxContainer.new()
-	_actions.add_theme_constant_override("separation", 12)
-	box.add_child(_actions)
+	_actions = page.foot
 	_show_start()
 
 

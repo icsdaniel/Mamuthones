@@ -178,7 +178,7 @@ func test_remix_chip_beside_the_difficulties() -> void:
 		var card := app.current()
 		var chip := UIHarness.find_button(card, "Remix")
 		if check(chip != null and chip.toggle_mode, "%s: a Remix chip" % sz):
-			var diff := UIHarness.find_button(card, "Diff_easy")
+			var diff := UIHarness.find_button(card, "Tab_easy")
 			var fold := (card.find_child("Footer", true, false) as Control).get_global_rect().position.y
 			check(chip.get_global_rect().end.y <= fold, "%s: the chip is above the fold" % sz)
 			check(absf(chip.get_global_rect().end.y - diff.get_global_rect().position.y) < 40.0, "%s: right above the difficulty buttons" % sz)

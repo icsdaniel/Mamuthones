@@ -1,25 +1,25 @@
 extends Screen
-## First launch, step 1: pick the language. The phone's language is offered first.
+## First launch, step 1: pick the language. The game's whole logo is the hero in the middle of the
+## night; the two languages are big buttons pinned in the thumb zone, the phone's own first (and
+## primary).
 
 
 func build() -> void:
-	var box := UIKit.column(self, false, 24)
-	UIKit.spacer(box, 0, true)
-	# The same wordmark as the title screen: the name, then the subtitle.
+	var page := UIKit.scaffold(self, false, UIKit.S3)
+	UIKit.spacer(page.body, 0, true)
 	var logo := Logo.new()
 	logo.name = "Logo"
 	logo.show_title = true
 	logo.subtitle = tr("app_title")
-	logo.custom_minimum_size = Vector2(0, 700)   # x3 on the base screen
-	box.add_child(logo)
-	UIKit.spacer(box, 24)
+	logo.custom_minimum_size = Vector2(0, 640)
+	page.body.add_child(logo)
+	UIKit.spacer(page.body, 0, true)
+	page.foot.add_child(UIKit.label(tr("lang_choose"), UIKit.LEAD, false, HORIZONTAL_ALIGNMENT_CENTER))
 	var phone := I18n.system_locale()
 	for code in ["en", "it"] if phone == "en" else ["it", "en"]:
-		var b := UIKit.button(tr("lang_name_" + code), _choose.bind(code),
-			UIKit.PRIMARY if code == phone else "")
+		var b := UIKit.button(tr("lang_name_" + code), _choose.bind(code), UIKit.PRIMARY if code == phone else "")
 		b.name = "Lang_" + code
-		box.add_child(b)
-	UIKit.spacer(box, 0, true)
+		page.foot.add_child(b)
 
 
 func _choose(code: String) -> void:
