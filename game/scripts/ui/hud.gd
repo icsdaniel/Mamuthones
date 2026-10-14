@@ -286,13 +286,13 @@ static func sliced(key: String, cells: Vector2i) -> Texture2D:
 	return tex
 
 
-## Draws picture `key` over r (base px), snapped to whole cells.
+## Draws picture `key` over r (base px), snapped to whole texels of the world picture (PxArt.FINE).
 func _picture(ci: CanvasItem, key: String, r: Rect2, mod := Color.WHITE) -> void:
-	var px := PxArt.PX
+	var px := PxArt.FINE
 	var cells := Vector2i((r.size / px).round())
 	var tex := sliced(key, cells)
 	if tex != null:
-		ci.draw_texture_rect(tex, Rect2(PxArt.snap2(r.position), Vector2(cells) * px), false, mod)
+		ci.draw_texture_rect(tex, Rect2(PxArt.snap2(r.position, Vector2.ZERO, px), Vector2(cells) * px), false, mod)
 
 
 ## A carved frame: a dark panel with pointed ends, an orange edge glowing outward, a thin inner line,
