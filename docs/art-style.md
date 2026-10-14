@@ -17,6 +17,10 @@ banner for the main action. Text is cream on navy, in a serif face.
   Sprites are baked at 1x and drawn with **nearest** filtering (no mipmaps, no linear blur).
 * Only integer multiples where the layout allows (x3 on the base screen; x2 for small far figures).
   Moving sprites may land between pixels; still scenery sits on the 3 px grid.
+* The play screen is drawn into one picture of **480 texels across** (PxArt.FINE = 1.5 base px, half
+  an art pixel) and shown with a sharp upscale (square texels, only the seam pixel blended). Daniele's
+  pictures (notes, rings, bell bars, rope, step buttons, HUD frames, the street) are shrunk to that
+  finer grid; drawn sprites, the pixel type and the figures stay on the 3 px grid (two texels).
 * No anti-aliasing, no soft gradients inside sprites. Glows (fire light, beat flashes) are the one
   exception: they are additive light layered over the art, and they are stepped (banded) where they
   are large.

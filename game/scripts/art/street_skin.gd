@@ -183,7 +183,7 @@ static func disc_glow(ci: CanvasItem, c: Vector2, rx: float, k: Array, alpha: fl
 
 
 ## Daniele's pictures of the notes and the rings (game/art/ai, drawn by an outside image AI, 2026-10-08), by key,
-## and each shrunk to the sizes it is shown at: one picture pixel per screen cell, so it stays crisp.
+## and each shrunk to the sizes it is shown at: one picture pixel per texel of the world picture (PxArt.FINE), so it stays crisp.
 static var _ai := {}
 static var _ai_sized := {}
 ## Per picture, halvings of it (the picture itself first): a size is shrunk from the smallest one at
@@ -267,7 +267,7 @@ static func warm(lv: LaneView, field: Rect2) -> void:
 				ai_tex("bar_bell", b.bell)
 				ai_tex("bar_arrow", b.arrow)
 				ai_tex("bar_arrow!flip", b.arrow)
-		y += 1.0
+		y += 0.25   # finer than a texel of the sizes it meets (they change fastest near the hit line)
 	ai_tex("bar_bell", Vector2i.ONE)
 	# a bell rung on time: its cowbells thrown off the strap (bell_strike), at each size a strike has
 	var lw: float = lv.road_scale(LaneSkin.hit_line_y(field)) * _lane(field)

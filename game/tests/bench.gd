@@ -17,6 +17,8 @@ var _times: Array[float] = []
 var _script := 0.0
 var _draws := 0.0        ## draw calls and primitives summed over the measured frames
 var _prims := 0.0
+var _shrunk0 := -1       ## pictures shrunk when measuring began (more by the end: made mid-song)
+var _keys0: Array = []
 var _t0 := 0
 var _warm_ms := 5000     ## real time before measuring: the count-in is over and notes are coming
 
@@ -88,6 +90,8 @@ func _tick() -> void:
 		var LV0: Script = load("res://scripts/ui/lane_view.gd")
 		LV0.set("draw_usec", 0)
 		LV0.set("draw_count", 0)
+		_keys0 = (load("res://scripts/art/street_skin.gd").get("_ai_sized") as Dictionary).keys()
+		_shrunk0 = _keys0.size()
 	if _times.size() >= _n:
 		var sorted := _times.duplicate()
 		sorted.sort()
@@ -112,7 +116,9 @@ func _tick() -> void:
 		var sk: Script = load("res://scripts/art/street_skin.gd")
 		var sheet: Object = sk.get("atlas")
 		var tex: Texture2D = sheet.get("_tex") if sheet != null else null
-		print("PICTURES shrunk=%d note_sheet=%s" % [(sk.get("_ai_sized") as Dictionary).size(), str(tex.get_size()) if tex != null else "-"])
+		var shrunk := (sk.get("_ai_sized") as Dictionary).size()
+		var late: Array = (sk.get("_ai_sized") as Dictionary).keys().filter(func(k: String) -> bool: return not k in _keys0)
+		print("PICTURES shrunk=%d (%d of them while measuring: %s) note_sheet=%s" % [shrunk, late.size(), ", ".join(late), str(tex.get_size()) if tex != null else "-"])
 		print("RENDER draw_calls=%.0f primitives=%.0f window=%dx%d live_viewports=[%s] video_mem=%.1fMB" % [_draws / _times.size(),
 			_prims / _times.size(), root.size.x, root.size.y, ", ".join(vps),
 			Performance.get_monitor(Performance.RENDER_VIDEO_MEM_USED) / 1048576.0])

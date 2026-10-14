@@ -244,7 +244,7 @@ func _to_frames(p: Vector2) -> Vector2:
 
 ## The pixel look's frames are Daniele's pictures (art/ai/hud_*.png, 2026-10-08), each in three
 ## slices: its two ends kept to their shape at the frame's height, its middle stretched between
-## them. Made once per size at one texel per cell (the HUD is drawn one px per cell), every texel
+## them. Made once per size at one texel per texel of the world picture (PxArt.FINE), every texel
 ## wholly in or out, so they stay crisp.
 const SLICE := {"hud_plate": 240, "hud_bar": 90}   ## each picture's end width, its own px
 static var _sliced := {}
