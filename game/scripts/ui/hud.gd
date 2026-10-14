@@ -244,7 +244,7 @@ func _to_frames(p: Vector2) -> Vector2:
 
 ## The pixel look's frames are Daniele's pictures (art/ai/hud_*.png, 2026-10-08), each in three
 ## slices: its two ends kept to their shape at the frame's height, its middle stretched between
-## them. Made once per size at one texel per cell (the HUD is drawn one px per cell), every texel
+## them. Made once per size at one texel per texel of the world picture (PxArt.FINE), every texel
 ## wholly in or out, so they stay crisp.
 const SLICE := {"hud_plate": 240, "hud_bar": 90}   ## each picture's end width, its own px
 static var _sliced := {}
@@ -286,13 +286,13 @@ static func sliced(key: String, cells: Vector2i) -> Texture2D:
 	return tex
 
 
-## Draws picture `key` over r (base px), snapped to whole cells.
+## Draws picture `key` over r (base px), snapped to whole texels of the world picture (PxArt.FINE).
 func _picture(ci: CanvasItem, key: String, r: Rect2, mod := Color.WHITE) -> void:
-	var px := PxArt.PX
+	var px := PxArt.FINE
 	var cells := Vector2i((r.size / px).round())
 	var tex := sliced(key, cells)
 	if tex != null:
-		ci.draw_texture_rect(tex, Rect2(PxArt.snap2(r.position), Vector2(cells) * px), false, mod)
+		ci.draw_texture_rect(tex, Rect2(PxArt.snap2(r.position, Vector2.ZERO, px), Vector2(cells) * px), false, mod)
 
 
 ## A carved frame: a dark panel with pointed ends, an orange edge glowing outward, a thin inner line,

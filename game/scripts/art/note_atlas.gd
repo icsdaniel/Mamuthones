@@ -3,13 +3,13 @@ extends Node
 ## The pixel look's note sheet. Drawing a note in full (a faceted solid, its shading, the pintadera's
 ## teeth) every frame cost most of a frame on a dense chart, so each kind is painted once here, by the
 ## same StreetSkin code, at a ladder of sizes down the road, into one small picture at one pixel per
-## art pixel. Notes are then stamped from it: one textured rectangle each, whatever their number.
+## texel of the world picture (PxArt.FINE). Notes are then stamped from it: one textured rectangle each, whatever their number.
 ##
 ## A note's look depends only on how far down the road it is (its size and how flat it lies), so a
 ## sheet row per size covers the road; the nearest size is stretched by a few percent to fit.
 
 const KINDS := ["step", "off", "six", "call", "heal", "hold", "stomp", "knot"]
-const STEP := 3.0               ## sheet px a cell grows by from one row to the next (a note is stretched by under 1 px)
+const STEP := 6.0               ## sheet texels (PxArt.FINE) a cell grows by from one row to the next (a note is stretched by under 3 texels, 2%)
 const CELL := Vector2(1.08, 0.78)  ## a cell's size in lane widths at its size (a stomp's disc fits)
 const REACH := 1.3             ## the sheet's biggest note: this times a note's size on the hit line
 
@@ -74,6 +74,8 @@ func is_ready() -> bool:
 		if img != null and not img.is_empty():
 			_tex = ImageTexture.create_from_image(img)
 			_kept = {"key": _key, "ys": _ys, "lws": _lws, "rows": _rows, "n": _n, "tex": _tex}
+			# the copy is drawn from now on: give back the painting picture's memory
+			_vp.size = Vector2i.ONE
 	return true
 
 
@@ -90,7 +92,7 @@ func _layout(lv: LaneView) -> void:
 	_ys = PackedFloat32Array()   # fresh: the kept sheet may hold the old ones
 	_lws = PackedFloat32Array()
 	_rows = []
-	var px := PxArt.PX
+	var px := PxArt.FINE
 	var top := 0.0
 	var width := 0.0
 	# just enough rows that the nearest is never more than STEP / 2 sheet px off: few, as the road
@@ -141,7 +143,7 @@ func stamp(lv: LaneView, key: String, c: Vector2, lw: float, a: float) -> void:
 	var i := clampi(int(roundf(log(lw / _lws[0]) / log(_lws[_n - 1] / _lws[0]) * (_n - 1))), 0, _n - 1)
 	var row := _rows[i]
 	var src := Rect2(row.size.x * col, row.position.y, row.size.x, row.size.y)
-	var s := lw / _lws[i] * PxArt.PX
+	var s := lw / _lws[i] * PxArt.FINE
 	var dst := Rect2(c - row.size * 0.5 * s, row.size * s)
 	lv.draw_texture_rect_region(_tex, dst, src, Color(1.0, 1.0, 1.0, a))
 
@@ -164,7 +166,7 @@ class _Painter extends Node2D:
 	func _draw() -> void:
 		if view == null:
 			return
-		var px := PxArt.PX
+		var px := PxArt.FINE
 		var cx := field.size.x * 0.5
 		StreetSkin.paint_glow = false
 		var near := StreetSkin._near

@@ -10,6 +10,11 @@ extends RefCounted
 ## road's far end, so the backdrop, the road and the title scene share one grid.
 
 const PX := 3.0
+## One texel of the play screen's world picture, in base px: half an art pixel, so the world is drawn
+## 480 texels across the 720-wide base screen (twice the old 240 each way). Daniele's pictures
+## (notes, rings, buttons, HUD frames, the street) are shrunk to this grid; the drawn sprites and the
+## pixel type keep PX, two texels by two, so both grids line up.
+const FINE := PX / 2.0
 const SCENERY := "res://art/px/scenery/"
 const FIELD := "res://art/px/field/"
 
@@ -63,6 +68,51 @@ static func blit(ci: CanvasItem, t: Texture2D, at: Vector2, px := PX, modulate :
 		ci.draw_texture_rect_region(t, Rect2(at, sz), Rect2(Vector2(t.get_width(), 0), Vector2(-t.get_width(), t.get_height())), modulate)
 	else:
 		ci.draw_texture_rect(t, Rect2(at, sz), false, modulate)
+
+
+## The sharp-pixel upscale for a picture of whole texels shown bigger than 1:1 at a size that is not
+## a whole multiple (the world picture, 480 texels across, on a 1290-px-wide phone is 2.69x): each
+## texel stays a hard-edged square, and only the one screen pixel where two texels meet is blended, so
+## no column is a pixel wider than the next (nearest) and nothing is smeared (plain linear). It reads
+## its own picture once a pixel, as the plain blit did: no screen read, no extra pass. `zoom` is
+## screen px per texel (sharp_zoom keeps it up to date).
+const SHARP_SHADER := """
+shader_type canvas_item;
+uniform float zoom = 1.0;
+void fragment() {
+	vec2 ts = vec2(textureSize(TEXTURE, 0));
+	vec2 t = UV * ts;
+	vec2 seam = floor(t + 0.5);
+	t = seam + clamp((t - seam) * zoom, -0.5, 0.5);
+	COLOR = texture(TEXTURE, t / ts);
+}
+"""
+
+static var _sharp_shader: Shader
+
+
+## A material that shows a picture of hard texels sharply at any scale (SHARP_SHADER); the canvas
+## item it is set on must filter its texture linearly, and call sharp_zoom when its size on screen
+## changes.
+static func sharp_material() -> ShaderMaterial:
+	if _sharp_shader == null:
+		_sharp_shader = Shader.new()
+		_sharp_shader.code = SHARP_SHADER
+	var m := ShaderMaterial.new()
+	m.shader = _sharp_shader
+	return m
+
+
+## Sets ci's sharp material to its texels' size on screen: `texel` its own units per texel.
+static func sharp_zoom(ci: CanvasItem, texel := 1.0) -> void:
+	var m := ci.material as ShaderMaterial
+	if m == null or not ci.is_inside_tree():
+		return
+	var xf := ci.get_viewport().get_final_transform() * ci.get_global_transform_with_canvas()
+	var z := maxf(absf(xf.get_scale().x) * texel, 1.0)
+	var was: Variant = m.get_shader_parameter("zoom")
+	if was == null or not is_equal_approx(float(was), z):
+		m.set_shader_parameter("zoom", z)
 
 
 ## Ordered-dither threshold (0..1) of art pixel (x, y).
