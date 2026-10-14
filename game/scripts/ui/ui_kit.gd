@@ -749,6 +749,15 @@ static func unlock_text(u: Dictionary) -> String:
 	return unlock_name(u)
 
 
+## An opaque raised sheet with a bronze rim, for dialogs and banners over a veil.
+static func _sheet() -> PxStyle:
+	var sb := PxStyle.make(WoodcutTheme.C_SURFACE, WoodcutTheme.C_BRONZE_DEEP, WoodcutTheme.R_M, WoodcutTheme.CARD_PAD)
+	sb.highlight = WoodcutTheme.C_STROKE_HI
+	sb.lip = WoodcutTheme.LIP
+	sb.lip_color = WoodcutTheme.C_INK
+	return sb
+
+
 ## A dark veil over a scene so text on top reads.
 static func shade(parent: Control, alpha: float) -> ColorRect:
 	var r := ColorRect.new()
@@ -795,6 +804,7 @@ static func confirm(node: Node, question: String, yes: String, on_yes: Callable)
 	veil.add_child(center)
 	var p := PanelContainer.new()
 	p.custom_minimum_size.x = 540
+	p.add_theme_stylebox_override("panel", _sheet())
 	center.add_child(p)
 	var box := VBoxContainer.new()
 	box.add_theme_constant_override("separation", 16)
@@ -824,6 +834,7 @@ static func celebrate(node: Node, text: String, delay := 0.0) -> void:
 	p.theme_type_variation = CARD
 	p.custom_minimum_size.x = 560
 	p.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	p.add_theme_stylebox_override("panel", _sheet())
 	center.add_child(p)
 	var box := VBoxContainer.new()
 	box.add_theme_constant_override("separation", 8)

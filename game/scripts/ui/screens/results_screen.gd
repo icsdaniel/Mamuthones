@@ -46,7 +46,7 @@ func build() -> void:
 	var rewards := not (record.get("unlocked", []) as Array).is_empty() or int(record.get("carving_gained", 0)) > 0
 	pager = UIKit.paged(page.body, [["overview", tr("res_tab_overview")], ["score", tr("res_tab_score")],
 		["timing", tr("res_tab_timing")], ["tips", tr("res_tab_rewards" if rewards else "res_tab_tips")]])
-	_overview(pager.add_page("OverviewPage", UIKit.S3))
+	_overview(pager.add_page("OverviewPage", UIKit.S3, true))
 	_breakdown(pager.add_page("ScorePage", UIKit.S2, true))
 	_tendency(pager.add_page("TimingPage", UIKit.S3))
 	_tips(pager.add_page("TipsPage", UIKit.S3, true))
@@ -65,7 +65,7 @@ func _hero(box: Container) -> void:
 	hero.add_theme_constant_override("separation", UIKit.S2)
 	box.add_child(hero)
 	# The seal: its warm halo flares as the grade stamps in and as the score lands.
-	var grade := GradeSeal.new(session.grade_rank(), 62, 2)
+	var grade := GradeSeal.new(session.grade_rank(), 58, 2)
 	grade.name = "Grade"
 	grade.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
 	grade.stamped.connect(func() -> void:

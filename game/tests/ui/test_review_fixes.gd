@@ -110,6 +110,48 @@ func test_results_fit_one_screen_with_pages() -> void:
 	UIHarness.restore_profile()
 
 
+func test_results_pages_swipe() -> void:
+	UIHarness.fresh_profile()
+	var s := _auto("fires", "hard")
+	var app := UIHarness.make_app(tree, "results", {"session": s, "record": {}}, Vector2i(720, 1440))
+	await UIHarness.settle(tree)
+	var res := app.current()
+	var pager := res.find_child("Pager", true, false) as Pager
+	var tabs := res.find_child("Tabs", true, false) as HBoxContainer
+	var c := pager.get_global_rect().get_center()
+	# a sideways swipe to the left turns to the next page and lights its segment
+	_touch(pager, c, true)
+	for i in 6:
+		_drag(pager, c - Vector2(40.0 * (i + 1), 4.0))
+	_touch(pager, c - Vector2(240, 4), false)
+	check_eq(pager.current, 1, "a swipe left turns the page")
+	check((tabs.get_child(1) as Button).button_pressed, "the Score segment is lit")
+	# a mostly vertical drag does not
+	_touch(pager, c, true)
+	for i in 6:
+		_drag(pager, c + Vector2(10.0, 40.0 * (i + 1)))
+	_touch(pager, c + Vector2(10, 240), false)
+	check_eq(pager.current, 1, "an up-down drag leaves the page")
+	# tapping a segment turns to it
+	(tabs.get_child(2) as Button).pressed.emit()
+	check_eq(pager.current, 2, "a segment turns to its page")
+	UIHarness.free_app(app)
+	UIHarness.restore_profile()
+
+
+static func _touch(p: Pager, at: Vector2, down: bool) -> void:
+	var e := InputEventScreenTouch.new()
+	e.position = at
+	e.pressed = down
+	p._input(e)
+
+
+static func _drag(p: Pager, at: Vector2) -> void:
+	var e := InputEventScreenDrag.new()
+	e.position = at
+	p._input(e)
+
+
 func test_tips_are_correct_and_concrete() -> void:
 	UIHarness.fresh_profile()
 	var results: GDScript = load(App.SCREENS["results"])
