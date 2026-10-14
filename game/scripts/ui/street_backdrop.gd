@@ -85,6 +85,7 @@ var _glow: Control                   ## additive: lines pulsing, lanterns, hit f
 var _sparks: CPUParticles2D
 var _frames: Array[Node2D] = []
 var _puppets: Array[PixelFigure] = []
+var _look := {}                       ## the player's look for the Mamuthone ({}: as painted)
 var _cuts: Array[ShaderMaterial] = []   ## per portrait: cuts its figure at the frame's lower edge
 var _glow_tex: Texture2D
 var _flashes: Array = []             ## [local pos, t0, strength]
@@ -311,8 +312,12 @@ func lane_px(fy: float) -> float:
 
 # ------------------------------------------------------------------ the SideRows / FireBackdrop calls
 
-func set_look(_mask: Dictionary, _fleece := "black", _straps := "natural") -> void:
-	pass
+## The player's look on the Mamuthone's portrait (PixelFigure.set_look: a texture swap, the carved
+## mask stamped once; the play screen calls it while it builds, never during the song).
+func set_look(mask: Dictionary, fleece := "black", straps := "natural") -> void:
+	_look = {"mask": mask, "fleece": fleece, "straps": straps}
+	for pup in _puppets:
+		pup.set_look(_look)
 
 
 func set_bell_set(id: String) -> void:
@@ -560,6 +565,8 @@ func _make_frame(i: int) -> Node2D:
 	pup.name = "Figure"
 	pup.mirror = i == 1
 	pup.material = cut
+	if not _look.is_empty():
+		pup.set_look(_look)
 	stand.add_child(pup)
 	_puppets.append(pup)
 	var border := Line2D.new()
