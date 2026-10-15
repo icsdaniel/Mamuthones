@@ -1,0 +1,88 @@
+{
+ "title": {
+  "en": "Sant'Antonio's Fires (Suno test)",
+  "it": "I fuochi di Sant'Antonio (prova Suno)"
+ },
+ "stop": 2,
+ "bpm": 66.377,
+ "offset": 0.433,
+ "targets": {
+  "easy": 0.62,
+  "medium": 1.3,
+  "hard": 2.2,
+  "expert": 3.4
+ },
+ "id": "suno_fires",
+ "audio": "res://audio/music/suno_fires.ogg",
+ "length": 170.209,
+ "features": "/tmp/claude-0/suno/fires_feat.json",
+ "preview": 40.0,
+ "rests": [
+  {
+   "b": 150,
+   "len": 2
+  }
+ ],
+ "sections": [
+  [
+   "intro",
+   0,
+   4,
+   0
+  ],
+  [
+   "verse",
+   4,
+   5,
+   1
+  ],
+  [
+   "groove",
+   9,
+   4,
+   2
+  ],
+  [
+   "call",
+   13,
+   8,
+   2
+  ],
+  [
+   "rise",
+   21,
+   4,
+   3
+  ],
+  [
+   "drop",
+   25,
+   2,
+   1
+  ],
+  [
+   "climax",
+   27,
+   11,
+   3
+  ],
+  [
+   "break",
+   38,
+   3,
+   1
+  ],
+  [
+   "outro",
+   41,
+   5,
+   2
+  ]
+ ],
+ "thresholds": {
+  "mel": 0.4,
+  "chorus": 0.3,
+  "hat": 0.35,
+  "snare": 0.4
+ }
+}
