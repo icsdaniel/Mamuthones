@@ -75,6 +75,10 @@ var _stomp_sounded := false       ## a stomp sounded on this touch: no plain ste
 var _sched := 0                  ## next note to check for calls and accents
 var _last_accent_t := -INF       ## the last accent's note time (a chord swells once)
 const CLANK_GAP := 0.15
+## Notes make no sounds of their own for now (Daniele, 2026-10-15: "remove notes sounds, we'll work
+## on these again later"): no lane tones, bells, stomps, hold drones and chimes, bell cue ticks or
+## calls. The music and its lift on good hits are what the player hears.
+const NOTE_SOUNDS := false
 var _clank_at := -INF            ## when the last stand-still clank sounded (_clank)
 var _hold_ends: Array[Note] = []  ## holds whose end chime is still to come (_schedule)
 var _bell_sched := 0             ## next note to check for the bell cue
@@ -273,8 +277,9 @@ func build() -> void:
 		session.health_changed.connect(func(h: int, d: int) -> void: rl.event(_song_t, "health", {"health": h, "delta": d}))
 		session.unison_changed.connect(func(level: int) -> void: rl.event(_song_t, "unison", {"level": level}))
 	session.unison_changed.connect(_on_unison)
-	session.hold_started.connect(func(lane: int) -> void: Sound.hold_start(lane))
-	session.hold_ended.connect(func(lane: int, _kept: bool) -> void: Sound.hold_stop(lane))
+	if NOTE_SOUNDS:
+		session.hold_started.connect(func(lane: int) -> void: Sound.hold_start(lane))
+		session.hold_ended.connect(func(lane: int, _kept: bool) -> void: Sound.hold_stop(lane))
 	session.wrong_step.connect(_on_wrong_step)
 	session.stray.connect(_on_stray)
 	session.stomp_landed.connect(_on_stomp)
@@ -540,12 +545,12 @@ func _schedule(t: float, delta := 0.0) -> void:
 		var at := n.t - lead
 		if at > t:
 			break
-		if n.call:
+		if n.call and NOTE_SOUNDS:
 			Sound.call_out()
 		if n.kind != Note.Kind.REST and n.t > _last_accent_t + 0.01 and not _no_lift:
 			_last_accent_t = n.t
 			lift.accent()
-		if not _no_lift:
+		if not _no_lift and NOTE_SOUNDS:
 			_cue(n)
 		_sched += 1
 	# The bell cue: on Easy and Medium the music's rim clicks come before many beats with no bell, so
@@ -558,7 +563,7 @@ func _schedule(t: float, delta := 0.0) -> void:
 			continue
 		if n.t - 0.5 * _spb - lead > t:
 			break
-		if _bell_cue and not n.done and n.t > t:
+		if _bell_cue and NOTE_SOUNDS and not n.done and n.t > t:
 			Sound.ui("cue")
 		_bell_sched += 1
 	# a hold's small bell at its end, unless it was let go
@@ -568,7 +573,7 @@ func _schedule(t: float, delta := 0.0) -> void:
 		if h.end_t - lead > t:
 			k += 1
 			continue
-		if h.judgement != "let_go" and h.judgement != "miss":
+		if h.judgement != "let_go" and h.judgement != "miss" and NOTE_SOUNDS:
 			Sound.cued(Sound.hold_done.bind(h.lane))
 		_hold_ends.remove_at(k)
 	var still := false
@@ -675,7 +680,9 @@ func _on_rang(result: Dictionary) -> void:
 	var up := bool(result.get("up", true))
 	# A bell note already rang on the music (_schedule), heard on its beat; only a tilt with no bell
 	# to ring (free) or one in a stand-still (silence) sounds now.
-	if q == "silence":
+	if not NOTE_SOUNDS:
+		pass
+	elif q == "silence":
 		_clank(up, strength)
 	elif q == "free":
 		Sound.bell(BellSets.STANDARD, up, q, strength)

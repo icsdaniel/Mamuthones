@@ -19,6 +19,9 @@ var remix: Dictionary = {}
 var length := 0.0
 var preview := 0.0
 var key_root := 60
+## How late a swung song's off-beat sixteenths sound, in beats (0: straight). Expert's gaps shrink
+## by it, since a late sixteenth sits that much closer to the next eighth.
+var swing := 0.0
 var sections: Array = []
 var lessons: Array = []
 var charts: Dictionary = {}
@@ -60,6 +63,7 @@ static func from_dict(d: Dictionary) -> SongData:
 	s.length = float(d.get("length", 0.0))
 	s.preview = float(d.get("preview", 0.0))
 	s.key_root = int(d.get("key_root", 60))
+	s.swing = float(d.get("swing", 0.0))
 	var sec = d.get("sections", [])
 	s.sections = sec if sec is Array else []
 	var les = d.get("lessons", [])

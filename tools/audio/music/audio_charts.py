@@ -68,13 +68,13 @@ def metric_rank(b):
 def candidates(song, feat, cfg):
     """Chart candidates from the features: every one sits on a sound the player hears."""
     th = {"kick": 0.45, "snare": 0.5, "hat": 0.6, "mel": 0.55, "chorus": 0.4, "tune": 0.25,
-          "bell": 0.55, "bell_off": 1.1, "hold_next": 0.6, "stomp": 1.0}
+          "bell": 0.55, "bell_off": 1.1, "bass": 0.6, "hold_next": 0.6, "stomp": 1.0}
     th.update(cfg.get("thresholds", {}))
     S = feat["slots"]
     spb = 60.0 / song.bpm
     # drums have no pitch: give each a register, so the lanes follow kick (left), hats (middle)
     # and snare (right) instead of all sitting where the tune last was
-    P_KICK, P_HAT, P_SNARE = 55.0, 66.0, 77.0
+    P_BASS, P_KICK, P_HAT, P_SNARE = 50.0, 55.0, 66.0, 77.0
     # how busy the tune is in each bar (a hold needs a tune that plays, not a drums-only bar)
     tune_bar = {}
     for s in S:
@@ -113,6 +113,9 @@ def candidates(song, feat, cfg):
         if not kick and (s["snare"] >= th["snare"] or s["hat"] >= th["hat"]):
             p = P_SNARE if s["snare"] >= th["snare"] and s["snare"] >= s["hat"] else P_HAT
             cands.append(Cand(b, "perc", min(5, r + 1), "drums", pitch=p))
+        # the bass line (from stems): its own notes where no kick plays, low on the buttons
+        if not kick and s.get("bass", 0.0) >= th["bass"]:
+            cands.append(Cand(b, "chorus", min(5, r + 1), "bass", pitch=P_BASS))
         tune = s["h"] >= th["tune"]
         if tune and s["mel"] >= th["mel"]:
             p = pitch_near(i)
@@ -220,7 +223,16 @@ def build(cfg):
         sec.opts["add"].setdefault("hard", {})["steps"] = [x for x in C.DEFAULTS["expert"][e]["steps"] if x[0] != "fast"]
         sec.opts.update(cfg.get("section_opts", {}).get(sec.name, {}))
     song.cands, song.events = candidates(song, feat, cfg)
-    charts, _ = C.chart_song(song)
+    # a swung song's Expert plays its late sixteenths: they sit closer than a sixteenth to the next
+    # eighth, so the gap rules shrink by the swing while charting (the validator does the same)
+    saved = {k: V.RULES[k]["expert"] for k in ("overall_gap", "hand_gap")}
+    for k in saved:
+        V.RULES[k]["expert"] = saved[k] - cfg.get("swing", 0.0)
+    try:
+        charts, _ = C.chart_song(song)
+    finally:
+        for k, v in saved.items():
+            V.RULES[k]["expert"] = v
     # Easy rings at most one bell a phrase (8 beats), however the sections fall on the bars
     last = -99.0
     keep = []

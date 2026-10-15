@@ -223,14 +223,17 @@ def rule_fns(song, name, notes):
     if name not in DIFFS:
         return (lambda b: 0.5), (lambda b: 0.5), (lambda b: 0.0)
 
+    # a swung song's late sixteenth sits closer than a sixteenth to the eighth after it (Expert)
+    swing = float(song.get("swing", 0.0)) if name == "expert" else 0.0
+
     def overall(b):
         g = RULES["overall_gap_third" if third(b) else "overall_gap"][name]
         if name == "easy" and not tutorial:
             g = max(g, RULES["easy_min_gap_s"] / spb - EPS)
-        return g
+        return g - swing
 
     def hand(b):
-        return RULES["hand_gap_third" if third(b) else "hand_gap"][name]
+        return RULES["hand_gap_third" if third(b) else "hand_gap"][name] - swing
 
     if name in RULES["bell_clear_s"]:
         cb = RULES["bell_clear_s"][name] / spb

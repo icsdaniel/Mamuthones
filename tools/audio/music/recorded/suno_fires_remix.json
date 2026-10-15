@@ -5,17 +5,17 @@
  },
  "stop": 2,
  "bpm": 137.0,
- "offset": 0.046,
+ "offset": 0.018,
  "targets": {
   "easy": 0.8,
   "medium": 2.0,
-  "hard": 3.2,
-  "expert": 4.6
+  "hard": 3.68,
+  "expert": 5.75
  },
  "id": "suno_fires_remix",
  "audio": "res://audio/music/suno_fires_remix.ogg",
- "length": 170.0,
- "features": "/tmp/claude-0/suno/fires_remix_feat.json",
+ "length": 170.004,
+ "features": "/mnt/project-files/suno-songs/work/features-stems/fires_remix_feat.json",
  "preview": 40.0,
  "rests": [],
  "sections": [
@@ -103,5 +103,12 @@
    5,
    1
   ]
- ]
+ ],
+ "thresholds": {
+  "hat": 0.35,
+  "snare": 0.4,
+  "kick": 0.4,
+  "mel": 0.3,
+  "chorus": 0.2
+ }
 }

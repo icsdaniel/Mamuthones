@@ -4,18 +4,18 @@
   "it": "La bottega (prova Suno)"
  },
  "stop": 1,
- "bpm": 101.22,
- "offset": 0.206,
+ "bpm": 101.0,
+ "offset": 0.595,
  "targets": {
   "easy": 0.7,
   "medium": 1.8,
-  "hard": 2.8,
-  "expert": 4.2
+  "hard": 3.22,
+  "expert": 5.25
  },
  "id": "suno_workshop",
  "audio": "res://audio/music/suno_workshop.ogg",
- "length": 139.087,
- "features": "/tmp/claude-0/suno/workshop_feat.json",
+ "length": 139.535,
+ "features": "/mnt/project-files/suno-songs/work/features-stems/workshop_feat.json",
  "preview": 40.0,
  "rests": [],
  "sections": [
@@ -91,5 +91,14 @@
    1,
    1
   ]
- ]
+ ],
+ "thresholds": {
+  "hat": 0.25,
+  "snare": 0.4,
+  "kick": 0.4,
+  "mel": 0.35,
+  "chorus": 0.2,
+  "tune": 0.2,
+  "bass": 0.4
+ }
 }

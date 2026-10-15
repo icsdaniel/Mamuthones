@@ -5,17 +5,17 @@
  },
  "stop": 1,
  "bpm": 90.0,
- "offset": 0.245,
+ "offset": 0.195,
  "targets": {
   "easy": 0.7,
   "medium": 1.8,
-  "hard": 2.8,
-  "expert": 4.0
+  "hard": 3.22,
+  "expert": 5.0
  },
  "id": "suno_workshop_remix",
  "audio": "res://audio/music/suno_workshop_remix.ogg",
- "length": 139.96,
- "features": "/tmp/claude-0/suno/workshop_remix_feat.json",
+ "length": 139.896,
+ "features": "/mnt/project-files/suno-songs/work/features-stems/workshop_remix_feat.json",
  "preview": 40.0,
  "rests": [],
  "sections": [
@@ -88,9 +88,13 @@
  ],
  "thresholds": {
   "bell": 0.45,
-  "mel": 0.45,
-  "chorus": 0.3,
-  "hat": 0.45
+  "mel": 0.35,
+  "chorus": 0.2,
+  "hat": 0.25,
+  "snare": 0.4,
+  "kick": 0.4,
+  "tune": 0.2,
+  "bass": 0.4
  },
  "swing": 0.0675
 }

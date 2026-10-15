@@ -188,7 +188,7 @@ static func _check_spacing(song: SongData, difficulty: String, notes: Array, whe
 	for i in range(1, beats.size()):
 		var a: float = beats[i - 1]
 		var c: float = beats[i]
-		var g := maxf(_overall(difficulty, third_at.get(a, false), easy_min), _overall(difficulty, third_at.get(c, false), easy_min))
+		var g := maxf(_overall(difficulty, third_at.get(a, false), easy_min), _overall(difficulty, third_at.get(c, false), easy_min)) - _swing(song, difficulty)
 		if c - a < g - TOL:
 			out.append("%s b=%s: inputs %.3f beats apart (min %.3f)" % [where, a, c - a, g])
 	# Thumbs, in order of beat (fixed lanes first on a beat).
@@ -219,7 +219,7 @@ static func _check_spacing(song: SongData, difficulty: String, notes: Array, whe
 			out.append("%s b=%s: input too close after the bell at b=%s (both thumbs tilt the phone)" % [where, b, last_bell])
 		var key := snappedf(b, 0.001)
 		var taken: Array = used_at.get(key, [])
-		var gap: float = (HAND_GAP_THIRD if feel[i] else HAND_GAP)[difficulty]
+		var gap: float = (HAND_GAP_THIRD if feel[i] else HAND_GAP)[difficulty] - _swing(song, difficulty)
 		if k == "stomp":
 			# Both thumbs on one button: each must be free and rested, and nothing else on its beat.
 			if not taken.is_empty():
@@ -261,6 +261,11 @@ static func _check_spacing(song: SongData, difficulty: String, notes: Array, whe
 		if k == "hold":
 			busy[h] = b + float(n.len)
 	return out
+
+
+## A swung song's Expert gaps shrink by its swing (see SongData.swing).
+static func _swing(song: SongData, difficulty: String) -> float:
+	return song.swing if difficulty == "expert" else 0.0
 
 
 static func _overall(difficulty: String, third: bool, easy_min: float) -> float:

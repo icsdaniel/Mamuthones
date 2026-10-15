@@ -20,14 +20,14 @@ from __future__ import annotations
 import validate_charts as V
 
 DIFFS = ("easy", "medium", "hard", "expert")
-ROOM = {"easy": 0.6, "medium": 0.45, "hard": 0.35, "expert": 0.25}      # tap <-> tilt, seconds
-TILT_GAP = {"medium": (4.0, 2.4), "hard": (4.0, 1.75), "expert": (2.0, 1.0)}  # (beats, seconds)
+ROOM = {"easy": 0.6, "medium": 0.45, "hard": 0.32, "expert": 0.2}      # tap <-> tilt, seconds
+TILT_GAP = {"medium": (4.0, 2.4), "hard": (4.0, 1.75), "expert": (2.0, 0.8)}  # (beats, seconds)
 CLEAR_MAX = 2       # a strong tilt may clear this many plain taps out of its way (Medium and up)
 TILT_FLOOR = {"medium": 8, "hard": 11, "expert": 10}   # per minute; below it, tilts clear more taps
 HOLD_MAX_S = 4.0
 # Medium and Hard are refilled from the level above when the pass leaves them thin or empty
 REFILL = {"medium": ("hard", 1.5, 2.5), "hard": ("expert", 2.3, 2.0)}   # source, min notes/s, void s
-TILTS_PER_MIN = {"easy": 8, "medium": 15, "hard": 20, "expert": 28}
+TILTS_PER_MIN = {"easy": 8, "medium": 15, "hard": 22, "expert": 34}
 RUN_CAP = {"medium": 4, "hard": 4, "expert": 6}
 MID_SHARE = 0.45
 STOMP_TILT_S = 0.6

@@ -4,18 +4,18 @@
   "it": "I fuochi di Sant'Antonio (prova Suno)"
  },
  "stop": 2,
- "bpm": 66.377,
- "offset": 0.433,
+ "bpm": 66.01,
+ "offset": 0.456,
  "targets": {
   "easy": 0.75,
   "medium": 1.5,
-  "hard": 2.3,
-  "expert": 3.4
+  "hard": 2.64,
+  "expert": 4.25
  },
  "id": "suno_fires",
  "audio": "res://audio/music/suno_fires.ogg",
- "length": 170.209,
- "features": "/tmp/claude-0/suno/fires_feat.json",
+ "length": 171.023,
+ "features": "/mnt/project-files/suno-songs/work/features-stems/fires_feat.json",
  "preview": 40.0,
  "rests": [],
  "sections": [
@@ -75,11 +75,14 @@
   ]
  ],
  "thresholds": {
-  "mel": 0.4,
-  "chorus": 0.3,
-  "hat": 0.35,
+  "mel": 0.35,
+  "chorus": 0.2,
+  "hat": 0.25,
   "snare": 0.4,
   "bell": 0.4,
-  "bell_off": 0.8
+  "bell_off": 0.8,
+  "kick": 0.4,
+  "tune": 0.2,
+  "bass": 0.4
  }
 }

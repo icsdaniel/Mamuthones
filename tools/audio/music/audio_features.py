@@ -68,7 +68,7 @@ def main():
         "all": librosa.onset.onset_strength(y=mix, sr=SR, hop_length=HOP),
     }
     if bass is not None:
-        feats["bass"] = librosa.onset.onset_strength(y=bass, sr=SR, hop_length=HOP)
+        feats["bass"] = peaks_only(librosa.onset.onset_strength(y=bass, sr=SR, hop_length=HOP))
     # loudness of harmonic and percussive parts (sustain, silence)
     rms_h = librosa.feature.rms(y=tune, hop_length=HOP)[0]
     rms_p = librosa.feature.rms(y=perc, hop_length=HOP)[0]
