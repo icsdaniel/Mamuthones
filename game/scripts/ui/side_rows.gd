@@ -43,7 +43,7 @@ signal joined(level: int)
 var lanes: Control
 var beat := 0.0                     ## the song's beat now (fractional); negative before the music
 var mask: Dictionary = MaskSpec.default()
-var fleece := "black"
+var fleece := MaskSpec.DEFAULT_FLEECE
 var straps := "natural"
 var bell_set := "village"
 var unison := 0
@@ -69,7 +69,7 @@ func _ready() -> void:
 
 # ------------------------------------------------------------------ the ProcessionScene calls
 
-func set_look(p_mask: Dictionary, p_fleece := "black", p_straps := "natural") -> void:
+func set_look(p_mask: Dictionary, p_fleece := MaskSpec.DEFAULT_FLEECE, p_straps := "natural") -> void:
 	mask = p_mask
 	fleece = p_fleece
 	straps = p_straps

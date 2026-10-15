@@ -96,7 +96,13 @@ func _place(x: float) -> void:
 	for i in get_child_count():
 		var c := get_child(i) as Control
 		if c != null:
-			c.position.x = roundf((x + i * size.x) / PX) * PX
+			var p := x + i * size.x
+			var r := roundf(p / PX) * PX
+			# a page (all but) off the side is put a whole step clear of it: at a fractional screen
+			# scale its edge would otherwise round onto the last physical column inside the clip
+			if absf(p) >= size.x - PX:
+				r = (ceilf(p / PX) if p > 0.0 else floorf(p / PX)) * PX + signf(p) * PX
+			c.position.x = r
 
 
 ## Whether something that takes input (a dialog's veil, a sheet) lies over `at` (viewport px): the

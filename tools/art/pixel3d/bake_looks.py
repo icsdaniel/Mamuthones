@@ -47,12 +47,13 @@ HEAD_LEATHER = [(41, 38, 53, 60)]
 BELLS_LEATHER = [(36, 55, 62, 70)]
 # The painted face (inside the kerchief), searched for low-saturation pixels.
 FACE_BOX = (24, 9, 44, 42)
-# The carved mask over it: MaskPixels at MASK_UNIT art px to the mask unit (fine detail from 9 up),
-# its crown on the painted crown and centred on the painted face.
-MASK_UNIT = 9.0
-MASK_TOP = -1.82   # MaskPixels.TOP
-MASK_HALF_W = 1.42
-CROWN_V = -1.34
+# The carving is laid on the painted 3/4 face (FigureLook.carve): MaskPixels is rendered at
+# MASK_UNIT art px to the mask unit and read through the painted face's own landmarks, picked by eye
+# on the head: the nose's ridge column (the mask's middle; the far side of the face, left of it, is
+# narrower than the near side) and the rows of the crown, brow, eyes, nose tip, mouth, chin.
+MASK_UNIT = 10.0
+NOSE_X = 31.5
+LANDMARKS = [(-1.34, 11.0), (-0.63, 18.5), (-0.34, 23.0), (0.7, 30.5), (1.13, 34.5), (1.56, 37.5), (1.9, 40.0)]
 
 # Black sheepskin in the firelight, shadow to lit tip.
 BLACK_WOOL = ["#0a080b", "#110e10", "#181415", "#211b1b", "#2b2322", "#372d2a", "#463931", "#574739"]
@@ -182,12 +183,9 @@ def main():
     fm[face] = (255, 255, 255, 255)
     Image.fromarray(fm, "RGBA").save(os.path.join(OUT, "mamuthone_face.png"), optimize=True)
     ys, xs = np.nonzero(face)
-    crown = int(ys.min())
-    mid_x = (xs.min() + xs.max() + 1) * 0.5
-    w = max(4, int(round(MASK_HALF_W * 2 * MASK_UNIT)))
-    at = (int(round(mid_x - w * 0.5)), int(round(crown - (CROWN_V - MASK_TOP) * MASK_UNIT)))
-    swatch_fleece = (64, 98, 44, 32)
-    swatch_straps = (78, 130, 32, 32)
+    marks = ", ".join("Vector2(%.2f, %.1f)" % m for m in LANDMARKS)
+    swatch_fleece = (72, 92, 40, 44)
+    swatch_straps = (76, 124, 40, 44)
     with open(GD, "w") as f:
         f.write('''class_name FigureLookCells
 extends RefCounted
@@ -196,19 +194,20 @@ extends RefCounted
 ## 172-px canvas (as the picture faces the road).
 
 const DIR := "res://art/pixel/looks/"
-## The carved mask: MaskPixels.texture(spec, MASK_UNIT, false) drawn with its top-left at MASK_AT,
-## kept to the painted face (mamuthone_face.png).
+## The carving on the painted 3/4 face (mamuthone_face.png): MaskPixels at MASK_UNIT, its middle
+## (u = 0) on the nose's column NOSE_X, its rows by LANDMARKS (mask v, face row y), piecewise.
 const MASK_UNIT := %.1f
-const MASK_AT := Vector2i(%d, %d)
+const NOSE_X := %.1f
+const LANDMARKS: Array[Vector2] = [%s]
 ## The painted face's box.
 const FACE := Rect2i(%d, %d, %d, %d)
 ## Crops of the figure that show a fleece and a strap swatch in the workshop.
 const SWATCH_FLEECE := Rect2i(%d, %d, %d, %d)
 const SWATCH_STRAPS := Rect2i(%d, %d, %d, %d)
-''' % (MASK_UNIT, at[0], at[1], xs.min(), ys.min(), xs.max() + 1 - xs.min(), ys.max() + 1 - ys.min(),
+''' % (MASK_UNIT, NOSE_X, marks, xs.min(), ys.min(), xs.max() + 1 - xs.min(), ys.max() + 1 - ys.min(),
             *swatch_fleece, *swatch_straps))
     print("fleece px", int(fleece.sum()), "leather px", int(leather.sum()), "head fleece", int(head_fleece.sum()),
-          "face", int(face.sum()), "mask at", at)
+          "face", int(face.sum()))
 
 
 if __name__ == "__main__":

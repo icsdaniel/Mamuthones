@@ -1,24 +1,35 @@
 extends Screen
 ## The workshop, on the mobile kit: dress your own Mamuthone, the very figure that bobs beside the
 ## Issohadore on the play screen. One screen that fits, no scrolling.
-##   top bar   back · Workshop · the mask close-up (or back to the whole figure)
-##   stage     your pixel Mamuthone (LookStage) large on a stone plinth in the bonfire's light,
-##             bobbing as it waits; it wears every choice at once, with a ring of its bells and a
-##             dip. Tap it for the carved mask up close (the part being carved ringed in bronze).
-##             On the carving pages your carving points sit in its corner.
-##   pages     a segmented control over swipeable pages, each a row of picture swatches:
-##               Mask       brow, eyes, nose, cheeks, mouth (part chips, then the four carvings)
-##               Wood       finish and patina
-##               Sheepskin  black or dark brown (the only real colours)
-##               Straps     natural or dark leather (the bell straps and the gaiters)
-##             A carving not open yet shows a lock and what opens it (the stop, or the points);
-##             tapping it says both (Progression.mask_option_unlocked, MaskSpec.requirement).
-## args: tab (optional: mask, wood, fleece, straps; "dress" = fleece), closeup (bool).
+##   top bar   back · Workshop
+##   stage     LookStage: on the Mask and Wood pages the carved mask up close, the part being carved
+##             ringed in bronze; on the Dress page your whole pixel Mamuthone on a stone plinth in the
+##             bonfire's light, bobbing as it waits. Every choice is worn at once, with a ring of the
+##             bells and a dip. A labelled toggle (top right) or a tap on the stage switches view.
+##             On the carving pages your carving points sit in its top-left corner.
+##   pages     a segmented control over swipeable pages:
+##               Mask   brow, eyes, nose, cheeks, mouth: part chips, then four swatches, each the
+##                      mask cropped to that part, large
+##               Wood   finish and patina: the whole mask
+##               Dress  sheepskin (dark brown, black: the only real colours) and leather (natural,
+##                      dark: the bell straps and the gaiters), the figure's own pixels
+##             A carving not open yet shows dimmed, a lock in its corner and what opens it (the stop,
+##             or the points); tapping it says both (Progression.mask_option_unlocked).
+## args: tab (optional: mask, wood, dress; "fleece" and "straps" open dress), part (optional: the mask
+## part to carve), closeup (bool: start in the other view than the page's own).
 
-const PAGES := ["mask", "wood", "fleece", "straps"]
+const PAGES := ["mask", "wood", "dress"]
 const PARTS := {"mask": ["brow", "eyes", "nose", "cheeks", "mouth"], "wood": ["finish", "patina"]}
-const SWATCH_H := 204.0
+const SWATCH_H := 252.0
+## The mask swatches: rendered at this unit, the carving pages crop each to its part (x, y: the mask
+## v range; z: the half width, from the nose) and show it as large as fits, so four carvings of one
+## part differ at a glance.
 const SWATCH_MASK_UNIT := 12.0
+const PART_V := {"brow": Vector3(-1.3, -0.3, 0.95), "eyes": Vector3(-0.8, 0.15, 1.0), "nose": Vector3(-0.45, 1.0, 0.55),
+	"cheeks": Vector3(-0.25, 1.2, 1.08), "mouth": Vector3(0.7, 1.75, 0.75)}
+## The mask swatches are shown as if held to the fire (the dark finishes read on a dark tile).
+const SWATCH_LIGHT := Color(1.45, 1.35, 1.25)
+const CROP_ASPECT := 0.85   ## a part crop's least height, to its width
 
 static var tab := "mask"
 static var part := "brow"
@@ -26,26 +37,26 @@ static var wood_part := "finish"
 
 var stage: LookStage
 var pager: Pager
-var _zoom: Button
 var _points: PanelContainer
 var _pages := {}
 
 
 func build() -> void:
 	var t := str(args.get("tab", tab))
-	if t == "dress":
-		t = "fleece"
+	if t in ["fleece", "straps"]:
+		t = "dress"
 	tab = t if t in PAGES else "mask"
+	if str(args.get("part", "")) in PARTS.mask:
+		part = str(args.part)
 	var page := UIKit.scaffold(self, false, UIKit.S3)
-	_zoom = UIKit.icon_button("check", _toggle_closeup, tr("ws_closeup_hint"))
-	_zoom.name = "Closeup"
-	UIKit.top_bar(page.top, tr("ws_title"), on_back, "", _zoom)
+	UIKit.top_bar(page.top, tr("ws_title"), on_back)
 
 	stage = LookStage.new()
 	stage.name = "Stage"
 	stage.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	stage.custom_minimum_size = Vector2(0, 300)
-	stage.tapped.connect(_toggle_closeup)
+	stage.toggle_texts = [tr("ws_view_mask"), tr("ws_view_figure")]
+	stage.tapped.connect(_refresh_stage)
 	page.body.add_child(stage)
 	_points_tile(stage)
 
@@ -56,41 +67,30 @@ func build() -> void:
 	pager.size_flags_vertical = Control.SIZE_FILL
 	pager.custom_minimum_size.y = UIKit.TOUCH + UIKit.S2 + SWATCH_H
 	for id in PAGES:
-		# a hair of room at each side: at fractional screen scales the next page's first column
-		# would otherwise show through the pager's edge
-		var pg := pager.add_page(id.capitalize() + "Page", 0)
-		var m := MarginContainer.new()
-		m.add_theme_constant_override("margin_left", 3)
-		m.add_theme_constant_override("margin_right", 3)
-		m.size_flags_vertical = Control.SIZE_EXPAND_FILL
-		pg.add_child(m)
-		var inner := VBoxContainer.new()
-		inner.add_theme_constant_override("separation", UIKit.S2)
-		m.add_child(inner)
-		_pages[id] = inner
+		_pages[id] = pager.add_page(id.capitalize() + "Page", UIKit.S2)
 		_fill(id)
 	pager.page_changed.connect(_on_page)
-	stage.closeup = bool(args.get("closeup", false))
-	_refresh_stage()
-	_on_page(PAGES.find(tab))
+	_on_page(PAGES.find(tab), false)
+	if bool(args.get("closeup", false)):
+		stage.set_closeup(not stage.closeup, false)
+		_refresh_stage()
 
 
 # ---------------------------------------------------------------- the stage
 
 
+## Your carving points, in the stage's top-left corner (the carving pages only).
 func _points_tile(host: Control) -> void:
 	_points = PanelContainer.new()
 	_points.name = "Points"
 	_points.theme_type_variation = UIKit.TILE
 	_points.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	_points.position = Vector2.ZERO
-	_points.custom_minimum_size.x = 216.0
 	host.add_child(_points)
 	var v := VBoxContainer.new()
 	v.add_theme_constant_override("separation", 0)
 	_points.add_child(v)
-	var tag := UIKit.label(tr("ws_points_tag"), UIKit.OVERLINE, false)
-	v.add_child(tag)
+	v.add_child(UIKit.label(tr("ws_points_tag"), UIKit.OVERLINE, false))
 	var row := HBoxContainer.new()
 	row.add_theme_constant_override("separation", UIKit.S1)
 	v.add_child(row)
@@ -106,22 +106,15 @@ func _points_tile(host: Control) -> void:
 
 
 func _refresh_stage() -> void:
-	var hp := ""
-	if tab == "mask":
-		hp = part
-	stage.set_look(Profile.get_look(), hp)
-	_zoom.icon = KitIcons.get_icon("figure" if stage.closeup else "zoom")
+	stage.set_look(Profile.get_look(), part if tab == "mask" else "")
 
 
-func _toggle_closeup() -> void:
-	stage.closeup = not stage.closeup
-	Sound.ui("tap")
-	_refresh_stage()
-
-
-func _on_page(i: int) -> void:
+## Each page frames the stage its own way: the carving pages the mask up close, the dress page the
+## whole figure.
+func _on_page(i: int, animate := true) -> void:
 	tab = PAGES[clampi(i, 0, PAGES.size() - 1)]
 	_points.visible = tab in PARTS
+	stage.set_closeup(tab != "dress", animate)
 	_refresh_stage()
 
 
@@ -133,20 +126,17 @@ func _fill(id: String) -> void:
 	for c in box.get_children():
 		box.remove_child(c)
 		c.queue_free()
-	match id:
-		"mask", "wood":
-			_carving(box, id)
-		"fleece":
-			_dress(box, "fleece", MaskSpec.FLEECES, FigureLookCells.SWATCH_FLEECE)
-		"straps":
-			_dress(box, "straps", MaskSpec.STRAPS, FigureLookCells.SWATCH_STRAPS)
+	if id == "dress":
+		_dress(box)
+	else:
+		_carving(box, id)
 
 
 func _current_part(id: String) -> String:
 	return part if id == "mask" else wood_part
 
 
-## Part chips, then the part's four carvings as swatches of the mask.
+## Part chips, then the part's four carvings as swatches.
 func _carving(box: VBoxContainer, id: String) -> void:
 	var chips := HBoxContainer.new()
 	chips.name = "Parts"
@@ -169,13 +159,12 @@ func _carving(box: VBoxContainer, id: String) -> void:
 	var row := HBoxContainer.new()
 	row.name = "Options"
 	row.add_theme_constant_override("separation", UIKit.S2)
-	row.custom_minimum_size.y = SWATCH_H
+	row.custom_minimum_size.y = SWATCH_H - UIKit.TOUCH - UIKit.S2
 	row.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	box.add_child(row)
 	var look := Profile.get_look()
 	var spec := MaskSpec.sanitize(look.get("mask", {}))
 	var have_stop := Progression.highest_stop()
-	var have_pts := Progression.carving_points()
 	for o in MaskSpec.options(cur):
 		var s := spec.duplicate()
 		s[cur] = o
@@ -184,9 +173,27 @@ func _carving(box: VBoxContainer, id: String) -> void:
 		if not open:
 			var req := MaskSpec.requirement(cur, o)
 			text = tr("ws_lock_stop") % int(req.stop) if have_stop < int(req.stop) else tr("ws_lock_pts") % int(req.cost)
-		var pic := MaskPixels.texture(s, SWATCH_MASK_UNIT, true, str(look.get("straps", "natural")), "")
-		var sw := Swatch.make(o, pic, text, spec[cur] == o, not open, _carve.bind(id, cur))
+		var cropped := PART_V.has(cur)
+		var pic := MaskPixels.texture(s, SWATCH_MASK_UNIT, not cropped, str(look.get("straps", MaskSpec.STRAPS[0])), "")
+		var sw := Swatch.make(o, pic, text, spec[cur] == o, not open, _carve.bind(id, cur), _part_crop(cur) if cropped else Rect2())
+		if cropped:
+			sw.pic.step = 1
+			sw.light = SWATCH_LIGHT
 		row.add_child(sw)
+
+
+## The part's crop of a swatch mask (MaskPixels at SWATCH_MASK_UNIT), in its pixels.
+static func _part_crop(p: String) -> Rect2:
+	var v: Vector3 = PART_V[p]
+	var u := SWATCH_MASK_UNIT
+	var x0 := floorf((MaskPixels.HALF_W - v.z) * u)
+	var x1 := ceilf((MaskPixels.HALF_W + v.z) * u)
+	# no flatter than CROP_ASPECT (the tile's own shape), so a wide part still fills its tile
+	var mid := ((v.x + v.y) * 0.5 - MaskPixels.TOP) * u
+	var half := maxf((v.y - v.x) * u, (x1 - x0) * CROP_ASPECT) * 0.5
+	var y0 := maxf(floorf(mid - half), 0.0)
+	var y1 := ceilf(mid + half)
+	return Rect2(x0, y0, x1 - x0, y1 - y0)
 
 
 func _style_chip(b: Button, on: bool) -> void:
@@ -225,30 +232,41 @@ func _carve(option: String, id: String, p: String) -> void:
 	Sound.ui("carve")
 	UIKit.vibrate(15)
 	_mark((_pages[id] as Control).find_child("Options", true, false), option)
+	# the other carving page's swatches show the whole mask (or its parts) as it is now
+	_fill("wood" if id == "mask" else "mask")
 	_refresh_stage()
 	stage.jingle()
 
 
-## Two big swatches: the figure's own pixels in each colour.
-func _dress(box: VBoxContainer, key: String, ids: Array, crop: Rect2i) -> void:
-	var row := HBoxContainer.new()
-	row.name = "Options"
-	row.add_theme_constant_override("separation", UIKit.S2)
-	row.custom_minimum_size.y = SWATCH_H - 60.0
-	row.size_flags_vertical = Control.SIZE_EXPAND_FILL
-	box.add_child(row)
-	var look := Profile.get_look()
-	var current := str(look.get(key, ids[0]))
-	for id in ids:
-		var l := look.duplicate(true)
-		l[key] = id
-		var sw := Swatch.make(id, FigureLook.texture("body", l), tr("ws_%s_%s" % [key, id]), id == current, false,
-			_dress_pick.bind(key), Rect2(crop))
-		row.add_child(sw)
-	var note := UIKit.label(tr("ws_%s_note" % key), UIKit.CAPTION, true, HORIZONTAL_ALIGNMENT_CENTER)
-	note.name = "Note"
-	note.add_theme_font_size_override("font_size", 28)
-	box.add_child(note)
+## Two groups of two swatches: the sheepskin and the leather, the figure's own pixels in each.
+func _dress(box: VBoxContainer) -> void:
+	var groups := HBoxContainer.new()
+	groups.name = "Groups"
+	groups.add_theme_constant_override("separation", UIKit.S2)
+	groups.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	box.add_child(groups)
+	var look := FigureLook.normalize(Profile.get_look())
+	for g in [["fleece", MaskSpec.FLEECES, FigureLookCells.SWATCH_FLEECE], ["straps", MaskSpec.STRAPS, FigureLookCells.SWATCH_STRAPS]]:
+		var key: String = g[0]
+		var col := VBoxContainer.new()
+		col.name = "Group_" + key
+		col.add_theme_constant_override("separation", UIKit.S1)
+		col.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		groups.add_child(col)
+		col.add_child(UIKit.overline(tr("ws_group_" + ("fleece" if key == "fleece" else "leather"))))
+		var row := HBoxContainer.new()
+		row.name = "Options_" + key
+		row.add_theme_constant_override("separation", UIKit.S2)
+		row.size_flags_vertical = Control.SIZE_EXPAND_FILL
+		col.add_child(row)
+		var ids: Array = g[1]
+		var current := str(look.get(key, ids[0]))
+		for id in ids:
+			var l := look.duplicate(true)
+			l[key] = id
+			var sw := Swatch.make(id, FigureLook.texture("body", l), tr("ws_%s_%s" % [key, id]), id == current, false,
+				_dress_pick.bind(key), Rect2(g[2]))
+			row.add_child(sw)
 
 
 func _dress_pick(id: String, key: String) -> void:
@@ -256,11 +274,10 @@ func _dress_pick(id: String, key: String) -> void:
 		Profile.set_look(key, id)
 	Sound.ui("carve")
 	UIKit.vibrate(15)
-	_mark((_pages[key] as Control).find_child("Options", true, false), id)
+	# the swatches are drawn in the look as it is: the other group's pictures change too
+	_fill("dress")
 	_refresh_stage()
 	stage.jingle()
-	# the other page's swatches show the figure in this colour too
-	_fill("straps" if key == "fleece" else "fleece")
 
 
 func _mark(row: Node, chosen: String) -> void:

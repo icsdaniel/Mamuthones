@@ -40,7 +40,7 @@ func build() -> void:
 	scene.set_anchors_preset(Control.PRESET_FULL_RECT)
 	scene.offset_bottom = OVERLAP
 	top.add_child(scene)
-	scene.set_look(str(Profile.get_look().get("fleece", "black")))
+	scene.set_look(str(Profile.get_look().get("fleece", MaskSpec.DEFAULT_FLEECE)))
 	var foot := _SceneFoot.new()
 	foot.set_anchors_preset(Control.PRESET_BOTTOM_WIDE)
 	foot.offset_top = -24.0

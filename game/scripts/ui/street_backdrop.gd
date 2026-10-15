@@ -314,7 +314,7 @@ func lane_px(fy: float) -> float:
 
 ## The player's look on the Mamuthone's portrait (PixelFigure.set_look: a texture swap, the carved
 ## mask stamped once; the play screen calls it while it builds, never during the song).
-func set_look(mask: Dictionary, fleece := "black", straps := "natural") -> void:
+func set_look(mask: Dictionary, fleece := MaskSpec.DEFAULT_FLEECE, straps := "natural") -> void:
 	_look = {"mask": mask, "fleece": fleece, "straps": straps}
 	for pup in _puppets:
 		pup.set_look(_look)

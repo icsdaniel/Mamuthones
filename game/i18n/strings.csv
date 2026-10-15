@@ -313,27 +313,26 @@ tip_harder,A clean run. Try %s next.,Una corsa pulita. Prova il livello %s.
 tip_harder_remix,A grade %s or better at %s opens this stop's remix.,Con un voto %s o meglio a %s si apre il remix di questa tappa.
 ws_title,Workshop,Laboratorio
 ws_tab_mask,Mask,Maschera
-ws_tab_dress,Sheepskin,Pelli
+ws_tab_dress,Dress,Vestizione
 ws_points,Carving points: %d,Punti d'intaglio: %d
 ws_points_note,"Your best grades give carving points: 1 for a D or C, 2 for a B or A, 3 for an S or S+. They are never used up: more points open finer carving.","I voti migliori danno punti d'intaglio: 1 per una D o C, 2 per una B o A, 3 per una S o S+. Non si consumano: più punti aprono intagli più fini."
 ws_needs,stop %d · %d points,tappa %d · %d punti
 ws_fleece,Sheepskin,Pelli di pecora
 ws_straps,Straps,Cinghie
 ws_fleece_black,Black,Nere
-ws_fleece_dark_brown,Dark brown,Marrone scuro
-ws_straps_natural,Natural leather,Cuoio naturale
-ws_straps_dark,Dark leather,Cuoio scuro
+ws_fleece_dark_brown,Dark brown,Marroni
+ws_straps_natural,Natural,Naturale
+ws_straps_dark,Dark,Scuro
 ws_tab_wood,Wood,Legno
-ws_tab_fleece,Sheepskin,Pelli
-ws_tab_straps,Straps,Cinghie
 ws_points_tag,CARVING,INTAGLIO
 ws_points_unit,points,punti
 ws_lock_stop,Stop %d,Tappa %d
 ws_lock_pts,%d points,%d punti
 ws_locked_toast,Opens at stop %d with %d carving points (you have %d).,Si apre alla tappa %d con %d punti d'intaglio (ne hai %d).
-ws_closeup_hint,Tap your Mamuthone to see the mask up close.,Tocca il tuo Mamuthone per vedere la maschera da vicino.
-ws_fleece_note,Real Mamuthones wear black or dark brown sheepskins.,I Mamuthones veri portano pelli nere o marrone scuro.
-ws_straps_note,The leather of the bell straps and the gaiters.,Il cuoio delle cinghie dei campanacci e delle gambiere.
+ws_view_mask,Mask,Maschera
+ws_view_figure,Figure,Figura
+ws_group_fleece,SHEEPSKIN,PELLI
+ws_group_leather,LEATHER,CUOIO
 ws_dress_note,Only the real colours: black and dark sheepskins.,Solo i colori veri: pelli nere e scure.
 tut_title,The Workshop,Il laboratorio
 tut_lesson_n,Lesson %d of %d,Lezione %d di %d

@@ -5,12 +5,13 @@ extends RefCounted
 ## 172-px canvas (as the picture faces the road).
 
 const DIR := "res://art/pixel/looks/"
-## The carved mask: MaskPixels.texture(spec, MASK_UNIT, false) drawn with its top-left at MASK_AT,
-## kept to the painted face (mamuthone_face.png).
-const MASK_UNIT := 9.0
-const MASK_AT := Vector2i(20, 7)
+## The carving on the painted 3/4 face (mamuthone_face.png): MaskPixels at MASK_UNIT, its middle
+## (u = 0) on the nose's column NOSE_X, its rows by LANDMARKS (mask v, face row y), piecewise.
+const MASK_UNIT := 10.0
+const NOSE_X := 31.5
+const LANDMARKS: Array[Vector2] = [Vector2(-1.34, 11.0), Vector2(-0.63, 18.5), Vector2(-0.34, 23.0), Vector2(0.70, 30.5), Vector2(1.13, 34.5), Vector2(1.56, 37.5), Vector2(1.90, 40.0)]
 ## The painted face's box.
 const FACE := Rect2i(24, 11, 18, 31)
 ## Crops of the figure that show a fleece and a strap swatch in the workshop.
-const SWATCH_FLEECE := Rect2i(64, 98, 44, 32)
-const SWATCH_STRAPS := Rect2i(78, 130, 32, 32)
+const SWATCH_FLEECE := Rect2i(72, 92, 40, 44)
+const SWATCH_STRAPS := Rect2i(76, 124, 40, 44)

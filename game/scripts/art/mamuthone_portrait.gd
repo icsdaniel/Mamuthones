@@ -6,7 +6,7 @@ extends Control
 ## (FigureSprites) in the chosen fleece, with the player's look on it (LookArt): the carved mask, the
 ## straps, the bells of the chosen set. In a gold frame. For the workshop and the results screen.
 ##
-##   set_look(mask: Dictionary, fleece := "black", straps := "natural", bell_set := "village")
+##   set_look(mask: Dictionary, fleece := MaskSpec.DEFAULT_FLEECE, straps := "natural", bell_set := "village")
 ##       the Profile look (MaskSpec dict, MaskSpec.FLEECES id, MaskSpec.STRAPS id, BellSets id).
 ##   highlight_part  a MaskSpec part being carved: gold marks point at the mask, or "".
 ##   framed          the workshop and the frame round him (off: the figure alone, transparent).
@@ -21,9 +21,9 @@ var mask: Dictionary = MaskSpec.default():
 	set(v):
 		mask = MaskSpec.sanitize(v)
 		_redraw()
-@export var fleece := "black":
+@export var fleece := MaskSpec.DEFAULT_FLEECE:
 	set(v):
-		fleece = v if v in MaskSpec.FLEECES else "black"
+		fleece = v if v in MaskSpec.FLEECES else MaskSpec.DEFAULT_FLEECE
 		_redraw()
 @export var straps := "natural":
 	set(v):
@@ -90,7 +90,7 @@ func _ready() -> void:
 	_relayout()
 
 
-func set_look(p_mask: Dictionary, p_fleece := "black", p_straps := "natural", p_bell_set := "village") -> void:
+func set_look(p_mask: Dictionary, p_fleece := MaskSpec.DEFAULT_FLEECE, p_straps := "natural", p_bell_set := "village") -> void:
 	mask = p_mask
 	fleece = p_fleece
 	straps = p_straps
@@ -135,11 +135,11 @@ static func _paint_figure(ci: CanvasItem, feet: Vector2, px: float, p_mask: Dict
 
 
 ## The portrait into any rect (a still): a navy ground and the frame when framed, the figure on it.
-static func paint(ci: CanvasItem, rect: Rect2, p_mask: Dictionary, p_fleece := "black", p_straps := "natural", p_bell_set := "village", highlight := "", p_framed := true) -> void:
+static func paint(ci: CanvasItem, rect: Rect2, p_mask: Dictionary, p_fleece := MaskSpec.DEFAULT_FLEECE, p_straps := "natural", p_bell_set := "village", highlight := "", p_framed := true) -> void:
 	var px := maxf(1.0, floorf(rect.size.y / float(ART_H)))
 	if p_framed:
 		ci.draw_rect(rect, PixelPalette.NAVY[0])
 		PixelFrame.draw(ci, rect, px, "gold")
 	var feet := Vector2(rect.position.x + floorf(rect.size.x * 0.5 / px) * px, rect.end.y - (float(PixelFrame.DEPTH) + 3.0) * px)
-	_paint_figure(ci, feet, px, MaskSpec.sanitize(p_mask), p_fleece if p_fleece in MaskSpec.FLEECES else "black",
+	_paint_figure(ci, feet, px, MaskSpec.sanitize(p_mask), p_fleece if p_fleece in MaskSpec.FLEECES else MaskSpec.DEFAULT_FLEECE,
 		p_straps if p_straps in MaskSpec.STRAPS else "natural", p_bell_set if p_bell_set in BellSets.IDS else "village", highlight)

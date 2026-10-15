@@ -710,7 +710,7 @@ static func apply_volumes() -> void:
 ## Shows the player's own Mamuthone (mask, fleece, straps) in a procession scene or the side rows.
 static func show_look(scene) -> void:
 	var look: Dictionary = Profile.get_look()
-	scene.set_look(look.get("mask", MaskSpec.default()), str(look.get("fleece", "black")), str(look.get("straps", "natural")))
+	scene.set_look(look.get("mask", MaskSpec.default()), str(look.get("fleece", MaskSpec.DEFAULT_FLEECE)), str(look.get("straps", "natural")))
 	if "bell_set" in scene:
 		scene.bell_set = BellSets.STANDARD
 

@@ -23,7 +23,7 @@ const MID := (TOP + BOTTOM) * 0.5
 ## Five-step wood ramps per finish, shadow to firelit edge (all very dark: the mask stays black).
 const FINISH_RAMP := {
 	"soot_black": ["K1", "WOOD0", "WOOD1", "WOOD2", "WOOD3"],
-	"smoked": ["K1", "WOOD1", "WOOD2", "WOOD3", "BONE0"],
+	"smoked": ["WOOD0", "WOOD2", "WOOD3", "WOOD4", "BONE1"],
 	"dark_walnut": ["WOOD0", "FLEECE2", "FLEECE3", "LEATHER1", "LEATHER2"],
 	"charred": ["K0", "K1", "WOOD0", "SETT2", "SETT4"],
 }

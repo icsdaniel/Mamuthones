@@ -4,7 +4,8 @@ extends Button
 ## pixel art (PixelPic) over a one-line caption. States:
 ##   chosen   a bronze rim, the face lit, a check in a bronze corner badge, the caption bronze
 ##   open     a dark sheepskin tile, the caption cream
-##   locked   the picture sunk in shadow with a lock on it; the caption says what opens it (bronze)
+##   locked   the picture dimmed, a small lock badge in its corner; the caption says what opens it
+##            (bronze)
 ## Tapping a locked swatch still emits `pressed` (the screen says what it needs); it never toggles.
 ##   Swatch.make(id, picture, caption, chosen, locked, on_press, region := Rect2()) -> Swatch
 
@@ -14,6 +15,13 @@ var id := ""
 var chosen := false
 var locked := false
 var pic: PixelPic
+## The light the picture is shown in (its tint when open; locked dims it): above white brightens it,
+## for a dark carving seen up close, as if held to the fire.
+var light := Color.WHITE:
+	set(v):
+		light = v
+		if pic != null:
+			pic.tint = light * Color(0.6, 0.55, 0.52) if locked else light
 var caption: Label
 var _badge: Control
 
@@ -84,12 +92,12 @@ func set_state(p_chosen: bool, p_locked: bool) -> void:
 		add_theme_stylebox_override(st, sb)
 	for st in ["pressed", "hover_pressed"]:
 		add_theme_stylebox_override(st, down)
-	pic.tint = Color(0.32, 0.28, 0.3) if locked else Color.WHITE
+	pic.tint = light * Color(0.6, 0.55, 0.52) if locked else light
 	caption.add_theme_color_override("font_color", WoodcutTheme.C_BRONZE_HI if chosen else (WoodcutTheme.C_BRONZE if locked else WoodcutTheme.C_TEXT))
 	_badge.queue_redraw()
 
 
-## The corner check of the chosen tile, or the lock over a locked picture.
+## The corner badge: a check on the chosen tile, a lock on a locked one.
 func _draw_badge() -> void:
 	if chosen:
 		var r := Rect2(Vector2(size.x - 48.0, 0.0), Vector2(48.0, 42.0))
@@ -98,8 +106,8 @@ func _draw_badge() -> void:
 		var ck := KitIcons.get_icon("check")
 		_badge.draw_texture(ck, (r.get_center() - ck.get_size() * 0.5).floor(), WoodcutTheme.C_INK)
 	elif locked:
+		# a small lock in the corner: the carving itself stays readable, only dimmed
+		var r := Rect2(Vector2(size.x - 48.0, 0.0), Vector2(48.0, 42.0))
+		_badge.draw_style_box(PxStyle.make(WoodcutTheme.C_INK, WoodcutTheme.C_BRONZE_DEEP, WoodcutTheme.R_M, Vector4.ZERO), r)
 		var lk := KitIcons.get_icon("lock")
-		var c: Vector2 = pic.position + (pic.get_parent() as Control).position + pic.size * 0.5
-		var plate := Rect2((c - Vector2(36, 36)).floor(), Vector2(72, 72))
-		_badge.draw_style_box(PxStyle.make(Color(WoodcutTheme.C_INK, 0.85), WoodcutTheme.C_BRONZE_DEEP, -1, Vector4.ZERO), plate)
-		_badge.draw_texture(lk, (c - lk.get_size() * 0.5).floor(), WoodcutTheme.C_BRONZE)
+		_badge.draw_texture(lk, (r.get_center() - lk.get_size() * 0.5).floor(), WoodcutTheme.C_BRONZE)

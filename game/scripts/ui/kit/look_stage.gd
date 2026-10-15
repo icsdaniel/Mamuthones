@@ -2,16 +2,25 @@ class_name LookStage
 extends Control
 ## The workshop's stage (a menu-kit piece, added with the workshop): your own pixel Mamuthone, the
 ## play screen's figure (PixelFigure wearing FigureLook), standing large on a stone plinth in the
-## bonfire's light, bobbing down on a slow beat as it waits. Tapping it turns to a close-up of the
-## carved mask (MaskPixels, as large as fits) and back.
+## bonfire's light, bobbing down on a slow beat as it waits, embers drifting up. It can turn to a
+## close-up of the carved mask (MaskPixels, as large as fits) and back: by a tap on the stage or its
+## labelled toggle (a pill with an icon and a word, top right). The change zooms in whole-pixel
+## steps (instant with reduced motion).
 ##   set_look(look, part)  the look to wear (Profile.get_look()), and the mask part to ring in the
 ##                         close-up ("" for none)
 ##   jingle()              a choice was made: the load rings and the figure dips with it
-##   closeup               true: the mask close-up
+##   closeup               true: the mask close-up (set_closeup(on, animate) to choose the motion)
+##   toggle_texts          [word for "show the mask", word for "show the figure"]
+## A tap is one mouse-button release (a phone's touch arrives as one, emulated) close to where it
+## was pressed: a drag that moved more than TAP_SLOP is no tap.
 ## The light and the plinth are drawn once per size into one small picture (whole art px, Bayer
-## dithered); per frame only the figure's pieces move.
+## dithered); per frame only the figure's pieces and a few embers move.
 
 signal tapped
+
+const TAP_SLOP := 24.0
+const ZOOM_TIME := 0.2
+const EMBERS := 9
 
 const BPM := 72.0
 const ART_H := 172.0
@@ -22,10 +31,19 @@ const GLOW := ["#140b0e", "#1e1116", "#2c1715", "#401f15", "#5a2a15", "#783a16"]
 const BAYER := [0, 8, 2, 10, 12, 4, 14, 6, 3, 11, 1, 9, 15, 7, 13, 5]
 
 var closeup := false:
+	get:
+		return _closeup
 	set(v):
-		closeup = v
-		_apply_mode()
+		set_closeup(v, false)
+var _closeup := false
 var reduced_motion := false
+var toggle_texts := ["Mask", "Figure"]:
+	set(v):
+		toggle_texts = v
+		_label_toggle()
+var toggle: Button
+var _press_at := Vector2.INF
+var _zoom_t := 1.0            ## 0 .. 1 through the zoom of a mode change
 
 var figure: PixelFigure
 var _look := {}
@@ -51,6 +69,30 @@ func _init() -> void:
 	_mask_pic.visible = false
 	_mask_pic.set_anchors_preset(Control.PRESET_FULL_RECT)
 	add_child(_mask_pic)
+	toggle = Button.new()
+	toggle.name = "ViewToggle"
+	toggle.focus_mode = Control.FOCUS_NONE
+	toggle.custom_minimum_size = Vector2(UIKit.TOUCH, UIKit.TOUCH)
+	toggle.add_theme_font_size_override("font_size", 28)
+	var sb := PxStyle.make(Color(WoodcutTheme.C_INK, 0.82), WoodcutTheme.C_BRONZE_DEEP, WoodcutTheme.R_PILL, Vector4(24, 6, 30, 6))
+	sb.highlight = WoodcutTheme.C_RAISED_HI
+	var down := sb.variant(WoodcutTheme.C_RAISED_HI, WoodcutTheme.C_BRONZE)
+	for st in ["normal", "hover", "focus", "disabled"]:
+		toggle.add_theme_stylebox_override(st, sb)
+	for st in ["pressed", "hover_pressed"]:
+		toggle.add_theme_stylebox_override(st, down)
+	for c in ["font_color", "font_hover_color", "font_pressed_color", "font_hover_pressed_color", "font_focus_color"]:
+		toggle.add_theme_color_override(c, WoodcutTheme.C_BRONZE_HI)
+	for c in ["icon_normal_color", "icon_hover_color", "icon_pressed_color", "icon_hover_pressed_color", "icon_focus_color"]:
+		toggle.add_theme_color_override(c, WoodcutTheme.C_BRONZE)
+	toggle.add_theme_constant_override("h_separation", 12)
+	toggle.pressed.connect(func() -> void:
+		Sound.ui("tap")
+		set_closeup(not closeup, true)
+		tapped.emit())
+	add_child(toggle)
+	UIKit.juice(toggle)
+	_label_toggle()
 
 
 func _ready() -> void:
@@ -96,8 +138,37 @@ func _layout() -> void:
 	_mask_pic.max_scale = maxi(int(floor(size.y * 0.72 / 85.0)), 2)
 	_mask_pic.offset_top = 0.0
 	_mask_pic.offset_bottom = -(PLINTH_H + 6) * _px
+	_full_scale = _mask_pic.max_scale
+	toggle.reset_size()
+	toggle.position = Vector2(floorf(size.x - toggle.size.x), 0.0)
 	_bake_bg()
+	_apply_mode()
 	queue_redraw()
+
+
+var _full_scale := 4
+
+
+## Turns to the mask close-up (on) or the whole figure, zooming in whole-pixel steps if `animate`.
+func set_closeup(on: bool, animate := true) -> void:
+	var changed := on != _closeup
+	_closeup = on
+	if changed and animate and not reduced_motion and is_inside_tree():
+		_zoom_t = 0.0
+	else:
+		_zoom_t = 1.0
+	_label_toggle()
+	_apply_mode()
+
+
+func _label_toggle() -> void:
+	if toggle == null:
+		return
+	toggle.text = str(toggle_texts[1] if closeup else toggle_texts[0])
+	toggle.icon = KitIcons.get_icon("figure" if closeup else "zoom")
+	if is_inside_tree():
+		toggle.reset_size()
+		toggle.position = Vector2(floorf(size.x - toggle.size.x), 0.0)
 
 
 ## Where the feet stand: the plinth's top, in the middle.
@@ -107,9 +178,19 @@ func _feet() -> Vector2:
 	return Vector2(floorf(size.x * 0.5 / _px) * _px, floorf((size.y - (PLINTH_H - 3) * _px - spare * 0.4) / _px) * _px)
 
 
+## Shows the mode, part way through its zoom: the mask grows from a small whole scale to its full
+## one, step by step; the figure rises onto the plinth in whole art px.
 func _apply_mode() -> void:
+	var k := clampf(_zoom_t, 0.0, 1.0)
 	figure.visible = not closeup
 	_mask_pic.visible = closeup
+	if closeup:
+		_mask_pic.max_scale = clampi(1 + int(floor(k * float(_full_scale))), 1, _full_scale)
+		_mask_pic.queue_redraw()
+	else:
+		var feet := _feet()
+		figure.position = Vector2(feet.x + FIGURE_SHIFT * _px, feet.y + roundf((1.0 - k) * 8.0) * _px)
+		figure.modulate.a = 1.0 if k >= 1.0 else maxf(k, 0.25)
 	queue_redraw()
 
 
@@ -117,20 +198,49 @@ func _process(delta: float) -> void:
 	if not is_visible_in_tree():
 		return
 	_clock += delta
+	if _zoom_t < 1.0:
+		_zoom_t = minf(_zoom_t + delta / ZOOM_TIME, 1.0)
+		_apply_mode()
 	var spb := 60.0 / BPM
 	figure.pose(fmod(_clock, spb), 0.0, false, _clock - _ring_at, true)
+	if not reduced_motion:
+		queue_redraw()   # the embers
 
 
+## One tap toggles the view: a left-button release near its press (touch arrives as emulated mouse;
+## ScreenTouch is not read, so one finger never counts twice).
 func _gui_input(e: InputEvent) -> void:
-	if e is InputEventMouseButton and e.button_index == MOUSE_BUTTON_LEFT and not e.pressed \
-			or e is InputEventScreenTouch and not e.pressed:
-		accept_event()
-		tapped.emit()
+	if not (e is InputEventMouseButton) or (e as InputEventMouseButton).button_index != MOUSE_BUTTON_LEFT:
+		return
+	var mb := e as InputEventMouseButton
+	if mb.pressed:
+		_press_at = mb.position
+		return
+	var was := _press_at
+	_press_at = Vector2.INF
+	if not was.is_finite() or was.distance_to(mb.position) > TAP_SLOP:
+		return
+	accept_event()
+	Sound.ui("tap")
+	set_closeup(not closeup, true)
+	tapped.emit()
 
 
 func _draw() -> void:
 	if _bg != null:
 		draw_texture_rect(_bg, Rect2(Vector2.ZERO, Vector2(_bg.get_size()) * _px), false)
+	if reduced_motion:
+		return
+	# embers drifting up out of the light, in whole art px
+	var feet := _feet()
+	for i in EMBERS:
+		var period := 3.2 + float(i % 4) * 0.7
+		var t := fmod(_clock + float(i) * 1.37, period) / period
+		var x := feet.x + (float((i * 37) % 23) - 11.0) * 4.0 * _px + sin(_clock * 1.3 + i) * 3.0 * _px
+		var y := feet.y - (12.0 + t * ART_H * 1.05) * _px
+		var c: Color = PixelPalette.FIRE[5 if i % 3 == 0 else 4]
+		c.a = (1.0 - t) * 0.9
+		draw_rect(Rect2((Vector2(x, y) / _px).floor() * _px, Vector2(_px, _px)), c)
 
 
 ## The bonfire's light behind the figure and the stone plinth it stands on, at one texel per art px.
@@ -143,9 +253,10 @@ func _bake_bg() -> void:
 	_bg_key = key
 	var img := Image.create(w, h, false, Image.FORMAT_RGBA8)
 	var feet := _feet() / _px
-	var glow_c := Vector2(feet.x, feet.y - ART_H * 0.42)
-	var rx := minf(w * 0.5, ART_H * 0.62)
-	var ry := minf(feet.y - 2.0, ART_H * 0.62)
+	# the light fills the stage: centred on the figure's chest, reaching its top and sides
+	var glow_c := Vector2(feet.x, feet.y - ART_H * 0.45)
+	var rx := maxf(w * 0.5, ART_H * 0.55)
+	var ry := maxf(glow_c.y + 6.0, ART_H * 0.62)
 	var ramp: Array[Color] = []
 	for c in GLOW:
 		ramp.append(Color(c))
