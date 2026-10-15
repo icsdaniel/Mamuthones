@@ -45,7 +45,7 @@ var stop := 1
 @export var show_player_mark := true
 
 var mask: Dictionary = MaskSpec.default()
-var fleece := "black"
+var fleece := MaskSpec.DEFAULT_FLEECE
 var straps := "natural"
 ## Your bell set (BellSets id): the heavier sets hang more bells on your Mamuthone.
 var bell_set := "light":
@@ -164,9 +164,9 @@ func set_stop(n: int) -> void:
 		_rebuild_stop()
 
 
-func set_look(p_mask: Dictionary, p_fleece := "black", p_straps := "natural") -> void:
+func set_look(p_mask: Dictionary, p_fleece := MaskSpec.DEFAULT_FLEECE, p_straps := "natural") -> void:
 	mask = MaskSpec.sanitize(p_mask)
-	fleece = p_fleece if p_fleece in MaskSpec.FLEECES else "black"
+	fleece = p_fleece if p_fleece in MaskSpec.FLEECES else MaskSpec.DEFAULT_FLEECE
 	straps = p_straps if p_straps in MaskSpec.STRAPS else "natural"
 	if _built:
 		_player.body.queue_redraw()

@@ -38,7 +38,7 @@ func build() -> void:
 	scene.bpm = BPM
 	scene.reduced_motion = UIKit.reduced_motion()
 	_top.add_child(scene)
-	scene.set_look(str(Profile.get_look().get("fleece", "black")))
+	scene.set_look(str(Profile.get_look().get("fleece", MaskSpec.DEFAULT_FLEECE)))
 	# Above the picture on a tall phone: the same stars as the picture's sky, so there is no flat band.
 	_sky = _Stars.new()
 	_top.add_child(_sky)

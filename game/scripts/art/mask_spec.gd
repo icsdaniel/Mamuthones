@@ -67,7 +67,7 @@ const NAMES := {
 	"grimace": {"en": "Grimace", "it": "Smorfia"},
 	"soot_black": {"en": "Soot black", "it": "Nero fumo"},
 	"smoked": {"en": "Smoked", "it": "Affumicata"},
-	"dark_walnut": {"en": "Dark walnut", "it": "Noce scuro"},
+	"dark_walnut": {"en": "Walnut", "it": "Noce scuro"},
 	"charred": {"en": "Charred", "it": "Bruciata"},
 	"fresh": {"en": "Fresh", "it": "Nuova"},
 	"worn": {"en": "Worn", "it": "Consumata"},
@@ -75,7 +75,10 @@ const NAMES := {
 	"ancient": {"en": "Ancient", "it": "Antica"},
 }
 
-const FLEECES: Array[String] = ["black", "dark_brown"]
+## The real sheepskins; the first is everyone's at the start (the finished picture's own: dark brown).
+## DEFAULT_FLEECE is the one name for it: every look that has no fleece yet falls back to it.
+const FLEECES: Array[String] = ["dark_brown", "black"]
+const DEFAULT_FLEECE := "dark_brown"
 const STRAPS: Array[String] = ["natural", "dark"]
 
 

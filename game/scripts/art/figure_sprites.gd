@@ -39,7 +39,7 @@ static func has(name: String) -> bool:
 
 ## The Mamuthone sprite name for a fleece and pose (unknown fleeces fall back to black).
 static func mamuthone(fleece: String, pose: String, big := false) -> String:
-	var fl := fleece if fleece in ["black", "dark_brown"] else "black"
+	var fl := fleece if fleece in ["black", "dark_brown"] else MaskSpec.DEFAULT_FLEECE
 	return ("big_" if big else "") + "mamuthone_%s_%s" % [fl, pose]
 
 
@@ -51,7 +51,7 @@ static func issohadore(pose: String, big := false) -> String:
 ## "land", "land2" (the bells swung the other way) or "dim" (standing, not yet dancing), variant
 ## "a" or "b" (tools/art/pixel/row_figures.py). Drawn at PxArt.PX, never scaled.
 static func row_mamuthone(d: String, fleece: String, pose: String, variant := "a") -> String:
-	var fl := fleece if fleece in ["black", "dark_brown"] else "black"
+	var fl := fleece if fleece in ["black", "dark_brown"] else MaskSpec.DEFAULT_FLEECE
 	return "row_%s_mamuthone_%s_%s_%s" % [d, fl, pose, variant]
 
 

@@ -237,7 +237,7 @@ func test_procession_api() -> void:
 	check(MaskSpec.validate(scene.mask), "set_look sanitizes the mask")
 	check_eq(scene.fleece, "dark_brown", "fleece set")
 	scene.set_look(MaskSpec.default(), "neon", "gold")
-	check_eq(scene.fleece, "black", "unknown fleece falls back")
+	check_eq(scene.fleece, MaskSpec.DEFAULT_FLEECE, "unknown fleece falls back")
 	check_eq(scene.straps, "natural", "unknown straps fall back")
 	# A jolt lifts the player's Mamuthone.
 	var y0: float = scene._player.root.position.y
@@ -647,7 +647,7 @@ func test_mamuthone_portrait() -> void:
 	check_eq(p.fleece, "dark_brown", "portrait fleece")
 	check_eq(p.bell_set, "full", "portrait bell set")
 	p.set_look(MaskSpec.default(), "pink", "gold", "huge")
-	check_eq(p.fleece, "black", "unknown fleece falls back")
+	check_eq(p.fleece, MaskSpec.DEFAULT_FLEECE, "unknown fleece falls back")
 	check_eq(p.straps, "natural", "unknown straps fall back")
 	check_eq(p.bell_set, "village", "unknown bell set falls back")
 	await _frames(2)

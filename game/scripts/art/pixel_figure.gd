@@ -45,6 +45,7 @@ var _upper: Sprite2D
 var _legs: Sprite2D
 var _pieces: Array = []       ## [Sprite2D, kind]
 var _size := Vector2.ONE
+var _look := {}               ## the Mamuthone's look (FigureLook), {} for the picture as painted
 
 
 func _init(p_figure := "mamuthone") -> void:
@@ -54,7 +55,7 @@ func _init(p_figure := "mamuthone") -> void:
 ## The body as two slices of its picture (the legs stay planted, the rest drops over them, so the
 ## seam is always exact), then the pieces over it.
 func _ready() -> void:
-	var tex: Texture2D = load(DIR + "%s_body.png" % figure)
+	var tex: Texture2D = _tex("body")
 	if tex == null:
 		return
 	_size = tex.get_size()
@@ -62,9 +63,31 @@ func _ready() -> void:
 	_legs = _sprite(tex, "Legs", knee, _size.y)
 	_upper = _sprite(tex, "Upper", 0.0, knee)
 	for spec: Array in PIECES.get(figure, []):
-		var pt: Texture2D = load(DIR + "%s_%s.png" % [figure, spec[0]])
+		var pt: Texture2D = _tex(str(spec[0]))
 		if pt != null:
-			_pieces.append([_sprite(pt, str(spec[0]).capitalize().replace(" ", ""), 0.0, _size.y), str(spec[1])])
+			_pieces.append([_sprite(pt, str(spec[0]).capitalize().replace(" ", ""), 0.0, _size.y), str(spec[1]), str(spec[0])])
+
+
+## Puts the player's look (Profile.get_look()) on a Mamuthone: its fleece, straps and carved mask
+## (FigureLook). A texture swap (the mask is stamped once per look and cached), so call it when the
+## look changes, never every frame. Ignored by the Issohadore.
+func set_look(look: Dictionary) -> void:
+	if figure != "mamuthone":
+		return
+	_look = FigureLook.normalize(look)
+	if _upper == null:
+		return
+	var body := _tex("body")
+	_upper.texture = body
+	_legs.texture = body
+	for e: Array in _pieces:
+		(e[0] as Sprite2D).texture = _tex(str(e[2]))
+
+
+func _tex(piece: String) -> Texture2D:
+	if figure == "mamuthone" and not _look.is_empty():
+		return FigureLook.texture(piece, _look)
+	return load(DIR + "%s_%s.png" % [figure, piece])
 
 
 func _sprite(tex: Texture2D, n: String, top: float, bottom: float) -> Sprite2D:

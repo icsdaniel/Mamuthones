@@ -32,7 +32,7 @@ const HAND := Vector2(12.0, -78.0)          ## his raised hand from his feet (is
 const BACK := [Vector2(-104.0, -66.0), Vector2(-46.0, -61.0), Vector2(54.0, -63.0), Vector2(110.0, -68.0)]
 const BRAZIERS := [Vector2(-108.0, -48.0), Vector2(108.0, -48.0)]
 
-var _fleece := "black"
+var _fleece := MaskSpec.DEFAULT_FLEECE
 var _t := 0.0
 var _pic: PxArt.Picture
 var _back: Control
@@ -78,7 +78,7 @@ func _ready() -> void:
 
 ## Dresses the nearest Mamuthone (the big one on the left) in the player's fleece.
 func set_look(fleece: String) -> void:
-	_fleece = fleece if fleece in ["black", "dark_brown"] else "black"
+	_fleece = fleece if fleece in ["black", "dark_brown"] else MaskSpec.DEFAULT_FLEECE
 	queue_redraw()
 
 

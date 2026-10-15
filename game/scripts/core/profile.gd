@@ -41,7 +41,8 @@ const DEFAULT_SETTINGS := {
 	"step_knocks": false,    # a knock on each step button (off: hits on time bring up the song's tune instead)
 }
 const FLAGS: Array[String] = ["language_chosen", "headphones_seen", "calibrated", "latency_tested", "tutorial_done"]
-const FLEECES: Array[String] = ["black", "dark_brown"]
+## MaskSpec.FLEECES (core keeps its own copy; the first, MaskSpec.DEFAULT_FLEECE, is the default).
+const FLEECES: Array[String] = ["dark_brown", "black"]
 const STRAPS: Array[String] = ["natural", "dark"]
 ## Allowed ranges for number settings; values outside are clamped.
 const RANGES := {
