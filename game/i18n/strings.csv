@@ -411,3 +411,4 @@ lang_choose,Choose your language,Scegli la lingua
 title_hero,Continue,Continua
 story_open,Open: %s,Apri: %s
 set_chain_step,Test %d of %d,Prova %d di %d
+res_meter_on,on beat,a tempo

@@ -136,14 +136,14 @@ func _shots() -> Array:
 		{"file": "play_stomped", "screen": "play", "args": {"song_id": "rope", "difficulty": "hard", "autoplay": true}, "setup": "moment:stomped", "wait": 0.02},
 		{"file": "play_tutorial", "screen": "play", "args": {"song_id": tut_id, "difficulty": "easy", "autoplay": true}, "setup": "advance:0.25"},
 		{"file": "pause", "screen": "play", "args": {"song_id": fires_id, "difficulty": "medium", "autoplay": true}, "setup": "pause"},
-		{"file": "results", "screen": "results", "setup": "results", "wait": 1.3},
+		{"file": "results", "screen": "results", "setup": "results", "wait": 3.5},
 		# the results' other pages (the segmented control over the pager)
-		{"file": "results_score", "screen": "results", "setup": "results", "page": 1, "wait": 1.3},
-		{"file": "results_timing", "screen": "results", "setup": "results", "page": 2, "wait": 1.3},
-		{"file": "results_tips", "screen": "results", "setup": "results", "page": 3, "wait": 1.3},
+		{"file": "results_score", "screen": "results", "setup": "results", "page": 1, "wait": 3.5},
+		{"file": "results_timing", "screen": "results", "setup": "results", "page": 2, "wait": 3.5},
+		{"file": "results_tips", "screen": "results", "setup": "results", "page": 3, "wait": 3.5},
 		# a full combo with no next stop open, leaning late (the fix button), not a new best
-		{"file": "results_fc", "screen": "results", "setup": "results_fc", "wait": 1.3},
-		{"file": "results_fc_timing", "screen": "results", "setup": "results_fc", "page": 2, "wait": 1.3},
+		{"file": "results_fc", "screen": "results", "setup": "results_fc", "wait": 3.5},
+		{"file": "results_fc_timing", "screen": "results", "setup": "results_fc", "page": 2, "wait": 3.5},
 		# Health: full, mid-run at 6 with a healing step on the road, low at 2, and the fail menu.
 		{"file": "play_health_full", "screen": "play", "args": {"song_id": fires_id, "difficulty": "hard", "autoplay": true, "health": true}, "setup": "moment:dense", "wait": 0.1},
 		{"file": "play_health_mid", "screen": "play", "args": {"song_id": fires_id, "difficulty": "hard", "autoplay": true, "health": true}, "setup": "moment:heal", "health": 6, "wait": 0.1},

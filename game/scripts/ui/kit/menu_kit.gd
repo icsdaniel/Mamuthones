@@ -99,7 +99,6 @@ static func grade_mark(rank: int, full_combo := false) -> HBoxContainer:
 	var seal := GradeSeal.new(maxi(rank, 0), 24, 1)
 	seal.name = "Seal"
 	seal.face = "caps"
-	seal.studs = false
 	seal.size_flags_vertical = Control.SIZE_SHRINK_CENTER
 	box.add_child(seal)
 	var empty := EmptyMark.new()

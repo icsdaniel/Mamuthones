@@ -39,7 +39,7 @@ const DISC_H := 0.1                  ## how thick a disc stands, in lane widths
 const FORE := 0.42                   ## how much the road's depth is foreshortened on screen
 const SIDES := 24                    ## a disc's facets round its edge
 const ROPE_W := 0.2                  ## the rope's width, in lane widths
-const ROPE_PIC_W := 18                ## cells across the rope's picture is shrunk to (the pixel look)
+const ROPE_PIC_W := 36                ## texels across the rope's picture is shrunk to (the pixel look)
 const STRAP_D := 0.42                ## the bell strap's depth along the road, in lane widths
 ## Bursts and sparks are drawn as opaque pixel shapes (no soft glows or fades, which turn to mud on the
 ## pixel grid): flashes, stamped rings and square embers.
@@ -183,7 +183,7 @@ static func disc_glow(ci: CanvasItem, c: Vector2, rx: float, k: Array, alpha: fl
 
 
 ## Daniele's pictures of the notes and the rings (game/art/ai, drawn by an outside image AI, 2026-10-08), by key,
-## and each shrunk to the sizes it is shown at: one picture pixel per screen cell, so it stays crisp.
+## and each shrunk to the sizes it is shown at: one picture pixel per texel of the world picture (PxArt.FINE), so it stays crisp.
 static var _ai := {}
 static var _ai_sized := {}
 ## Per picture, halvings of it (the picture itself first): a size is shrunk from the smallest one at
@@ -267,7 +267,7 @@ static func warm(lv: LaneView, field: Rect2) -> void:
 				ai_tex("bar_bell", b.bell)
 				ai_tex("bar_arrow", b.arrow)
 				ai_tex("bar_arrow!flip", b.arrow)
-		y += 1.0
+		y += 0.25   # finer than a texel of the sizes it meets (they change fastest near the hit line)
 	ai_tex("bar_bell", Vector2i.ONE)
 	# a bell rung on time: its cowbells thrown off the strap (bell_strike), at each size a strike has
 	var lw: float = lv.road_scale(LaneSkin.hit_line_y(field)) * _lane(field)
@@ -301,12 +301,12 @@ static func _bell_size(lv: LaneView, field: Rect2, y: float) -> Dictionary:
 		"arrow": ai_cells(Vector2(-a, -hh * 1.4), Vector2(a, hh * 0.4))}
 
 
-## The beam's picture size for its quad on screen: few sizes (a beam slides down every frame), its
-## width in steps of 8 cells.
+## The beam's picture size for its quad on screen (texels of PxArt.FINE): few sizes (a beam slides
+## down every frame), its width in steps of 16 texels.
 static func bar_cells(quad: PackedVector2Array) -> Vector2i:
 	var w := quad[1].x - quad[0].x
 	var tall := quad[2].y - quad[1].y
-	return Vector2i(maxi(8, roundi(w / PxArt.PX / 8.0) * 8), maxi(3, roundi(tall / PxArt.PX)))
+	return Vector2i(maxi(16, roundi(w / PxArt.FINE / 16.0) * 16), maxi(6, roundi(tall / PxArt.FINE)))
 
 
 ## The pixel look's note from its picture: the picture stretched over the disc it stands for (r lane
@@ -336,23 +336,24 @@ static func ai_disc(lv, field: Rect2, cx: float, y: float, r: float, key: String
 	return true
 
 
-## Picture `key` over the box lo..hi in whole cells: shrunk to the cells it covers, drawn one to one.
+## Picture `key` over the box lo..hi in whole texels of the world picture (PxArt.FINE base px): shrunk
+## to the texels it covers, drawn one to one.
 static func ai_draw(ci: CanvasItem, key: String, lo: Vector2, hi: Vector2, mod := Color.WHITE) -> void:
-	var px := PxArt.PX
+	var px := PxArt.FINE
 	var cells := ai_cells(lo, hi)
 	var tex := ai_tex(key, cells)
 	if tex == null:
 		return
-	var at := PxArt.snap2((lo + hi) * 0.5 - Vector2(cells) * px * 0.5)
+	var at := PxArt.snap2((lo + hi) * 0.5 - Vector2(cells) * px * 0.5, Vector2.ZERO, px)
 	ci.draw_texture_rect(tex, Rect2(at, Vector2(cells) * px), false, mod)
 
 
 ## The picture size (cells) ai_draw shows a picture at between lo and hi on screen.
 static func ai_cells(lo: Vector2, hi: Vector2) -> Vector2i:
-	var cells := Vector2i(((hi - lo) / PxArt.PX).round())
-	if cells.x > 40:
+	var cells := Vector2i(((hi - lo) / PxArt.FINE).round())
+	if cells.x > 80:
 		# past the sheet's sizes (a missed note sweeping past the line): fewer sizes to shrink to
-		cells = (cells / 4) * 4
+		cells = (cells / 8) * 8
 	return cells
 
 
