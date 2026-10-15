@@ -58,6 +58,8 @@ def analyse(cfg):
     spb = 60.0 / cfg["bpm"]
     n = int((cfg["length"] - cfg["offset"]) / spb * 4)
     times = cfg["offset"] + np.arange(n) * spb / 4
+    # a swung song's off-beat sixteenths sound late: read them where they sound
+    times = times + (np.arange(n) % 2) * cfg.get("swing", 0.0) * spb
     st = cfg["stems"]
     res = {"bpm": cfg["bpm"], "offset": cfg["offset"], "slots": n}
 
