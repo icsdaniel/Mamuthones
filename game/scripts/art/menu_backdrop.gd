@@ -2,22 +2,21 @@ class_name MenuBackdrop
 extends Control
 ## The night every menu-type screen stands in (App puts one behind the screen stack): a deep night
 ## sky with a few stars, warming toward a bonfire glow low in the middle, and a handful of embers
-## drifting up. Pixel art on the 3-px art grid: the sky is baked once per screen size into a small
-## texture (ordered dithering between palette colours, no smooth gradients) and drawn x3 with nearest
-## filtering; the embers step at 12 frames a second (a third as many with reduced motion, still when
-## animations are off). Hidden under the play screen, so nothing here runs during a song.
+## drifting up. Pixel art on the kit's art grid (PxStyle.unit): the sky is a canvas shader
+## (game/shaders/menu_sky.gdshader: the palette ramp, 4x4 ordered dithering, quantised to the art
+## pixel), the stars are a short list of art-pixel points rebuilt only when the width changes, and
+## the embers step at 12 frames a second (a third as many with reduced motion, still when animations
+## are off). Hidden under the play screen, so nothing here runs during a song.
 
-const PX := 3.0
 const FRAME_TIME := 1.0 / 12.0
-## The sky ramp, top to the heart of the glow (PixelPalette NIGHT0, NIGHT1, STONE0, STONE1, FIRE0, FIRE1).
-const RAMP: Array[Color] = [Color("#0a0c24"), Color("#10163a"), Color("#1c1418"), Color("#2c2026"), Color("#4a0a0c"), Color("#7c1812")]
-const BAYER := [0, 8, 2, 10, 12, 4, 14, 6, 3, 11, 1, 9, 15, 7, 13, 5]
 const EMBERS := 18
 
 var reduced_motion := false
 var still := false                ## animations off: the embers stand still
-var _sky: ImageTexture
-var _sky_size := Vector2i.ZERO
+var _sky: ColorRect
+var _sparks: Control
+var _stars: Array[Vector4] = []   ## art x, height fraction, colour index, bright (0/1)
+var _stars_w := -1
 var _t := 0.0
 var _clock := 0.0
 var _embers: Array[Vector4] = []   ## x (0..1), speed (art px/s), phase (0..1), sway
@@ -41,49 +40,41 @@ func _init() -> void:
 
 
 func _ready() -> void:
-	resized.connect(_bake)
-	_bake()
+	_sky = ColorRect.new()
+	_sky.name = "Sky"
+	_sky.set_anchors_preset(Control.PRESET_FULL_RECT)
+	_sky.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	var mat := ShaderMaterial.new()
+	mat.shader = load("res://shaders/menu_sky.gdshader")
+	_sky.material = mat
+	add_child(_sky)
+	_sparks = Control.new()
+	_sparks.name = "Sparks"
+	_sparks.set_anchors_preset(Control.PRESET_FULL_RECT)
+	_sparks.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_sparks.draw.connect(_draw_sparks)
+	add_child(_sparks)
+	resized.connect(_fit)
+	_fit()
 
 
-## Bakes the sky for this size at one texel per art pixel.
-func _bake() -> void:
-	var aw := maxi(ceili(size.x / PX), 1)
-	var ah := maxi(ceili(size.y / PX), 1)
-	if Vector2i(aw, ah) == _sky_size and _sky != null:
-		return
-	_sky_size = Vector2i(aw, ah)
-	var img := Image.create(aw, ah, false, Image.FORMAT_RGB8)
-	var cx := aw * 0.5
-	var last := RAMP.size() - 1
-	for y in ah:
-		var v := float(y) / float(ah)
-		var warm := clampf((v - 0.5) / 0.5, 0.0, 1.0)
-		for x in aw:
-			var side := absf(float(x) - cx) / maxf(cx, 1.0)
-			var heat := pow(warm, 1.6) * (1.0 - 0.6 * side * side)
-			var p := clampf(v * 0.28 + heat * 0.74, 0.0, 1.0) * last
-			var i := mini(floori(p), last - 1)
-			var f := p - i
-			var thr: float = (BAYER[(y % 4) * 4 + (x % 4)] + 0.5) / 16.0
-			img.set_pixel(x, y, RAMP[i + 1] if f > thr else RAMP[i])
-	# stars in the upper sky, fewer toward the glow
-	var seed := 12345
-	var n := int(aw * ah * 0.0016)
-	for k in n:
-		seed = (seed * 1103515245 + 12345) & 0x7fffffff
-		var sx := seed % aw
-		seed = (seed * 1103515245 + 12345) & 0x7fffffff
-		var sy := int(pow(float(seed % 1000) / 1000.0, 1.7) * ah * 0.55)
-		var bright := k % 9 == 0
-		img.set_pixel(sx, sy, PixelPalette.STAR[1] if bright else (PixelPalette.STAR[0] if k % 3 == 0 else PixelPalette.NIGHT[4]))
-		if bright and sx > 0 and sx < aw - 1 and sy > 0 and sy < ah - 1:
-			for d in [Vector2i(1, 0), Vector2i(-1, 0), Vector2i(0, 1), Vector2i(0, -1)]:
-				img.set_pixelv(Vector2i(sx, sy) + d, PixelPalette.NIGHT[4])
-	if _sky == null or _sky.get_size() != Vector2(aw, ah):
-		_sky = ImageTexture.create_from_image(img)
-	else:
-		_sky.update(img)
-	queue_redraw()
+func _fit() -> void:
+	var u := PxStyle.unit
+	(_sky.material as ShaderMaterial).set_shader_parameter("canvas_size", size)
+	(_sky.material as ShaderMaterial).set_shader_parameter("unit", u)
+	var aw := maxi(floori(size.x / u), 1)
+	if aw != _stars_w:
+		_stars_w = aw
+		_stars.clear()
+		var seed := 12345
+		var n := int(aw * 0.75)
+		for k in n:
+			seed = (seed * 1103515245 + 12345) & 0x7fffffff
+			var sx := seed % aw
+			seed = (seed * 1103515245 + 12345) & 0x7fffffff
+			var f := pow(float(seed % 1000) / 1000.0, 1.7) * 0.55
+			_stars.append(Vector4(sx, f, k % 3, 1.0 if k % 9 == 0 else 0.0))
+	_sparks.queue_redraw()
 
 
 func _process(delta: float) -> void:
@@ -94,23 +85,31 @@ func _process(delta: float) -> void:
 		return
 	_clock += _t * (0.5 if reduced_motion else 1.0)
 	_t = 0.0
-	queue_redraw()
+	_sparks.queue_redraw()
 
 
-func _draw() -> void:
-	if _sky != null:
-		draw_texture_rect(_sky, Rect2(Vector2.ZERO, Vector2(_sky_size) * PX), false)
-	var ah := size.y / PX
+func _draw_sparks() -> void:
+	var u := PxStyle.unit
+	var ah := floorf(size.y / u)
+	var cell := Vector2(u, u)
+	for s in _stars:
+		var p := Vector2(s.x, floorf(s.y * ah))
+		var bright := s.w > 0.0
+		var c: Color = PixelPalette.STAR[1] if bright else (PixelPalette.STAR[0] if s.z == 0.0 else PixelPalette.NIGHT[4])
+		if bright:
+			for d in [Vector2(1, 0), Vector2(-1, 0), Vector2(0, 1), Vector2(0, -1)]:
+				_sparks.draw_rect(Rect2((p + d) * u, cell), PixelPalette.NIGHT[4])
+		_sparks.draw_rect(Rect2(p * u, cell), c)
 	var rise := ah * 0.55
 	var count := EMBERS / 3 if reduced_motion else EMBERS
 	for i in count:
 		var e := _embers[i]
 		var up := fmod(_clock * e.y + e.z * rise, rise)
 		var k := up / rise
-		var x := e.x * size.x / PX + sin(_clock * 0.9 + e.z * 6.28) * e.w * k
+		var x := e.x * size.x / u + sin(_clock * 0.9 + e.z * 6.28) * e.w * k
 		var y := ah - 6.0 - up
 		var a := clampf(1.0 - k * 1.15, 0.0, 1.0)
 		if a <= 0.02:
 			continue
 		var c: Color = PixelPalette.FIRE[6] if k < 0.3 else (PixelPalette.FIRE[5] if k < 0.6 else PixelPalette.FIRE[4])
-		draw_rect(Rect2(Vector2(roundf(x), roundf(y)) * PX, Vector2(PX, PX)), Color(c, a))
+		_sparks.draw_rect(Rect2(Vector2(roundf(x), roundf(y)) * u, cell), Color(c, a))
