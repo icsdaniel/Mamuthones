@@ -63,6 +63,14 @@ def propose(cfg, a):
     # a drop: the first groove after a break, a build or a drum fill (eight or more snare hits)
     drops = [b for b in range(1, last + 1) if kind[b] in ("groove", "ending")
              and (kind[b - 1] in ("break", "calm", "build") or mids[b - 1] >= 8)]
+    # a song that keeps its drums going drops by getting louder: the phrase starts with the biggest
+    # rise in level count too
+    rise = {b: level[b] + level[b + 1] - level[b - 1] - level[b - 2] for b in range(4, last - 1, 4)
+            if kind[b] == "groove"}
+    if rise:
+        cut = float(np.percentile(list(rise.values()), 80))
+        drops += [b for b, r in rise.items() if r > 0 and r >= cut and all(abs(b - x) >= 4 for x in drops)]
+    drops = sorted(set(drops))
     drops = [b for b in drops if b - 1 not in drops]
     loud_drops = [b for b in drops if energy[b] >= 2]
     pivots, prev = [], -9
