@@ -155,7 +155,13 @@ func test_theme() -> void:
 	check(t.get_stylebox("grabber", "VScrollBar") is StyleBoxEmpty, "scroll bars are never drawn")
 	# Pixel art: every kit texture is drawn with nearest filtering at whole art pixels.
 	check(ProjectSettings.get_setting("rendering/textures/canvas_textures/default_texture_filter") == 0, "nearest filtering project-wide")
-	check_eq(up.px, 3.0, "one art pixel is three screen pixels")
+	# one art pixel is a whole number of device pixels: 3 canvas px at the 720 base, 4 device px at 1080
+	var keep := PxStyle.device
+	PxStyle.set_screen_scale(1.0)
+	check_eq(PxStyle.unit, 3.0, "one art pixel is three canvas px on a 720-wide screen")
+	PxStyle.set_screen_scale(1.5)
+	check_near(PxStyle.unit * 1.5, 4.0, 0.001, "and four device px on a 1080-wide one")
+	PxStyle.set_screen_scale(keep)
 	check_eq(WoodcutTheme.icon("chevron_left").get_width() % 3, 0, "icons are baked at whole art pixels")
 	check_eq(t.get_type_variation_base("AccentButton"), &"Button", "AccentButton is a Button variation")
 

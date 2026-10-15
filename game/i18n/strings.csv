@@ -395,3 +395,4 @@ res_total,Score,Punteggio
 res_new_best_badge,New best +%s,Record +%s
 res_first_best_badge,First best,Primo record
 res_ladder,Scores,Classifiche
+res_meter_on,on beat,a tempo
