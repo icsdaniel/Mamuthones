@@ -8,29 +8,16 @@
  "offset": 0.206,
  "targets": {
   "easy": 0.7,
-  "medium": 1.3,
-  "hard": 2.2,
-  "expert": 3.4
+  "medium": 1.8,
+  "hard": 2.8,
+  "expert": 4.2
  },
  "id": "suno_workshop",
  "audio": "res://audio/music/suno_workshop.ogg",
  "length": 139.087,
  "features": "/tmp/claude-0/suno/workshop_feat.json",
  "preview": 40.0,
- "rests": [
-  {
-   "b": 94,
-   "len": 2
-  },
-  {
-   "b": 142,
-   "len": 2
-  },
-  {
-   "b": 206,
-   "len": 2
-  }
- ],
+ "rests": [],
  "sections": [
   [
    "intro",

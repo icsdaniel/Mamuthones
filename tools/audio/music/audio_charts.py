@@ -213,6 +213,11 @@ def build(cfg):
         # Expert rings accents, not every beat: the playability pass keeps a tilt budget anyway, and
         # a bell on every beat would crowd out the steps and chords around it first
         sec.opts.setdefault("add", {}).setdefault("expert", {})["bells"] = "accent"
+        # Medium plays what Hard's tables pick and Hard what Expert's pick (each on its own grid):
+        # with the Charter's tables Medium felt like Easy (Daniele, 2026-10-15)
+        e = min(3, sec.energy)
+        sec.opts["add"].setdefault("medium", {})["steps"] = C.DEFAULTS["hard"][e]["steps"]
+        sec.opts["add"].setdefault("hard", {})["steps"] = [x for x in C.DEFAULTS["expert"][e]["steps"] if x[0] != "fast"]
         sec.opts.update(cfg.get("section_opts", {}).get(sec.name, {}))
     song.cands, song.events = candidates(song, feat, cfg)
     charts, _ = C.chart_song(song)

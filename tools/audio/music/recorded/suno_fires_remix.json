@@ -8,29 +8,16 @@
  "offset": 0.046,
  "targets": {
   "easy": 0.8,
-  "medium": 1.5,
-  "hard": 2.6,
-  "expert": 4.0
+  "medium": 2.0,
+  "hard": 3.2,
+  "expert": 4.6
  },
  "id": "suno_fires_remix",
  "audio": "res://audio/music/suno_fires_remix.ogg",
  "length": 170.0,
  "features": "/tmp/claude-0/suno/fires_remix_feat.json",
  "preview": 40.0,
- "rests": [
-  {
-   "b": 188,
-   "len": 4
-  },
-  {
-   "b": 260,
-   "len": 4
-  },
-  {
-   "b": 332,
-   "len": 4
-  }
- ],
+ "rests": [],
  "sections": [
   [
    "intro",

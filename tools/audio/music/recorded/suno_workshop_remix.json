@@ -8,29 +8,16 @@
  "offset": 0.245,
  "targets": {
   "easy": 0.7,
-  "medium": 1.3,
-  "hard": 2.2,
-  "expert": 3.4
+  "medium": 1.8,
+  "hard": 2.8,
+  "expert": 4.0
  },
  "id": "suno_workshop_remix",
  "audio": "res://audio/music/suno_workshop_remix.ogg",
  "length": 139.96,
  "features": "/tmp/claude-0/suno/workshop_remix_feat.json",
  "preview": 40.0,
- "rests": [
-  {
-   "b": 62,
-   "len": 2
-  },
-  {
-   "b": 148,
-   "len": 2
-  },
-  {
-   "b": 188,
-   "len": 4
-  }
- ],
+ "rests": [],
  "sections": [
   [
    "intro",

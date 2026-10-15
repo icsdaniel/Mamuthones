@@ -301,7 +301,7 @@ func build() -> void:
 	_bell_cue = bell_cue_on(difficulty)
 	Sound.set_key(song.key_root)
 	Sound.row_bells(0)
-	Sound.ambience(UIKit.ambience_for(song.stop))
+	Sound.stop_ambience()   # no background loops: the music and the bells are the sound (Daniele, 2026-10-15)
 	resized.connect(_layout_router)
 	_start.call_deferred()
 

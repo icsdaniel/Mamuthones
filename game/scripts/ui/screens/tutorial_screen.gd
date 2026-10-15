@@ -31,7 +31,7 @@ func build() -> void:
 	chart = "tutorial" if song.charts.has("tutorial") else "easy"
 	lessons = song.lessons
 	Sound.set_key(song.key_root)
-	Sound.ambience(UIKit.ambience_for(song.stop))
+	Sound.stop_ambience()   # no background loops: the music and the bells are the sound (Daniele, 2026-10-15)
 	_intro()
 
 

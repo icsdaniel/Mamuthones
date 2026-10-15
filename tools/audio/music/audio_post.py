@@ -26,7 +26,7 @@ CLEAR_MAX = 2       # a strong tilt may clear this many plain taps out of its wa
 TILT_FLOOR = {"medium": 8, "hard": 11, "expert": 10}   # per minute; below it, tilts clear more taps
 HOLD_MAX_S = 4.0
 # Medium and Hard are refilled from the level above when the pass leaves them thin or empty
-REFILL = {"medium": ("hard", 0.95, 3.0), "hard": ("expert", 1.6, 2.5)}   # source, min notes/s, void s
+REFILL = {"medium": ("hard", 1.5, 2.5), "hard": ("expert", 2.3, 2.0)}   # source, min notes/s, void s
 TILTS_PER_MIN = {"easy": 8, "medium": 15, "hard": 20, "expert": 28}
 RUN_CAP = {"medium": 4, "hard": 4, "expert": 6}
 MID_SHARE = 0.45
