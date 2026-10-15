@@ -4,7 +4,7 @@ extends Container
 ## the kit's answer to long screens instead of a scroll bar. Every page gets the pager's full size;
 ## add_page() returns a VBox to fill. A horizontal drag that starts on the pager follows the finger
 ## and snaps to the nearest page (a flick goes one page on); a vertical drag or a tap is left to the
-## controls inside. Snaps in whole art pixels, quickly; instant with reduced motion.
+## controls inside. Presses on anything drawn over the pager (a dialog, a banner) are ignored. Snaps in whole art pixels, quickly; instant with reduced motion.
 
 signal page_changed(index: int)
 
@@ -40,6 +40,7 @@ func add_page(id: String, separation := 18, scroll := false) -> VBoxContainer:
 		sc.scroll_deadzone = 12
 		add_child(sc)
 		box.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		box.size_flags_vertical = Control.SIZE_EXPAND_FILL   # a short page still fills the pager
 		sc.add_child(box)
 	else:
 		box.name = id
@@ -98,6 +99,36 @@ func _place(x: float) -> void:
 			c.position.x = roundf((x + i * size.x) / PX) * PX
 
 
+## Whether something that takes input (a dialog's veil, a sheet) lies over `at` (viewport px): the
+## App's overlay layer.
+func _covered(at: Vector2) -> bool:
+	var app: Variant = get_tree().root.get_meta("app", null) if is_inside_tree() else null
+	# the meta can outlive its App (a freed one): only a live App's overlay counts
+	if not is_instance_valid(app) or not (app as Object).has_method("overlay"):
+		return false
+	for c in (app.call("overlay") as Control).get_children():
+		if c is Control and (c as Control).is_visible_in_tree() and (c as Control).mouse_filter == Control.MOUSE_FILTER_STOP \
+				and (c as Control).get_global_rect().has_point(at):
+			return true
+	return false
+
+
+## Whether a press at `at` (viewport px) lands on a control that drags sideways itself: a Range
+## (HSlider, scroll bar, ...) on one of the pages. Such a press never arms the swipe.
+func _on_dragger(at: Vector2, node: Node = self) -> bool:
+	for c in node.get_children():
+		if not (c is Control) or not (c as Control).is_visible_in_tree():
+			continue
+		var cc := c as Control
+		if cc is Range:
+			var r := Rect2(Vector2.ZERO, cc.size)
+			if r.has_point(cc.get_global_transform_with_canvas().affine_inverse() * at):
+				return true
+		if _on_dragger(at, cc):
+			return true
+	return false
+
+
 func _input(event: InputEvent) -> void:
 	if not is_visible_in_tree() or page_count() < 2:
 		return
@@ -105,7 +136,10 @@ func _input(event: InputEvent) -> void:
 	if pressed_ev:
 		var pos: Vector2 = get_global_transform_with_canvas().affine_inverse() * event.position
 		if event.pressed:
-			_pressing = Rect2(Vector2.ZERO, size).has_point(pos)
+			# only a press that lands on the pager itself: never one on a dialog or banner above it
+			# ... nor one on a slider, which drags sideways itself
+			_pressing = Rect2(Vector2.ZERO, size).has_point(pos) and not _covered(event.position) \
+				and not _on_dragger(event.position)
 			_press = pos
 			_dragging = false
 		elif _pressing:

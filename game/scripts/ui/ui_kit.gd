@@ -82,8 +82,23 @@ static func side_color(side: String) -> Color:
 
 static func apply_root(root: Control) -> void:
 	root.theme = WoodcutTheme.build()
+	_fit_pixels(root)
+	if root.is_inside_tree() and not root.get_viewport().size_changed.is_connected(_fit_pixels.bind(root)):
+		root.get_viewport().size_changed.connect(_fit_pixels.bind(root))
 	I18n.set_locale(language())
 	apply_volumes()
+
+
+## The kit's art pixel from the real screen: device px per canvas px of the root's viewport (a
+## Window or a SubViewport with a 2D size override), so PxStyle draws whole device pixels.
+static func _fit_pixels(root: Control) -> void:
+	if not root.is_inside_tree():
+		return
+	var vp := root.get_viewport()
+	var dev := Vector2(vp.size) if vp is Window else Vector2((vp as SubViewport).size) if vp is SubViewport else Vector2.ZERO
+	var canvas := vp.get_visible_rect().size
+	if dev.x > 0.0 and canvas.x > 0.0:
+		PxStyle.set_screen_scale(dev.x / canvas.x)
 
 
 static func language() -> String:
@@ -317,10 +332,11 @@ static func header(box: Container, title: String, on_back: Callable) -> HBoxCont
 	return top_bar(box, title, on_back)
 
 
-## A round 96 px button showing one kit icon (WoodcutTheme.icon()): back, ladder, close.
-static func icon_button(icon_name: String, on_press: Callable, tooltip := "") -> Button:
+## A round 96 px button showing one kit icon (WoodcutTheme.icon()): back, ladder, close. With
+## `variation` "" it is a raised secondary button instead (a footer's icon action, e.g. replay).
+static func icon_button(icon_name: String, on_press: Callable, tooltip := "", variation := ICON) -> Button:
 	var b := Button.new()
-	b.theme_type_variation = ICON
+	b.theme_type_variation = variation
 	b.icon = WoodcutTheme.icon(icon_name)
 	b.icon_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	b.custom_minimum_size = Vector2(TOUCH, TOUCH)
@@ -479,14 +495,14 @@ static func fit_label(l: Label, min_size := 26) -> void:
 	l.clip_text = true
 	l.text_overrun_behavior = TextServer.OVERRUN_TRIM_ELLIPSIS
 	l.custom_minimum_size.x = 1
-	var top := -1
 	var refit := func() -> void:
 		if l.text == "" or not l.is_inside_tree() or l.size.x <= 1.0:
 			return
-		if top < 0:
-			top = l.get_theme_font_size("font_size")
+		# the size before any shrinking, kept on the label (a closure's local would reset every call)
+		if not l.has_meta("fit_base"):
+			l.set_meta("fit_base", l.get_theme_font_size("font_size"))
 		var font := l.get_theme_font("font")
-		var fs := top
+		var fs: int = l.get_meta("fit_base")
 		while fs > min_size and font.get_string_size(l.text, HORIZONTAL_ALIGNMENT_LEFT, -1, fs).x > l.size.x:
 			fs -= 1
 		if fs != l.get_theme_font_size("font_size"):
@@ -531,9 +547,11 @@ static func card(box: Container, paper := false) -> VBoxContainer:
 	return inner
 
 
-## A stat tile: a sunk panel with a pixel tag, a big value and an optional caption under it. Returns
-## the panel (named `id`; the value label is "<id>Value", the caption "<id>Caption").
-static func stat_tile(box: Container, id: String, tag: String, value: String, caption := "") -> PanelContainer:
+## A stat tile: a sunk panel with a pixel tag, a big value in the pixel figures (PxType "score":
+## digits , . + − x ×) with an optional `unit` beside it ("%", "ms") and an optional caption under it.
+## Returns the panel (named `id`; the value label is "<id>Value", the caption "<id>Caption", the unit
+## "<id>Unit").
+static func stat_tile(box: Container, id: String, tag: String, value: String, caption := "", unit := "") -> PanelContainer:
 	var p := PanelContainer.new()
 	p.theme_type_variation = TILE
 	p.name = id
@@ -545,15 +563,49 @@ static func stat_tile(box: Container, id: String, tag: String, value: String, ca
 	var t := overline(tag)
 	t.name = id + "Tag"
 	v.add_child(t)
-	var val := label(value, VALUE, false)
+	var row := HBoxContainer.new()
+	row.add_theme_constant_override("separation", S1)
+	v.add_child(row)
+	var val := number(value)
 	val.name = id + "Value"
-	fit_label(val, 30)
-	v.add_child(val)
+	row.add_child(val)
+	if unit != "":
+		var u := label(unit, CAPTION, false)
+		u.name = id + "Unit"
+		u.add_theme_font_override("font", Palette.text_font("Bold"))
+		u.size_flags_vertical = Control.SIZE_SHRINK_END
+		row.add_child(u)
 	if caption != "":
 		var c := label(caption, CAPTION, true)
 		c.name = id + "Caption"
 		v.add_child(c)
 	return p
+
+
+## A number in the pixel figures (PxType "score", k=1 is 36 px; k=2 the hero's 72), tinted by `tint`
+## (white keeps the face's own cream-to-gold).
+static func number(text: String, tint := Color.WHITE, k := 1) -> Label:
+	var l := Label.new()
+	l.text = text
+	PxType.label(l, "score", tint, k)
+	l.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	return l
+
+
+## The kit's footer row, the same on every screen: an optional icon secondary (96 px, raised) on the
+## left, the screen's one primary action filling the rest. Returns the row (named "Actions").
+static func footer_actions(foot: Container, primary: Button, secondary: Button = null) -> HBoxContainer:
+	var row := HBoxContainer.new()
+	row.name = "Actions"
+	row.add_theme_constant_override("separation", S2)
+	foot.add_child(row)
+	if secondary != null:
+		secondary.custom_minimum_size = Vector2(TOUCH, PRIMARY_H)
+		row.add_child(secondary)
+	primary.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	primary.custom_minimum_size.y = PRIMARY_H
+	row.add_child(primary)
+	return row
 
 
 ## A small pill label: "red" (a callout: new best, full combo), "bronze" (a reward) or "quiet".
@@ -816,52 +868,49 @@ static func confirm(node: Node, question: String, yes: String, on_yes: Callable)
 	box.add_child(button(tr_("ui_cancel"), veil.queue_free, QUIET))
 
 
-## An unlock celebration: a paper banner drops in over everything with the unlock sound and a ring of
-## the bells, then lifts away. Tapping dismisses it early.
-static func celebrate(node: Node, text: String, delay := 0.0) -> void:
+## An unlock celebration that never blocks: a sheet with the three bells slides down from the top
+## (under the safe area) with the unlock sound, rings, holds about two seconds and slides away.
+## Nothing on it takes input. (The results celebrate in place instead.) Returns the banner.
+static func celebrate(node: Node, text: String, delay := 0.0) -> Control:
 	var host := _overlay(node)
-	var veil := ColorRect.new()
-	veil.color = Color(Palette.INK, 0.0)
-	veil.set_anchors_preset(Control.PRESET_FULL_RECT)
-	veil.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	veil.name = "Celebration"
-	host.add_child(veil)
-	var center := CenterContainer.new()
-	center.set_anchors_preset(Control.PRESET_FULL_RECT)
-	center.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	veil.add_child(center)
 	var p := PanelContainer.new()
-	p.theme_type_variation = CARD
-	p.custom_minimum_size.x = 560
+	p.name = "Celebration"
 	p.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	p.add_theme_stylebox_override("panel", _sheet())
-	center.add_child(p)
-	var box := VBoxContainer.new()
-	box.add_theme_constant_override("separation", 8)
-	p.add_child(box)
-	box.add_child(label(tr_("celebrate_title"), PAPER_HEADER, true, HORIZONTAL_ALIGNMENT_CENTER))
-	var bells := BellMarks.new(3, 56.0)
-	bells.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
-	box.add_child(bells)
-	box.add_child(label(text, PAPER, true, HORIZONTAL_ALIGNMENT_CENTER))
-	p.modulate.a = 0.0
-	var tw := veil.create_tween()
+	host.add_child(p)
+	var row := HBoxContainer.new()
+	row.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	row.add_theme_constant_override("separation", S3)
+	p.add_child(row)
+	var bells := BellMarks.new(3, 44.0)
+	bells.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+	row.add_child(bells)
+	var col := VBoxContainer.new()
+	col.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	col.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	col.add_theme_constant_override("separation", 0)
+	row.add_child(col)
+	var o := overline(tr_("celebrate_title"))
+	o.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	col.add_child(o)
+	var l := label(text, "", true)
+	l.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	col.add_child(l)
+	var w := minf(host.size.x - 2.0 * GUTTER, COLUMN_MAX)
+	p.size = Vector2(w, 0)
+	var top := safe_margins(host).y + S4
+	var hidden_y := -p.get_combined_minimum_size().y - 24.0
+	p.position = Vector2(roundf((host.size.x - w) * 0.5), hidden_y)
+	var tw := p.create_tween()
 	tw.tween_interval(delay)
 	tw.tween_callback(func() -> void:
 		Sound.ui("unlock")
-		veil.mouse_filter = Control.MOUSE_FILTER_STOP
-		veil.gui_input.connect(func(e: InputEvent) -> void:
-			if e is InputEventMouseButton and e.pressed or e is InputEventScreenTouch and e.pressed:
-				veil.queue_free())
-		bells.animate(0.1))
-	tw.set_parallel()
-	tw.tween_property(veil, "color:a", 0.6, 0.25).set_delay(delay)
-	tw.tween_property(p, "modulate:a", 1.0, 0.25).set_delay(delay)
-	if not reduced_motion():
-		p.scale = Vector2(0.8, 0.8)
-		p.pivot_offset = Vector2(280, 150)
-		tw.tween_property(p, "scale", Vector2.ONE, 0.35).set_delay(delay).set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT)
-	tw.set_parallel(false)
-	tw.tween_interval(2.6)
-	tw.tween_property(veil, "modulate:a", 0.0, 0.3)
-	tw.tween_callback(veil.queue_free)
+		bells.animate(0.15))
+	if reduced_motion():
+		tw.tween_property(p, "position:y", top, 0.0)
+	else:
+		tw.tween_property(p, "position:y", top, 0.3).set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT)
+	tw.tween_interval(2.0)
+	tw.tween_property(p, "position:y", hidden_y, 0.25).set_trans(Tween.TRANS_CUBIC).set_ease(Tween.EASE_IN)
+	tw.tween_callback(p.queue_free)
+	return p

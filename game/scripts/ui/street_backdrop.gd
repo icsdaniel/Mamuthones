@@ -78,7 +78,7 @@ var _fire_pic: TextureRect           ## the fire's corner of the street, its sha
 var _fire_mat: ShaderMaterial
 var _baked_key := []                 ## what the bake was drawn with (redrawn when it changes)
 var _vp: SubViewport                 ## the pixel look: the street drawn at one texel per lens cell
-var own_cells := true                ## false when the whole play screen is already drawn one px per cell
+var own_cells := true                ## false when the whole play screen is already drawn in texels (the world picture)
 var _cells: TextureRect              ## ... and shown scaled up
 var _mat: ShaderMaterial
 var _glow: Control                   ## additive: lines pulsing, lanterns, hit flashes

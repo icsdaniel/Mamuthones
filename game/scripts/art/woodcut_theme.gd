@@ -43,7 +43,7 @@ const C_RAISED := Color("#231915")       ## FLEECE2: secondary buttons, the lit 
 const C_RAISED_HI := Color("#33241c")    ## FLEECE3: hover / highlights on raised faces
 const C_STROKE := Color("#4a3424")       ## FLEECE4: rims of cards and quiet frames
 const C_STROKE_HI := Color("#6a4a2e")    ## FLEECE5: the top highlight row of raised faces
-const C_SUNK := Color(0.027, 0.024, 0.055, 0.55)   ## K0 at 55%: tiles, tracks, grooves
+const C_SUNK := Color("#0e0a0a")         ## between K0 and FLEECE0, opaque: tiles, tracks, grooves
 const C_BRONZE := Color("#e8b64c")       ## GOLD4: the bells' bronze; tags, selection, links
 const C_BRONZE_HI := Color("#f8dc8a")    ## GOLD5
 const C_BRONZE_LO := Color("#c08a2e")    ## GOLD3
@@ -212,11 +212,13 @@ static func build() -> Theme:
 	_button_colors(t, "ChipButton", C_TEXT_2, C_BRONZE_HI)
 
 	# ---- panels
-	var board := PxStyle.make(Color(C_SURFACE, 0.9), Color(C_STROKE, 0.9), R_M, CARD_PAD)
-	board.highlight = Color(C_RAISED_HI, 0.9)
-	var card := PxStyle.make(Color(C_SURFACE, 0.94), C_BRONZE_DEEP, R_M, CARD_PAD)
-	card.highlight = Color(C_STROKE, 0.9)
-	var tile := PxStyle.make(C_SUNK, Color.TRANSPARENT, R_S, TILE_PAD)
+	var board := PxStyle.make(C_SURFACE, C_STROKE, R_M, CARD_PAD)
+	board.highlight = C_RAISED_HI
+	board.grain = fleece()
+	var card := PxStyle.make(C_SURFACE, C_BRONZE_DEEP, R_M, CARD_PAD)
+	card.highlight = C_STROKE
+	card.grain = fleece()
+	var tile := PxStyle.make(C_SUNK, C_RAISED, R_S, TILE_PAD)
 	for type in ["Panel", "PanelContainer", "PopupPanel"]:
 		t.set_stylebox("panel", type, board)
 	t.set_type_variation("BoardPanel", "PanelContainer")
@@ -428,6 +430,27 @@ const GLYPHS := {
 }
 
 
+## The cards' sheepskin: a 24x16 art-px tile of SURFACE with small curls of the fleece ramp (a lit
+## top pixel, a dark one under it), laid over a card's fill.
+static func fleece() -> Texture2D:
+	if _icons.has("_fleece"):
+		return _icons["_fleece"]
+	var img := Image.create(24, 16, false, Image.FORMAT_RGBA8)
+	img.fill(Color(0, 0, 0, 0))
+	var seed := 31
+	for i in 22:
+		seed = (seed * 1103515245 + 12345) & 0x7fffffff
+		var x := seed % 24
+		seed = (seed * 1103515245 + 12345) & 0x7fffffff
+		var y := seed % 16
+		var lit := Color(C_RAISED, 0.9) if i % 3 else Color(C_RAISED_HI, 0.55)
+		img.set_pixel(x, y, lit)
+		img.set_pixel((x + 1) % 24, y, Color(C_RAISED, 0.6))
+		img.set_pixel(x, (y + 1) % 16, Color(PixelPalette.FLEECE[0], 0.8))
+	_icons["_fleece"] = ImageTexture.create_from_image(img)
+	return _icons["_fleece"]
+
+
 ## A baked icon (cached): a GLYPHS map, or one of the painted controls (toggles, knob, boxes).
 static func icon(name: String) -> Texture2D:
 	if _icons.has(name):
@@ -492,6 +515,23 @@ static func _painted(name: String) -> Image:
 			PxStyle.paint(img, Rect2i(4, 2, 6, 1), 0, Color.WHITE if name == "knob_hi" else C_BRONZE_HI)
 			if name == "knob_off":
 				_fade(img, 0.45)
+			return img
+		"replay":
+			# a two-pixel ring open at the upper right, its top end an arrowhead pointing on round
+			var img := Image.create(16, 16, false, Image.FORMAT_RGBA8)
+			for y in 16:
+				for x in 16:
+					var dx := x + 0.5 - 8.0
+					var dy := y + 0.5 - 8.0
+					var d := sqrt(dx * dx + dy * dy)
+					var a := atan2(dy, dx)
+					if d >= 4.6 and d <= 7.0 and not (a > -1.45 and a < -0.35):
+						img.set_pixel(x, y, Color.WHITE)
+			for x in range(8, 13):
+				var half := int((12 - x) * 0.75 + 0.5)
+				for y in range(2 - half, 3 + half):
+					if y >= 0:
+						img.set_pixel(x, y, Color.WHITE)
 			return img
 		"check_on", "check_off", "radio_on", "radio_off":
 			var img := Image.create(14, 14, false, Image.FORMAT_RGBA8)

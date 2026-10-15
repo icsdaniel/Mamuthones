@@ -64,7 +64,7 @@ var lanes: LaneView
 var backdrop: StreetBackdrop     ## the street picture, the fire and the swaying portraits (songs)
 var words: JudgementWords
 var filter: PixelFilter           ## a lens over the whole screen (only when the World picture is off)
-var world: SubViewportContainer   ## the street, lanes and HUD drawn at one pixel per art pixel
+var world: SubViewportContainer   ## the street, lanes and HUD drawn in hard texels, PxArt.FINE base px each
 var world_vp: SubViewport
 var paused := false
 var done := false
@@ -126,18 +126,27 @@ func build() -> void:
 	if gd is Dictionary and not (gd as Dictionary).is_empty():
 		ghost = Ghost.from_dict(gd)
 
-	# The pixel look draws the street, the lanes and the HUD straight into one small picture, one
-	# pixel per art pixel (a third of the base size each way), and shows it enlarged with hard edges.
-	# That is the pixel art itself: no filter reads the screen back and no other picture is drawn,
-	# so a phone does far less work per frame than for a picture drawn at full resolution.
+	# The pixel look draws the street, the lanes and the HUD straight into one picture of hard texels,
+	# PxArt.FINE base px each (480 across the 720-wide base screen: half an art pixel, so Daniele's
+	# pictures keep twice the detail they had at one texel per art pixel), and shows it enlarged with
+	# PxArt's sharp upscale: square texels, no smear, at a phone's own, non-whole scale. No filter
+	# reads the screen back and no other picture is drawn: the world is one plain blit.
 	var host: Node = self
 	if not OS.has_environment("NO_WORLD"):
 		world = SubViewportContainer.new()
 		world.name = "World"
 		world.stretch = true
-		world.stretch_shrink = int(PxArt.PX)
-		world.set_anchors_preset(Control.PRESET_FULL_RECT)
-		world.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
+		world.stretch_shrink = 1
+		# a container shrinks its picture by whole numbers only: it is laid out at the texels' size and
+		# scaled up by FINE, and its picture keeps the base screen's coordinates (size_2d_override)
+		world.set_anchors_preset(Control.PRESET_TOP_LEFT)
+		world.scale = Vector2(PxArt.FINE, PxArt.FINE)
+		world.texture_filter = CanvasItem.TEXTURE_FILTER_LINEAR
+		world.material = PxArt.sharp_material()
+		if OS.has_environment("WORLD_NEAREST"):
+			# measuring: the plain nearest blit instead (columns of uneven width), to see the upscale's cost
+			world.material = null
+			world.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
 		world_vp = SubViewport.new()
 		world_vp.name = "WorldView"
 		world_vp.disable_3d = true
@@ -146,8 +155,8 @@ func build() -> void:
 		world_vp.canvas_item_default_texture_filter = Viewport.DEFAULT_CANVAS_ITEM_TEXTURE_FILTER_NEAREST
 		world.add_child(world_vp)
 		add_child(world)
-		world.resized.connect(func() -> void: world_vp.size_2d_override = Vector2i(world.size.round()))
-		world_vp.size_2d_override = Vector2i(world.size.round())
+		resized.connect(_fit_world)
+		_fit_world()
 		host = world_vp
 	# a picture of its own does not inherit the app's theme: hand it on to what is drawn in it
 	var host_theme: Theme = null
@@ -413,6 +422,15 @@ func _begin_count(music_t: float) -> void:
 	_tick_count()
 
 
+## The world picture covers the screen in whole texels (the last row and column may hang off its edge).
+func _fit_world() -> void:
+	if world == null:
+		return
+	var texels := (size / PxArt.FINE).ceil().max(Vector2.ONE)
+	world.size = texels
+	world_vp.size_2d_override = Vector2i((texels * PxArt.FINE).round())
+
+
 func _layout_router() -> void:
 	if router != null and lanes != null:
 		router.buttons_rect = lanes.tap_global_rect()
@@ -420,6 +438,8 @@ func _layout_router() -> void:
 
 func _process(delta: float) -> void:
 	_clock += delta
+	if world != null:
+		PxArt.sharp_zoom(world)   # the window can be scaled without the screen's own size changing
 	_tick_shake(delta)
 	if _fail_at >= 0.0 and _clock >= _fail_at:
 		_fail_at = -1.0

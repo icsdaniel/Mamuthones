@@ -323,6 +323,7 @@ S = [
 ("res_new_best_badge", "New best +%s", "Record +%s"),
 ("res_first_best_badge", "First best", "Primo record"),
 ("res_ladder", "Scores", "Classifiche"),
+("res_meter_on", "on beat", "a tempo"),
 ("tip_still", "Keep the phone steady through the grey stand-still bars: each ring there costs 100 points and a level of unison.",
  "Tieni fermo il telefono durante le barre grigie delle soste: ogni colpo lì costa 100 punti e un livello di unisono."),
 ("tip_holds", "Keep holds pressed until their end crosses the line: each hold kept is worth 150 × unison.",

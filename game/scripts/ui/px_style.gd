@@ -1,25 +1,42 @@
 class_name PxStyle
 extends StyleBox
 ## The one box of the menu kit (see UIKit's header): a pixel-stepped rounded rectangle drawn in code
-## on the art grid (one art pixel = `px` screen px, 3 on the 720 base), so every edge stays crisp next
-## to the pixel art and every colour is a token, not a texture.
+## on the art grid, so every edge stays crisp next to the pixel art and every colour is a token.
+##
+## Integer pixels: one art pixel is `unit` canvas px, set by UIKit.apply_root() from the screen's real
+## scale so that it is a WHOLE number of device pixels (3 canvas px on a 720-wide screen; 4 device px
+## = 2.67 canvas px on a 1080-wide one, instead of an uneven 4.5). The box's origin snaps to device
+## pixels too, so every stair of a corner is the same size on any phone. `px` > 0 overrides it.
+##
+## `grain`: an optional tile (1 texel = 1 art px) laid over the fill, e.g. the cards' fleece.
 ##
 ## Layers, back to front: the `lip` (the box's carved thickness, `lip` art px tall under the face, in
 ## `lip_color`), the face's `border` ring (`border_px` art px), the `fill`, a one-pixel `highlight`
 ## row along the top inside the ring and a `shade` row along its bottom. `sink` pushes the face down
 ## (a pressed button sits on its lip). `radius` is in art px; -1 makes a pill (half the height).
-## Any colour with alpha 0 is skipped.
+## Any colour with alpha 0 is skipped. The fields are exported so duplicate() (and variant()) keep them.
 
-var fill := Color.TRANSPARENT
-var border := Color.TRANSPARENT
-var border_px := 1
-var highlight := Color.TRANSPARENT
-var shade := Color.TRANSPARENT
-var lip := 0
-var lip_color := Color.TRANSPARENT
-var sink := 0
-var radius := 3
-var px := 3.0
+@export var fill := Color.TRANSPARENT
+@export var border := Color.TRANSPARENT
+@export var border_px := 1
+@export var highlight := Color.TRANSPARENT
+@export var shade := Color.TRANSPARENT
+@export var lip := 0
+@export var lip_color := Color.TRANSPARENT
+@export var sink := 0
+@export var radius := 3
+@export var px := 0.0
+@export var grain: Texture2D
+
+## Canvas px per art px for the whole kit, and device px per canvas px (see the header).
+static var unit := 3.0
+static var device := 1.0
+
+
+## Sets the kit's art pixel from the screen's device-px-per-canvas-px scale.
+static func set_screen_scale(s: float) -> void:
+	device = maxf(s, 0.01)
+	unit = maxf(floorf(3.0 * device + 0.01), 1.0) / device
 
 
 static func make(p_fill: Color, p_border := Color.TRANSPARENT, p_radius := 3, pad := Vector4(24, 18, 24, 18)) -> PxStyle:
@@ -43,8 +60,8 @@ func variant(p_fill: Color, p_border: Color, p_highlight := Color.TRANSPARENT, p
 	s.sink = p_sink
 	if p_sink > 0:
 		# the label goes down with the face
-		s.content_margin_top += p_sink * px
-		s.content_margin_bottom -= p_sink * px
+		s.content_margin_top += p_sink * 3.0
+		s.content_margin_bottom -= p_sink * 3.0
 	return s
 
 
@@ -71,12 +88,12 @@ static func corner(r: int) -> PackedInt32Array:
 
 
 func _draw(ci: RID, rect: Rect2) -> void:
-	var s := px
-	var aw := floori(rect.size.x / s)
-	var ah := floori(rect.size.y / s)
+	var s := px if px > 0.0 else unit
+	var aw := floori(rect.size.x / s + 0.001)
+	var ah := floori(rect.size.y / s + 0.001)
 	if aw <= 0 or ah <= 0:
 		return
-	var origin := (rect.position + (rect.size - Vector2(aw, ah) * s) * 0.5).round()
+	var origin := ((rect.position + (rect.size - Vector2(aw, ah) * s) * 0.5) * device).round() / device
 	RenderingServer.canvas_item_add_set_transform(ci, Transform2D(0.0, Vector2(s, s), 0.0, origin))
 	var face_h := ah - lip
 	var r := _radius(aw, face_h)
@@ -94,6 +111,8 @@ func _draw(ci: RID, rect: Rect2) -> void:
 			ring(ci, outer, r, b, border)   # a see-through face: never paint under it
 	if fill.a > 0.0 and inner.size.x > 0 and inner.size.y > 0:
 		shape(ci, inner, ri, fill)
+		if grain != null:
+			_grain(ci, inner, ri)
 	if inner.size.y > 2:
 		var prof := corner(mini(ri, inner.size.y / 2))
 		var top_in := prof[0] if prof.size() > 0 else 0
@@ -102,6 +121,25 @@ func _draw(ci: RID, rect: Rect2) -> void:
 		if shade.a > 0.0:
 			_span(ci, inner.position.x + top_in, inner.end.y - 1, inner.size.x - 2 * top_in, shade)
 	RenderingServer.canvas_item_add_set_transform(ci, Transform2D.IDENTITY)
+
+
+## Tiles `grain` over the straight middle of the face (the corner rows are too short to show it).
+func _grain(ci: RID, r: Rect2i, rr: int) -> void:
+	var band := Rect2i(r.position.x, r.position.y + rr, r.size.x, r.size.y - 2 * rr)
+	var ts := Vector2i(grain.get_size())
+	if band.size.y <= 0 or ts.x <= 0:
+		return
+	var mod := Color(1, 1, 1, fill.a)
+	var y := 0
+	while y < band.size.y:
+		var h := mini(ts.y, band.size.y - y)
+		var x := 0
+		while x < band.size.x:
+			var w := mini(ts.x, band.size.x - x)
+			RenderingServer.canvas_item_add_texture_rect_region(ci, Rect2(band.position.x + x, band.position.y + y, w, h),
+				grain.get_rid(), Rect2(0, 0, w, h), mod)
+			x += w
+		y += h
 
 
 func _radius(w: int, h: int) -> int:
