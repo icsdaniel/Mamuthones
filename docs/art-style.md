@@ -17,13 +17,21 @@ banner for the main action. Text is cream on navy, in a serif face.
   Sprites are baked at 1x and drawn with **nearest** filtering (no mipmaps, no linear blur).
 * Only integer multiples where the layout allows (x3 on the base screen; x2 for small far figures).
   Moving sprites may land between pixels; still scenery sits on the 3 px grid.
-* The play screen is drawn into one picture of **480 texels across** (PxArt.FINE = 1.5 base px, half
-  an art pixel) and shown with a sharp upscale (square texels, only the seam pixel blended). Daniele's
-  pictures (notes, rings, bell bars, rope, step buttons, HUD frames, the street) are shrunk to that
-  finer grid; drawn sprites, the pixel type and the figures stay on the 3 px grid (two texels).
-* No anti-aliasing, no soft gradients inside sprites. Glows (fire light, beat flashes) are the one
-  exception: they are additive light layered over the art, and they are stepped (banded) where they
-  are large.
+* The play screen is drawn into one picture of hard texels, each a **whole number of the phone's own
+  pixels** (PxArt.world_density): 3 screen px a texel wherever that leaves at least 240 across, so
+  240 texels on a 720-wide phone, 360 on 1080, 430 on 1290, 480 on 1440. It is shown with plain
+  nearest, so every texel is the same square. Daniele's pictures (notes, rings, bell bars, rope, step
+  buttons, feet, HUD frames, the street) are shrunk to those texels, one picture pixel per texel.
+  Drawn sprites, the pixel type and the figures keep the 3 base px art grid: whole texels where the
+  screen's scale allows (720, 1440), otherwise the nearest texels (on a 1080 phone an art pixel is
+  1.5 texels, so 1 or 2).
+* Settings > Graphics: **Sharp** (the above, default) or **Fast** (one texel per art pixel, 240
+  across the base screen: the cheapest, for phones that stutter).
+* The street is baked once in the pixel palette (palette_lut.png) through a 4 x 4 ordered dither,
+  so its light and the lanes' shading are palette bands and dither, not airbrushed gradients.
+* No anti-aliasing, no soft gradients inside sprites. Glows (fire light, beat flashes, the light
+  under a note) are the one exception: they are additive light layered over the art, and they are
+  stepped in flat rings (PxArt.stepped_radial, six bands) with hard texel edges.
 
 ## Palette
 `tools/art/pixel/palette.py` is the only source of colours (ramps NIGHT, HILL, STAR, FIRE, STONE,
