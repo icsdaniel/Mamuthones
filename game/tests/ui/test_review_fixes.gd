@@ -1,6 +1,6 @@
 extends TestCase
 ## The final review's fixes: early/late only off Perfect, the ghost in points after the first note,
-## the results breakdown and timing above the fold, correct tips, the Remix chip beside the
+## the results fitting one screen (breakdown and timing on pages above the fold), correct tips, the Remix chip beside the
 ## difficulties, and the delay slider's range.
 
 
@@ -72,7 +72,7 @@ func test_ghost_line_in_points_after_the_first_note() -> void:
 	UIHarness.restore_profile()
 
 
-func test_results_breakdown_and_timing_above_the_fold() -> void:
+func test_results_fit_one_screen_with_pages() -> void:
 	UIHarness.fresh_profile()
 	var s := _auto("fires", "hard")
 	var args := {"session": s, "record": {"prev_best": int(s.score * 0.9), "new_best": true, "grade": s.grade_rank(), "carving_gained": 2,
@@ -83,20 +83,127 @@ func test_results_breakdown_and_timing_above_the_fold() -> void:
 			var app := UIHarness.make_app(tree, "results", args, sz)
 			await UIHarness.settle(tree)
 			var res := app.current()
+			var h := res.get_viewport_rect().size.y
 			var foot := res.find_child("Footer", true, false) as Control
 			var fold := foot.get_global_rect().position.y
-			for part in ["UnisonHeadline", "Breakdown", "Tendency"]:
-				var ctl := res.find_child(part, true, false) as Control
-				if check(ctl != null, "%s %s: %s is shown" % [loc, sz, part]):
-					check(ctl.get_global_rect().end.y <= fold + 1.0,
-						"%s %s: %s is above the fold (ends %.0f, fold %.0f)" % [loc, sz, part, ctl.get_global_rect().end.y, fold])
+			check(foot.get_global_rect().end.y <= h + 1.0, "%s %s: the footer is on screen (ends %.0f of %.0f)" % [loc, sz, foot.get_global_rect().end.y, h])
 			var score := res.find_child("Score", true, false) as Control
-			var br := res.find_child("Breakdown", true, false) as Control
-			check(score.get_global_rect().end.y <= br.get_global_rect().position.y, "%s %s: the breakdown comes right under the score" % [loc, sz])
+			var pager := res.find_child("Pager", true, false) as Pager
+			check(score.get_global_rect().end.y <= pager.get_global_rect().position.y, "%s %s: the hero comes before the pages" % [loc, sz])
+			check(pager.get_global_rect().end.y <= fold + 1.0, "%s %s: the pages end above the footer" % [loc, sz])
+			check(res.find_children("*", "ScrollBar", true, false).all(func(b: ScrollBar) -> bool: return not b.is_visible_in_tree()),
+				"%s %s: no scroll bar shows" % [loc, sz])
+			# every page, once turned to, shows its parts inside the pager
+			for page in [["Breakdown", "UnisonHeadline"], ["Tendency", "Meter"]]:
+				var i := 1 if page[0] == "Breakdown" else 2
+				pager.go(i, true)
+				await UIHarness.frames(tree, 2)
+				for part in page:
+					var ctl := res.find_child(part, true, false) as Control
+					if check(ctl != null, "%s %s: %s is shown" % [loc, sz, part]):
+						var r := ctl.get_global_rect()
+						check(r.position.x >= pager.get_global_rect().position.x - 1.0 and r.end.y <= fold + 1.0,
+							"%s %s: %s sits on its page above the fold (%s, fold %.0f)" % [loc, sz, part, r, fold])
 			UIHarness.free_app(app)
 	Profile.set_setting("language", "en")
 	I18n.set_locale("en")
 	UIHarness.restore_profile()
+
+
+func test_results_pages_swipe() -> void:
+	UIHarness.fresh_profile()
+	var s := _auto("fires", "hard")
+	var app := UIHarness.make_app(tree, "results", {"session": s, "record": {}}, Vector2i(720, 1440))
+	await UIHarness.settle(tree)
+	var res := app.current()
+	var pager := res.find_child("Pager", true, false) as Pager
+	var tabs := res.find_child("Tabs", true, false) as HBoxContainer
+	var c := pager.get_global_rect().get_center()
+	# a sideways swipe to the left turns to the next page and lights its segment
+	_touch(pager, c, true)
+	for i in 6:
+		_drag(pager, c - Vector2(40.0 * (i + 1), 4.0))
+	_touch(pager, c - Vector2(240, 4), false)
+	check_eq(pager.current, 1, "a swipe left turns the page")
+	check((tabs.get_child(1) as Button).button_pressed, "the Score segment is lit")
+	# a mostly vertical drag does not
+	_touch(pager, c, true)
+	for i in 6:
+		_drag(pager, c + Vector2(10.0, 40.0 * (i + 1)))
+	_touch(pager, c + Vector2(10, 240), false)
+	check_eq(pager.current, 1, "an up-down drag leaves the page")
+	# tapping a segment turns to it
+	(tabs.get_child(2) as Button).pressed.emit()
+	check_eq(pager.current, 2, "a segment turns to its page")
+	UIHarness.free_app(app)
+	UIHarness.restore_profile()
+
+
+## A slider on a page drags its value, never the page: a press on a Range does not arm the swipe.
+func test_pager_slider_drags_value_not_page() -> void:
+	var vp := SubViewport.new()
+	vp.size = Vector2i(720, 1440)
+	vp.render_target_update_mode = SubViewport.UPDATE_DISABLED
+	tree.root.add_child(vp)
+	var pager := Pager.new()
+	pager.position = Vector2.ZERO
+	pager.size = Vector2(720, 1440)
+	vp.add_child(pager)
+	var first := pager.add_page("First")
+	pager.add_page("Second").add_child(Label.new())
+	var slider := HSlider.new()
+	slider.min_value = 0.0
+	slider.max_value = 100.0
+	slider.value = 0.0
+	slider.custom_minimum_size = Vector2(600, 96)
+	slider.size_flags_horizontal = Control.SIZE_SHRINK_BEGIN
+	first.add_child(slider)
+	await UIHarness.frames(tree, 3)
+	# grab the grabber (at value 0: the slider's left end) and drag it 240 px to the right
+	var start := slider.get_global_rect().position + Vector2(8.0, slider.size.y * 0.5)
+	var down := InputEventMouseButton.new()
+	down.button_index = MOUSE_BUTTON_LEFT
+	down.pressed = true
+	down.position = start
+	down.global_position = start
+	vp.push_input(down)
+	for i in 8:
+		var m := InputEventMouseMotion.new()
+		m.button_mask = MOUSE_BUTTON_MASK_LEFT
+		m.position = start + Vector2(30.0 * (i + 1), 0.0)
+		m.global_position = m.position
+		m.relative = Vector2(30.0, 0.0)
+		vp.push_input(m)
+	var up := InputEventMouseButton.new()
+	up.button_index = MOUSE_BUTTON_LEFT
+	up.pressed = false
+	up.position = start + Vector2(240.0, 0.0)
+	up.global_position = up.position
+	vp.push_input(up)
+	await UIHarness.frames(tree, 2)
+	check(slider.value > 20.0, "dragging the slider 240 px moves its value (%.1f)" % slider.value)
+	check_eq(pager.current, 0, "dragging the slider leaves the page")
+	# the same drag on the page beside the slider still turns it
+	var c := Vector2(360, 900)
+	_touch(pager, c, true)
+	for i in 6:
+		_drag(pager, c - Vector2(40.0 * (i + 1), 4.0))
+	_touch(pager, c - Vector2(240, 4), false)
+	check_eq(pager.current, 1, "a swipe off the slider still turns the page")
+	vp.queue_free()
+
+
+static func _touch(p: Pager, at: Vector2, down: bool) -> void:
+	var e := InputEventScreenTouch.new()
+	e.position = at
+	e.pressed = down
+	p._input(e)
+
+
+static func _drag(p: Pager, at: Vector2) -> void:
+	var e := InputEventScreenDrag.new()
+	e.position = at
+	p._input(e)
 
 
 func test_tips_are_correct_and_concrete() -> void:
@@ -125,7 +232,7 @@ func test_remix_chip_beside_the_difficulties() -> void:
 		var card := app.current()
 		var chip := UIHarness.find_button(card, "Remix")
 		if check(chip != null and chip.toggle_mode, "%s: a Remix chip" % sz):
-			var diff := UIHarness.find_button(card, "Diff_easy")
+			var diff := UIHarness.find_button(card, "Tab_easy")
 			var fold := (card.find_child("Footer", true, false) as Control).get_global_rect().position.y
 			check(chip.get_global_rect().end.y <= fold, "%s: the chip is above the fold" % sz)
 			check(absf(chip.get_global_rect().end.y - diff.get_global_rect().position.y) < 40.0, "%s: right above the difficulty buttons" % sz)
@@ -178,7 +285,10 @@ func test_results_offer_to_even_out_a_steady_lean() -> void:
 		var fix := UIHarness.find_button(res, "FixTiming")
 		if check(fix != null, "%s: a fix button under the timing" % sz):
 			var fold := (res.find_child("Footer", true, false) as Control).get_global_rect().position.y
+			(res.find_child("Pager", true, false) as Pager).go(2, true)
+			await UIHarness.frames(tree, 2)
 			var tend := res.find_child("Tendency", true, false) as Control
+			check(fix.get_global_rect().end.y <= fold + 1.0, "%s: the fix button is above the fold" % sz)
 			check(tend.get_global_rect().end.y <= fold + 1.0, "%s: the timing card still ends above the fold (%d > %d)" % [sz, tend.get_global_rect().end.y, fold])
 			check(fix.text.contains("45"), "it says by how much (%s)" % fix.text)
 			var fl := res.find_child("Frames", true, false) as Label

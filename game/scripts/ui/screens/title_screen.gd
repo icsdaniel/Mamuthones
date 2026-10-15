@@ -1,17 +1,24 @@
 extends Screen
-## Title, laid out like Daniele's menu reference: the illustrated bonfire scene across the top (TitleScene)
-## with the MAMUTHONES word mark over its sky, then the red kilim banner that always says what to do next
-## (the next story stop), the framed buttons to every other mode in two columns, the gold divider, and
-## Settings and Quit. The menu stands on the shared stone backdrop; the banner glows on the scene's beat.
+## Title, on the mobile kit: the bonfire scene is the hero, full bleed down to the menu, with the
+## MAMUTHONES word mark in its starry sky. In the thumb zone: one big red Continue (the next story
+## stop named under the word) and four equal quick-action tiles (Story, Free play with the scores,
+## Workshop, Lessons). Settings is the round gear in the top-right corner (calibration and the delay
+## tests live there); Quit is a round power button top-left on desktop only (phones and browsers
+## leave apps their own way). The corner buttons line up with the menu's column.
 
 const BPM := 76.0
-## How far the menu reaches up over the scene's foot (the banner sits on the square's edge).
-const OVERLAP := 36.0
+## How far the menu reaches up over the scene's foot.
+const OVERLAP := 120.0
+## The scene picture's height on the art grid (title_scene.png is 250 art px tall).
+const PICTURE_H := 250.0 * 3.0
 
 var scene: TitleScene
-var _glow: TextureRect
 var _play: Button
-var _t := 0.0
+var _logo: Logo
+var _sky: _Stars
+var _top: Control
+var _menu: Control
+var _corners: Control
 
 
 func build() -> void:
@@ -20,134 +27,119 @@ func build() -> void:
 	var stop := next_song.stop if next_song != null else maxi(Progression.highest_stop(), 1)
 	var safe := UIKit.safe_margins(self)
 
-	var root := VBoxContainer.new()
-	root.set_anchors_preset(Control.PRESET_FULL_RECT)
-	root.add_theme_constant_override("separation", 0)
-	root.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	add_child(root)
-
-	# ---- the scene, full bleed, with the word mark over its sky
-	var top := Control.new()
-	top.name = "Top"
-	top.size_flags_vertical = Control.SIZE_EXPAND_FILL
-	top.custom_minimum_size.y = 300
-	top.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	root.add_child(top)
+	# ---- the scene, full bleed behind everything
+	_top = Control.new()
+	_top.name = "Top"
+	_top.set_anchors_preset(Control.PRESET_FULL_RECT)
+	_top.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	add_child(_top)
 	scene = TitleScene.new()
 	scene.name = "Scene"
 	scene.bpm = BPM
 	scene.reduced_motion = UIKit.reduced_motion()
-	scene.set_anchors_preset(Control.PRESET_FULL_RECT)
-	scene.offset_bottom = OVERLAP
-	top.add_child(scene)
+	_top.add_child(scene)
 	scene.set_look(str(Profile.get_look().get("fleece", "black")))
+	# Above the picture on a tall phone: the same stars as the picture's sky, so there is no flat band.
+	_sky = _Stars.new()
+	_top.add_child(_sky)
 	var foot := _SceneFoot.new()
-	foot.set_anchors_preset(Control.PRESET_BOTTOM_WIDE)
-	foot.offset_top = -24.0
-	foot.offset_bottom = OVERLAP
-	top.add_child(foot)
-	var logo := Logo.new()
-	logo.name = "Logo"
-	logo.mode = "title"
-	logo.subtitle = tr("app_title")
-	logo.set_anchors_preset(Control.PRESET_TOP_WIDE)
-	logo.offset_top = 30.0 + safe.y
-	logo.offset_bottom = logo.offset_top + 132.0
-	logo.offset_left = 12.0
-	logo.offset_right = -12.0
-	top.add_child(logo)
+	foot.name = "Foot"
+	_top.add_child(foot)
+	_logo = Logo.new()
+	_logo.name = "Logo"
+	_logo.mode = "title"
+	_logo.subtitle = tr("app_title")
+	_top.add_child(_logo)
 	Sound.ambience(UIKit.ambience_for(stop))
 
-	# ---- the menu
+	# ---- the corners: Quit (desktop only) on the left, the settings gear on the right
+	var corners := HBoxContainer.new()
+	_corners = corners
+	corners.name = "Corners"
+	corners.set_anchors_preset(Control.PRESET_TOP_WIDE)
+	corners.offset_left = UIKit.GUTTER * 0.5 + safe.x
+	corners.offset_right = -UIKit.GUTTER * 0.5 - safe.z
+	corners.offset_top = UIKit.S2 + safe.y
+	corners.offset_bottom = corners.offset_top + UIKit.TOUCH
+	corners.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	add_child(corners)
+	if quit_offered():
+		var quit := UIKit.icon_button("power", quit_game, tr("title_quit"))
+		quit.icon = KitIcons.get_icon("power")
+		quit.name = "Quit"
+		corners.add_child(quit)
+	var gap := Control.new()
+	gap.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	gap.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	corners.add_child(gap)
+	var gear := UIKit.icon_button("gear", func() -> void: app.open("settings"), tr("title_settings"))
+	gear.icon = KitIcons.get_icon("gear")
+	gear.name = "Settings"
+	corners.add_child(gear)
+
+	# ---- the menu in the thumb zone
 	var margin := MarginContainer.new()
 	margin.name = "Menu"
+	margin.set_anchors_preset(Control.PRESET_BOTTOM_WIDE)
+	margin.grow_vertical = Control.GROW_DIRECTION_BEGIN
 	margin.add_theme_constant_override("margin_left", int(UIKit.GUTTER + safe.x))
 	margin.add_theme_constant_override("margin_right", int(UIKit.GUTTER + safe.z))
-	margin.add_theme_constant_override("margin_bottom", int(24 + safe.w))
-	root.add_child(margin)
+	margin.add_theme_constant_override("margin_bottom", int(UIKit.S4 + safe.w))
+	margin.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	add_child(margin)
+	_menu = margin
 	var center := CenterWidth.new()
 	center.max_width = UIKit.COLUMN_MAX
+	center.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	margin.add_child(center)
 	var box := VBoxContainer.new()
-	box.add_theme_constant_override("separation", 12)
+	box.add_theme_constant_override("separation", UIKit.S3)
+	box.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	center.add_child(box)
-
-	var holder := Control.new()
-	holder.custom_minimum_size.y = UIKit.TOUCH
-	box.add_child(holder)
-	_glow = TextureRect.new()
-	_glow.name = "BannerGlow"
-	_glow.texture = Palette.px("ui/banner_glow")
-	_glow.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
-	_glow.stretch_mode = TextureRect.STRETCH_SCALE
-	_glow.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	var add := CanvasItemMaterial.new()
-	add.blend_mode = CanvasItemMaterial.BLEND_MODE_ADD
-	_glow.material = add
-	_glow.set_anchors_preset(Control.PRESET_FULL_RECT)
-	_glow.offset_left = -24   # stays inside the side gutters
-	_glow.offset_right = 24
-	_glow.offset_top = -48
-	_glow.offset_bottom = 48
-	_glow.modulate.a = 0.4
-	holder.add_child(_glow)
-	_play = UIKit.button("", _play_next, UIKit.PRIMARY)
+	var sub := tr("title_procession")
+	if next_song != null:
+		sub = tr("title_hero_sub") % [next_song.stop, UIKit.song_title(next_song)]
+	_play = MenuKit.hero_button(tr("title_hero"), sub, _play_next)
 	_play.name = "PlayNext"
-	_play.text = tr("title_continue") % UIKit.song_title(next_song) if next_song != null else tr("title_procession")
-	_play.text_overrun_behavior = TextServer.OVERRUN_TRIM_ELLIPSIS
-	_play.set_anchors_preset(Control.PRESET_FULL_RECT)
-	holder.add_child(_play)
-
-	var grid := GridContainer.new()
-	grid.columns = 2
-	grid.add_theme_constant_override("h_separation", 12)
-	grid.add_theme_constant_override("v_separation", 12)
-	box.add_child(grid)
-	for item in [
-		["StoryMap", "title_story", func() -> void: app.open("story")],
-		["FreePlay", "title_free", func() -> void: app.open("free_play")],
-		["Workshop", "title_workshop", func() -> void: app.open("workshop")],
-		["Leaderboards", "title_boards", _boards],
-		["Tutorial", "title_tutorial", func() -> void: app.open("tutorial")],
-		["Calibrate", "title_calibrate", func() -> void: app.open("calibration", {"then_latency": true})],
-	]:
-		var b := UIKit.button(tr(item[1]), item[2])
-		b.name = item[0]
-		b.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-		grid.add_child(b)
-
-	var rule_box := MarginContainer.new()
-	rule_box.add_theme_constant_override("margin_left", 72)
-	rule_box.add_theme_constant_override("margin_right", 72)
-	box.add_child(rule_box)
-	var rule := HSeparator.new()
-	rule.name = "Divider"
-	rule_box.add_child(rule)
-
-	var row := HBoxContainer.new()
-	row.alignment = BoxContainer.ALIGNMENT_CENTER
-	row.add_theme_constant_override("separation", 24)
-	box.add_child(row)
-	var settings := UIKit.button(tr("title_settings"), func() -> void: app.open("settings"))
-	settings.name = "Settings"
-	settings.custom_minimum_size.x = 270
-	row.add_child(settings)
-	# iOS and browsers leave apps their own way; Android and desktop get a Quit.
-	if not (OS.has_feature("ios") or OS.has_feature("web")):
-		var quit := UIKit.button(tr("title_quit"), quit_game)
-		quit.name = "Quit"
-		quit.custom_minimum_size.x = 270
-		row.add_child(quit)
+	box.add_child(_play)
+	MenuKit.quick_tiles(box, [
+		["StoryMap", "flame", tr("title_story"), func() -> void: app.open("story")],
+		["FreePlay", "note", tr("title_free"), func() -> void: app.open("free_play")],
+		["Workshop", "bell", tr("title_workshop"), func() -> void: app.open("workshop")],
+		["Tutorial", "help", tr("title_tutorial"), func() -> void: app.open("tutorial")],
+	])
+	resized.connect(_layout)
+	margin.resized.connect(_layout)
+	_layout.call_deferred()
 
 
-## The banner glows gently on the scene's beat, in steps (a third as much with reduced motion).
-func _process(delta: float) -> void:
-	if _glow == null:
+## The scene ends a little under the top of the menu; the picture sits at its foot, the stars fill
+## the sky above it, and the word mark is centred in the sky left above the scene's rooftops.
+func _layout() -> void:
+	if _menu == null:
 		return
-	_t += delta
-	var beat := pow(1.0 - fposmod(_t * BPM / 60.0, 1.0), 2.0)
-	var amp := 0.08 if UIKit.reduced_motion() else 0.24
-	_glow.modulate.a = snappedf(0.34 + amp * beat, 0.04)
+	var menu_top := size.y - _menu.size.y
+	var scene_h := menu_top + OVERLAP
+	scene.position = Vector2.ZERO
+	scene.size = Vector2(size.x, scene_h)
+	_sky.position = Vector2.ZERO
+	_sky.size = Vector2(size.x, maxf(scene_h - PICTURE_H, 0.0))
+	var foot: Control = _top.get_node("Foot")
+	foot.position = Vector2(0.0, menu_top - 96.0)
+	foot.size = Vector2(size.x, scene_h - (menu_top - 96.0))
+	var safe := UIKit.safe_margins(self)
+	# the corner buttons line up with the menu's column (on a tablet too)
+	var col_w := minf(size.x - 2.0 * UIKit.GUTTER - safe.x - safe.z, UIKit.COLUMN_MAX)
+	var side := (size.x - col_w) * 0.5
+	_corners.offset_left = maxf(side, UIKit.GUTTER * 0.5 + safe.x)
+	_corners.offset_right = -maxf(side, UIKit.GUTTER * 0.5 + safe.z)
+	var logo_h := 156.0
+	var room_top := safe.y + UIKit.S2 + UIKit.TOUCH
+	# the open sky: down to where the picture's houses start (about its top fifth is sky)
+	var sky_end := scene_h - PICTURE_H * 0.78
+	var y := maxf(room_top, (room_top + sky_end - logo_h) * 0.5)
+	_logo.position = Vector2(UIKit.S2, roundf(y / 3.0) * 3.0)
+	_logo.size = Vector2(size.x - UIKit.S2 * 2.0, logo_h)
 
 
 func _play_next() -> void:
@@ -158,8 +150,9 @@ func _play_next() -> void:
 		app.open("stop_card", {"song_id": id})
 
 
-func _boards() -> void:
-	app.open("boards")
+## Desktop builds offer Quit; Android leaves with its back button, iOS and browsers their own way.
+static func quit_offered() -> bool:
+	return not (OS.has_feature("android") or OS.has_feature("ios") or OS.has_feature("web"))
 
 
 ## Tests set this to count quits instead of leaving.
@@ -179,7 +172,7 @@ func on_back() -> void:
 	quit_game()
 
 
-## The scene's foot sinks into the stone in stepped bands of shadow, so the menu reads on it.
+## The scene's foot sinks into the night in stepped bands of shadow, so the menu reads on it.
 class _SceneFoot:
 	extends Control
 
@@ -191,4 +184,32 @@ class _SceneFoot:
 		var n := int(size.y / 6.0)
 		for i in n:
 			var a := float(i + 1) / float(n)
-			draw_rect(Rect2(0, i * 6.0, size.x, 6.0), Color(k, a * 0.85))
+			draw_rect(Rect2(0, i * 6.0, size.x, 6.0), Color(k, minf(a * 1.25, 1.0) * 0.82))
+
+
+## Stars over the flat night above the picture on tall phones, in the picture's own star colours
+## (title_scene.png's sky), on the 3-px art grid. Drawn once per size.
+class _Stars:
+	extends Control
+	const COLS: Array[Color] = [Color8(48, 58, 120), Color8(67, 76, 140), Color8(201, 205, 232), Color8(244, 241, 220)]
+
+	func _init() -> void:
+		mouse_filter = Control.MOUSE_FILTER_IGNORE
+		resized.connect(queue_redraw)
+
+	func _draw() -> void:
+		var px := 3.0
+		var aw := int(size.x / px)
+		var ah := int(size.y / px)
+		if aw <= 0 or ah <= 0:
+			return
+		var n := aw * ah / 140
+		var s := 91
+		for i in n:
+			s = (s * 1103515245 + 12345) & 0x7fffffff
+			var x := s % aw
+			s = (s * 1103515245 + 12345) & 0x7fffffff
+			var y := s % ah
+			s = (s * 1103515245 + 12345) & 0x7fffffff
+			var c := COLS[0] if s % 10 < 6 else (COLS[1] if s % 10 < 8 else (COLS[2] if s % 10 < 9 else COLS[3]))
+			draw_rect(Rect2(x * px, y * px, px, px), c)

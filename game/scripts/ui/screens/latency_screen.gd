@@ -28,13 +28,10 @@ var _drum: SetupArtView
 
 
 func build() -> void:
-	var box := UIKit.column(self, false, 18)
-	if args.get("first_run", false):
-		box.add_child(UIKit.label(tr("lat_step"), UIKit.CAPTION, false, HORIZONTAL_ALIGNMENT_CENTER))
-	else:
-		UIKit.header(box, tr("lat_title"), on_back)
-	box.add_child(UIKit.label(tr("lat_title"), UIKit.HEADER, true, HORIZONTAL_ALIGNMENT_CENTER))
-	_status = UIKit.label(tr("lat_intro"), UIKit.LEAD, true, HORIZONTAL_ALIGNMENT_CENTER)
+	var page := UIKit.scaffold(self, false, UIKit.S3)
+	var box: VBoxContainer = page.body
+	UIKit.top_bar(page.top, tr("lat_title"), on_back, load(App.SCREENS["calibration"]).step_text(args, 2))
+	_status = MenuKit.instruction(tr("lat_intro"))
 	_status.name = "Status"
 	box.add_child(_status)
 	_pad = Button.new()
@@ -42,7 +39,7 @@ func build() -> void:
 	_pad.text = tr("lat_pad")
 	_pad.focus_mode = Control.FOCUS_NONE
 	_pad.size_flags_vertical = Control.SIZE_EXPAND_FILL
-	_pad.custom_minimum_size = Vector2(0, 360)
+	_pad.custom_minimum_size = Vector2(0, 300)
 	_pad.action_mode = BaseButton.ACTION_MODE_BUTTON_PRESS
 	_pad.button_down.connect(_on_tap)
 	box.add_child(_pad)
@@ -68,9 +65,7 @@ func build() -> void:
 	box.add_child(_meter)
 	_detail = UIKit.label("", UIKit.CAPTION, true, HORIZONTAL_ALIGNMENT_CENTER)
 	box.add_child(_detail)
-	_actions = VBoxContainer.new()
-	_actions.add_theme_constant_override("separation", 12)
-	box.add_child(_actions)
+	_actions = page.foot
 	_show_start()
 
 
@@ -78,7 +73,7 @@ func _show_start() -> void:
 	_clear_actions()
 	var go := UIKit.button(tr("lat_start"), _begin, UIKit.PRIMARY)
 	go.name = "Start"
-	_actions.add_child(go)
+	UIKit.footer_actions(_actions, go)
 	var skip := UIKit.button(tr("lat_skip"), _next, UIKit.QUIET)
 	skip.name = "Skip"
 	_actions.add_child(skip)
@@ -165,14 +160,13 @@ func _finish() -> void:
 		Sound.ui("unlock")
 		var go := UIKit.button(tr("ui_continue"), _next, UIKit.PRIMARY)
 		go.name = "Continue"
-		_actions.add_child(go)
-		_actions.add_child(UIKit.button(tr("lat_again"), _begin, UIKit.QUIET))
+		UIKit.footer_actions(_actions, go, MenuKit.icon_action("Again", "replay", _begin, tr("lat_again")))
 	else:
 		_status.text = tr("lat_uneven") if int(r.get("count", 0)) >= LatencyTest.MIN_TAPS else tr("lat_few")
 		_detail.text = tr("lat_uneven_body")
 		var again := UIKit.button(tr("lat_again"), _begin, UIKit.PRIMARY)
 		again.name = "Again"
-		_actions.add_child(again)
+		UIKit.footer_actions(_actions, again)
 		# Enough taps but uneven: the median is still a fair guess, so it can be kept.
 		if int(r.get("count", 0)) >= LatencyTest.MIN_TAPS:
 			var keep := UIKit.button(tr("lat_keep") % roundi(float(r.offset) * 1000.0), _keep.bind(float(r.offset)))
@@ -210,6 +204,8 @@ func _next() -> void:
 	if args.get("first_run", false):
 		Profile.set_flag("latency_tested", true)
 		app.reset("title")
+	elif args.get("chain", false):
+		app.replace("screen_delay", {"chain": true})
 	else:
 		app.back()
 

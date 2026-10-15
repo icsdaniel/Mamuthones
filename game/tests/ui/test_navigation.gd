@@ -22,8 +22,14 @@ func test_first_launch_leads_to_the_menu() -> void:
 	await UIHarness.frames(tree, 2)
 	check_eq(app.current().screen_name(), "title_screen", "then the menu: the tutorial is optional")
 	check_eq(app.stack.size(), 1, "the title is the bottom of the stack")
-	for b in ["Tutorial", "Calibrate"]:
-		check(app.current().find_child(b, true, false) != null, "the menu offers %s" % b)
+	check(app.current().find_child("Settings", true, false) != null, "the menu offers the settings gear")
+	# The lessons and the calibration live in the settings now (the title keeps one Play and four tabs).
+	var title_screen := app.current()
+	check(UIHarness.press(title_screen, "Settings"), "title: the settings gear")
+	await UIHarness.frames(tree, 2)
+	check(app.current().find_child("Calibrate", true, false) != null, "the settings offer the calibration")
+	app.back()
+	await UIHarness.frames(tree, 2)
 	var next := Progression.next_stop()
 	check(next != "" and SongLibrary.get_song(next).kind != "tutorial", "Continue leads to the first song, not the tutorial (%s)" % next)
 	check(Progression.is_unlocked(SongLibrary.story()[1].id), "the first song is open without the tutorial")
@@ -59,17 +65,28 @@ func test_calibrate_from_the_menu() -> void:
 	UIHarness.fresh_profile()
 	var app := UIHarness.make_app(tree)
 	await UIHarness.frames(tree, 2)
-	check(UIHarness.press(app, "Calibrate"), "title: Calibrate")
+	check(UIHarness.press(app, "Settings"), "title: the settings gear")
 	await UIHarness.frames(tree, 2)
-	check_eq(app.current().screen_name(), "calibration_screen", "the tilt calibration first")
+	check(UIHarness.press(app.current(), "Calibrate"), "settings: Calibrate")
+	await UIHarness.frames(tree, 2)
+	check_eq(app.current().screen_name(), "calibration_screen", "the tilt calibration opens")
 	check(UIHarness.press(app.current(), "UseSlam"), "no sensor here: play with buttons")
 	await UIHarness.frames(tree, 2)
-	check_eq(app.current().screen_name(), "latency_screen", "then the delay test")
+	check_eq(app.current().screen_name(), "latency_screen", "then the sound delay test")
 	check(UIHarness.press(app.current(), "Start"), "the delay test starts")
 	await UIHarness.frames(tree, 2)
 	check(UIHarness.press(app.current(), "Skip"), "Skip stays on screen while the test runs")
 	await UIHarness.frames(tree, 2)
-	check_eq(app.current().screen_name(), "title_screen", "and leads back to the menu")
+	check_eq(app.current().screen_name(), "screen_delay_screen", "then the screen delay test")
+	check(UIHarness.press(app.current(), "Skip"), "it can be skipped too")
+	await UIHarness.frames(tree, 2)
+	check_eq(app.current().screen_name(), "settings_screen", "and leads back to the settings")
+	check(UIHarness.press(app.current(), "Latency"), "settings: the sound delay test on its own")
+	await UIHarness.frames(tree, 2)
+	check_eq(app.current().screen_name(), "latency_screen", "the delay test opens")
+	app.current().on_back()
+	await UIHarness.frames(tree, 2)
+	check_eq(app.current().screen_name(), "settings_screen", "back to the settings")
 	UIHarness.free_app(app)
 	UIHarness.restore_profile()
 
@@ -83,7 +100,7 @@ func test_quit_leaves() -> void:
 	check(UIHarness.press(app, "Quit"), "the title has Quit")
 	check_eq(title.quit_calls, before + 1, "Quit closes the game")
 	# Quit from the pause menu inside a tutorial lesson leaves the tutorial.
-	check(UIHarness.press(app, "Tutorial"), "title: Tutorial")
+	check(UIHarness.press(app, "Tutorial"), "title: the lessons")
 	await UIHarness.frames(tree, 2)
 	var tut := app.current()
 	check_eq(tut.screen_name(), "tutorial_screen", "the tutorial opens")
@@ -108,8 +125,8 @@ func test_menus_forward_and_back() -> void:
 	check_eq(app.current().screen_name(), "title_screen", "a returning player starts on the title")
 	var routes := [
 		["StoryMap", "story_screen"], ["FreePlay", "free_play_screen"],
-		["Workshop", "workshop_screen"], ["Leaderboards", "boards_screen"],
-		["Settings", "settings_screen"], ["Tutorial", "tutorial_screen"], ["Calibrate", "calibration_screen"],
+		["Workshop", "workshop_screen"], ["Tutorial", "tutorial_screen"],
+		["Settings", "settings_screen"],
 	]
 	for r in routes:
 		check(UIHarness.press(app, r[0]), "title has %s" % r[0])

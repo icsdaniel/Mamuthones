@@ -1,9 +1,21 @@
 extends Screen
-## Results: the row's words for the run, the letter grade (F to S+), the score and where it came from (accuracy,
-## unison), the early/late tendency, the best and the ghost, what was unlocked (celebrated), and
-## one concrete tip for next time.
+## Results, on the mobile kit (UIKit's header): one screen that fits, no scrolling.
+##   top bar   back · the song and difficulty · the ladder
+##   hero      the score counts up on a dark bronze seal, then the grade (F to S+) stamps in; the
+##             row's words, the full combo ribbon (its own reward) and the new best / best to beat
+##             land in turn (T_* below). The hero grows with the screen's height.
+##   pages     a segmented control over swipeable pages:
+##               Overview  accuracy, longest combo, unison peak, timing lean as tiles, and the
+##                         perfect / good / ok / missed counts, and a row pointing at the last page
+##                         (when something opened it lights up and its bells ring: no modal)
+##               Score     where the points came from (notes × unison, holds, stillness), the formula
+##               Timing    the early/late histogram, the one-tap fix, smoothness, the saved run
+##               Tips      (Rewards when something opened) what was unlocked, carving points, the
+##                         closest unlock, and one concrete tip for next time
+##   footer    UIKit.footer_actions(): Next stop (primary) with a replay icon beside it, or Play again
+##             alone. Back is only in the top bar.
 ## args: session, record (Profile.record_result output, empty for autoplay), play_args, ghost, frames
-## (the play screen's frame_stats(): how smoothly the phone drew the song, shown under the timing).
+## (the play screen's frame_stats(): how smoothly the phone drew the song), run_saved.
 
 const TIERS := [0.5, 0.7, 0.85, 0.95]
 
@@ -17,6 +29,19 @@ signal best_revealed(new_best: bool)
 
 var session: Session
 var record: Dictionary
+var pager: Pager
+
+## The reveal, in seconds from the screen opening: the score counts up on a dark seal until T_STAMP,
+## when the letter stamps in; then the full combo ribbon, the best badge, the pages, and (when
+## something opened) the in-place celebration on the rewards row.
+const T_STAMP := 1.0
+const T_FC := 1.3
+const T_BEST := 1.5
+const T_PAGES := 1.75
+const T_CELEBRATE := 2.1
+
+var _hero_box: VBoxContainer
+var _teaser_bells: BellMarks
 
 
 func build() -> void:
@@ -24,134 +49,154 @@ func build() -> void:
 	record = args.get("record", {})
 	if session == null:
 		return
-	var play_args: Dictionary = args.get("play_args", {})
-	var cols := UIKit.column_with_footer(self, 14)
-	var box := cols[0]
-	var foot := cols[1]
-	UIKit.header(box, UIKit.song_title(session.song), _leave)
+	var page := UIKit.scaffold(self, false, UIKit.S3)
 	var sub := tr("diff_" + session.difficulty)
 	if session.remix:
 		sub += " · " + tr("res_remix")
-	box.add_child(UIKit.label(sub, UIKit.CAPTION, true, HORIZONTAL_ALIGNMENT_CENTER))
+	var ladder := UIKit.icon_button("ladder", _open_ladder, tr("res_ladder"))
+	ladder.name = "Ladder"
+	UIKit.top_bar(page.top, UIKit.song_title(session.song), _leave, sub, ladder)
+	_hero(page.body)
 
-	var acc := session.accuracy()
-	var words := UIKit.label(tr(grade_key(acc)), UIKit.HEADER, true, HORIZONTAL_ALIGNMENT_CENTER)
-	words.name = "Words"
-	box.add_child(words)
-	# Grade and score share one row, so the breakdown and timing fit above the fold.
-	# The showcase: a warm glow behind them flares as the grade stamps in and as the score lands.
-	var stage := PanelContainer.new()
-	stage.theme_type_variation = "ClearPanel"
-	box.add_child(stage)
-	var holder := Control.new()
-	holder.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	stage.add_child(holder)
-	_glow = TextureRect.new()
-	_glow.name = "Glow"
-	_glow.texture = Palette.px("ui/banner_glow")
-	_glow.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
-	_glow.stretch_mode = TextureRect.STRETCH_SCALE
-	_glow.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	var add := CanvasItemMaterial.new()
-	add.blend_mode = CanvasItemMaterial.BLEND_MODE_ADD
-	_glow.material = add
-	_glow.set_anchors_preset(Control.PRESET_FULL_RECT)
-	_glow.offset_left = -30
-	_glow.offset_right = 30
-	_glow.offset_top = -36
-	_glow.offset_bottom = 36
-	_glow.modulate.a = 0.0
-	holder.add_child(_glow)
-	var top := HBoxContainer.new()
-	top.alignment = BoxContainer.ALIGNMENT_CENTER
-	top.add_theme_constant_override("separation", 24)
-	stage.add_child(top)
-	var grade := GradeBadge.new(session.grade_rank(), true, session.full_combo())
+	var rewards := _rewarded()
+	pager = UIKit.paged(page.body, [["overview", tr("res_tab_overview")], ["score", tr("res_tab_score")],
+		["timing", tr("res_tab_timing")], ["tips", tr("res_tab_rewards" if rewards else "res_tab_tips")]])
+	# the overview is the page that sizes the pager; the others fit in it (or drag-scroll, no bar)
+	_overview(pager.add_page("OverviewPage", UIKit.S3))
+	_breakdown(pager.add_page("ScorePage", UIKit.S3, true))
+	_tendency(pager.add_page("TimingPage", UIKit.S3, true))
+	_tips(pager.add_page("TipsPage", UIKit.S3, true))
+	var track := page.body.find_child("TabsTrack", false, false) as Control
+	UIKit.pop_in(pager, T_PAGES)
+	if track != null:
+		UIKit.pop_in(track, T_PAGES)
+
+	_footer(page.foot)
+	Sound.ui("result")
+	if rewards and not (record.get("unlocked", []) as Array).is_empty():
+		_celebrate_in_place()
+
+
+func _rewarded() -> bool:
+	return not (record.get("unlocked", []) as Array).is_empty() or int(record.get("carving_gained", 0)) > 0
+
+
+# ---------------------------------------------------------------- hero
+
+
+## The hero grows with the screen: the seal and the score are larger on tall phones, and the hero
+## takes the height the pages do not need, centred in it.
+func _hero(box: Container) -> void:
+	var extra := clampf(get_viewport_rect().size.y - 1440.0, 0.0, 240.0)
+	var d := 58 + int(extra / 9.0)
+	var hero := VBoxContainer.new()
+	hero.name = "Hero"
+	hero.alignment = BoxContainer.ALIGNMENT_CENTER
+	hero.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	hero.add_theme_constant_override("separation", UIKit.S2)
+	box.add_child(hero)
+	_hero_box = hero
+	# The seal stays dark while the score counts; at T_STAMP the letter stamps in with a bell, a flare
+	# of its halo, a little shake and a buzz.
+	# the letter grows with the seal, but a two-glyph rank (S+) keeps the smaller face so it stays inside the ring
+	var rank := session.grade_rank()
+	var grade := GradeSeal.new(rank, d, 3 if d >= 74 and Session.GRADES[maxi(rank, 0)].length() < 2 else 2)
 	grade.name = "Grade"
-	grade.size_flags_vertical = Control.SIZE_SHRINK_CENTER
-	top.add_child(grade)
+	grade.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
 	grade.stamped.connect(func() -> void:
 		grade_stamped.emit(grade.rank)
+		UIKit.vibrate(30)
+		_shake()
 		_flare(0.5 + 0.1 * maxi(grade.rank - Session.RANK_B, 0)))
-	grade.animate(0.35)
-	var score := UIKit.label(UIKit.fmt_score(session.score), "BigNumberLabel", false, HORIZONTAL_ALIGNMENT_CENTER)
+	grade.animate(0.0 if UIKit.reduced_motion() else T_STAMP)
+	# the halo's room: the seal stands in a box a little larger than itself
+	var stage := CenterContainer.new()
+	stage.name = "Stage"
+	stage.custom_minimum_size.y = grade.custom_minimum_size.y + 2.0 * UIKit.S4
+	stage.add_child(grade)
+	hero.add_child(stage)
+	_seal = grade
+
+	var score := UIKit.number(UIKit.fmt_score(session.score), Color.WHITE, 3 if extra >= 120.0 else 2)
 	score.name = "Score"
-	score.add_theme_font_size_override("font_size", 72)
-	var score_col := VBoxContainer.new()
-	score_col.alignment = BoxContainer.ALIGNMENT_CENTER
-	score_col.add_theme_constant_override("separation", 0)
-	top.add_child(score_col)
-	score_col.add_child(score)
+	score.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	hero.add_child(score)
 	_count_up(score, session.score)
-	var mc := UIKit.label(tr("res_max_combo") % session.max_combo, UIKit.SUB, false, HORIZONTAL_ALIGNMENT_CENTER)
-	mc.name = "MaxCombo"
-	mc.add_theme_font_size_override("font_size", 26)
-	mc.add_theme_color_override("font_color", Palette.BONE_DIM)
-	score_col.add_child(mc)
+
+	var words := UIKit.label(tr(grade_key(session.accuracy())), UIKit.LEAD, true, HORIZONTAL_ALIGNMENT_CENTER)
+	words.name = "Words"
+	words.add_theme_font_size_override("font_size", 30)
+	words.add_theme_constant_override("line_spacing", -6)
+	hero.add_child(words)
+
+	var marks := HFlowContainer.new()
+	marks.name = "Marks"
+	marks.alignment = FlowContainer.ALIGNMENT_CENTER
+	marks.add_theme_constant_override("h_separation", UIKit.S2)
+	marks.add_theme_constant_override("v_separation", UIKit.S1)
+	hero.add_child(marks)
+	_marks(marks)
+
+
+## The callouts under the score: the full combo ribbon, then the best badge, landing in turn.
+func _marks(box: Container) -> void:
 	if session.full_combo():
 		# The full combo is its own reward: it lands just after the grade, with a chime and a flare.
-		var fc := UIKit.label(tr("res_full_combo"), UIKit.SUB, false, HORIZONTAL_ALIGNMENT_CENTER)
+		var fc := UIKit.badge(tr("res_full_combo"), "bronze")
 		fc.name = "FullCombo"
-		fc.add_theme_color_override("font_color", Palette.GOLD_HOT)
-		score_col.add_child(fc)
-		if not UIKit.reduced_motion():
-			fc.modulate.a = 0.0
-			var tw := fc.create_tween()
-			tw.tween_interval(0.8)
-			tw.tween_callback(func() -> void:
-				Sound.ui("unlock")
-				_flare(1.0))
-			tw.tween_property(fc, "modulate:a", 1.0, 0.15)
-	var best_line := _best_line()
-	if best_line != "":
-		var bl := UIKit.label(best_line, UIKit.SUB, true, HORIZONTAL_ALIGNMENT_CENTER)
-		bl.name = "BestLine"
-		bl.add_theme_font_size_override("font_size", 28)
-		bl.add_theme_color_override("font_color", Palette.GOLD_HOT if bool(record.get("new_best", false)) else Palette.BONE_DIM)
-		box.add_child(bl)
-		var new_best := bool(record.get("new_best", false))
-		if UIKit.reduced_motion():
-			best_revealed.emit.call_deferred(new_best)
-		else:
-			bl.modulate.a = 0.0
-			var tw := bl.create_tween()
-			tw.tween_interval(1.15)
-			tw.tween_callback(func() -> void: best_revealed.emit(new_best))
-			tw.tween_property(bl, "modulate:a", 1.0, 0.2)
+		box.add_child(fc)
+		_land(fc, T_FC, func() -> void:
+			Sound.ui("unlock")
+			_flare(1.0))
+	var new_best := bool(record.get("new_best", false))
+	var text := _best_badge()
+	if text == "":
+		return
+	var bl := UIKit.badge(text, "red" if new_best else "quiet")
+	bl.name = "BestLine"
+	box.add_child(bl)
+	_land(bl, T_BEST, func() -> void: best_revealed.emit(new_best))
 
-	# The score's story first: the unison headline, where the points came from, and the timing.
-	_breakdown(box)
-	_tendency(box)
-	var tip_line := tip_text(session)
-	if tip_line != "":
-		var tip := UIKit.card(box, true)
-		tip.name = "Tip"
-		tip.add_child(UIKit.label(tr("res_tip"), UIKit.PAPER_HEADER))
-		tip.add_child(UIKit.label(tip_line, UIKit.PAPER))
-	_unlocks(box)
-	if session.slam:
-		box.add_child(UIKit.label(tr("res_slam_note"), UIKit.CAPTION, true, HORIZONTAL_ALIGNMENT_CENTER))
-	box.add_child(UIKit.label(tr("res_formula"), UIKit.CAPTION))
 
-	var again := UIKit.button(tr("res_again"), func() -> void: app.replace("play", play_args), UIKit.PRIMARY)
-	again.name = "Again"
-	var next := _next_song()
-	if next != null:
-		var go := UIKit.button(tr("res_next") % UIKit.song_title(next), func() -> void:
-			app.replace("stop_card", {"song_id": next.id}), UIKit.PRIMARY)
-		go.name = "Next"
-		foot.add_child(go)
-		again.theme_type_variation = ""
-	var row := HBoxContainer.new()
-	row.add_theme_constant_override("separation", 12)
-	foot.add_child(row)
-	again.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	row.add_child(again)
-	var leave := UIKit.button(tr("res_done"), _leave, UIKit.QUIET)
-	leave.name = "Done"
-	leave.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	row.add_child(leave)
-	Sound.ui("result")
+## A badge pops in at `at` seconds (scale from its centre once it has a size), calling `then`.
+func _land(c: Control, at: float, then: Callable) -> void:
+	if UIKit.reduced_motion():
+		then.call_deferred()
+		return
+	c.modulate.a = 0.0
+	var tw := c.create_tween()
+	tw.tween_interval(at)
+	tw.tween_callback(func() -> void:
+		c.pivot_offset = c.size * 0.5
+		c.scale = Vector2(1.25, 1.25)
+		then.call())
+	tw.tween_property(c, "modulate:a", 1.0, 0.12)
+	tw.parallel().tween_property(c, "scale", Vector2.ONE, 0.3).set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT)
+
+
+## A short shake of the seal as the letter lands (whole art pixels).
+func _shake() -> void:
+	if UIKit.reduced_motion() or _seal == null:
+		return
+	var u := PxStyle.unit
+	var x0 := _seal.position.x
+	var tw := _seal.create_tween()
+	for dx in [2.0, -2.0, 1.0, -1.0, 0.0]:
+		tw.tween_property(_seal, "position:x", x0 + dx * u, 0.035)
+
+
+## Something opened: once the pages are in, the rewards row lights bronze, its bells ring in place
+## and the unlock sound plays (no veil, nothing to dismiss).
+func _celebrate_in_place() -> void:
+	var tw := create_tween()
+	tw.tween_interval(0.0 if UIKit.reduced_motion() else T_CELEBRATE)
+	tw.tween_callback(func() -> void:
+		Sound.ui("unlock")
+		if _teaser_bells != null:
+			_teaser_bells.animate(0.05)
+		if _teaser_panel != null and not UIKit.reduced_motion():
+			_teaser_panel.self_modulate = Color(1.7, 1.4, 0.9)
+			_teaser_panel.create_tween().tween_property(_teaser_panel, "self_modulate", Color.WHITE, 0.7))
 
 
 static func grade_key(acc: float) -> String:
@@ -162,13 +207,14 @@ static func grade_key(acc: float) -> String:
 	return "grade_%d" % i
 
 
-func _best_line() -> String:
+## The best callout: a new best (by how much), the first best, or the best (or ghost) still to beat.
+func _best_badge() -> String:
 	var prev := int(record.get("prev_best", 0))
 	var ghost: Ghost = args.get("ghost")
 	if bool(record.get("new_best", false)):
 		if prev > 0:
-			return tr("res_new_best_by") % UIKit.fmt_score(session.score - prev)
-		return tr("res_first_best")
+			return tr("res_new_best_badge") % UIKit.fmt_score(session.score - prev)
+		return tr("res_first_best_badge")
 	if prev > 0:
 		return tr("res_best") % [UIKit.fmt_score(prev), UIKit.fmt_score(prev - session.score)]
 	if ghost != null and not ghost.is_empty():
@@ -176,31 +222,200 @@ func _best_line() -> String:
 	return ""
 
 
+## The old one-line best text (kept for callers and tests).
+func _best_line() -> String:
+	var prev := int(record.get("prev_best", 0))
+	if bool(record.get("new_best", false)):
+		if prev > 0:
+			return tr("res_new_best_by") % UIKit.fmt_score(session.score - prev)
+		return tr("res_first_best")
+	return _best_badge()
+
+
+# ---------------------------------------------------------------- pages
+
+
+## Accuracy, longest combo, unison peak and the timing lean as tiles, then the four counts, then the
+## row that points at the last page.
+func _overview(box: VBoxContainer) -> void:
+	var st := session.stats
+	var grid := GridContainer.new()
+	grid.name = "Tiles"
+	grid.columns = 2
+	grid.add_theme_constant_override("h_separation", UIKit.S2)
+	grid.add_theme_constant_override("v_separation", UIKit.S2)
+	box.add_child(grid)
+	UIKit.stat_tile(grid, "Accuracy", tr("res_accuracy"), str(roundi(session.accuracy() * 100.0)), "", "%")
+	UIKit.stat_tile(grid, "MaxCombo", tr("res_tile_combo"), str(session.max_combo))
+	var peak := _peak()
+	var top := Session.UNISON_MULTS[Session.UNISON_MULTS.size() - 1]
+	var secs := float(st.get("time_at_top", 0.0))
+	var u_cap := tr("res_unison_time") % [UIKit.fmt_dec(secs, 0), Hud._mult_text(top)] if peak >= top and secs >= 0.5 else " "
+	var ut := UIKit.stat_tile(grid, "UnisonPeak", tr("res_tile_unison"), Hud._mult_text(peak), u_cap)
+	(ut.find_child("UnisonPeakValue", true, false) as Label).add_theme_color_override("font_color", WoodcutTheme.C_EMBER)
+	var med := session.median_offset()
+	var side := UIKit.side_of(med)
+	var few := session.hit_offsets.size() < 4
+	var lean_val := "-" if few else ("0" if side == "" else ("%+d" % roundi(med * 1000.0)).replace("-", "−"))
+	var lean_cap := tr("res_timing_few") if few else tr({"": "res_lean_none", "early": "res_lean_early", "late": "res_lean_late"}[side])
+	var tt := UIKit.stat_tile(grid, "Lean", tr("res_tile_timing"), lean_val, lean_cap, "" if few else "ms")
+	if side != "" and not few:
+		# the side's colour on the plain caption: the gold number face would muddy a blue tint
+		(tt.find_child("LeanCaption", true, false) as Label).add_theme_color_override("font_color", UIKit.side_color(side))
+	# captions stay on one line, so the tiles of a row line up
+	for t in grid.get_children():
+		var cap := (t as Control).find_child("*Caption", true, false) as Label
+		if cap != null:
+			cap.autowrap_mode = TextServer.AUTOWRAP_OFF
+			UIKit.fit_label(cap, 24)
+
+	# the counts, as one strip of numbers: perfect / good / ok / missed
+	var strip := PanelContainer.new()
+	strip.name = "Counts"
+	strip.theme_type_variation = UIKit.TILE
+	box.add_child(strip)
+	var row := HBoxContainer.new()
+	row.add_theme_constant_override("separation", UIKit.S1)
+	strip.add_child(row)
+	var counts := [
+		["Perfect", int(st.perfect), "res_count_perfect", Color.WHITE],
+		["Good", int(st.good), "res_count_good", WoodcutTheme.C_TEXT],
+		["Ok", int(st.early) + int(st.late), "res_count_ok", WoodcutTheme.C_TEXT_2],
+		["Miss", int(st.miss) + int(st.wrong), "res_count_miss", PixelPalette.RED[4]],
+	]
+	for c in counts:
+		var col := VBoxContainer.new()
+		col.name = c[0]
+		col.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		col.add_theme_constant_override("separation", UIKit.S1)
+		row.add_child(col)
+		var n := UIKit.number(str(c[1]), c[3] if int(c[1]) > 0 else WoodcutTheme.C_TEXT_3)
+		n.name = c[0] + "Count"
+		n.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+		col.add_child(n)
+		var w := UIKit.label(tr(c[2]), UIKit.CAPTION, false, HORIZONTAL_ALIGNMENT_CENTER)
+		UIKit.fit_label(w, 24)
+		w.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+		col.add_child(w)
+	_teaser(box)
+
+
+## A row at the foot of the overview pointing at the last page: what opened (the one reward card:
+## bronze rim, the bells that ring when it lights up), else the tip or the closest unlock, in up to two
+## lines. Tapping it turns to that page.
+func _teaser(box: VBoxContainer) -> void:
+	var list: Array = record.get("unlocked", [])
+	var carving := int(record.get("carving_gained", 0))
+	var rewards := _rewarded()
+	var tag := tr("res_tip")
+	var line := tip_text(session)
+	if rewards:
+		tag = tr("res_unlocked")
+		var parts: Array[String] = []
+		for u in list:
+			parts.append(UIKit.unlock_text(u))
+		if carving > 0:
+			parts.append(tr("res_carving") % carving)
+		line = " · ".join(parts)
+	elif line == "":
+		tag = tr("res_closest")
+		line = closest_unlock(session)
+	if line == "":
+		return
+	if not rewards:
+		# a tip or the next unlock: its first sentence; the whole of it is a tap away
+		var cut := line.find(". ")
+		if cut > 0:
+			line = line.substr(0, cut + 1)
+	var b := PanelContainer.new()
+	b.name = "Teaser"
+	b.theme_type_variation = UIKit.CARD if rewards else UIKit.BOARD
+	b.custom_minimum_size.y = UIKit.TOUCH
+	b.mouse_filter = Control.MOUSE_FILTER_STOP
+	b.add_theme_stylebox_override("panel", _teaser_style(rewards))
+	b.gui_input.connect(func(e: InputEvent) -> void:
+		var up: bool = (e is InputEventMouseButton and e.button_index == MOUSE_BUTTON_LEFT and not e.pressed) \
+			or (e is InputEventScreenTouch and not e.pressed)
+		if up and Rect2(Vector2.ZERO, b.size).has_point(e.position):
+			Sound.ui("tap")
+			pager.go(3))
+	box.add_child(b)
+	var row := HBoxContainer.new()
+	row.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	row.add_theme_constant_override("separation", UIKit.S3)
+	b.add_child(row)
+	if rewards and not list.is_empty():
+		_teaser_bells = BellMarks.new(3, 44.0)
+		_teaser_bells.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+		row.add_child(_teaser_bells)
+	var col := VBoxContainer.new()
+	col.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	col.alignment = BoxContainer.ALIGNMENT_CENTER
+	col.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	col.add_theme_constant_override("separation", 0)
+	row.add_child(col)
+	var t := UIKit.overline(tag)
+	t.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	col.add_child(t)
+	var l := UIKit.label(line, "", true)
+	l.name = "TeaserText"
+	l.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	# wraps (never an ellipsis): two lines at 28, a longer list drops to 26 for a third
+	l.add_theme_font_size_override("font_size", 28)
+	l.resized.connect(func() -> void:
+		if l.get_line_count() > 2 and l.get_theme_font_size("font_size") > 26:
+			l.add_theme_font_size_override("font_size", 26), CONNECT_DEFERRED)
+	l.max_lines_visible = 3
+	l.text_overrun_behavior = TextServer.OVERRUN_TRIM_ELLIPSIS
+	col.add_child(l)
+	var chev := TextureRect.new()
+	chev.texture = WoodcutTheme.icon("chevron_right")
+	chev.modulate = WoodcutTheme.C_BRONZE
+	chev.stretch_mode = TextureRect.STRETCH_KEEP_CENTERED
+	chev.custom_minimum_size = Vector2(30, 0)
+	chev.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	row.add_child(chev)
+	_teaser_panel = b
+
+
+var _teaser_panel: PanelContainer
+
+
+## The teaser's panel: the theme's card or board with tighter padding.
+func _teaser_style(reward: bool) -> PxStyle:
+	var sb: PxStyle = (get_theme_stylebox("panel", UIKit.CARD if reward else UIKit.BOARD) as PxStyle).duplicate()
+	sb.content_margin_top = UIKit.S3
+	sb.content_margin_bottom = UIKit.S3
+	sb.content_margin_left = UIKit.S4
+	sb.content_margin_right = UIKit.S3
+	return sb
+
+
+func _peak() -> float:
+	var st := session.stats
+	return float(st.get("unison_peak", Session.UNISON_MULTS[int(st.get("max_unison", 0))]))
+
+
 ## Score = notes × unison: show how much each part added, so the game's ideas read as the way
 ## to a high score.
-func _breakdown(box: Container) -> void:
+func _breakdown(box: VBoxContainer) -> void:
+	box.name = "Breakdown"
 	var b := session.score_breakdown()
-	var c := UIKit.card(box)
-	c.name = "Breakdown"
 	var st := session.stats
-	var peak := float(st.get("unison_peak", Session.UNISON_MULTS[int(st.get("max_unison", 0))]))
+	var peak := _peak()
 	var top := Session.UNISON_MULTS[Session.UNISON_MULTS.size() - 1]
+	# one section: the unison headline, the parts, and the total at the foot, filling the page
+	var c := UIKit.card(box)
+	c.get_parent().size_flags_vertical = Control.SIZE_EXPAND_FILL
+	c.add_theme_constant_override("separation", UIKit.S2)
 	var head := UIKit.label(unison_headline(peak, float(st.get("time_at_top", 0.0)), top), UIKit.SUB, true)
 	head.name = "UnisonHeadline"
-	head.add_theme_color_override("font_color", Palette.EMBER_HOT)
+	head.add_theme_color_override("font_color", WoodcutTheme.C_EMBER)
 	c.add_child(head)
-	var grid := GridContainer.new()
-	grid.columns = 2
-	grid.add_theme_constant_override("h_separation", 16)
-	grid.add_theme_constant_override("v_separation", 6)
-	c.add_child(grid)
-	_row(grid, tr("res_accuracy"), "%d%%" % roundi(session.accuracy() * 100.0), "Accuracy")
-	_row(grid, tr("res_counts") % [int(st.perfect), int(st.good), int(st.early) + int(st.late), int(st.miss) + int(st.wrong)], "", "Counts", true)
-	_row(grid, tr("res_base"), UIKit.fmt_score(roundi(float(b.get("base", 0.0)))), "Base")
-	_row(grid, tr("res_unison") % Hud._mult_text(peak),
-		"+" + UIKit.fmt_score(roundi(float(b.get("unison", 0.0)))), "Unison")
+	_row(c, tr("res_base"), UIKit.fmt_score(roundi(float(b.get("base", 0.0)))), "Base")
+	_row(c, tr("res_unison") % Hud._mult_text(peak), "+" + UIKit.fmt_score(roundi(float(b.get("unison", 0.0)))), "Unison")
 	if float(b.get("holds", 0.0)) > 0.0:
-		_row(grid, tr("res_holds"), "+" + UIKit.fmt_score(roundi(float(b.holds))), "Holds")
+		_row(c, tr("res_holds"), "+" + UIKit.fmt_score(roundi(float(b.holds))), "Holds")
 	if int(st.get("rests", 0)) > 0:
 		# Keeping still is scored both ways: a bonus for every stand-still kept, a cost for ringing in one.
 		var net := float(b.get("stills", 0.0)) - absf(float(b.get("penalties", 0.0)))
@@ -208,8 +423,20 @@ func _breakdown(box: Container) -> void:
 		var share := still_share(net, session.score)
 		if share > 0:
 			what += " · " + tr("res_still_share") % share
-		_row(grid, what, ("+" if net >= 0.0 else "−") + UIKit.fmt_score(roundi(absf(net))), "Still")
-	UIKit.pop_in(c, 0.5)
+		_row(c, what, ("+" if net >= 0.0 else "−") + UIKit.fmt_score(roundi(absf(net))), "Still")
+	UIKit.spacer(c, 0.0, true)
+	var line := HSeparator.new()
+	line.add_theme_constant_override("separation", UIKit.S2)
+	c.add_child(line)
+	var total := _row(c, tr("res_total"), UIKit.fmt_score(session.score), "Total")
+	total[0].add_theme_font_override("font", Palette.text_font("Bold"))
+	total[1].add_theme_color_override("font_color", WoodcutTheme.C_BRONZE_HI)
+	total[1].add_theme_font_size_override("font_size", 36)
+	total[1].size_flags_vertical = Control.SIZE_SHRINK_CENTER
+	total[0].vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	box.add_child(UIKit.label(tr("res_formula"), UIKit.CAPTION))
+	if session.slam:
+		box.add_child(UIKit.label(tr("res_slam_note"), UIKit.CAPTION))
 
 
 ## Stillness's share of the final score in whole percent (at least 1 when it added anything).
@@ -226,20 +453,28 @@ static func unison_headline(peak: float, secs_at_top: float, top: float) -> Stri
 	return UIKit.tr_("res_unison_head") % Hud._mult_text(peak)
 
 
-func _row(grid: GridContainer, what: String, value: String, id: String, span := false) -> void:
-	var l := UIKit.label(what, UIKit.CAPTION if span else "", true)
+## One line of the breakdown: what on the left (wrapping), the points on the right. Returns [what, value].
+func _row(box: Container, what: String, value: String, id: String) -> Array:
+	var row := HBoxContainer.new()
+	row.name = id
+	row.add_theme_constant_override("separation", UIKit.S3)
+	box.add_child(row)
+	var l := UIKit.label(what, "", true)
 	l.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	l.name = id + "Label"
-	grid.add_child(l)
-	var v := UIKit.label(value, UIKit.SUB, false, HORIZONTAL_ALIGNMENT_RIGHT)
+	row.add_child(l)
+	var v := UIKit.label(value, "", false, HORIZONTAL_ALIGNMENT_RIGHT)
+	v.add_theme_font_override("font", Palette.text_font("ExtraBold"))
+	v.add_theme_font_size_override("font_size", 32)
+	v.add_theme_color_override("font_color", WoodcutTheme.C_BRONZE)
+	v.size_flags_vertical = Control.SIZE_SHRINK_BEGIN
 	v.name = id + "Value"
-	grid.add_child(v)
+	row.add_child(v)
+	return [l, v]
 
 
-func _tendency(box: Container) -> void:
-	var c := UIKit.card(box)
-	c.name = "Tendency"
-	c.add_child(UIKit.label(tr("res_timing"), UIKit.SUB))
+func _tendency(box: VBoxContainer) -> void:
+	box.name = "Tendency"
 	var med := session.median_offset()
 	var ms := roundi(absf(med) * 1000.0)
 	var text := tr("res_on_time")
@@ -250,40 +485,43 @@ func _tendency(box: Container) -> void:
 		text = tr("res_early") % ms
 	elif side == "late":
 		text = tr("res_late") % ms
-	var tl := UIKit.label(text, "")
+	var c := UIKit.card(box)
+	var tl := UIKit.label(text, UIKit.HEADER, true)
+	tl.name = "TimingText"
+	tl.add_theme_font_size_override("font_size", 32)
 	if side != "" and session.hit_offsets.size() >= 4:
 		tl.add_theme_color_override("font_color", UIKit.side_color(side))
-	var row := HBoxContainer.new()
-	row.add_theme_constant_override("separation", 16)
-	c.add_child(row)
-	# The words, and under them the fix when there is one, sit beside the meter: the card stays short
-	# enough to end above the buttons even when the footer offers the next stop.
-	var left := VBoxContainer.new()
-	left.add_theme_constant_override("separation", 10)
-	left.alignment = BoxContainer.ALIGNMENT_CENTER
-	left.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	left.size_flags_stretch_ratio = 1.2
-	row.add_child(left)
-	left.add_child(tl)
+	c.add_child(tl)
 	var meter := TendencyMeter.new()
 	meter.name = "Meter"
 	meter.offsets = session.hit_offsets
-	meter.custom_minimum_size.y = 150
-	meter.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	row.add_child(meter)
+	c.add_child(meter)
 	# A steady lean one way after a played song: one tap draws the notes that much earlier or later.
 	var shift := timing_fix(session)
-	if shift != 0.0 and not record.is_empty():
+	# the chart is capped (about 300 px), a little shorter when the fix button needs the room
+	var fixable := shift != 0.0 and not record.is_empty()
+	meter.custom_minimum_size.y = 240 if fixable else 260
+	# the split as numbers (early / on the beat / late), unless the fix button needs the room
+	var n := session.hit_offsets.size()
+	if n >= 4 and not fixable:
+		var split := {"early": 0, "": 0, "late": 0}
+		for o in session.hit_offsets:
+			split[UIKit.side_of(o)] += 1
+		var row := HBoxContainer.new()
+		row.name = "Split"
+		row.add_theme_constant_override("separation", UIKit.S2)
+		box.add_child(row)
+		for k in [["Early", "early", "res_meter_early"], ["OnBeat", "", "res_meter_on"], ["Late", "late", "res_meter_late"]]:
+			UIKit.stat_tile(row, k[0], tr(k[2]), str(roundi(100.0 * split[k[1]] / n)), "", "%")
+	if fixable:
 		var key := "res_fix_late" if shift > 0.0 else "res_fix_early"
-		var fix := UIKit.button(tr(key) % roundi(absf(shift) * 1000.0), func() -> void: pass, UIKit.QUIET)
+		var fix := UIKit.button(tr(key) % roundi(absf(shift) * 1000.0), func() -> void: pass)
 		fix.name = "FixTiming"
-		fix.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-		fix.custom_minimum_size.x = 0
 		fix.pressed.connect(func() -> void:
 			Profile.set_setting("visual_offset", Profile.visual_offset() + shift)
 			fix.text = tr("res_fixed")
 			fix.disabled = true)
-		left.add_child(fix)
+		box.add_child(fix)
 	var saved := str(args.get("run_saved", ""))
 	if saved != "":
 		if saved.begins_with("user://"):
@@ -294,17 +532,16 @@ func _tendency(box: Container) -> void:
 				DisplayServer.clipboard_set(run_clipboard_text(saved))
 				copy.text = tr("res_run_copied")
 				copy.disabled = true)
-			c.add_child(copy)
+			box.add_child(copy)
 		else:
 			var sl := UIKit.label(tr("res_run_saved") % saved.get_file(), UIKit.CAPTION)
 			sl.name = "RunSaved"
-			c.add_child(sl)
+			box.add_child(sl)
 	var fr: Dictionary = args.get("frames", {})
 	if not fr.is_empty() and not record.is_empty():
 		var fl := UIKit.label(tr("res_frames") % [roundi(float(fr.fps)), int(fr.slow), roundi(float(fr.worst) * 1000.0)], UIKit.CAPTION)
 		fl.name = "Frames"
-		c.add_child(fl)
-	UIKit.pop_in(c, 0.7)
+		box.add_child(fl)
 
 
 ## How much earlier (positive: the hits were late) the notes should be drawn to even out this run's
@@ -328,33 +565,47 @@ const TIMING_FIX_HITS := 20
 const TIMING_FIX_MIN := 0.015
 
 
-func _unlocks(box: Container) -> void:
+## What this run opened (celebrated), the carving points, the closest unlock and the tip.
+func _tips(box: VBoxContainer) -> void:
 	var list: Array = record.get("unlocked", [])
 	var carving := int(record.get("carving_gained", 0))
 	var closest := closest_unlock(session)
-	if list.is_empty() and carving <= 0:
-		if closest != "":
-			var cc := UIKit.card(box)
-			cc.name = "Closest"
-			cc.add_child(UIKit.label(tr("res_closest"), UIKit.SUB))
-			cc.add_child(UIKit.label(closest, UIKit.CAPTION))
-		return
-	var c := UIKit.card(box, true)
-	c.name = "Unlocked"
-	c.add_child(UIKit.label(tr("res_unlocked"), UIKit.PAPER_HEADER))
-	var lines: Array[String] = []
-	for u in list:
-		lines.append(UIKit.unlock_text(u))
-	if carving > 0:
-		lines.append(tr("res_carving") % carving)
-	for line in lines:
-		c.add_child(UIKit.label("• " + line, UIKit.PAPER))
+	if not list.is_empty() or carving > 0:
+		var c := UIKit.card(box, true)   # the one reward card
+		c.get_parent().name = "UnlockedCard"
+		c.name = "Unlocked"
+		c.add_child(UIKit.label(tr("res_unlocked"), UIKit.PAPER_HEADER))
+		var lines: Array[String] = []
+		for u in list:
+			lines.append(UIKit.unlock_text(u))
+		if carving > 0:
+			lines.append(tr("res_carving") % carving)
+		for line in lines:
+			var row := HBoxContainer.new()
+			row.add_theme_constant_override("separation", UIKit.S2)
+			c.add_child(row)
+			var dot := TextureRect.new()
+			dot.texture = WoodcutTheme.icon("dot")
+			dot.modulate = WoodcutTheme.C_BRONZE
+			dot.stretch_mode = TextureRect.STRETCH_KEEP_CENTERED
+			dot.custom_minimum_size = Vector2(12, 36)
+			dot.size_flags_vertical = Control.SIZE_SHRINK_BEGIN
+			row.add_child(dot)
+			var l := UIKit.label(line, UIKit.PAPER)
+			l.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+			row.add_child(l)
+	var tip_line := tip_text(session)
+	if tip_line != "":
+		var tip := UIKit.card(box)
+		tip.name = "Tip"
+		tip.add_child(UIKit.overline(tr("res_tip")))
+		tip.add_child(UIKit.label(tip_line, UIKit.PAPER))
 	if closest != "":
-		var cl := UIKit.label(tr("res_closest") + ": " + closest, UIKit.PAPER)
-		cl.name = "Closest"
-		c.add_child(cl)
-	if not list.is_empty():
-		UIKit.celebrate(self, lines[0], 2.2)
+		var v := UIKit.card(box)
+		v.name = "Closest"
+		v.add_theme_constant_override("separation", UIKit.S1)
+		v.add_child(UIKit.overline(tr("res_closest")))
+		v.add_child(UIKit.label(closest, UIKit.CAPTION))
 
 
 ## The unlock this run came closest to, as a goal line ("" when nothing is left): a goal about this
@@ -408,11 +659,37 @@ static func tip_text(s: Session) -> String:
 	return ""
 
 
-var _glow: TextureRect
+# ---------------------------------------------------------------- footer
+
+
+## Next stop (the primary) over Play again and Back; without a next stop, Back beside Play again.
+func _footer(foot: VBoxContainer) -> void:
+	var play_args: Dictionary = args.get("play_args", {})
+	var replay := func() -> void: app.replace("play", play_args)
+	var next := _next_song()
+	if next != null:
+		# the next stop is the primary; playing again is the icon beside it
+		var go := UIKit.button(tr("res_next") % UIKit.song_title(next), func() -> void:
+			app.replace("stop_card", {"song_id": next.id}), UIKit.PRIMARY)
+		go.name = "Next"
+		var again := UIKit.icon_button("replay", replay, tr("res_again"), "")
+		again.name = "Again"
+		UIKit.footer_actions(foot, go, again)
+	else:
+		var again := UIKit.button(tr("res_again"), replay, UIKit.PRIMARY)
+		again.name = "Again"
+		UIKit.footer_actions(foot, again)
+
+
+# ---------------------------------------------------------------- juice
+
+
+var _seal: GradeSeal
 var _ticks := 0
 
 
-## The score counts up in about 24 audible ticks, then lands with a flare of the glow.
+## The score counts up over T_STAMP in about 24 audible ticks and swells a step as it lands (the
+## seal stamps at the same moment).
 func _count_up(l: Label, target: int) -> void:
 	if UIKit.reduced_motion():
 		_glow_rest.call_deferred()
@@ -425,33 +702,30 @@ func _count_up(l: Label, target: int) -> void:
 		var n := int(v / maxf(float(target), 1.0) * 24.0)
 		if n > _ticks:
 			_ticks = n
-			count_tick.emit(roundi(v)), 0.0, float(target), 1.1) \
+			count_tick.emit(roundi(v)), 0.0, float(target), T_STAMP) \
 		.set_trans(Tween.TRANS_CUBIC).set_ease(Tween.EASE_OUT)
-	tw.tween_callback(func() -> void:
-		count_done.emit(target)
-		_flare(1.0))
+	tw.tween_callback(func() -> void: count_done.emit(target))
 	# the number swells a step as it lands
-	l.pivot_offset = l.size * 0.5
+	tw.tween_callback(func() -> void: l.pivot_offset = l.size * 0.5)
 	tw.tween_property(l, "scale", Vector2(1.08, 1.08), 0.06)
 	tw.tween_property(l, "scale", Vector2.ONE, 0.12)
 
 
-## A quick bright step of the warm glow, then it settles to a low ember.
+## A quick bright step of the seal's warm halo, then it settles to a low ember.
 func _flare(strength: float) -> void:
-	if _glow == null:
+	if _seal == null:
 		return
-	var tw := _glow.create_tween()
-	tw.tween_property(_glow, "modulate:a", 0.25 + 0.45 * strength * (0.4 if UIKit.reduced_motion() else 1.0), 0.05)
-	tw.tween_property(_glow, "modulate:a", 0.28, 0.5)
+	var tw := _seal.create_tween()
+	tw.tween_property(_seal, "halo", 0.4 + 0.6 * strength * (0.4 if UIKit.reduced_motion() else 1.0), 0.05)
+	tw.tween_property(_seal, "halo", 0.45, 0.5)
 
 
 func _glow_rest() -> void:
-	if _glow != null:
-		_glow.modulate.a = 0.28
+	if _seal != null:
+		_seal.halo = 0.45
 
 
 func _next_song() -> SongData:
-	var play_args: Dictionary = args.get("play_args", {})
 	if session.grade_rank() < Progression.CLEAR_GRADE:
 		return null
 	var story := SongLibrary.story()
@@ -459,6 +733,14 @@ func _next_song() -> SongData:
 		if story[i].id == session.song.id and Progression.is_unlocked(story[i + 1].id):
 			return story[i + 1]
 	return null
+
+
+## The ladder for this song: the platform's own when online, else the scores kept on this phone.
+func _open_ladder() -> void:
+	if Leaderboards.online():
+		Leaderboards.show(Profile.board_id(session.song_key(), session.difficulty))
+	else:
+		app.open("boards")
 
 
 func _leave() -> void:

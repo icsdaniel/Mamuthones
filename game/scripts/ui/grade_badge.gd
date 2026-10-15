@@ -115,9 +115,14 @@ func _draw() -> void:
 	# Landing: one step larger while it settles (whole steps keep the pixels square).
 	if _pop < 0.85:
 		kk = k + 1
+	draw_letter(Vector2(r.size.x * 0.5, size.y * 0.5), kk)
+
+
+## The letter in `face` at kk, centred on `c` (the plate's or a seal's centre), faded in by the stamp.
+func draw_letter(c0: Vector2, kk: int) -> void:
 	var text := letter()
 	var h := PxType.line_height(face, kk)
-	var pos := Vector2(r.size.x * 0.5, (size.y - h) * 0.5)
+	var pos := Vector2(c0.x, c0.y - h * 0.5)
 	var ink := Color(COLORS[rank], clampf(_pop * 2.0, 0.0, 1.0))
 	if text.ends_with("+") and face == "big" and not PxType.smooth:
 		# The doubled face's Scale2x rounds a small "+" into a dot, so the plus is drawn square here.

@@ -4,7 +4,7 @@ extends Screen
 ## (tap - the moment the note was drawn on the ring) is how long the screen and the touch take for
 ## this player, and becomes the "Notes drawn early" setting (Profile.visual_offset). No sound plays,
 ## so this measures the eyes and the screen, not the ears (the sound delay test does that).
-## args: none (opened from Settings; back returns there).
+## args: chain (the last of Settings' three timing steps: "Test 3 of 3"); back returns to Settings.
 
 const BPM := LatencyTest.BPM
 const WATCH := 4
@@ -24,10 +24,10 @@ var _taps := 0
 
 
 func build() -> void:
-	var box := UIKit.column(self, false, 18)
-	UIKit.header(box, tr("vis_title"), on_back)
-	box.add_child(UIKit.label(tr("vis_title"), UIKit.HEADER, true, HORIZONTAL_ALIGNMENT_CENTER))
-	_status = UIKit.label(tr("vis_intro"), UIKit.LEAD, true, HORIZONTAL_ALIGNMENT_CENTER)
+	var page := UIKit.scaffold(self, false, UIKit.S3)
+	var box: VBoxContainer = page.body
+	UIKit.top_bar(page.top, tr("vis_title"), on_back, load(App.SCREENS["calibration"]).step_text(args, 3))
+	_status = MenuKit.instruction(tr("vis_intro"))
 	_status.name = "Status"
 	box.add_child(_status)
 	var pad := Button.new()
@@ -35,7 +35,7 @@ func build() -> void:
 	pad.focus_mode = Control.FOCUS_NONE
 	pad.flat = true
 	pad.size_flags_vertical = Control.SIZE_EXPAND_FILL
-	pad.custom_minimum_size = Vector2(0, 420)
+	pad.custom_minimum_size = Vector2(0, 320)
 	pad.action_mode = BaseButton.ACTION_MODE_BUTTON_PRESS
 	pad.button_down.connect(_on_tap)
 	box.add_child(pad)
@@ -50,9 +50,7 @@ func build() -> void:
 	box.add_child(_meter)
 	_detail = UIKit.label("", UIKit.CAPTION, true, HORIZONTAL_ALIGNMENT_CENTER)
 	box.add_child(_detail)
-	_actions = VBoxContainer.new()
-	_actions.add_theme_constant_override("separation", 12)
-	box.add_child(_actions)
+	_actions = page.foot
 	_show_start()
 
 
@@ -60,7 +58,7 @@ func _show_start() -> void:
 	_clear_actions()
 	var go := UIKit.button(tr("lat_start"), _begin, UIKit.PRIMARY)
 	go.name = "Start"
-	_actions.add_child(go)
+	UIKit.footer_actions(_actions, go)
 	var skip := UIKit.button(tr("lat_skip"), on_back, UIKit.QUIET)
 	skip.name = "Skip"
 	_actions.add_child(skip)
@@ -145,14 +143,13 @@ func _finish() -> void:
 		Sound.ui("unlock")
 		var go := UIKit.button(tr("ui_continue"), on_back, UIKit.PRIMARY)
 		go.name = "Continue"
-		_actions.add_child(go)
-		_actions.add_child(UIKit.button(tr("lat_again"), _begin, UIKit.QUIET))
+		UIKit.footer_actions(_actions, go, MenuKit.icon_action("Again", "replay", _begin, tr("lat_again")))
 	else:
 		_status.text = tr("lat_uneven") if int(r.get("count", 0)) >= LatencyTest.MIN_TAPS else tr("lat_few")
 		_detail.text = tr("vis_uneven_body")
 		var again := UIKit.button(tr("lat_again"), _begin, UIKit.PRIMARY)
 		again.name = "Again"
-		_actions.add_child(again)
+		UIKit.footer_actions(_actions, again)
 		if int(r.get("count", 0)) >= LatencyTest.MIN_TAPS:
 			var keep := UIKit.button(tr("lat_keep") % roundi(lead * 1000.0), func() -> void:
 				Profile.set_setting("visual_offset", lead)

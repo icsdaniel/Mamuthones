@@ -1,107 +1,115 @@
 class_name MenuBackdrop
 extends Control
-## The stone every menu-type screen stands on (App puts one behind the screen stack): a wall of worn
-## dark ashlar, warm from the torch and brazier light below, with wall torches burning in the side
-## gutters. Pixel art from tools/art/pixel/ui_kit.py, drawn x3 with nearest filtering, anchored at the
-## bottom centre so it covers any phone or tablet shape. The flames step through their frames and the
-## glows flicker in steps (never smooth), a third as much with reduced motion.
+## The night every menu-type screen stands in (App puts one behind the screen stack): a deep night
+## sky with a few stars, warming toward a bonfire glow low in the middle, and a handful of embers
+## drifting up. Pixel art on the kit's art grid (PxStyle.unit): the sky is a canvas shader
+## (game/shaders/menu_sky.gdshader: the palette ramp, 4x4 ordered dithering, quantised to the art
+## pixel), the stars are a short list of art-pixel points rebuilt only when the width changes, and
+## the embers step at 12 frames a second (a third as many with reduced motion, still when animations
+## are off). Hidden under the play screen, so nothing here runs during a song.
 
-const PX := 3.0
-const FRAME_TIME := 0.11
-## Torches as (side, height as a fraction of the screen): in the side gutters, clear of the text.
-const TORCHES := [[-1, 0.47], [1, 0.47], [-1, 0.8], [1, 0.8]]
+const FRAME_TIME := 1.0 / 12.0
+const EMBERS := 18
 
 var reduced_motion := false
-var still := false                ## animations off: the torches stand still
-var _wall: Texture2D
-var _frames: Array[Texture2D] = []
-var _glows: Array[TextureRect] = []
-var _frame := [0, 2, 1, 3]
+var still := false                ## animations off: the embers stand still
+var _sky: ColorRect
+var _sparks: Control
+var _stars: Array[Vector4] = []   ## art x, height fraction, colour index, bright (0/1)
+var _stars_w := -1
 var _t := 0.0
-var _seed := 1
+var _clock := 0.0
+var _embers: Array[Vector4] = []   ## x (0..1), speed (art px/s), phase (0..1), sway
 
 
 func _init() -> void:
 	set_anchors_preset(Control.PRESET_FULL_RECT)
 	mouse_filter = Control.MOUSE_FILTER_IGNORE
 	name = "Backdrop"
+	var seed := 7
+	for i in EMBERS:
+		seed = (seed * 1103515245 + 12345) & 0x7fffffff
+		var a := float(seed % 1000) / 1000.0
+		seed = (seed * 1103515245 + 12345) & 0x7fffffff
+		var b := float(seed % 1000) / 1000.0
+		seed = (seed * 1103515245 + 12345) & 0x7fffffff
+		var c := float(seed % 1000) / 1000.0
+		# most embers rise from the middle, where the glow is
+		var x := 0.5 + (a - 0.5) * (0.5 + 0.5 * c)
+		_embers.append(Vector4(x, 6.0 + 10.0 * b, c, (b - 0.5) * 8.0))
 
 
 func _ready() -> void:
-	_wall = Palette.px("ui/backdrop")
-	for i in 4:
-		_frames.append(Palette.px("ui/torch_%d" % i))
-	var glow_tex := Palette.px("ui/torch_glow")
-	var add := CanvasItemMaterial.new()
-	add.blend_mode = CanvasItemMaterial.BLEND_MODE_ADD
-	for i in TORCHES.size():
-		var g := TextureRect.new()
-		g.texture = glow_tex
-		g.material = add
-		g.mouse_filter = Control.MOUSE_FILTER_IGNORE
-		g.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
-		g.stretch_mode = TextureRect.STRETCH_SCALE
-		g.modulate.a = 0.6
-		add_child(g)
-		_glows.append(g)
-	resized.connect(_place)
-	_place()
+	_sky = ColorRect.new()
+	_sky.name = "Sky"
+	_sky.set_anchors_preset(Control.PRESET_FULL_RECT)
+	_sky.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	var mat := ShaderMaterial.new()
+	mat.shader = load("res://shaders/menu_sky.gdshader")
+	_sky.material = mat
+	add_child(_sky)
+	_sparks = Control.new()
+	_sparks.name = "Sparks"
+	_sparks.set_anchors_preset(Control.PRESET_FULL_RECT)
+	_sparks.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_sparks.draw.connect(_draw_sparks)
+	add_child(_sparks)
+	resized.connect(_fit)
+	_fit()
 
 
-func _torch_pos(i: int) -> Vector2:
-	var side: int = TORCHES[i][0]
-	var x := 0.0 if side < 0 else size.x - 11.0 * PX   # hard against the edge, clear of the column
-	return Vector2(x, roundf(size.y * float(TORCHES[i][1]) / PX) * PX)
-
-
-func _place() -> void:
-	if _glows.is_empty():
-		return
-	for i in _glows.size():
-		_flicker(i, 0.0)
-	queue_redraw()
-
-
-## Steps one glow to a new size and strength.
-func _flicker(i: int, amount: float) -> void:
-	var g := _glows[i]
-	var gs := g.texture.get_size() * PX if g.texture != null else Vector2(240, 240)
-	_seed = (_seed * 1103515245 + 12345) & 0x7fffffff
-	var r := float(_seed % 1000) / 1000.0
-	var k := 1.0 + (r - 0.5) * 0.16 * amount
-	var sz := (gs * k / PX).round() * PX
-	var p := _torch_pos(i) + Vector2(5.5 * PX, 4.0 * PX)
-	g.size = sz
-	g.position = (p - sz * 0.5).round()
-	g.modulate.a = 0.42 + 0.14 * (r - 0.5) * amount
+func _fit() -> void:
+	var u := PxStyle.unit
+	(_sky.material as ShaderMaterial).set_shader_parameter("canvas_size", size)
+	(_sky.material as ShaderMaterial).set_shader_parameter("unit", u)
+	var aw := maxi(floori(size.x / u), 1)
+	if aw != _stars_w:
+		_stars_w = aw
+		_stars.clear()
+		var seed := 12345
+		var n := int(aw * 0.75)
+		for k in n:
+			seed = (seed * 1103515245 + 12345) & 0x7fffffff
+			var sx := seed % aw
+			seed = (seed * 1103515245 + 12345) & 0x7fffffff
+			var f := pow(float(seed % 1000) / 1000.0, 1.7) * 0.55
+			_stars.append(Vector4(sx, f, k % 3, 1.0 if k % 9 == 0 else 0.0))
+	_sparks.queue_redraw()
 
 
 func _process(delta: float) -> void:
-	if not is_visible_in_tree():
-		return
-	if still:
+	if not is_visible_in_tree() or still:
 		return
 	_t += delta
 	if _t < FRAME_TIME:
 		return
+	_clock += _t * (0.5 if reduced_motion else 1.0)
 	_t = 0.0
-	var amount := 0.33 if reduced_motion else 1.0
-	for i in _frame.size():
-		_frame[i] = (_frame[i] + 1) % _frames.size()
-		_flicker(i, amount)
-	queue_redraw()
+	_sparks.queue_redraw()
 
 
-func _draw() -> void:
-	if _wall != null:
-		var ws := _wall.get_size() * PX
-		var pos := Vector2(roundf((size.x - ws.x) * 0.5), size.y - ws.y)
-		if pos.y > 0.0:
-			draw_rect(Rect2(0, 0, size.x, pos.y + 1.0), PixelPalette.K[0])
-		draw_texture_rect(_wall, Rect2(pos, ws), false)
-	if _frames.is_empty() or _frames[0] == null:
-		return
-	for i in TORCHES.size():
-		var tex := _frames[_frame[i] % _frames.size()]
-		var p := _torch_pos(i)
-		draw_texture_rect(tex, Rect2(p, tex.get_size() * PX), false)
+func _draw_sparks() -> void:
+	var u := PxStyle.unit
+	var ah := floorf(size.y / u)
+	var cell := Vector2(u, u)
+	for s in _stars:
+		var p := Vector2(s.x, floorf(s.y * ah))
+		var bright := s.w > 0.0
+		var c: Color = PixelPalette.STAR[1] if bright else (PixelPalette.STAR[0] if s.z == 0.0 else PixelPalette.NIGHT[4])
+		if bright:
+			for d in [Vector2(1, 0), Vector2(-1, 0), Vector2(0, 1), Vector2(0, -1)]:
+				_sparks.draw_rect(Rect2((p + d) * u, cell), PixelPalette.NIGHT[4])
+		_sparks.draw_rect(Rect2(p * u, cell), c)
+	var rise := ah * 0.55
+	var count := EMBERS / 3 if reduced_motion else EMBERS
+	for i in count:
+		var e := _embers[i]
+		var up := fmod(_clock * e.y + e.z * rise, rise)
+		var k := up / rise
+		var x := e.x * size.x / u + sin(_clock * 0.9 + e.z * 6.28) * e.w * k
+		var y := ah - 6.0 - up
+		var a := clampf(1.0 - k * 1.15, 0.0, 1.0)
+		if a <= 0.02:
+			continue
+		var c: Color = PixelPalette.FIRE[6] if k < 0.3 else (PixelPalette.FIRE[5] if k < 0.6 else PixelPalette.FIRE[4])
+		_sparks.draw_rect(Rect2(Vector2(roundf(x), roundf(y)) * u, cell), Color(c, a))

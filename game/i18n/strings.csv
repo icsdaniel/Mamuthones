@@ -80,7 +80,7 @@ title_free,Free play,Gioco libero
 title_workshop,Workshop,Laboratorio
 title_boards,Scores,Punteggi
 title_settings,Settings,Impostazioni
-title_tutorial,Tutorial,Lezioni
+title_tutorial,Lessons,Lezioni
 title_calibrate,Calibrate,Calibra
 title_quit,Quit,Esci
 story_title,The procession,La processione
@@ -379,3 +379,40 @@ tut_full_slam_short,Tap the step on the line,Tocca il passo sulla linea
 tut_fail_full_slam,Tap the step right as it reaches the line: in slam mode that rings its bell too.,Tocca il passo proprio quando arriva sulla linea: in modalità colpo così suona anche il campanaccio.
 tut_full_short,Step and flick together,Passo e colpo insieme
 tut_fail_full,Both halves have to land together: tap and flick in one movement.,Le due parti devono arrivare insieme: tocca e dai il colpo in un solo movimento.
+res_tab_overview,Overview,Sintesi
+res_tab_score,Score,Punti
+res_tab_timing,Timing,Tempo
+res_tab_tips,Tips,Consigli
+res_tab_rewards,Rewards,Premi
+res_tile_combo,Longest combo,Combo più lunga
+res_tile_unison,Unison peak,Unisono massimo
+res_tile_timing,Timing,Tempo
+res_unison_time,%s s at %s,%s s a %s
+res_lean_none,Right on the beat,Proprio sul battito
+res_lean_early,A little early,Un po' in anticipo
+res_lean_late,A little late,Un po' in ritardo
+res_count_perfect,Perfect,Perfetti
+res_count_good,Good,Buoni
+res_count_ok,Ok,Ok
+res_count_miss,Missed,Mancati
+res_total,Score,Punteggio
+res_new_best_badge,New best +%s,Record +%s
+res_first_best_badge,First best,Primo record
+res_ladder,Scores,Classifiche
+title_hero_sub,Stop %d · %s,Tappa %d · %s
+story_locked_short,Locked,Chiusa
+story_progress,%d of %d stops cleared,%d tappe superate su %d
+story_stop_overline,Stop %d,Tappa %d
+stop_best_at,Best · %s,Record · %s
+set_more,More,Altro
+set_about,About,Informazioni
+set_motion,Motion sensors,Sensori di movimento
+set_display,Display,Schermo
+set_setup,Getting started,Per iniziare
+set_tutorial,The lessons (tutorial),Le lezioni (tutorial)
+boards_not_played,Not played,Non giocata
+lang_choose,Choose your language,Scegli la lingua
+title_hero,Continue,Continua
+story_open,Open: %s,Apri: %s
+set_chain_step,Test %d of %d,Prova %d di %d
+res_meter_on,on beat,a tempo

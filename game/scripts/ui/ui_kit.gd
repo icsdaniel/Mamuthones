@@ -1,25 +1,65 @@
 class_name UIKit
 extends RefCounted
-## Small builders shared by every screen, so screens read as a list of what they show. Sizes follow the
-## rubric: touch targets at least 88 px (we use 96), text at least 24 px (the theme's sizes).
+## The menu kit, "Bonfire Night" (2026-10 mobile rework). Every menu screen is built from these
+## builders and the theme in WoodcutTheme, so screens read as a list of what they show. Follow it:
+##
+## WORLD  Night in Mamoiada: a dark sky warming to a bonfire glow (MenuBackdrop), cards of dark
+##        sheepskin, the bronze of the bells for anything selected or tagged, the red of the
+##        Issohadore jacket ONLY for the one primary action. Crisp pixel corners (PxStyle, 3-px art
+##        grid), pixel type for display (grades, the big score, tags), clean Alegreya Sans for reading.
+## COLOUR (WoodcutTheme.C_*) INK/NIGHT backgrounds · SURFACE cards · RAISED/RAISED_HI buttons ·
+##        STROKE rims · SUNK tiles and tracks · BRONZE (+HI/LO/DEEP) accents · RED (+HI/LO/LIP)
+##        primary · TEXT / TEXT_2 / TEXT_3 for primary / secondary / disabled text · EMBER heat.
+## TYPE   (720 base) display 72 pixel · title 56 · header 40 (top bar) · value 44 · button 32-34 ·
+##        body 30 · overline 30 pixel caps · caption 26 (the floor; captions only, never body).
+## SPACE  multiples of one art pixel pair: S1 6 · S2 12 · S3 18 · S4 24 · S5 36 · S6 48. Side
+##        gutter GUTTER 36 (+ safe area). Corner radii in art px: R_S 2 tiles/chips, R_M 3 cards,
+##        R_L 4 buttons, pills for toggles and segmented controls.
+## TOUCH  every target >= TOUCH (96) tall; the primary button is PRIMARY_H (112) tall, full width.
+## LAYOUT scaffold(): a top bar (top_bar(): round back button on the left, the title centred, an
+##        optional action on the right), a body that FITS the screen, and a footer pinned in the
+##        thumb zone with the screen's one primary action (AccentButton) and at most two
+##        secondary ones. No scroll bars, ever: split long content into pages (paged(): a segmented
+##        control over a swipeable Pager), or let a list scroll by touch-drag with its bar hidden
+##        (column(), scroll_box()). The theme draws no scroll bar either.
+## PARTS  button() (Button = secondary, PRIMARY, QUIET text, COMPACT, ICON round, CHIP pill) ·
+##        icon_button() · card() (BOARD; paper=true for the bronze-rimmed accent card) ·
+##        stat_tile() (TILE: overline tag + big value + caption) · badge() (a pill label: red, bronze
+##        or quiet) · tabs() (a segmented control) · paged() / Pager · overline() · label().
+## MOTION Buttons sink onto their carved lip and pulse a little when pressed (juice()); items rise
+##        and fade in turn (pop_in()); a screen slides in by 36 px. reduced_motion() calms all of it.
+##        Nothing here runs during a song (the play screen hides the backdrop).
 
 const TOUCH := 96
+const PRIMARY_H := 112
 const COLUMN_MAX := 760.0
-const GUTTER := 32.0
+const GUTTER := 36.0
+## The spacing scale (screen px at the 720 base).
+const S1 := 6
+const S2 := 12
+const S3 := 18
+const S4 := 24
+const S5 := 36
+const S6 := 48
 
-# Theme type variations from Art's WoodcutTheme.
+# Theme type variations (WoodcutTheme).
 const TITLE := "TitleLabel"
 const HEADER := "HeaderLabel"
 const CAPTION := "CaptionLabel"
 const SUB := "SubheaderLabel"
+const OVERLINE := "OverlineLabel"   ## pixel capitals: tags over tiles and sections
+const VALUE := "ValueLabel"         ## a tile's big number
 const LEAD := "LeadLabel"   ## an instruction sentence (serif, pale gold), not small caps
 const PAPER := "PaperLabel"
 const PAPER_HEADER := "PaperHeaderLabel"
 const HUD := "HudLabel"
 const BOARD := "BoardPanel"
+const TILE := "TilePanel"
 const PRIMARY := "AccentButton"
 const QUIET := "QuietButton"
-const COMPACT := "CompactButton"   ## framed, no lozenges: dense grids of choices
+const COMPACT := "CompactButton"   ## secondary with tight padding: dense grids of choices
+const ICON := "IconButton"
+const CHIP := "ChipButton"
 const CARD := "CardPanel"
 
 ## One early/late language everywhere (bursts, the timing ticks, judgement hints, the results
@@ -42,8 +82,23 @@ static func side_color(side: String) -> Color:
 
 static func apply_root(root: Control) -> void:
 	root.theme = WoodcutTheme.build()
+	_fit_pixels(root)
+	if root.is_inside_tree() and not root.get_viewport().size_changed.is_connected(_fit_pixels.bind(root)):
+		root.get_viewport().size_changed.connect(_fit_pixels.bind(root))
 	I18n.set_locale(language())
 	apply_volumes()
+
+
+## The kit's art pixel from the real screen: device px per canvas px of the root's viewport (a
+## Window or a SubViewport with a 2D size override), so PxStyle draws whole device pixels.
+static func _fit_pixels(root: Control) -> void:
+	if not root.is_inside_tree():
+		return
+	var vp := root.get_viewport()
+	var dev := Vector2(vp.size) if vp is Window else Vector2((vp as SubViewport).size) if vp is SubViewport else Vector2.ZERO
+	var canvas := vp.get_visible_rect().size
+	if dev.x > 0.0 and canvas.x > 0.0:
+		PxStyle.set_screen_scale(dev.x / canvas.x)
 
 
 static func language() -> String:
@@ -88,24 +143,16 @@ static func vibrate(ms: int) -> void:
 		Input.vibrate_handheld(ms)
 
 
-## A centred column inside safe-area margins, optionally scrolling. Returns the VBox to fill.
+## A centred column inside safe-area margins, optionally scrolling (touch-drag, no bar). Returns the
+## VBox to fill.
 static func column(parent: Control, scroll := true, separation := 20) -> VBoxContainer:
-	var margin := MarginContainer.new()
-	margin.set_anchors_preset(Control.PRESET_FULL_RECT)
-	var safe := safe_margins(parent)
-	margin.add_theme_constant_override("margin_left", int(GUTTER + safe.x))
-	margin.add_theme_constant_override("margin_right", int(GUTTER + safe.x))
-	margin.add_theme_constant_override("margin_top", int(24 + safe.y))
-	margin.add_theme_constant_override("margin_bottom", int(24 + safe.w))
-	parent.add_child(margin)
+	var margin := _margins(parent, 24, 24)
 	var center := CenterWidth.new()
 	center.max_width = COLUMN_MAX
 	var box := VBoxContainer.new()
 	box.add_theme_constant_override("separation", separation)
 	if scroll:
-		var sc := ScrollContainer.new()
-		sc.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
-		sc.follow_focus = true
+		var sc := _scroll()
 		margin.add_child(sc)
 		sc.add_child(center)
 		center.size_flags_horizontal = Control.SIZE_EXPAND_FILL
@@ -116,43 +163,111 @@ static func column(parent: Control, scroll := true, separation := 20) -> VBoxCon
 	return box
 
 
-## A scrolling column with a footer pinned to the bottom for the screen's main actions, so "Play" is
-## always in reach of a thumb. Returns [content VBox, footer VBox].
+## A column whose list scrolls by touch-drag (no bar) above a footer pinned to the bottom for the
+## screen's main actions, so "Play" is always in reach of a thumb. Returns [content VBox, footer VBox].
 static func column_with_footer(parent: Control, separation := 16) -> Array[VBoxContainer]:
-	var margin := MarginContainer.new()
-	margin.set_anchors_preset(Control.PRESET_FULL_RECT)
-	var safe := safe_margins(parent)
-	margin.add_theme_constant_override("margin_left", int(GUTTER + safe.x))
-	margin.add_theme_constant_override("margin_right", int(GUTTER + safe.x))
-	margin.add_theme_constant_override("margin_top", int(24 + safe.y))
-	margin.add_theme_constant_override("margin_bottom", int(20 + safe.w))
-	parent.add_child(margin)
+	var margin := _margins(parent, 24, 24)
 	var center := CenterWidth.new()
 	center.max_width = COLUMN_MAX
 	margin.add_child(center)
 	var outer := VBoxContainer.new()
-	outer.add_theme_constant_override("separation", 12)
+	outer.add_theme_constant_override("separation", S3)
 	center.add_child(outer)
-	var sc := ScrollContainer.new()
-	sc.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
+	var sc := _scroll()
 	sc.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	outer.add_child(sc)
 	var box := VBoxContainer.new()
 	box.add_theme_constant_override("separation", separation)
 	box.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	sc.add_child(box)
-	var foot := VBoxContainer.new()
-	foot.add_theme_constant_override("separation", 8)
-	foot.name = "Footer"
-	# the list sinks into shadow in three stepped bands above the footer instead of being cut off
-	foot.draw.connect(func() -> void:
-		if foot.get_child_count() == 0 or not sc.get_v_scroll_bar().visible:
-			return
-		for i in 3:
-			foot.draw_rect(Rect2(-GUTTER, -36.0 + i * 8.0, foot.size.x + 2.0 * GUTTER, 8.0), Color(PixelPalette.K[0], 0.25 * (i + 1))))
-	sc.get_v_scroll_bar().visibility_changed.connect(foot.queue_redraw)
-	outer.add_child(foot)
+	var foot := _footer(outer)
+	_fade_above(foot, sc)
 	return [box, foot]
+
+
+## The kit's page: a top bar, a body that fits the screen (or scrolls by touch-drag with `scroll`),
+## and a footer in the thumb zone. Returns {"top": VBox, "body": VBox, "foot": VBox}; fill the top
+## with top_bar(), the foot with the primary button (button(..., PRIMARY)) and secondary ones.
+static func scaffold(parent: Control, scroll := false, separation := S4) -> Dictionary:
+	var margin := _margins(parent, S2, S4)
+	var center := CenterWidth.new()
+	center.max_width = COLUMN_MAX
+	margin.add_child(center)
+	var outer := VBoxContainer.new()
+	outer.add_theme_constant_override("separation", S3)
+	center.add_child(outer)
+	var top := VBoxContainer.new()
+	top.name = "Top"
+	outer.add_child(top)
+	var body := VBoxContainer.new()
+	body.name = "Body"
+	body.add_theme_constant_override("separation", separation)
+	body.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	if scroll:
+		var sc := _scroll()
+		sc.size_flags_vertical = Control.SIZE_EXPAND_FILL
+		outer.add_child(sc)
+		body.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		sc.add_child(body)
+		var foot := _footer(outer)
+		_fade_above(foot, sc)
+		return {"top": top, "body": body, "foot": foot}
+	outer.add_child(body)
+	return {"top": top, "body": body, "foot": _footer(outer)}
+
+
+## A touch-drag ScrollContainer with no visible bar (for a list that may outgrow a short phone).
+static func scroll_box(box: Container) -> VBoxContainer:
+	var sc := _scroll()
+	sc.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	box.add_child(sc)
+	var inner := VBoxContainer.new()
+	inner.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	inner.add_theme_constant_override("separation", S3)
+	sc.add_child(inner)
+	return inner
+
+
+static func _scroll() -> ScrollContainer:
+	var sc := ScrollContainer.new()
+	sc.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
+	sc.vertical_scroll_mode = ScrollContainer.SCROLL_MODE_SHOW_NEVER
+	sc.scroll_deadzone = 12
+	sc.follow_focus = true
+	return sc
+
+
+static func _margins(parent: Control, top: int, bottom: int) -> MarginContainer:
+	var margin := MarginContainer.new()
+	margin.set_anchors_preset(Control.PRESET_FULL_RECT)
+	var safe := safe_margins(parent)
+	margin.add_theme_constant_override("margin_left", int(GUTTER + safe.x))
+	margin.add_theme_constant_override("margin_right", int(GUTTER + safe.z))
+	margin.add_theme_constant_override("margin_top", int(top + safe.y))
+	margin.add_theme_constant_override("margin_bottom", int(bottom + safe.w))
+	parent.add_child(margin)
+	return margin
+
+
+static func _footer(outer: Container) -> VBoxContainer:
+	var foot := VBoxContainer.new()
+	foot.add_theme_constant_override("separation", S2)
+	foot.name = "Footer"
+	outer.add_child(foot)
+	return foot
+
+
+## The list above a footer sinks into the night in stepped bands when there is more of it below,
+## instead of being cut off (the hint a scroll bar would have given).
+static func _fade_above(foot: Control, sc: ScrollContainer) -> void:
+	var bar := sc.get_v_scroll_bar()
+	foot.draw.connect(func() -> void:
+		if foot.get_child_count() == 0 or bar.max_value <= bar.page + 1.0 or bar.value >= bar.max_value - bar.page - 1.0:
+			return
+		for i in 4:
+			foot.draw_rect(Rect2(-GUTTER, -S3 - 48.0 + i * 12.0, foot.size.x + 2.0 * GUTTER, 12.0), Color(PixelPalette.K[0], 0.18 * (i + 1))))
+	bar.changed.connect(foot.queue_redraw)
+	bar.value_changed.connect(func(_v: float) -> void: foot.queue_redraw())
 
 
 ## Safe-area insets in canvas units (left, top, right, bottom) for notches and home bars.
@@ -169,30 +284,85 @@ static func safe_margins(node: Control) -> Vector4:
 		(win.x - safe.end.x) * scale, (win.y - safe.end.y) * scale).max(Vector4.ZERO)
 
 
-## Back button and title in one row.
-static func header(box: Container, title: String, on_back: Callable) -> HBoxContainer:
+## The top bar: a round back button, the title centred (shrinking to fit, one line), and the right
+## slot balanced by an empty one or filled by `action` (an icon_button()). `sub` is an overline above
+## the title (a difficulty, a step "1 of 2"). Returns the row.
+static func top_bar(box: Container, title: String, on_back: Callable, sub := "", action: Control = null) -> HBoxContainer:
 	var row := HBoxContainer.new()
-	row.add_theme_constant_override("separation", 16)
-	var back := button(tr_("ui_back"), on_back, QUIET)
-	back.custom_minimum_size = Vector2(TOUCH * 1.6, TOUCH)
+	row.name = "TopBar"
+	row.add_theme_constant_override("separation", S2)
+	row.custom_minimum_size.y = TOUCH
+	var back := icon_button("chevron_left", on_back, tr_("ui_back"))
 	back.name = "Back"
+	back.size_flags_vertical = Control.SIZE_SHRINK_CENTER
 	row.add_child(back)
-	var l := label(title, HEADER, true)
-	l.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	l.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	var mid := VBoxContainer.new()
+	mid.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	mid.alignment = BoxContainer.ALIGNMENT_CENTER
+	mid.add_theme_constant_override("separation", 0)
+	row.add_child(mid)
+	if sub != "":
+		var o := label(sub, OVERLINE, false, HORIZONTAL_ALIGNMENT_CENTER)
+		o.name = "Sub"
+		o.clip_text = true
+		o.text_overrun_behavior = TextServer.OVERRUN_TRIM_ELLIPSIS
+		mid.add_child(o)
+	var l := label(title, HEADER, false, HORIZONTAL_ALIGNMENT_CENTER)
 	l.name = "Title"
-	row.add_child(l)
+	l.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	if sub != "":
+		l.add_theme_font_size_override("font_size", 36)
+	fit_label(l, 28)
+	mid.add_child(l)
+	if action != null:
+		action.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+		row.add_child(action)
+	else:
+		var trail := Control.new()
+		trail.name = "Trail"
+		trail.custom_minimum_size = Vector2(TOUCH, TOUCH)
+		trail.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		row.add_child(trail)
 	box.add_child(row)
 	return row
 
 
-## Browser-style tabs in one row: the chosen tab is lit and open at the bottom onto the page below,
-## the others sit back, darker and lower, on a gold rule. `items` are [id, label] pairs; `on_pick`
-## gets the id. Each tab is a toggle Button named "Tab_<id>".
+## Back button and title in one row (the top bar without a subtitle; kept for every screen).
+static func header(box: Container, title: String, on_back: Callable) -> HBoxContainer:
+	return top_bar(box, title, on_back)
+
+
+## A round 96 px button showing one kit icon (WoodcutTheme.icon()): back, ladder, close. With
+## `variation` "" it is a raised secondary button instead (a footer's icon action, e.g. replay).
+static func icon_button(icon_name: String, on_press: Callable, tooltip := "", variation := ICON) -> Button:
+	var b := Button.new()
+	b.theme_type_variation = variation
+	b.icon = WoodcutTheme.icon(icon_name)
+	b.icon_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	b.custom_minimum_size = Vector2(TOUCH, TOUCH)
+	b.focus_mode = Control.FOCUS_NONE
+	b.tooltip_text = tooltip
+	if on_press.is_valid():
+		b.pressed.connect(func() -> void:
+			Sound.ui("tap")
+			on_press.call())
+	juice(b)
+	return b
+
+
+## A segmented control: one sunk pill track, the chosen segment raised and lit bronze. `items` are
+## [id, label] pairs; `on_pick` gets the id. Each segment is a toggle Button named "Tab_<id>" in the
+## returned HBox "Tabs".
 static func tabs(box: Container, items: Array, selected: String, on_pick: Callable) -> HBoxContainer:
+	var track := PanelContainer.new()
+	track.name = "TabsTrack"
+	var tsb := PxStyle.make(WoodcutTheme.C_SUNK, Color(WoodcutTheme.C_STROKE, 0.7), WoodcutTheme.R_L, Vector4(6, 6, 6, 6))
+	track.add_theme_stylebox_override("panel", tsb)
+	box.add_child(track)
 	var row := HBoxContainer.new()
 	row.name = "Tabs"
-	row.add_theme_constant_override("separation", 0)
+	row.add_theme_constant_override("separation", S1)
+	track.add_child(row)
 	for it in items:
 		var id: String = it[0]
 		var b := Button.new()
@@ -201,54 +371,56 @@ static func tabs(box: Container, items: Array, selected: String, on_pick: Callab
 		b.toggle_mode = true
 		b.focus_mode = Control.FOCUS_NONE
 		b.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-		b.size_flags_vertical = Control.SIZE_SHRINK_END
 		b.custom_minimum_size = Vector2(0, TOUCH)
 		b.clip_text = true
+		b.add_theme_font_size_override("font_size", 28)
 		b.pressed.connect(func() -> void:
 			Sound.ui("tap")
 			on_pick.call(id))
 		juice(b)
 		row.add_child(b)
-	box.add_child(row)
 	select_tab(row, selected)
 	return row
 
 
-## Lights the tab `id` in a `tabs()` row.
+## Lights the segment `id` in a `tabs()` row.
 static func select_tab(row: HBoxContainer, id: String) -> void:
-	var kids := row.get_children()
-	for i in kids.size():
-		var b: Button = kids[i]
-		var on := b.name == "Tab_" + id
-		# Neighbours share one divider: a tab draws its left edge only when first or lit, its right
-		# edge unless the next tab is the lit one.
-		var next_on := i + 1 < kids.size() and kids[i + 1].name == "Tab_" + id
+	var on_sb := PxStyle.make(WoodcutTheme.C_RAISED_HI, WoodcutTheme.C_BRONZE_DEEP, WoodcutTheme.R_M, Vector4(12, 6, 12, 6))
+	on_sb.highlight = WoodcutTheme.C_STROKE_HI
+	var off_sb := PxStyle.make(Color.TRANSPARENT, Color.TRANSPARENT, WoodcutTheme.R_M, Vector4(12, 6, 12, 6))
+	for b in row.get_children():
+		if not b is Button:
+			continue
+		var on: bool = b.name == "Tab_" + id
 		b.set_pressed_no_signal(on)
-		var sb := StyleBoxFlat.new()
-		sb.bg_color = PixelPalette.NAVY[3] if on else PixelPalette.NAVY[1]
-		sb.border_color = PixelPalette.GOLD[4] if on else PixelPalette.GOLD[3]
-		sb.border_width_left = 6 if on or i == 0 else 0
-		sb.border_width_right = 0 if next_on else 6
-		sb.border_width_top = 6
-		sb.border_width_bottom = 0 if on else 6
-		sb.content_margin_left = 10
-		sb.content_margin_right = 10
-		sb.content_margin_top = 8
-		sb.content_margin_bottom = 8
-		sb.anti_aliasing = false
 		for st in ["normal", "hover", "pressed", "hover_pressed", "disabled", "focus"]:
-			b.add_theme_stylebox_override(st, sb)
-		var ink: Color = PixelPalette.BONE[4] if on else PixelPalette.BONE[1]
+			b.add_theme_stylebox_override(st, on_sb if on else off_sb)
+		var ink: Color = WoodcutTheme.C_BRONZE_HI if on else WoodcutTheme.C_TEXT_2
 		for c in ["font_color", "font_hover_color", "font_pressed_color", "font_hover_pressed_color", "font_focus_color"]:
 			b.add_theme_color_override(c, ink)
-		# The open tab stands a little taller than the ones behind it.
-		b.custom_minimum_size.y = TOUCH + 12 if on else TOUCH
+
+
+## A segmented control over a swipeable Pager: picking a segment turns the page and swiping lights
+## the segment. `items` are [id, label] pairs. Fill each page with pager.add_page(id) BEFORE adding
+## more pages than items. Returns the Pager (named "Pager"; its tabs row is "Tabs").
+static func paged(box: Container, items: Array, selected := 0) -> Pager:
+	var pager := Pager.new()
+	pager.name = "Pager"
+	var row := tabs(box, items, items[selected][0], func(id: String) -> void:
+		for i in items.size():
+			if items[i][0] == id:
+				pager.go(i))
+	pager.page_changed.connect(func(i: int) -> void:
+		select_tab(row, items[i][0]))
+	box.add_child(pager)
+	pager.current = selected
+	return pager
 
 
 static func button(text: String, on_press: Callable, variation := "") -> Button:
 	var b := Button.new()
 	b.text = text
-	b.custom_minimum_size = Vector2(TOUCH, TOUCH)
+	b.custom_minimum_size = Vector2(TOUCH, PRIMARY_H if variation == PRIMARY else TOUCH)
 	b.theme_type_variation = variation
 	b.focus_mode = Control.FOCUS_NONE
 	if on_press.is_valid():
@@ -260,18 +432,25 @@ static func button(text: String, on_press: Callable, variation := "") -> Button:
 	return b
 
 
-## The press feel of every kit button: the face drops one art pixel (the pressed PixelBox) and the
-## whole button flashes gold for a moment.
+## The press feel of every kit button: the face sinks onto its carved lip (the pressed PxStyle), the
+## button gives a little under the finger and springs back on release.
 static func juice(b: BaseButton) -> void:
 	b.button_down.connect(func() -> void:
-		var hot := Color(1.35, 1.2, 0.9) if not reduced_motion() else Color(1.15, 1.08, 0.97)
-		b.self_modulate = hot
+		if reduced_motion():
+			return
+		b.pivot_offset = b.size * 0.5
 		var tw := b.create_tween()
-		tw.tween_property(b, "self_modulate", Color.WHITE, 0.24).set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_OUT))
+		tw.tween_property(b, "scale", Vector2(0.97, 0.97), 0.06).set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_OUT))
+	b.button_up.connect(func() -> void:
+		if reduced_motion() or b.scale == Vector2.ONE:
+			b.scale = Vector2.ONE
+			return
+		var tw := b.create_tween()
+		tw.tween_property(b, "scale", Vector2.ONE, 0.18).set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT))
 
 
-## Shrinks a button's label (down to `min_size`, never under the 26 px floor) until it fits between
-## the button's ornaments, whatever the language. The button asks only for room for its text at
+## Shrinks a button's label (down to `min_size`, never under the 26 px floor) until it fits inside
+## the button's padding, whatever the language. The button asks only for room for its text at
 ## `min_size`, so long translations shrink the type instead of pushing the layout off the screen.
 static func fit_text(b: Button, min_size := 26) -> void:
 	var refit := func() -> void:
@@ -285,6 +464,8 @@ static func fit_text(b: Button, min_size := 26) -> void:
 		var fs := b.get_theme_font_size("font_size")
 		var sb := b.get_theme_stylebox("normal")
 		var pads := sb.get_margin(SIDE_LEFT) + sb.get_margin(SIDE_RIGHT) if sb != null else 0.0
+		if b.icon != null:
+			pads += b.icon.get_width() + b.get_theme_constant("h_separation")
 		var line := b.text.get_slice("\n", 0)
 		if font == null:
 			b.remove_meta("fitting")
@@ -308,6 +489,28 @@ static func fit_text(b: Button, min_size := 26) -> void:
 	b.tree_entered.connect(refit)
 
 
+## Shrinks a one-line label's type (down to `min_size`) until it fits its width, then trims with "…".
+static func fit_label(l: Label, min_size := 26) -> void:
+	l.autowrap_mode = TextServer.AUTOWRAP_OFF
+	l.clip_text = true
+	l.text_overrun_behavior = TextServer.OVERRUN_TRIM_ELLIPSIS
+	l.custom_minimum_size.x = 1
+	var refit := func() -> void:
+		if l.text == "" or not l.is_inside_tree() or l.size.x <= 1.0:
+			return
+		# the size before any shrinking, kept on the label (a closure's local would reset every call)
+		if not l.has_meta("fit_base"):
+			l.set_meta("fit_base", l.get_theme_font_size("font_size"))
+		var font := l.get_theme_font("font")
+		var fs: int = l.get_meta("fit_base")
+		while fs > min_size and font.get_string_size(l.text, HORIZONTAL_ALIGNMENT_LEFT, -1, fs).x > l.size.x:
+			fs -= 1
+		if fs != l.get_theme_font_size("font_size"):
+			l.add_theme_font_size_override("font_size", fs)
+	l.resized.connect(refit)
+	l.tree_entered.connect(refit)
+
+
 static func label(text: String, variation := "", wrap := true, align := HORIZONTAL_ALIGNMENT_LEFT) -> Label:
 	var l := Label.new()
 	l.text = text
@@ -317,22 +520,111 @@ static func label(text: String, variation := "", wrap := true, align := HORIZONT
 		l.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 		l.custom_minimum_size.x = 1
 		# The display face has tall line gaps: pull wrapped headings' lines together.
-		var tighten: int = {TITLE: -18, HEADER: -12, PAPER_HEADER: -8}.get(variation, 0)
+		var tighten: int = {TITLE: -14, HEADER: -10, PAPER_HEADER: -8}.get(variation, 0)
 		if tighten != 0:
 			l.add_theme_constant_override("line_spacing", tighten)
 	return l
 
 
-## A panel holding a VBox. `paper` uses the light paper card (put PAPER labels inside), otherwise a dark
-## carved board.
+## A tag in the pixel capitals (bronze), for the top of a tile or a section.
+static func overline(text: String, align := HORIZONTAL_ALIGNMENT_LEFT) -> Label:
+	var l := label(text, OVERLINE, false, align)
+	l.clip_text = true
+	l.text_overrun_behavior = TextServer.OVERRUN_TRIM_ELLIPSIS
+	l.custom_minimum_size.x = 1
+	return l
+
+
+## A panel holding a VBox. `paper` gives the accent card (bronze rim: tips, rewards), otherwise the
+## plain sheepskin card. (PAPER labels still work inside both.)
 static func card(box: Container, paper := false) -> VBoxContainer:
 	var p := PanelContainer.new()
 	p.theme_type_variation = CARD if paper else BOARD
 	box.add_child(p)
 	var inner := VBoxContainer.new()
-	inner.add_theme_constant_override("separation", 12)
+	inner.add_theme_constant_override("separation", S2)
 	p.add_child(inner)
 	return inner
+
+
+## A stat tile: a sunk panel with a pixel tag, a big value in the pixel figures (PxType "score":
+## digits , . + − x ×) with an optional `unit` beside it ("%", "ms") and an optional caption under it.
+## Returns the panel (named `id`; the value label is "<id>Value", the caption "<id>Caption", the unit
+## "<id>Unit").
+static func stat_tile(box: Container, id: String, tag: String, value: String, caption := "", unit := "") -> PanelContainer:
+	var p := PanelContainer.new()
+	p.theme_type_variation = TILE
+	p.name = id
+	p.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	box.add_child(p)
+	var v := VBoxContainer.new()
+	v.add_theme_constant_override("separation", S1)
+	p.add_child(v)
+	var t := overline(tag)
+	t.name = id + "Tag"
+	v.add_child(t)
+	var row := HBoxContainer.new()
+	row.add_theme_constant_override("separation", S1)
+	v.add_child(row)
+	var val := number(value)
+	val.name = id + "Value"
+	row.add_child(val)
+	if unit != "":
+		var u := label(unit, CAPTION, false)
+		u.name = id + "Unit"
+		u.add_theme_font_override("font", Palette.text_font("Bold"))
+		u.size_flags_vertical = Control.SIZE_SHRINK_END
+		row.add_child(u)
+	if caption != "":
+		var c := label(caption, CAPTION, true)
+		c.name = id + "Caption"
+		v.add_child(c)
+	return p
+
+
+## A number in the pixel figures (PxType "score", k=1 is 36 px; k=2 the hero's 72), tinted by `tint`
+## (white keeps the face's own cream-to-gold).
+static func number(text: String, tint := Color.WHITE, k := 1) -> Label:
+	var l := Label.new()
+	l.text = text
+	PxType.label(l, "score", tint, k)
+	l.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	return l
+
+
+## The kit's footer row, the same on every screen: an optional icon secondary (96 px, raised) on the
+## left, the screen's one primary action filling the rest. Returns the row (named "Actions").
+static func footer_actions(foot: Container, primary: Button, secondary: Button = null) -> HBoxContainer:
+	var row := HBoxContainer.new()
+	row.name = "Actions"
+	row.add_theme_constant_override("separation", S2)
+	foot.add_child(row)
+	if secondary != null:
+		secondary.custom_minimum_size = Vector2(TOUCH, PRIMARY_H)
+		row.add_child(secondary)
+	primary.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	primary.custom_minimum_size.y = PRIMARY_H
+	row.add_child(primary)
+	return row
+
+
+## A small pill label: "red" (a callout: new best, full combo), "bronze" (a reward) or "quiet".
+static func badge(text: String, tone := "quiet") -> PanelContainer:
+	var p := PanelContainer.new()
+	p.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	var fill: Color = {"red": WoodcutTheme.C_RED, "bronze": WoodcutTheme.C_RAISED_HI}.get(tone, WoodcutTheme.C_SUNK)
+	var rim: Color = {"red": WoodcutTheme.C_RED_LIP, "bronze": WoodcutTheme.C_BRONZE_DEEP}.get(tone, WoodcutTheme.C_STROKE)
+	var sb := PxStyle.make(fill, rim, WoodcutTheme.R_PILL, Vector4(24, 6, 24, 6))
+	if tone == "red":
+		sb.highlight = WoodcutTheme.C_RED_HI
+	p.add_theme_stylebox_override("panel", sb)
+	var l := label(text, "", false, HORIZONTAL_ALIGNMENT_CENTER)
+	l.name = "Text"
+	l.add_theme_font_override("font", Palette.text_font("ExtraBold" if tone == "red" else "Bold"))
+	l.add_theme_font_size_override("font_size", 28)
+	l.add_theme_color_override("font_color", {"red": WoodcutTheme.C_TEXT, "bronze": WoodcutTheme.C_BRONZE_HI}.get(tone, WoodcutTheme.C_TEXT_2))
+	p.add_child(l)
+	return p
 
 
 static func spacer(box: Container, h: float, expand := false) -> Control:
@@ -509,6 +801,15 @@ static func unlock_text(u: Dictionary) -> String:
 	return unlock_name(u)
 
 
+## An opaque raised sheet with a bronze rim, for dialogs and banners over a veil.
+static func _sheet() -> PxStyle:
+	var sb := PxStyle.make(WoodcutTheme.C_SURFACE, WoodcutTheme.C_BRONZE_DEEP, WoodcutTheme.R_M, WoodcutTheme.CARD_PAD)
+	sb.highlight = WoodcutTheme.C_STROKE_HI
+	sb.lip = WoodcutTheme.LIP
+	sb.lip_color = WoodcutTheme.C_INK
+	return sb
+
+
 ## A dark veil over a scene so text on top reads.
 static func shade(parent: Control, alpha: float) -> ColorRect:
 	var r := ColorRect.new()
@@ -555,6 +856,7 @@ static func confirm(node: Node, question: String, yes: String, on_yes: Callable)
 	veil.add_child(center)
 	var p := PanelContainer.new()
 	p.custom_minimum_size.x = 540
+	p.add_theme_stylebox_override("panel", _sheet())
 	center.add_child(p)
 	var box := VBoxContainer.new()
 	box.add_theme_constant_override("separation", 16)
@@ -566,51 +868,49 @@ static func confirm(node: Node, question: String, yes: String, on_yes: Callable)
 	box.add_child(button(tr_("ui_cancel"), veil.queue_free, QUIET))
 
 
-## An unlock celebration: a paper banner drops in over everything with the unlock sound and a ring of
-## the bells, then lifts away. Tapping dismisses it early.
-static func celebrate(node: Node, text: String, delay := 0.0) -> void:
+## An unlock celebration that never blocks: a sheet with the three bells slides down from the top
+## (under the safe area) with the unlock sound, rings, holds about two seconds and slides away.
+## Nothing on it takes input. (The results celebrate in place instead.) Returns the banner.
+static func celebrate(node: Node, text: String, delay := 0.0) -> Control:
 	var host := _overlay(node)
-	var veil := ColorRect.new()
-	veil.color = Color(Palette.INK, 0.0)
-	veil.set_anchors_preset(Control.PRESET_FULL_RECT)
-	veil.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	veil.name = "Celebration"
-	host.add_child(veil)
-	var center := CenterContainer.new()
-	center.set_anchors_preset(Control.PRESET_FULL_RECT)
-	center.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	veil.add_child(center)
 	var p := PanelContainer.new()
-	p.theme_type_variation = CARD
-	p.custom_minimum_size.x = 560
+	p.name = "Celebration"
 	p.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	center.add_child(p)
-	var box := VBoxContainer.new()
-	box.add_theme_constant_override("separation", 8)
-	p.add_child(box)
-	box.add_child(label(tr_("celebrate_title"), PAPER_HEADER, true, HORIZONTAL_ALIGNMENT_CENTER))
-	var bells := BellMarks.new(3, 56.0)
-	bells.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
-	box.add_child(bells)
-	box.add_child(label(text, PAPER, true, HORIZONTAL_ALIGNMENT_CENTER))
-	p.modulate.a = 0.0
-	var tw := veil.create_tween()
+	p.add_theme_stylebox_override("panel", _sheet())
+	host.add_child(p)
+	var row := HBoxContainer.new()
+	row.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	row.add_theme_constant_override("separation", S3)
+	p.add_child(row)
+	var bells := BellMarks.new(3, 44.0)
+	bells.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+	row.add_child(bells)
+	var col := VBoxContainer.new()
+	col.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	col.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	col.add_theme_constant_override("separation", 0)
+	row.add_child(col)
+	var o := overline(tr_("celebrate_title"))
+	o.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	col.add_child(o)
+	var l := label(text, "", true)
+	l.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	col.add_child(l)
+	var w := minf(host.size.x - 2.0 * GUTTER, COLUMN_MAX)
+	p.size = Vector2(w, 0)
+	var top := safe_margins(host).y + S4
+	var hidden_y := -p.get_combined_minimum_size().y - 24.0
+	p.position = Vector2(roundf((host.size.x - w) * 0.5), hidden_y)
+	var tw := p.create_tween()
 	tw.tween_interval(delay)
 	tw.tween_callback(func() -> void:
 		Sound.ui("unlock")
-		veil.mouse_filter = Control.MOUSE_FILTER_STOP
-		veil.gui_input.connect(func(e: InputEvent) -> void:
-			if e is InputEventMouseButton and e.pressed or e is InputEventScreenTouch and e.pressed:
-				veil.queue_free())
-		bells.animate(0.1))
-	tw.set_parallel()
-	tw.tween_property(veil, "color:a", 0.6, 0.25).set_delay(delay)
-	tw.tween_property(p, "modulate:a", 1.0, 0.25).set_delay(delay)
-	if not reduced_motion():
-		p.scale = Vector2(0.8, 0.8)
-		p.pivot_offset = Vector2(280, 150)
-		tw.tween_property(p, "scale", Vector2.ONE, 0.35).set_delay(delay).set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT)
-	tw.set_parallel(false)
-	tw.tween_interval(2.6)
-	tw.tween_property(veil, "modulate:a", 0.0, 0.3)
-	tw.tween_callback(veil.queue_free)
+		bells.animate(0.15))
+	if reduced_motion():
+		tw.tween_property(p, "position:y", top, 0.0)
+	else:
+		tw.tween_property(p, "position:y", top, 0.3).set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT)
+	tw.tween_interval(2.0)
+	tw.tween_property(p, "position:y", hidden_y, 0.25).set_trans(Tween.TRANS_CUBIC).set_ease(Tween.EASE_IN)
+	tw.tween_callback(p.queue_free)
+	return p

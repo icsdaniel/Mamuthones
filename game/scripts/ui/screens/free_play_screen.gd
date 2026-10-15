@@ -1,49 +1,99 @@
 extends Screen
-## Free play: every song at every difficulty (all open from the start), any unlocked bell set, the
-## remix when earned. The difficulties are tabs along the top; the song list under them shows each
-## song's best score and grade at the open difficulty. Below, whether a ghost is there to race.
+## Free play, and the scores, on the mobile kit: every song at every difficulty, all open from the
+## start. The difficulty is a segmented control under the top bar; the seven songs are rows that
+## share the room down to the footer (96 to 120 px) showing the stop number, the name, the best
+## score and a round grade seal with the FC pill at that difficulty (the remix's when the remix is
+## on for the chosen song): the player's bests on this phone. The chosen row is lit with a bronze
+## rim and a bronze name. The platform's ladders (Game Center / Google Play Games) are the round
+## trophy in the top bar, for the chosen song and difficulty. The footer: the ghost line when a best
+## run is there to race, the remix's lock and requirement while it is closed, and Play with the Remix
+## chip beside it once earned. Fits; nothing scrolls. The old "boards" screen opens this one.
+## args: song_id, difficulty (optional: what to show first).
+
+const ROW_MIN := 96.0
+const ROW_MAX := 120.0
 
 var song: SongData
 var difficulty := "easy"
 var use_remix := false
 var _song_buttons := {}
 var _tabs: HBoxContainer
-var _info: Label
-var _remix: CheckButton
+var _rows: VBoxContainer
+var _options: HBoxContainer
+var _ghost: Label
+var _remix: Button
+var _remix_lock: HBoxContainer
+var _ladder: Button
 
 
 func build() -> void:
-	var cols := UIKit.column_with_footer(self, 14)
-	var box := cols[0]
-	UIKit.header(box, tr("free_title"), on_back)
-	# The difficulties are tabs along the top; the songs below show their best at the open one.
+	_song_buttons.clear()
+	if str(args.get("difficulty", "")) in SongData.DIFFICULTIES:
+		difficulty = str(args.difficulty)
+	var page := UIKit.scaffold(self, false, UIKit.S3)
+	_ladder = UIKit.icon_button("ladder", _open_ladder, tr("boards_online"))
+	_ladder.name = "Ladder"
+	_ladder.disabled = not Leaderboards.available()
+	UIKit.top_bar(page.top, tr("free_title"), on_back, "", _ladder)
 	var items := []
 	for d in SongData.DIFFICULTIES:
 		items.append([d, tr("diff_" + d)])
-	_tabs = UIKit.tabs(box, items, difficulty, _pick_diff)
+	_tabs = UIKit.tabs(page.top, items, difficulty, _pick_diff)
+	page.top.add_theme_constant_override("separation", UIKit.S3)
+	_rows = VBoxContainer.new()
+	_rows.name = "Rows"
+	_rows.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	_rows.add_theme_constant_override("separation", UIKit.S2)
+	page.body.add_child(_rows)
 	for s in SongLibrary.story():
-		var b := UIKit.button("%d · %s" % [s.stop, UIKit.song_title(s)], _pick_song.bind(s))
-		b.toggle_mode = true
-		b.alignment = HORIZONTAL_ALIGNMENT_LEFT
-		b.text_overrun_behavior = TextServer.OVERRUN_TRIM_ELLIPSIS
-		b.name = "Song_" + s.id
-		b.custom_minimum_size.y = UIKit.TOUCH + 16
-		box.add_child(b)
+		var parts := MenuKit.row_button("Song_" + s.id, _pick_song.bind(s), true)
+		var b: Button = parts[0]
+		var row: HBoxContainer = parts[1]
+		var num := UIKit.label(str(s.stop), UIKit.VALUE, false, HORIZONTAL_ALIGNMENT_CENTER)
+		num.name = "Number"
+		num.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		num.custom_minimum_size.x = 36
+		num.add_theme_font_size_override("font_size", 34)
+		num.add_theme_color_override("font_color", WoodcutTheme.C_TEXT_3)
+		num.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+		row.add_child(num)
+		MenuKit.row_text(row, UIKit.song_title(s), " ")
+		var g := MenuKit.grade_mark(-1)
+		g.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+		row.add_child(g)
+		_rows.add_child(b)
 		_song_buttons[s.id] = b
-	_remix = CheckButton.new()
-	_remix.custom_minimum_size.y = UIKit.TOUCH
-	_remix.focus_mode = Control.FOCUS_NONE
+	_rows.resized.connect(_fit_rows)
+
+	# footer: the remix's lock, the ghost line beside the Remix chip, then Play (footer_actions)
+	_remix_lock = MenuKit.lock_line(tr("stop_remix_locked"))
+	page.foot.add_child(_remix_lock)
+	var row := HBoxContainer.new()
+	row.name = "Options"
+	row.alignment = BoxContainer.ALIGNMENT_END
+	_options = row
+	row.add_theme_constant_override("separation", UIKit.S2)
+	page.foot.add_child(row)
+	_ghost = UIKit.label(tr("free_ghost"), UIKit.CAPTION, true)
+	_ghost.name = "Ghost"
+	_ghost.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	_ghost.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+	_ghost.add_theme_constant_override("line_spacing", -2)
+	row.add_child(_ghost)
+	_remix = UIKit.button(tr("stop_remix_chip"), func() -> void: pass, UIKit.CHIP)
+	_remix.name = "Remix"
+	_remix.toggle_mode = true
+	_remix.custom_minimum_size = Vector2(180, UIKit.TOUCH)
 	_remix.toggled.connect(func(on: bool) -> void:
 		use_remix = on
 		_pick_song(song))
-	_remix.name = "Remix"
-	box.add_child(_remix)
-	_info = UIKit.label("", UIKit.CAPTION)
-	box.add_child(_info)
+	row.add_child(_remix)
 	var play := UIKit.button(tr("stop_play"), _play, UIKit.PRIMARY)
 	play.name = "Play"
-	cols[1].add_child(play)
-	var first := SongLibrary.get_song(Progression.next_stop())
+	UIKit.footer_actions(page.foot, play)
+	var first := SongLibrary.get_song(str(args.get("song_id", "")))
+	if first == null:
+		first = SongLibrary.get_song(Progression.next_stop())
 	if first == null and not SongLibrary.story().is_empty():
 		first = SongLibrary.story()[0]
 	_pick_diff(difficulty)
@@ -51,17 +101,31 @@ func build() -> void:
 		_pick_song(first)
 
 
+## The rows share the room above the footer: each 96 to 120 px, never more (the rest stays below).
+func _fit_rows() -> void:
+	var n := _song_buttons.size()
+	if n == 0:
+		return
+	var sep := float(_rows.get_theme_constant("separation"))
+	var h := clampf(floorf((_rows.size.y - sep * (n - 1)) / n / 3.0) * 3.0, ROW_MIN, ROW_MAX)
+	for b in _song_buttons.values():
+		if absf((b as Control).custom_minimum_size.y - h) > 0.5:
+			(b as Control).custom_minimum_size.y = h
+
+
 func _pick_song(s: SongData) -> void:
 	song = s
-	for id in _song_buttons:
-		(_song_buttons[id] as Button).set_pressed_no_signal(id == s.id)
 	var remix_open := s.has_remix() and Progression.remix_unlocked(s.id)
-	_remix.visible = s.has_remix()
-	_remix.disabled = not remix_open
-	_remix.text = tr("stop_remix") if remix_open else tr("stop_remix_locked")
+	_remix.visible = remix_open
+	_remix_lock.visible = s.has_remix() and not remix_open
 	if not remix_open:
 		use_remix = false
 		_remix.set_pressed_no_signal(false)
+	for id in _song_buttons:
+		var b: Button = _song_buttons[id]
+		b.set_pressed_no_signal(id == s.id)
+		var t := b.find_child("Title", true, false) as Label
+		t.add_theme_color_override("font_color", WoodcutTheme.C_BRONZE_HI if id == s.id else WoodcutTheme.C_TEXT)
 	_show_bests()
 	_refresh()
 
@@ -74,52 +138,37 @@ func _pick_diff(d: String) -> void:
 
 
 ## Every song row shows its best at the chosen difficulty: score and grade (the remix's when the
-## remix is on for the chosen song).
+## remix is on for the chosen song). The seals are updated in place.
 func _show_bests() -> void:
 	for id in _song_buttons:
 		var b: Button = _song_buttons[id]
 		var sd := SongLibrary.get_song(id)
-		var best: Dictionary = Profile.best(UIKit.board_song_id(sd, use_remix and sd == song), difficulty)
-		_badge(b, UIKit.grade_of(best), UIKit.fmt_score(int(best.get("score", 0))) if not best.is_empty() else "", bool(best.get("full_combo", false)))
+		var remix := use_remix and sd == song
+		var best: Dictionary = Profile.best(UIKit.board_song_id(sd, remix), difficulty)
+		var cap := b.find_child("Caption", true, false) as Label
+		var text := UIKit.fmt_score(int(best.get("score", 0))) if not best.is_empty() else tr("boards_not_played")
+		if remix:
+			text = tr("stop_remix_chip") + " · " + text
+		cap.text = text
+		cap.add_theme_color_override("font_color", WoodcutTheme.C_BRONZE if not best.is_empty() else WoodcutTheme.C_TEXT_3)
+		MenuKit.set_grade(b.find_child("Grade", true, false) as HBoxContainer, UIKit.grade_of(best), bool(best.get("full_combo", false)))
 
 
-## The best score and grade at the right end of a song row.
-func _badge(b: Button, grade: int, score: String, fc := false) -> void:
-	var old := b.get_node_or_null("Best")
-	if old != null:
-		b.remove_child(old)
-		old.queue_free()
-	var row := HBoxContainer.new()
-	row.name = "Best"
-	row.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	row.alignment = BoxContainer.ALIGNMENT_END
-	row.add_theme_constant_override("separation", 14)
-	row.set_anchors_and_offsets_preset(Control.PRESET_RIGHT_WIDE)
-	row.offset_right = -46.0   # clear of the frame's right-hand diamond
-	row.grow_horizontal = Control.GROW_DIRECTION_BEGIN
-	if score != "":
-		var l := UIKit.label(score, UIKit.CAPTION, false)
-		l.name = "Score"
-		l.size_flags_vertical = Control.SIZE_SHRINK_CENTER
-		l.add_theme_color_override("font_color", PixelPalette.GOLD[5])
-		row.add_child(l)
-	var badge := GradeBadge.new(grade, false, fc)
-	badge.name = "Grade"
-	badge.size_flags_vertical = Control.SIZE_SHRINK_CENTER
-	row.add_child(badge)
-	b.add_child(row)
-
-
+## The ghost line shows when the chosen song has a best run to race at this difficulty.
 func _refresh() -> void:
 	if song == null:
 		return
 	var best: Dictionary = Profile.best(UIKit.board_song_id(song, use_remix), difficulty)
-	if best.is_empty():
-		_info.text = tr("stop_no_best")
+	_ghost.visible = not (best.get("ghost", {}) as Dictionary).is_empty()
+	_options.visible = _ghost.visible or _remix.visible
+
+
+## The platform's ladder for the chosen song and difficulty.
+func _open_ladder() -> void:
+	if song == null:
+		Leaderboards.show()
 	else:
-		_info.text = tr("stop_best") % [UIKit.fmt_score(int(best.get("score", 0))), Session.grade_name(UIKit.grade_of(best))]
-		if not (best.get("ghost", {}) as Dictionary).is_empty():
-			_info.text += "\n" + tr("free_ghost")
+		Leaderboards.show(Profile.board_id(UIKit.board_song_id(song, use_remix), difficulty))
 
 
 func _play() -> void:

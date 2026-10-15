@@ -96,6 +96,13 @@ func _shots() -> Array:
 		{"file": "boards", "screen": "boards"},
 		{"file": "settings", "screen": "settings"},
 		{"file": "credits", "screen": "credits"},
+		# the menus' other pages (2026-10 menu rework)
+		{"file": "settings_timing", "screen": "settings", "page": 1},
+		{"file": "settings_sound", "screen": "settings", "page": 2},
+		{"file": "settings_more", "screen": "settings", "page": 3},
+		{"file": "credits_list", "screen": "credits", "page": 1},
+		{"file": "stop_card_lessons", "screen": "stop_card", "args": {"song_id": tut_id}},
+		{"file": "screen_delay", "screen": "screen_delay"},
 		{"file": "workshop", "screen": "workshop", "setup": "tab_mask", "wait": 0.8},
 		{"file": "workshop_dress", "screen": "workshop", "setup": "tab_dress", "wait": 0.8},
 		{"file": "tutorial", "screen": "tutorial", "args": {"song_id": tut_id, "first_run": true}, "wait": 1.2},
@@ -129,7 +136,14 @@ func _shots() -> Array:
 		{"file": "play_stomped", "screen": "play", "args": {"song_id": "rope", "difficulty": "hard", "autoplay": true}, "setup": "moment:stomped", "wait": 0.02},
 		{"file": "play_tutorial", "screen": "play", "args": {"song_id": tut_id, "difficulty": "easy", "autoplay": true}, "setup": "advance:0.25"},
 		{"file": "pause", "screen": "play", "args": {"song_id": fires_id, "difficulty": "medium", "autoplay": true}, "setup": "pause"},
-		{"file": "results", "screen": "results", "setup": "results", "wait": 1.3},
+		{"file": "results", "screen": "results", "setup": "results", "wait": 3.5},
+		# the results' other pages (the segmented control over the pager)
+		{"file": "results_score", "screen": "results", "setup": "results", "page": 1, "wait": 3.5},
+		{"file": "results_timing", "screen": "results", "setup": "results", "page": 2, "wait": 3.5},
+		{"file": "results_tips", "screen": "results", "setup": "results", "page": 3, "wait": 3.5},
+		# a full combo with no next stop open, leaning late (the fix button), not a new best
+		{"file": "results_fc", "screen": "results", "setup": "results_fc", "wait": 3.5},
+		{"file": "results_fc_timing", "screen": "results", "setup": "results_fc", "page": 2, "wait": 3.5},
 		# Health: full, mid-run at 6 with a healing step on the road, low at 2, and the fail menu.
 		{"file": "play_health_full", "screen": "play", "args": {"song_id": fires_id, "difficulty": "hard", "autoplay": true, "health": true}, "setup": "moment:dense", "wait": 0.1},
 		{"file": "play_health_mid", "screen": "play", "args": {"song_id": fires_id, "difficulty": "hard", "autoplay": true, "health": true}, "setup": "moment:heal", "health": 6, "wait": 0.1},
@@ -160,6 +174,8 @@ func _render(shot: Dictionary, size: Vector2i, locale: String, dir: String) -> v
 	var setup := str(shot.get("setup", ""))
 	if setup == "results":
 		args = _results_args()
+	elif setup == "results_fc":
+		args = _results_fc_args()
 	elif setup.begins_with("tab_"):
 		args = {"tab": setup.substr(4)}
 	app.set("start_screen", shot.screen)
@@ -188,6 +204,8 @@ func _render(shot: Dictionary, size: Vector2i, locale: String, dir: String) -> v
 		var fs: Session = screen.get("session")
 		while not fs.has_failed:
 			fs.call("_hurt")
+	if shot.has("page") and screen != null and screen.get("pager") != null:
+		screen.get("pager").call("go", int(shot.page), true)   # untyped: Pager compiles after the autoloads
 	if shot.has("health") and screen != null:
 		# Health as the shot asks; the pips read it every frame and the bonfire dims when it is low.
 		var hs: Session = screen.get("session")
@@ -498,3 +516,21 @@ func _results_args() -> Dictionary:
 		"record": {"prev_best": ghost.final_score, "new_best": true, "grade": s.grade_rank(), "carving_gained": 2,
 			"unlocked": [{"kind": "remix", "id": song.remix_id() if song.has_remix() else song.id}, {"kind": "song", "id": next}]},
 		"play_args": {"song_id": song.id, "difficulty": "hard"}}
+
+
+## A full-combo run shown as leaning late (its offsets moved 40 ms) on the last story stop, below
+## its best: the full combo ribbon, the best still to beat, the timing fix, and no next stop.
+func _results_fc_args() -> Dictionary:
+	var story := SongLibrary.story()
+	var song: SongData = story[story.size() - 1]
+	var s := Session.new(song, "medium")
+	var auto := Autoplay.new(s)
+	var t := s.notes[0].t - 1.0
+	while t < s.end_time():
+		t += 1.0 / 60.0
+		auto.update(t)
+	# a perfect run, drawn as if every hit had come about 40 ms late (the histogram and the fix only)
+	for i in s.hit_offsets.size():
+		s.hit_offsets[i] = 0.04 + 0.012 * sin(i * 1.7)
+	return {"session": s, "record": {"prev_best": s.score + 4210, "new_best": false, "grade": s.grade_rank(), "carving_gained": 0, "unlocked": []},
+		"play_args": {"song_id": song.id, "difficulty": "medium"}, "frames": {"fps": 59.7, "slow": 3, "worst": 0.024}}
