@@ -139,6 +139,60 @@ func test_results_pages_swipe() -> void:
 	UIHarness.restore_profile()
 
 
+## A slider on a page drags its value, never the page: a press on a Range does not arm the swipe.
+func test_pager_slider_drags_value_not_page() -> void:
+	var vp := SubViewport.new()
+	vp.size = Vector2i(720, 1440)
+	vp.render_target_update_mode = SubViewport.UPDATE_DISABLED
+	tree.root.add_child(vp)
+	var pager := Pager.new()
+	pager.position = Vector2.ZERO
+	pager.size = Vector2(720, 1440)
+	vp.add_child(pager)
+	var first := pager.add_page("First")
+	pager.add_page("Second").add_child(Label.new())
+	var slider := HSlider.new()
+	slider.min_value = 0.0
+	slider.max_value = 100.0
+	slider.value = 0.0
+	slider.custom_minimum_size = Vector2(600, 96)
+	slider.size_flags_horizontal = Control.SIZE_SHRINK_BEGIN
+	first.add_child(slider)
+	await UIHarness.frames(tree, 3)
+	# grab the grabber (at value 0: the slider's left end) and drag it 240 px to the right
+	var start := slider.get_global_rect().position + Vector2(8.0, slider.size.y * 0.5)
+	var down := InputEventMouseButton.new()
+	down.button_index = MOUSE_BUTTON_LEFT
+	down.pressed = true
+	down.position = start
+	down.global_position = start
+	vp.push_input(down)
+	for i in 8:
+		var m := InputEventMouseMotion.new()
+		m.button_mask = MOUSE_BUTTON_MASK_LEFT
+		m.position = start + Vector2(30.0 * (i + 1), 0.0)
+		m.global_position = m.position
+		m.relative = Vector2(30.0, 0.0)
+		vp.push_input(m)
+	var up := InputEventMouseButton.new()
+	up.button_index = MOUSE_BUTTON_LEFT
+	up.pressed = false
+	up.position = start + Vector2(240.0, 0.0)
+	up.global_position = up.position
+	vp.push_input(up)
+	await UIHarness.frames(tree, 2)
+	check(slider.value > 20.0, "dragging the slider 240 px moves its value (%.1f)" % slider.value)
+	check_eq(pager.current, 0, "dragging the slider leaves the page")
+	# the same drag on the page beside the slider still turns it
+	var c := Vector2(360, 900)
+	_touch(pager, c, true)
+	for i in 6:
+		_drag(pager, c - Vector2(40.0 * (i + 1), 4.0))
+	_touch(pager, c - Vector2(240, 4), false)
+	check_eq(pager.current, 1, "a swipe off the slider still turns the page")
+	vp.queue_free()
+
+
 static func _touch(p: Pager, at: Vector2, down: bool) -> void:
 	var e := InputEventScreenTouch.new()
 	e.position = at
