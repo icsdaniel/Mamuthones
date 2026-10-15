@@ -87,7 +87,7 @@
   ]
  ],
  "thresholds": {
-  "bell": 0.45,
+  "bell": 0.3,
   "mel": 0.35,
   "chorus": 0.2,
   "hat": 0.25,

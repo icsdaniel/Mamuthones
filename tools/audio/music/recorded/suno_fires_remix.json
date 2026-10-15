@@ -109,6 +109,7 @@
   "snare": 0.4,
   "kick": 0.4,
   "mel": 0.3,
-  "chorus": 0.2
+  "chorus": 0.2,
+  "bell": 0.4
  }
 }
