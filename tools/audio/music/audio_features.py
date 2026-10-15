@@ -1,6 +1,8 @@
 """Audio -> per-slot features on a fixed beat grid (16th slots).
 
-    python3 tools/audio/music/audio_features.py <song.wav> <bpm> <offset> <out.json> [stems_dir]
+    python3 tools/audio/music/audio_features.py <song.wav> <bpm> <offset> <out.json> [stems_dir] [--swing=<s>]
+
+--swing: how late (seconds) the odd sixteenths sound in a swung groove; they are read there.
 
 stems_dir (optional) holds drums.wav, bass.wav, other.wav from a source separation; without it the
 mix is split into percussive and harmonic parts (HPSS) and frequency bands.
@@ -35,8 +37,11 @@ def peaks_only(env):
     return out
 
 def main():
-    path, bpm, off, out = sys.argv[1], float(sys.argv[2]), float(sys.argv[3]), sys.argv[4]
-    stems = sys.argv[5] if len(sys.argv) > 5 else None
+    flags = [a for a in sys.argv[1:] if a.startswith("--")]
+    args = [a for a in sys.argv[1:] if not a.startswith("--")]
+    path, bpm, off, out = args[0], float(args[1]), float(args[2]), args[3]
+    stems = args[4] if len(args) > 4 else None
+    swing = next((float(a.split("=")[1]) for a in flags if a.startswith("--swing=")), 0.0)
     mix = load(path)
     if stems:
         drums = load(os.path.join(stems, "drums.wav"))
@@ -88,8 +93,11 @@ def main():
     # normalise each onset curve by its 98th percentile at slot positions
     slots = []
     raw = {k: [] for k in feats}
+    def slot_t(i):
+        return off + i * spb / 4 + (swing if i % 2 == 1 else 0.0)
+
     for i in range(nslots):
-        t = off + i * spb / 4
+        t = slot_t(i)
         for k, a in feats.items():
             raw[k].append(peak(a, t))
     # drums: 95th percentile of every slot; peak-picked tune curves: 90th percentile of their hits
@@ -97,7 +105,7 @@ def main():
                 else np.percentile([x for x in v if x > 0] or [1.0], 90)) + 1e-9 for k, v in raw.items()}
     lvl_h = np.percentile(rms_h, 95); lvl_p = np.percentile(rms_p, 95); lvl_m = np.percentile(rms_m, 95)
     for i in range(nslots):
-        t = off + i * spb / 4
+        t = slot_t(i)
         j = np.searchsorted(f0t, t + 0.04)
         j = min(j, len(f0) - 1)
         hz = f0[j] if voiced[j] else None
@@ -109,7 +117,7 @@ def main():
             "m": round(float(mean(rms_m, t, t + spb / 4) / lvl_m), 3),
             "pitch": None if hz is None or np.isnan(hz) else round(float(librosa.hz_to_midi(hz)), 2),
         })
-    json.dump({"bpm": bpm, "offset": off, "duration": dur, "slots": slots}, open(out, "w"))
+    json.dump({"bpm": bpm, "offset": off, "swing": swing, "duration": dur, "slots": slots}, open(out, "w"))
     print(out, nslots, "slots")
 
 main()

@@ -46,6 +46,9 @@ RULES = {
     "jack_fast_s": 0.15,
     "jack_run": 3,
     "expert_peak_nps": 4.0,          # every story Expert chart reaches this somewhere
+    # a swung song ("swing": how late its off-beat sixteenths sound, in beats) packs its sixteenths
+    # against the next eighth, so the gap rules leave it fewer of them
+    "expert_peak_swung_nps": 3.5,
     "rest_min_beats": 2.0,           # a stand-still lasts at least two beats (design section 3)
     "bell_gap": 0.5,                 # bells at least half a beat apart
     "easy_min_gap_s": 0.6,           # easy never asks for two inputs closer than this
@@ -427,8 +430,9 @@ def check_chart(song: dict, name: str, notes: list, audio_len: float | None):
     count, avg, peak = nps_stats(notes, bpm, song["offset"], RULES["peak_window_s"])
     if name == "easy" and not tutorial and peak > RULES["easy_peak_nps"] + EPS:
         errs.append(f"easy: peak {peak:.2f} notes/s is above {RULES['easy_peak_nps']}")
-    if name == "expert" and kind == "story" and peak < RULES["expert_peak_nps"] - EPS:
-        errs.append(f"expert: peak {peak:.2f} notes/s is below {RULES['expert_peak_nps']}")
+    min_peak = RULES["expert_peak_swung_nps" if song.get("swing") else "expert_peak_nps"]
+    if name == "expert" and kind == "story" and peak < min_peak - EPS:
+        errs.append(f"expert: peak {peak:.2f} notes/s is below {min_peak}")
     # the finale (stop 7): Expert has triplets and triple rings
     if name == "expert" and kind == "story" and song.get("stop") == 7:
         if not mech.get("triple"):

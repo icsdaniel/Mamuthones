@@ -25,6 +25,7 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, HERE)
 sys.path.insert(0, os.path.join(HERE, ".."))
 
+import audio_post  # noqa: E402
 import charts as C  # noqa: E402
 import validate_charts as V  # noqa: E402
 from score import Cand, Ev, Section, Song  # noqa: E402
@@ -70,6 +71,15 @@ def candidates(song, feat, cfg):
           "bell": 0.55, "bell_off": 1.1, "hold_next": 0.6, "stomp": 1.0}
     th.update(cfg.get("thresholds", {}))
     S = feat["slots"]
+    spb = 60.0 / song.bpm
+    # drums have no pitch: give each a register, so the lanes follow kick (left), hats (middle)
+    # and snare (right) instead of all sitting where the tune last was
+    P_KICK, P_HAT, P_SNARE = 55.0, 66.0, 77.0
+    # how busy the tune is in each bar (a hold needs a tune that plays, not a drums-only bar)
+    tune_bar = {}
+    for s in S:
+        if s["mel"] >= th["mel"] and s["h"] >= th["tune"]:
+            tune_bar[s["i"] // 16] = tune_bar.get(s["i"] // 16, 0) + 1
     end_b = song.end_b
     cands = []
     events = []
@@ -94,17 +104,23 @@ def candidates(song, feat, cfg):
         b = s["b"]
         if b >= end_b - 1e-6 or in_rest(b):
             continue
+        if i % 2 == 1 and cfg.get("swing"):
+            b = round(b + cfg["swing"], 4)    # a swung sixteenth sounds late: the note follows it
         r = metric_rank(b)
         kick = s["kick"] >= th["kick"]
         if kick:
-            cands.append(Cand(b, "pulse", max(1, r - (1 if s["kick"] >= 0.9 else 0)), "drums"))
+            cands.append(Cand(b, "pulse", max(1, r - (1 if s["kick"] >= 0.9 else 0)), "drums", pitch=P_KICK))
         if not kick and (s["snare"] >= th["snare"] or s["hat"] >= th["hat"]):
-            cands.append(Cand(b, "perc", min(5, r + 1), "drums"))
+            p = P_SNARE if s["snare"] >= th["snare"] and s["snare"] >= s["hat"] else P_HAT
+            cands.append(Cand(b, "perc", min(5, r + 1), "drums", pitch=p))
         tune = s["h"] >= th["tune"]
         if tune and s["mel"] >= th["mel"]:
             p = pitch_near(i)
             role = "fast" if i % 2 == 1 else "mel"
-            cands.append(Cand(b, role, max(1, r - (1 if s["mel"] >= 1.0 else 0)), "tune", pitch=p))
+            rk = max(1, r - (1 if s["mel"] >= 1.0 else 0))
+            if i % 4 != 0 and s["mel"] < 0.8:
+                rk = min(5, rk + 1)    # a soft onset off the beat is more likely a chop than the hook
+            cands.append(Cand(b, role, rk, "tune", pitch=p))
             # how long the note sounds: until the tune's next clear onset, while it keeps sounding
             j = i + 1
             while j < len(S) and S[j]["mel"] < th["hold_next"] and S[j]["h"] >= 0.5 * max(s["h"], 0.3):
@@ -112,7 +128,13 @@ def candidates(song, feat, cfg):
             dur = (j - i) / 4
             if p is not None:
                 events.append(Ev("lead_pitch", b, max(0.25, dur), p))
-            if dur >= 1.5 and r <= 4:
+            # a hold: a long note (0.8 s or more) that keeps sounding, in a bar where the tune plays
+            if j > i + 1:
+                sustain = sum(S[k]["h"] for k in range(i + 1, j)) / (j - i - 1)
+            else:
+                sustain = 0.0
+            if dur >= 1.5 and r <= 4 and dur * spb >= 0.8 and sustain >= 0.8 * s["h"] \
+                    and tune_bar.get(i // 16, 0) >= 2:
                 cands.append(Cand(b, "hold", r, "tune", pitch=p, len=dur))
         elif tune and s["mel"] >= th["chorus"] and r <= 4:
             cands.append(Cand(b, "chorus", min(5, r + 1), "tune", pitch=pitch_near(i)))
@@ -134,13 +156,17 @@ def candidates(song, feat, cfg):
     # stomps: the heaviest unison hits, at most one every two bars, from the busier sections
     heavy = [s for s in S if s["b"] < end_b and not in_rest(s["b"]) and int(s["i"]) % 4 == 0
              and s["kick"] >= th["stomp"] and s["snare"] >= 0.8 * th["stomp"]]
-    taken = {}
+    if len(heavy) < 4:
+        # no kick and snare together (boom bap): the loudest backbeat snares instead
+        top = sorted(s["all"] for s in S)[int(0.95 * len(S))]
+        heavy = [s for s in S if s["b"] < end_b and not in_rest(s["b"]) and int(s["i"]) % 16 in (4, 12)
+                 and s["snare"] >= th["stomp"] and s["all"] >= top]
+    taken = []
     for s in sorted(heavy, key=lambda s: -(s["kick"] + s["snare"] + s["all"])):
-        key = int(s["b"] // 8)
-        if key in taken or song.section_at(s["b"]).energy < 2:
+        if song.section_at(s["b"]).energy < 2 or any(abs(s["b"] - o["b"]) < 8 - 1e-6 for o in taken):
             continue
-        taken[key] = s
-    for k, s in enumerate(sorted(taken.values(), key=lambda s: s["b"])):
+        taken.append(s)
+    for k, s in enumerate(sorted(taken, key=lambda s: s["b"])):
         cands.append(Cand(s["b"], "stomp", 1, "drums", dir=1 if k % 2 == 0 else -1))
     for rb, rl in rests:
         cands.append(Cand(rb, "rest", 0, None, len=rl))
@@ -184,6 +210,9 @@ def build(cfg):
     song.sections = sections(song, feat, cfg)
     song.end_b = song.sections[-1].b + song.sections[-1].len
     for sec in song.sections:
+        # Expert rings accents, not every beat: the playability pass keeps a tilt budget anyway, and
+        # a bell on every beat would crowd out the steps and chords around it first
+        sec.opts.setdefault("add", {}).setdefault("expert", {})["bells"] = "accent"
         sec.opts.update(cfg.get("section_opts", {}).get(sec.name, {}))
     song.cands, song.events = candidates(song, feat, cfg)
     charts, _ = C.chart_song(song)
@@ -204,6 +233,12 @@ def build(cfg):
         "sections": [{"name": s.name, "b": s.b, "len": s.len} for s in song.sections],
         "charts": charts,
     }
+    if cfg.get("swing"):
+        data["swing"] = cfg["swing"]
+    if not cfg.get("raw"):
+        rests = [(r["b"], r["len"]) for r in cfg.get("rests", [])]
+        for line in audio_post.apply(data, song, feat, rests):
+            print("  post", line)
     return song, data
 
 
