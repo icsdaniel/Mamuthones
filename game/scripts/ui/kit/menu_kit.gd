@@ -7,17 +7,22 @@ extends RefCounted
 ##
 ##   row_button()   a 96 px list row (song rows): a sheepskin face, selected = bronze rim (no lip,
 ##                  no sink, so a row never changes height); fill the returned HBox
-##   grade_mark()   a small round GradeSeal plus a bronze "FC" pill for a full combo
+##   grade_mark()   a small round GradeSeal plus a bronze "FC" pill (an empty sunk ring when never
+##                  played); set_grade() updates it in place
 ##   group()        a grouped list: an optional overline, then one BoardPanel whose rows are split
 ##                  by one-art-px dividers; nav_row(), toggle_row(), slider_row(), value_row() fill it
-##   tab_bar()      the title's bottom bar of icon tabs (icon over a label)
+##   quick_tiles()  the title's row of four equal quick-action tiles (icon over a label)
+##   instruction()  a setup screen's instruction (sans, secondary colour)
 ##   hero_button()  the primary with a second, smaller line under its words
-##   bottom_sheet() an opaque sheet rising from the bottom over a veil (pause, fail)
+##   bottom_sheet() an opaque sheet rising from the bottom over a veil (pause, fail); it ignores
+##                  presses for ARM_DELAY after it appears
 ##   lock_line()    a lock icon and the requirement to open something
 ##   picture_card() a card whose top is a picture with the card's rounded corners
 
 const ROW_H := 96
 const DIVIDER := 3.0
+## Seconds a bottom sheet ignores presses after it appears.
+const ARM_DELAY := 0.4
 
 
 # ---------------------------------------------------------------- list rows
@@ -82,23 +87,64 @@ static func row_text(row: HBoxContainer, title: String, caption := "") -> Array:
 	return [t, c]
 
 
-## A small grade: the round bronze seal (F to S+, a dash when never played) and, for a full combo, a
-## bronze "FC" pill beside it.
+## A small grade: the round bronze seal (F to S+) and, for a full combo, a bronze "FC" pill beside
+## it; never played is a sunk empty ring. Update it in place with set_grade().
 static func grade_mark(rank: int, full_combo := false) -> HBoxContainer:
 	var box := HBoxContainer.new()
 	box.name = "Grade"
 	box.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	box.add_theme_constant_override("separation", UIKit.S1)
 	box.alignment = BoxContainer.ALIGNMENT_END
-	if full_combo and rank >= 0:
-		box.add_child(fc_pill())
-	var seal := GradeSeal.new(rank, 24, 1)
+	box.add_child(fc_pill())
+	var seal := GradeSeal.new(maxi(rank, 0), 24, 1)
 	seal.name = "Seal"
 	seal.face = "caps"
-	seal.set("_studs", false)
+	seal.studs = false
 	seal.size_flags_vertical = Control.SIZE_SHRINK_CENTER
 	box.add_child(seal)
+	var empty := EmptyMark.new()
+	empty.name = "Empty"
+	empty.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+	box.add_child(empty)
+	set_grade(box, rank, full_combo)
 	return box
+
+
+## Shows `rank` (and the FC pill) on a grade_mark() without rebuilding it.
+static func set_grade(box: HBoxContainer, rank: int, full_combo := false) -> void:
+	var seal := box.get_node("Seal") as GradeSeal
+	seal.visible = rank >= 0
+	if rank >= 0 and seal.rank != rank:
+		seal.rank = rank
+	(box.get_node("Empty") as Control).visible = rank < 0
+	(box.get_node("FC") as Control).visible = full_combo and rank >= 0
+
+
+## Never played: a sunk empty ring in the rim colour, the size of the small seal.
+class EmptyMark:
+	extends Control
+
+	func _init() -> void:
+		mouse_filter = Control.MOUSE_FILTER_IGNORE
+		custom_minimum_size = Vector2(72, 72)
+
+	func _draw() -> void:
+		var px := 3.0
+		var c := (size * 0.5 / px).floor()
+		var r := 11.0
+		for y in range(int(-r), int(r)):
+			var dy := float(y) + 0.5
+			var hw := sqrt(maxf(r * r - dy * dy, 0.0))
+			var x0 := roundi(-hw)
+			var x1 := roundi(hw)
+			draw_rect(Rect2((c + Vector2(x0, y)) * px, Vector2(x1 - x0, 1) * px), WoodcutTheme.C_STROKE)
+		var ri := r - 2.0
+		for y in range(int(-ri), int(ri)):
+			var dy := float(y) + 0.5
+			var hw := sqrt(maxf(ri * ri - dy * dy, 0.0))
+			var x0 := roundi(-hw)
+			var x1 := roundi(hw)
+			draw_rect(Rect2((c + Vector2(x0, y)) * px, Vector2(x1 - x0, 1) * px), Color(0.027, 0.024, 0.055, 1.0))
 
 
 ## The full-combo mark: "FC" in the pixel capitals on a small bronze pill.
@@ -305,30 +351,22 @@ static func note_row(g: VBoxContainer, text: String, id := "") -> Label:
 # ---------------------------------------------------------------- title parts
 
 
-## The bottom bar of icon tabs: `items` are [id, icon, label, on_press]. Returns the HBox.
-static func tab_bar(box: Container, items: Array) -> HBoxContainer:
-	var p := PanelContainer.new()
-	p.name = "TabBar"
-	var sb := PxStyle.make(Color(WoodcutTheme.C_SURFACE, 0.94), WoodcutTheme.C_STROKE, WoodcutTheme.R_L, Vector4(6, 6, 6, 6))
-	sb.highlight = Color(WoodcutTheme.C_RAISED_HI, 0.9)
-	p.add_theme_stylebox_override("panel", sb)
-	box.add_child(p)
+## Four equal quick-action tiles (each opens a screen): a raised secondary face with a bronze icon
+## over its label. `items` are [id, icon, label, on_press]. Returns the HBox.
+static func quick_tiles(box: Container, items: Array) -> HBoxContainer:
 	var row := HBoxContainer.new()
-	row.add_theme_constant_override("separation", UIKit.S1)
-	p.add_child(row)
-	var clear := StyleBoxEmpty.new()
-	var down := PxStyle.make(WoodcutTheme.C_RAISED_HI, WoodcutTheme.C_BRONZE_DEEP, WoodcutTheme.R_M, Vector4.ZERO)
+	row.name = "QuickTiles"
+	row.add_theme_constant_override("separation", UIKit.S2)
+	box.add_child(row)
 	for it in items:
 		var b := Button.new()
 		b.name = it[0]
+		b.theme_type_variation = UIKit.COMPACT
 		b.focus_mode = Control.FOCUS_NONE
 		b.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-		b.custom_minimum_size = Vector2(UIKit.TOUCH, 120)
+		b.size_flags_stretch_ratio = 1.0
+		b.custom_minimum_size = Vector2(UIKit.TOUCH, 126)
 		b.tooltip_text = it[2]
-		for st in ["normal", "hover", "focus", "disabled"]:
-			b.add_theme_stylebox_override(st, clear)
-		b.add_theme_stylebox_override("pressed", down)
-		b.add_theme_stylebox_override("hover_pressed", down)
 		var cb: Callable = it[3]
 		b.pressed.connect(func() -> void:
 			Sound.ui("tap")
@@ -337,6 +375,9 @@ static func tab_bar(box: Container, items: Array) -> HBoxContainer:
 		row.add_child(b)
 		var col := VBoxContainer.new()
 		col.set_anchors_preset(Control.PRESET_FULL_RECT)
+		col.offset_left = 6
+		col.offset_right = -6
+		col.offset_bottom = -WoodcutTheme.LIP * WoodcutTheme.PX
 		col.alignment = BoxContainer.ALIGNMENT_CENTER
 		col.mouse_filter = Control.MOUSE_FILTER_IGNORE
 		col.add_theme_constant_override("separation", UIKit.S1)
@@ -357,6 +398,21 @@ static func tab_bar(box: Container, items: Array) -> HBoxContainer:
 		UIKit.fit_label(l, 24)
 		col.add_child(l)
 	return row
+
+
+## An instruction on a setup screen (calibration, the delay tests, the lessons): clean sans in the
+## secondary text colour, centred; the serif gold lead is kept for one-line titles.
+static func instruction(text: String) -> Label:
+	var l := UIKit.label(text, "", true, HORIZONTAL_ALIGNMENT_CENTER)
+	l.add_theme_font_size_override("font_size", 30)
+	l.add_theme_color_override("font_color", WoodcutTheme.C_TEXT_2)
+	l.add_theme_constant_override("line_spacing", -2)
+	return l
+
+
+## "remix open" -> "Remix open" (first letter only; .capitalize() would title-case every word).
+static func sentence_case(t: String) -> String:
+	return t.substr(0, 1).to_upper() + t.substr(1) if t != "" else t
 
 
 ## The primary button with a second line (the stop it plays) in smaller, paler type under its words.
@@ -438,6 +494,16 @@ static func bottom_sheet(host: Control, veil_alpha := 0.78) -> VBoxContainer:
 	var box := VBoxContainer.new()
 	box.add_theme_constant_override("separation", UIKit.S3)
 	p.add_child(box)
+	# It sits over the stomp pads: for ARM_DELAY a shield takes every press, so a thumb still
+	# drumming when the sheet appears cannot pick an action by accident.
+	var shield := Control.new()
+	shield.name = "Shield"
+	shield.set_anchors_preset(Control.PRESET_FULL_RECT)
+	shield.mouse_filter = Control.MOUSE_FILTER_STOP
+	host.add_child(shield)
+	host.get_tree().create_timer(ARM_DELAY, true, false, true).timeout.connect(func() -> void:
+		if is_instance_valid(shield):
+			shield.queue_free())
 	if not UIKit.reduced_motion():
 		p.modulate.a = 0.0
 		veil.modulate.a = 0.0

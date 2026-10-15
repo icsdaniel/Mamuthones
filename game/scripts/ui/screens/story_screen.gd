@@ -5,7 +5,7 @@ extends Screen
 ## stop number and day, its name, the two-sentence card text, the best grade (a round seal, FC pill)
 ## and a status pill (next / cleared / remix open); a locked stop lies under the night veil with a
 ## lock and what opens it. Progress dots under the carousel, the closest goal as one line, and the
-## primary (play the centred stop: opens its card) pinned in the thumb zone. A tap on the centred
+## primary ("Open: <stop>": its card) pinned in the thumb zone. A tap on the centred
 ## card opens it too; a tap on a peeking neighbour brings it to the centre.
 
 var carousel: Carousel
@@ -134,11 +134,11 @@ func _card(song: SongData, is_next: bool) -> Button:
 	pills.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	pills.add_theme_constant_override("separation", UIKit.S2)
 	if is_next:
-		pills.add_child(UIKit.badge(tr("story_next").capitalize(), "red"))
+		pills.add_child(UIKit.badge(MenuKit.sentence_case(tr("story_next")), "bronze"))
 	elif Progression.cleared(song.id):
-		pills.add_child(UIKit.badge(tr("story_cleared").capitalize()))
+		pills.add_child(UIKit.badge(MenuKit.sentence_case(tr("story_cleared"))))
 	if song.has_remix() and Progression.remix_unlocked(song.id):
-		pills.add_child(UIKit.badge(tr("story_remix_open").capitalize(), "bronze"))
+		pills.add_child(UIKit.badge(MenuKit.sentence_case(tr("story_remix_open"))))
 	if pills.get_child_count() > 0:
 		UIKit.spacer(text, UIKit.S1)
 		text.add_child(pills)
@@ -155,7 +155,7 @@ func _on_page(i: int) -> void:
 	var song: SongData = SongLibrary.story()[i]
 	var open := Progression.is_unlocked(song.id)
 	_play.disabled = not open
-	_play.text = tr("title_continue") % UIKit.song_title(song) if open else tr("story_locked_short")
+	_play.text = tr("story_open") % UIKit.song_title(song) if open else tr("story_locked_short")
 
 
 func _open_current() -> void:

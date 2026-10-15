@@ -30,8 +30,8 @@ var _drum: SetupArtView
 func build() -> void:
 	var page := UIKit.scaffold(self, false, UIKit.S3)
 	var box: VBoxContainer = page.body
-	UIKit.top_bar(page.top, tr("lat_title"), on_back, tr("lat_step") if args.get("first_run", false) else "")
-	_status = UIKit.label(tr("lat_intro"), UIKit.LEAD, true, HORIZONTAL_ALIGNMENT_CENTER)
+	UIKit.top_bar(page.top, tr("lat_title"), on_back, load(App.SCREENS["calibration"]).step_text(args, 2))
+	_status = MenuKit.instruction(tr("lat_intro"))
 	_status.name = "Status"
 	box.add_child(_status)
 	_pad = Button.new()
@@ -205,6 +205,8 @@ func _next() -> void:
 	if args.get("first_run", false):
 		Profile.set_flag("latency_tested", true)
 		app.reset("title")
+	elif args.get("chain", false):
+		app.replace("screen_delay", {"chain": true})
 	else:
 		app.back()
 

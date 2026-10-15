@@ -1,9 +1,10 @@
 extends Screen
 ## Title, on the mobile kit: the bonfire scene is the hero, full bleed down to the menu, with the
-## MAMUTHONES word mark in its starry sky. In the thumb zone: one big red Play (the next story stop,
-## named under the word) and a bar of four icon tabs (Story, Free play, Workshop, Scores). Settings
-## is the round gear in the top-right corner (the tutorial and the calibration live there); Quit is
-## a round power button top-left on desktop only (phones and browsers leave apps their own way).
+## MAMUTHONES word mark in its starry sky. In the thumb zone: one big red Continue (the next story
+## stop named under the word) and four equal quick-action tiles (Story, Free play with the scores,
+## Workshop, Lessons). Settings is the round gear in the top-right corner (calibration and the delay
+## tests live there); Quit is a round power button top-left on desktop only (phones and browsers
+## leave apps their own way). The corner buttons line up with the menu's column.
 
 const BPM := 76.0
 ## How far the menu reaches up over the scene's foot.
@@ -17,6 +18,7 @@ var _logo: Logo
 var _sky: _Stars
 var _top: Control
 var _menu: Control
+var _corners: Control
 
 
 func build() -> void:
@@ -52,6 +54,7 @@ func build() -> void:
 
 	# ---- the corners: Quit (desktop only) on the left, the settings gear on the right
 	var corners := HBoxContainer.new()
+	_corners = corners
 	corners.name = "Corners"
 	corners.set_anchors_preset(Control.PRESET_TOP_WIDE)
 	corners.offset_left = UIKit.GUTTER * 0.5 + safe.x
@@ -96,14 +99,14 @@ func build() -> void:
 	var sub := tr("title_procession")
 	if next_song != null:
 		sub = tr("title_hero_sub") % [next_song.stop, UIKit.song_title(next_song)]
-	_play = MenuKit.hero_button(tr("stop_play"), sub, _play_next)
+	_play = MenuKit.hero_button(tr("title_hero"), sub, _play_next)
 	_play.name = "PlayNext"
 	box.add_child(_play)
-	MenuKit.tab_bar(box, [
+	MenuKit.quick_tiles(box, [
 		["StoryMap", "flame", tr("title_story"), func() -> void: app.open("story")],
 		["FreePlay", "note", tr("title_free"), func() -> void: app.open("free_play")],
 		["Workshop", "bell", tr("title_workshop"), func() -> void: app.open("workshop")],
-		["Leaderboards", "ladder", tr("title_boards"), _boards],
+		["Tutorial", "help", tr("title_tutorial"), func() -> void: app.open("tutorial")],
 	])
 	resized.connect(_layout)
 	margin.resized.connect(_layout)
@@ -125,6 +128,11 @@ func _layout() -> void:
 	foot.position = Vector2(0.0, menu_top - 96.0)
 	foot.size = Vector2(size.x, scene_h - (menu_top - 96.0))
 	var safe := UIKit.safe_margins(self)
+	# the corner buttons line up with the menu's column (on a tablet too)
+	var col_w := minf(size.x - 2.0 * UIKit.GUTTER - safe.x - safe.z, UIKit.COLUMN_MAX)
+	var side := (size.x - col_w) * 0.5
+	_corners.offset_left = maxf(side, UIKit.GUTTER * 0.5 + safe.x)
+	_corners.offset_right = -maxf(side, UIKit.GUTTER * 0.5 + safe.z)
 	var logo_h := 156.0
 	var room_top := safe.y + UIKit.S2 + UIKit.TOUCH
 	# the open sky: down to where the picture's houses start (about its top fifth is sky)
@@ -140,10 +148,6 @@ func _play_next() -> void:
 		app.open("story")
 	else:
 		app.open("stop_card", {"song_id": id})
-
-
-func _boards() -> void:
-	app.open("boards")
 
 
 ## Desktop builds offer Quit; Android leaves with its back button, iOS and browsers their own way.

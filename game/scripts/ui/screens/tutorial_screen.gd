@@ -73,7 +73,7 @@ func _intro(after_fail := false, after_demo := false) -> void:
 	pic.name = "Picture"
 	box.add_child(pic)
 	var body := tr("tut_%s_slam" % t) if slam and t in ["bells", "full"] else tr("tut_%s" % t)
-	var text := UIKit.label(body, UIKit.LEAD)
+	var text := MenuKit.instruction(body)
 	text.name = "Instruction"
 	box.add_child(text)
 	if after_fail:
@@ -276,7 +276,7 @@ func _finale() -> void:
 	meter.fill = 0.5
 	box.add_child(meter)
 	box.add_child(UIKit.label(tr("tut_unison"), ""))
-	box.add_child(UIKit.label(tr("tut_ready"), UIKit.LEAD))
+	box.add_child(MenuKit.instruction(tr("tut_ready")))
 	var go := UIKit.button(tr("tut_play_song"), _play_song, UIKit.PRIMARY)
 	go.name = "PlaySong"
 	page.foot.add_child(go)

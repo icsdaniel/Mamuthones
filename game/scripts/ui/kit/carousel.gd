@@ -4,7 +4,9 @@ extends Container
 ## neighbours peeking in at the screen's edges (the story's stops). A horizontal drag follows the
 ## finger and snaps to the nearest card (a flick goes one on); a tap on the centred card emits
 ## `tapped`, a tap on a peeking neighbour brings it to the centre. The cards themselves ignore the
-## mouse (the carousel handles every touch), so a swipe never leaves a card half pressed.
+## mouse (the carousel handles every touch, through _gui_input), so a swipe never leaves a card
+## half pressed and nothing over the carousel arms a swipe. Neighbours peek at least inset - gap
+## (48 px), dimmed to side_dim.
 ## Clips to its rect (the neighbours peek in at its sides). Snaps in whole art
 ## pixels; instant with reduced motion. Nothing runs between gestures.
 
@@ -17,10 +19,12 @@ const FLICK := 0.16
 const PX := 3.0
 
 ## How far a card is narrower than the carousel on each side (the neighbour shows in that room).
-var inset := 42.0
+var inset := 60.0
 var gap := 12.0
+## The widest a card gets (tablets): the rest goes to the neighbours' peek.
+var max_card := 620.0
 ## How dim a card one step from the centre is (brightness multiplier).
-var side_dim := 0.55
+var side_dim := 0.7
 var current := 0
 var _offset := 0.0
 var _press := Vector2.ZERO
@@ -31,7 +35,7 @@ var _tween: Tween
 
 func _init() -> void:
 	clip_contents = true
-	mouse_filter = Control.MOUSE_FILTER_PASS
+	mouse_filter = Control.MOUSE_FILTER_STOP
 	size_flags_vertical = Control.SIZE_EXPAND_FILL
 	size_flags_horizontal = Control.SIZE_EXPAND_FILL
 
@@ -52,7 +56,11 @@ func card(i: int) -> Control:
 
 
 func card_width() -> float:
-	return maxf(size.x - inset * 2.0, 1.0)
+	return maxf(minf(size.x - inset * 2.0, max_card), 1.0)
+
+
+func _side() -> float:
+	return (size.x - card_width()) * 0.5
 
 
 func step() -> float:
@@ -100,24 +108,25 @@ func _place(at: float) -> void:
 		if c == null:
 			continue
 		var d := float(i) - at
-		c.position.x = roundf((inset + d * step()) / PX) * PX
+		c.position.x = roundf((_side() + d * step()) / PX) * PX
 		var k := lerpf(1.0, side_dim, clampf(absf(d), 0.0, 1.0))
 		c.modulate = Color(k, k, k, 1.0)
 
 
-func _input(event: InputEvent) -> void:
-	if not is_visible_in_tree() or count() == 0:
+## Touches reach the carousel through the GUI (its cards ignore the mouse), so anything drawn over
+## it (a dialog, a toast, a slider elsewhere) takes its own presses and never arms a swipe; once a
+## press began here, its drag and release keep coming here even off the rect.
+func _gui_input(event: InputEvent) -> void:
+	if count() == 0:
 		return
 	var pressed_ev: bool = (event is InputEventScreenTouch and event.index == 0) or (event is InputEventMouseButton and event.button_index == MOUSE_BUTTON_LEFT)
 	if pressed_ev:
-		var pos: Vector2 = get_global_transform_with_canvas().affine_inverse() * event.position
+		var pos: Vector2 = event.position
 		if event.pressed:
-			# the neighbours peek outside the rect: a press anywhere across the row counts
-			var vw := get_viewport_rect().size.x
-			var gx: float = event.position.x
-			_pressing = pos.y >= 0.0 and pos.y <= size.y and gx >= 0.0 and gx <= vw
+			_pressing = true
 			_press = pos
 			_dragging = false
+			accept_event()
 		elif _pressing:
 			_pressing = false
 			if _dragging:
@@ -129,7 +138,6 @@ func _input(event: InputEvent) -> void:
 				elif shift > FLICK:
 					target -= 1
 				go(target)
-				get_viewport().set_input_as_handled()
 			elif pos.distance_to(_press) <= TAP_SLOP:
 				var hit := _card_at(pos.x)
 				if hit == current:
@@ -137,12 +145,11 @@ func _input(event: InputEvent) -> void:
 				elif hit >= 0:
 					Sound.ui("tap")
 					go(hit)
-				get_viewport().set_input_as_handled()
+			accept_event()
 		return
 	var moved: bool = (event is InputEventScreenDrag and event.index == 0) or (event is InputEventMouseMotion and (event.button_mask & MOUSE_BUTTON_MASK_LEFT) != 0)
 	if moved and _pressing:
-		var pos: Vector2 = get_global_transform_with_canvas().affine_inverse() * event.position
-		var d := pos - _press
+		var d: Vector2 = event.position - _press
 		if not _dragging and absf(d.x) > SWIPE_START and absf(d.x) > absf(d.y) * 1.4:
 			_dragging = true
 			if _tween != null:
@@ -153,7 +160,7 @@ func _input(event: InputEvent) -> void:
 				dx *= 0.3
 			_offset = dx
 			_place(float(current) - _offset / step())
-			get_viewport().set_input_as_handled()
+			accept_event()
 
 
 func _card_at(x: float) -> int:

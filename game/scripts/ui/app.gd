@@ -22,7 +22,7 @@ const SCREENS := {
 	"play": "res://scripts/ui/screens/play_screen.gd",
 	"tutorial": "res://scripts/ui/screens/tutorial_screen.gd",
 	"results": "res://scripts/ui/screens/results_screen.gd",
-	"boards": "res://scripts/ui/screens/boards_screen.gd",
+	"boards": "res://scripts/ui/screens/free_play_screen.gd",   ## Scores live in Free play (2026-10)
 }
 
 ## Set before adding to the tree to skip the first screen (tests, screenshots, recorder).

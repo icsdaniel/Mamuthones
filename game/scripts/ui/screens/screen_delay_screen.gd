@@ -4,7 +4,7 @@ extends Screen
 ## (tap - the moment the note was drawn on the ring) is how long the screen and the touch take for
 ## this player, and becomes the "Notes drawn early" setting (Profile.visual_offset). No sound plays,
 ## so this measures the eyes and the screen, not the ears (the sound delay test does that).
-## args: none (opened from Settings; back returns there).
+## args: chain (the last of Settings' three timing steps: "Test 3 of 3"); back returns to Settings.
 
 const BPM := LatencyTest.BPM
 const WATCH := 4
@@ -26,8 +26,8 @@ var _taps := 0
 func build() -> void:
 	var page := UIKit.scaffold(self, false, UIKit.S3)
 	var box: VBoxContainer = page.body
-	UIKit.top_bar(page.top, tr("vis_title"), on_back)
-	_status = UIKit.label(tr("vis_intro"), UIKit.LEAD, true, HORIZONTAL_ALIGNMENT_CENTER)
+	UIKit.top_bar(page.top, tr("vis_title"), on_back, load(App.SCREENS["calibration"]).step_text(args, 3))
+	_status = MenuKit.instruction(tr("vis_intro"))
 	_status.name = "Status"
 	box.add_child(_status)
 	var pad := Button.new()

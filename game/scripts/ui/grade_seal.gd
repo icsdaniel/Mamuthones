@@ -12,6 +12,12 @@ var halo := 0.0:
 		halo = v
 		queue_redraw()
 var _studs := true
+## The eight studs round the rim (off for the small list seals, MenuKit.grade_mark).
+var studs := true:
+	set(v):
+		studs = v
+		_studs = v
+		queue_redraw()
 
 
 func _init(p_rank := -1, p_diameter := 64, p_k := 2) -> void:

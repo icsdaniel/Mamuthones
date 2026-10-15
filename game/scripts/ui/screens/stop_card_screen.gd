@@ -83,13 +83,22 @@ func build() -> void:
 	_best_tile.theme_type_variation = UIKit.TILE
 	page.body.add_child(_best_tile)
 
-	if song.kind == "tutorial":
-		var lessons := UIKit.button(tr("stop_lessons"), func() -> void: app.open("tutorial", {"song_id": song.id}), UIKit.PRIMARY)
-		lessons.name = "Lessons"
-		page.foot.add_child(lessons)
-	var play := UIKit.button(tr("stop_play"), _play, "" if song.kind == "tutorial" else UIKit.PRIMARY)
+	# The tutorial stop: its lessons are the one primary until they are done; then Play leads and
+	# the lessons stay beside it.
+	var lessons_first := song.kind == "tutorial" and not Profile.has_flag("tutorial_done")
+	var play := UIKit.button(tr("stop_play"), _play, "" if lessons_first else UIKit.PRIMARY)
 	play.name = "Play"
-	page.foot.add_child(play)
+	if song.kind == "tutorial":
+		var lessons := UIKit.button(tr("stop_lessons"), func() -> void: app.open("tutorial", {"song_id": song.id}), UIKit.PRIMARY if lessons_first else "")
+		lessons.name = "Lessons"
+		if lessons_first:
+			page.foot.add_child(lessons)
+			page.foot.add_child(play)
+		else:
+			page.foot.add_child(play)
+			page.foot.add_child(lessons)
+	else:
+		page.foot.add_child(play)
 	_pick(difficulty)
 
 

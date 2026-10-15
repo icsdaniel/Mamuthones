@@ -80,7 +80,7 @@ title_free,Free play,Gioco libero
 title_workshop,Workshop,Laboratorio
 title_boards,Scores,Punteggi
 title_settings,Settings,Impostazioni
-title_tutorial,Tutorial,Lezioni
+title_tutorial,Lessons,Lezioni
 title_calibrate,Calibrate,Calibra
 title_quit,Quit,Esci
 story_title,The procession,La processione
@@ -408,3 +408,6 @@ set_setup,Getting started,Per iniziare
 set_tutorial,The lessons (tutorial),Le lezioni (tutorial)
 boards_not_played,Not played,Non giocata
 lang_choose,Choose your language,Scegli la lingua
+title_hero,Continue,Continua
+story_open,Open: %s,Apri: %s
+set_chain_step,Test %d of %d,Prova %d di %d

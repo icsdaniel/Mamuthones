@@ -2,10 +2,11 @@ extends Screen
 ## Settings, on the mobile kit: a segmented control over four swipeable pages, each a grouped list
 ## of 96 px rows (MenuKit.group: label left, value / switch / chevron right, dividers), so nothing
 ## scrolls:
-##   Play     note speed with its preview in a card, the bell cue, vibration, slam mode
-##   Timing   the tilt calibration and the two delay tests as chevron rows (with what the motion
-##            sensors can do), then the two delay sliders
-##   Sound    music and bells volumes, the button knocks
+##   Play     note speed with its preview in a card, slam mode
+##   Timing   the tilt calibration (which leads on through both delay tests) and the two delay
+##            tests as chevron rows, with what the motion sensors can do (read only while this
+##            page shows, until they answer), then the two delay sliders
+##   Sound    music and bells volumes, the button knocks, the bell cue, vibration
 ##   More     language and animations as segmented controls, the lessons and the credits
 ## Every change is saved at once. args: page (an index, for screenshots and links).
 
@@ -15,10 +16,12 @@ var pager: Pager
 var _sensor: Label
 var _reader := MotionReader.new()
 var _status := ""
+var _settled := false
 
 
 func build() -> void:
 	_status = ""
+	_settled = false
 	var page := UIKit.scaffold(self, false, UIKit.S3)
 	UIKit.top_bar(page.top, tr("set_title"), on_back)
 	pager = UIKit.paged(page.body, [["play", tr("set_play")], ["timing", tr("set_timing")],
@@ -28,6 +31,13 @@ func build() -> void:
 	_sound_page(pager.add_page("SoundPage", UIKit.S2, true))
 	_more_page(pager.add_page("MorePage", UIKit.S2, true))
 	pager.go(pager.current, true)
+	# The motion sensors are only read while the Timing page shows, and only until they answer.
+	pager.page_changed.connect(func(_i: int) -> void: _poll_sensor())
+	_poll_sensor()
+
+
+func _poll_sensor() -> void:
+	set_process(pager.current == 1 and not _settled)
 
 
 func _play_page(box: VBoxContainer) -> void:
@@ -50,14 +60,13 @@ func _play_page(box: VBoxContainer) -> void:
 	var pv := MenuKit.control_row(g, "", preview)
 	pv.add_child(warn)
 	var t := MenuKit.group(box, tr("set_play"))
-	_toggle(t, "bell_cue", tr("set_bell_cue"), tr("set_bell_cue_note"))
-	_toggle(t, "vibration", tr("set_vibration"))
 	_toggle(t, "slam", tr("set_slam"), tr("set_slam_note"))
 
 
 func _timing_page(box: VBoxContainer) -> void:
 	var g := MenuKit.group(box, tr("set_setup"))
-	MenuKit.nav_row(g, "Calibrate", tr("set_calibrate"), func() -> void: app.open("calibration"))
+	# The calibration leads on through both delay tests ("Test 1 of 3" ...), then back here.
+	MenuKit.nav_row(g, "Calibrate", tr("set_calibrate"), func() -> void: app.open("calibration", {"chain": true}))
 	_sensor = MenuKit.note_row(g, tr("motion_waiting"), "Sensor")
 	UIKit.spacer(g, UIKit.S2)
 	MenuKit.nav_row(g, "Latency", tr("set_latency"), func() -> void: app.open("latency"))
@@ -76,6 +85,8 @@ func _sound_page(box: VBoxContainer) -> void:
 	_slider(g, "music_volume", tr("set_music"), 0.0, 1.0, 0.05, func(v: float) -> String: return "%d%%" % roundi(v * 100.0), true)
 	_slider(g, "sfx_volume", tr("set_sfx"), 0.0, 1.0, 0.05, func(v: float) -> String: return "%d%%" % roundi(v * 100.0), true)
 	_toggle(g, "step_knocks", tr("set_step_knocks"), tr("set_step_knocks_note"))
+	_toggle(g, "bell_cue", tr("set_bell_cue"), tr("set_bell_cue_note"))
+	_toggle(g, "vibration", tr("set_vibration"))
 
 
 func _more_page(box: VBoxContainer) -> void:
@@ -103,6 +114,8 @@ func _process(delta: float) -> void:
 	if st == _status or st == "waiting" or _sensor == null:
 		return
 	_status = st
+	_settled = st != "permission"
+	_poll_sensor()
 	# On the web: not asked yet ("permission"), or refused (no_sensor with a denied permission).
 	var key := "motion_denied" if st == "no_sensor" and _reader.web_permission() == "denied" else "motion_" + st
 	var text := tr(key)

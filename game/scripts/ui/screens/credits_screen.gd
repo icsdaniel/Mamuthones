@@ -11,11 +11,13 @@ func build() -> void:
 	var page := UIKit.scaffold(self, false, UIKit.S3)
 	UIKit.top_bar(page.top, tr("cred_title"), on_back)
 	pager = UIKit.paged(page.body, [["respect", tr("cred_respect_title")], ["credits", tr("cred_title")]], clampi(int(args.get("page", 0)), 0, 1))
-	var a := pager.add_page("RespectPage", UIKit.S3, true)
+	var a := pager.add_page("RespectPage", UIKit.S3)
 	var logo := Logo.new()
-	logo.mode = "mark"
+	logo.mode = "full"
+	logo.subtitle = tr("app_title")
 	logo.max_scale = 3
-	logo.custom_minimum_size = Vector2(0, 220)
+	logo.custom_minimum_size = Vector2(0, 240)
+	logo.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	a.add_child(logo)
 	var respect := UIKit.card(a, true)
 	respect.get_parent().name = "Respect"

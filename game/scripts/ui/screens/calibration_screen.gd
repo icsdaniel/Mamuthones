@@ -8,7 +8,8 @@ extends Screen
 ## Laid out on the kit's scaffold: the top bar (back, the title, "Setup 1 of 2" on the first run),
 ## the instruction, the phone, the marks, the graph and the notes in the body, and the actions
 ## (Continue, Try again, Use the buttons) pinned in the footer.
-## args: first_run (bool) continues to the delay test; otherwise back to settings.
+## args: first_run (bool) continues to the delay test; chain (from Settings) on through both delay
+## tests; otherwise back to settings.
 
 var reader: MotionReader
 var calibrator: Calibrator
@@ -40,7 +41,7 @@ func build() -> void:
 	calibrator.start()
 	var page := UIKit.scaffold(self, false, UIKit.S3)
 	var box: VBoxContainer = page.body
-	UIKit.top_bar(page.top, tr("cal_title"), on_back, tr("cal_step") if args.get("first_run", false) else "")
+	UIKit.top_bar(page.top, tr("cal_title"), on_back, step_text(args, 1))
 	_instruction = UIKit.label("", UIKit.LEAD, true, HORIZONTAL_ALIGNMENT_CENTER)
 	_instruction.name = "Instruction"
 	box.add_child(_instruction)
@@ -247,9 +248,21 @@ func _use_slam() -> void:
 	_next()
 
 
+## The overline of a setup step: "Setup 1 of 2" on the first run, "Test 1 of 3" when Settings runs
+## the calibration and both delay tests in a row, else nothing.
+static func step_text(a: Dictionary, n: int) -> String:
+	if a.get("first_run", false) and n <= 2:
+		return UIKit.tr_("cal_step" if n == 1 else "lat_step")
+	if a.get("chain", false):
+		return UIKit.tr_("set_chain_step") % [n, 3]
+	return ""
+
+
 func _next() -> void:
 	if args.get("first_run", false):
 		app.replace("latency", {"first_run": true})
+	elif args.get("chain", false):
+		app.replace("latency", {"chain": true})
 	elif args.get("then_latency", false):
 		app.replace("latency")
 	else:
