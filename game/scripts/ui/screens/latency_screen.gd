@@ -73,7 +73,7 @@ func _show_start() -> void:
 	_clear_actions()
 	var go := UIKit.button(tr("lat_start"), _begin, UIKit.PRIMARY)
 	go.name = "Start"
-	_actions.add_child(go)
+	UIKit.footer_actions(_actions, go)
 	var skip := UIKit.button(tr("lat_skip"), _next, UIKit.QUIET)
 	skip.name = "Skip"
 	_actions.add_child(skip)
@@ -160,14 +160,13 @@ func _finish() -> void:
 		Sound.ui("unlock")
 		var go := UIKit.button(tr("ui_continue"), _next, UIKit.PRIMARY)
 		go.name = "Continue"
-		_actions.add_child(go)
-		_actions.add_child(UIKit.button(tr("lat_again"), _begin, UIKit.QUIET))
+		UIKit.footer_actions(_actions, go, MenuKit.icon_action("Again", "replay", _begin, tr("lat_again")))
 	else:
 		_status.text = tr("lat_uneven") if int(r.get("count", 0)) >= LatencyTest.MIN_TAPS else tr("lat_few")
 		_detail.text = tr("lat_uneven_body")
 		var again := UIKit.button(tr("lat_again"), _begin, UIKit.PRIMARY)
 		again.name = "Again"
-		_actions.add_child(again)
+		UIKit.footer_actions(_actions, again)
 		# Enough taps but uneven: the median is still a fair guess, so it can be kept.
 		if int(r.get("count", 0)) >= LatencyTest.MIN_TAPS:
 			var keep := UIKit.button(tr("lat_keep") % roundi(float(r.offset) * 1000.0), _keep.bind(float(r.offset)))

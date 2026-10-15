@@ -58,7 +58,7 @@ func _show_start() -> void:
 	_clear_actions()
 	var go := UIKit.button(tr("lat_start"), _begin, UIKit.PRIMARY)
 	go.name = "Start"
-	_actions.add_child(go)
+	UIKit.footer_actions(_actions, go)
 	var skip := UIKit.button(tr("lat_skip"), on_back, UIKit.QUIET)
 	skip.name = "Skip"
 	_actions.add_child(skip)
@@ -143,14 +143,13 @@ func _finish() -> void:
 		Sound.ui("unlock")
 		var go := UIKit.button(tr("ui_continue"), on_back, UIKit.PRIMARY)
 		go.name = "Continue"
-		_actions.add_child(go)
-		_actions.add_child(UIKit.button(tr("lat_again"), _begin, UIKit.QUIET))
+		UIKit.footer_actions(_actions, go, MenuKit.icon_action("Again", "replay", _begin, tr("lat_again")))
 	else:
 		_status.text = tr("lat_uneven") if int(r.get("count", 0)) >= LatencyTest.MIN_TAPS else tr("lat_few")
 		_detail.text = tr("vis_uneven_body")
 		var again := UIKit.button(tr("lat_again"), _begin, UIKit.PRIMARY)
 		again.name = "Again"
-		_actions.add_child(again)
+		UIKit.footer_actions(_actions, again)
 		if int(r.get("count", 0)) >= LatencyTest.MIN_TAPS:
 			var keep := UIKit.button(tr("lat_keep") % roundi(lead * 1000.0), func() -> void:
 				Profile.set_setting("visual_offset", lead)

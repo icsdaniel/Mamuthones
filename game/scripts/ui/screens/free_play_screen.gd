@@ -19,6 +19,7 @@ var use_remix := false
 var _song_buttons := {}
 var _tabs: HBoxContainer
 var _rows: VBoxContainer
+var _options: HBoxContainer
 var _ghost: Label
 var _remix: Button
 var _remix_lock: HBoxContainer
@@ -64,28 +65,32 @@ func build() -> void:
 		_song_buttons[s.id] = b
 	_rows.resized.connect(_fit_rows)
 
-	# footer: the ghost line, the remix's lock, then Remix + Play
-	_ghost = UIKit.label(tr("free_ghost"), UIKit.CAPTION, true, HORIZONTAL_ALIGNMENT_CENTER)
-	_ghost.name = "Ghost"
-	_ghost.add_theme_constant_override("line_spacing", -2)
-	page.foot.add_child(_ghost)
+	# footer: the remix's lock, the ghost line beside the Remix chip, then Play (footer_actions)
 	_remix_lock = MenuKit.lock_line(tr("stop_remix_locked"))
 	page.foot.add_child(_remix_lock)
 	var row := HBoxContainer.new()
+	row.name = "Options"
+	row.alignment = BoxContainer.ALIGNMENT_END
+	_options = row
 	row.add_theme_constant_override("separation", UIKit.S2)
 	page.foot.add_child(row)
+	_ghost = UIKit.label(tr("free_ghost"), UIKit.CAPTION, true)
+	_ghost.name = "Ghost"
+	_ghost.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	_ghost.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+	_ghost.add_theme_constant_override("line_spacing", -2)
+	row.add_child(_ghost)
 	_remix = UIKit.button(tr("stop_remix_chip"), func() -> void: pass, UIKit.CHIP)
 	_remix.name = "Remix"
 	_remix.toggle_mode = true
-	_remix.custom_minimum_size = Vector2(180, UIKit.PRIMARY_H)
+	_remix.custom_minimum_size = Vector2(180, UIKit.TOUCH)
 	_remix.toggled.connect(func(on: bool) -> void:
 		use_remix = on
 		_pick_song(song))
 	row.add_child(_remix)
 	var play := UIKit.button(tr("stop_play"), _play, UIKit.PRIMARY)
 	play.name = "Play"
-	play.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	row.add_child(play)
+	UIKit.footer_actions(page.foot, play)
 	var first := SongLibrary.get_song(str(args.get("song_id", "")))
 	if first == null:
 		first = SongLibrary.get_song(Progression.next_stop())
@@ -155,6 +160,7 @@ func _refresh() -> void:
 		return
 	var best: Dictionary = Profile.best(UIKit.board_song_id(song, use_remix), difficulty)
 	_ghost.visible = not (best.get("ghost", {}) as Dictionary).is_empty()
+	_options.visible = _ghost.visible or _remix.visible
 
 
 ## The platform's ladder for the chosen song and difficulty.

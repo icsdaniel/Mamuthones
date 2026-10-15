@@ -55,7 +55,7 @@ func build() -> void:
 		v.add_child(gl)
 	_play = UIKit.button("", _open_current, UIKit.PRIMARY)
 	_play.name = "OpenStop"
-	page.foot.add_child(_play)
+	UIKit.footer_actions(page.foot, _play)
 	carousel.page_changed.connect(_on_page)
 	carousel.tapped.connect(func(i: int) -> void:
 		var b := carousel.card(i) as Button

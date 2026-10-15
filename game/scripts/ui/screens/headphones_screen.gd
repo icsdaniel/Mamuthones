@@ -20,7 +20,7 @@ func build() -> void:
 	UIKit.spacer(page.body, UIKit.S4)
 	var go := UIKit.button(tr("hp_continue"), _next, UIKit.PRIMARY)
 	go.name = "Continue"
-	page.foot.add_child(go)
+	UIKit.footer_actions(page.foot, go)
 
 
 func _next() -> void:

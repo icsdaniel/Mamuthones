@@ -86,19 +86,18 @@ func build() -> void:
 	# The tutorial stop: its lessons are the one primary until they are done; then Play leads and
 	# the lessons stay beside it.
 	var lessons_first := song.kind == "tutorial" and not Profile.has_flag("tutorial_done")
-	var play := UIKit.button(tr("stop_play"), _play, "" if lessons_first else UIKit.PRIMARY)
-	play.name = "Play"
-	if song.kind == "tutorial":
-		var lessons := UIKit.button(tr("stop_lessons"), func() -> void: app.open("tutorial", {"song_id": song.id}), UIKit.PRIMARY if lessons_first else "")
+	var open_lessons := func() -> void: app.open("tutorial", {"song_id": song.id})
+	if lessons_first:
+		var lessons := UIKit.button(tr("stop_lessons"), open_lessons, UIKit.PRIMARY)
 		lessons.name = "Lessons"
-		if lessons_first:
-			page.foot.add_child(lessons)
-			page.foot.add_child(play)
-		else:
-			page.foot.add_child(play)
-			page.foot.add_child(lessons)
+		UIKit.footer_actions(page.foot, lessons, MenuKit.icon_action("Play", "play", _play, tr("stop_play")))
 	else:
-		page.foot.add_child(play)
+		var play := UIKit.button(tr("stop_play"), _play, UIKit.PRIMARY)
+		play.name = "Play"
+		var lessons_icon: Button = null
+		if song.kind == "tutorial":
+			lessons_icon = MenuKit.icon_action("Lessons", "help", open_lessons, tr("stop_lessons"))
+		UIKit.footer_actions(page.foot, play, lessons_icon)
 	_pick(difficulty)
 
 

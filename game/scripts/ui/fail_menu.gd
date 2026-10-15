@@ -23,16 +23,9 @@ func _ready() -> void:
 	sub.name = "Hint"
 	box.add_child(sub)
 	UIKit.spacer(box, UIKit.S1)
-	var row := HBoxContainer.new()
-	row.add_theme_constant_override("separation", UIKit.S2)
-	box.add_child(row)
-	var quit := UIKit.button(tr("pause_quit"), func() -> void: chosen.emit("quit"))
-	quit.name = "Quit"
-	quit.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	quit.size_flags_stretch_ratio = 0.7
-	quit.custom_minimum_size.y = UIKit.PRIMARY_H
-	row.add_child(quit)
 	var restart := UIKit.button(tr("pause_restart"), func() -> void: chosen.emit("restart"), UIKit.PRIMARY)
 	restart.name = "Restart"
-	restart.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	row.add_child(restart)
+	UIKit.footer_actions(box, restart)
+	var quit := UIKit.button(tr("pause_quit"), func() -> void: chosen.emit("quit"), UIKit.QUIET)
+	quit.name = "Quit"
+	box.add_child(quit)

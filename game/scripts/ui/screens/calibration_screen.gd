@@ -136,7 +136,7 @@ func _show_permission() -> void:
 		c.queue_free()
 	var ask := UIKit.button(tr("cal_permission"), _request_permission, UIKit.PRIMARY)
 	ask.name = "EnableMotion"
-	_actions.add_child(ask)
+	UIKit.footer_actions(_actions, ask)
 	var skip := UIKit.button(tr("cal_use_slam"), _use_slam, UIKit.QUIET)
 	skip.name = "UseSlam"
 	_actions.add_child(skip)
@@ -220,9 +220,7 @@ func _on_finished(result: Dictionary) -> void:
 		c.queue_free()
 	var go := UIKit.button(tr("ui_continue"), _next, UIKit.PRIMARY)
 	go.name = "Continue"
-	_actions.add_child(go)
-	var again := UIKit.button(tr("cal_again"), func() -> void: app.replace("calibration", args), UIKit.QUIET)
-	_actions.add_child(again)
+	UIKit.footer_actions(_actions, go, MenuKit.icon_action("Again", "replay", func() -> void: app.replace("calibration", args), tr("cal_again")))
 
 
 func _on_failed(reason: String) -> void:
@@ -238,8 +236,16 @@ func _on_failed(reason: String) -> void:
 		_actions.remove_child(c)
 		c.queue_free()
 	if reason != "no_sensor":
-		_actions.add_child(UIKit.button(tr("cal_again"), func() -> void: app.replace("calibration", args), UIKit.PRIMARY))
-	_actions.add_child(UIKit.button(tr("cal_use_slam"), _use_slam, "" if reason != "no_sensor" else UIKit.PRIMARY))
+		var again := UIKit.button(tr("cal_again"), func() -> void: app.replace("calibration", args), UIKit.PRIMARY)
+		again.name = "Again"
+		UIKit.footer_actions(_actions, again)
+		var slam := UIKit.button(tr("cal_use_slam"), _use_slam, UIKit.QUIET)
+		slam.name = "UseSlam"
+		_actions.add_child(slam)
+	else:
+		var slam := UIKit.button(tr("cal_use_slam"), _use_slam, UIKit.PRIMARY)
+		slam.name = "UseSlam"
+		UIKit.footer_actions(_actions, slam)
 
 
 func _use_slam() -> void:

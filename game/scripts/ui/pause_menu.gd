@@ -24,12 +24,8 @@ func _ready() -> void:
 	UIKit.spacer(box, UIKit.S1)
 	var resume := UIKit.button(tr("pause_resume"), func() -> void: chosen.emit("resume"), UIKit.PRIMARY)
 	resume.name = "Resume"
-	box.add_child(resume)
-	var row := HBoxContainer.new()
-	row.add_theme_constant_override("separation", UIKit.S2)
-	box.add_child(row)
-	for item in [["restart", "pause_restart"], ["quit", "pause_quit"]]:
-		var b := UIKit.button(tr(item[1]), func() -> void: chosen.emit(item[0]))
-		b.name = str(item[0]).capitalize()
-		b.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-		row.add_child(b)
+	var restart := MenuKit.icon_action("Restart", "replay", func() -> void: chosen.emit("restart"), tr("pause_restart"))
+	UIKit.footer_actions(box, resume, restart)
+	var quit := UIKit.button(tr("pause_quit"), func() -> void: chosen.emit("quit"), UIKit.QUIET)
+	quit.name = "Quit"
+	box.add_child(quit)

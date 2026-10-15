@@ -399,6 +399,15 @@ static func quick_tiles(box: Container, items: Array) -> HBoxContainer:
 	return row
 
 
+## A footer's raised icon secondary (UIKit.footer_actions sizes it to 96 px): one of KitIcons'
+## glyphs (play, help, ...) or a WoodcutTheme icon, named so tests and hands can find it.
+static func icon_action(id: String, icon_name: String, on_press: Callable, tooltip := "") -> Button:
+	var b := UIKit.icon_button("dot", on_press, tooltip, "")
+	b.name = id
+	b.icon = KitIcons.get_icon(icon_name)
+	return b
+
+
 ## An instruction on a setup screen (calibration, the delay tests, the lessons): clean sans in the
 ## secondary text colour, centred; the serif gold lead is kept for one-line titles.
 static func instruction(text: String) -> Label:

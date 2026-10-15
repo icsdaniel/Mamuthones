@@ -89,7 +89,7 @@ func _intro(after_fail := false, after_demo := false) -> void:
 		why.add_child(UIKit.label(tr(fail_key), UIKit.CAPTION))
 	var go := UIKit.button(tr("tut_your_turn") if after_demo else (tr("tut_try_again") if after_fail else tr("tut_try")), _start.bind(false), UIKit.PRIMARY)
 	go.name = "Try"
-	page.foot.add_child(go)
+	UIKit.footer_actions(page.foot, go)
 	var row := HBoxContainer.new()
 	row.add_theme_constant_override("separation", UIKit.S2)
 	page.foot.add_child(row)
@@ -243,7 +243,7 @@ func _well_done(session: Session) -> void:
 	UIKit.spacer(box, 0, true)
 	var go := UIKit.button(tr("ui_continue"), _next, UIKit.PRIMARY)
 	go.name = "Continue"
-	page.foot.add_child(go)
+	UIKit.footer_actions(page.foot, go)
 	if bool(args.get("autoplay", false)):
 		_next.call_deferred()
 
@@ -279,7 +279,7 @@ func _finale() -> void:
 	box.add_child(MenuKit.instruction(tr("tut_ready")))
 	var go := UIKit.button(tr("tut_play_song"), _play_song, UIKit.PRIMARY)
 	go.name = "PlaySong"
-	page.foot.add_child(go)
+	UIKit.footer_actions(page.foot, go)
 	var story := SongLibrary.story()
 	if story.size() > 1:
 		var on := UIKit.button(tr("tut_next_stop") % UIKit.song_title(story[1]), func() -> void:
