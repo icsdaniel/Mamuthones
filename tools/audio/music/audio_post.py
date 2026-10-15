@@ -23,6 +23,10 @@ DIFFS = ("easy", "medium", "hard", "expert")
 ROOM = {"easy": 0.6, "medium": 0.45, "hard": 0.35, "expert": 0.25}      # tap <-> tilt, seconds
 TILT_GAP = {"medium": (4.0, 2.4), "hard": (4.0, 1.75), "expert": (2.0, 1.0)}  # (beats, seconds)
 CLEAR_MAX = 2       # a strong tilt may clear this many plain taps out of its way (Medium and up)
+TILT_FLOOR = {"medium": 8, "hard": 11, "expert": 10}   # per minute; below it, tilts clear more taps
+HOLD_MAX_S = 4.0
+# Medium and Hard are refilled from the level above when the pass leaves them thin or empty
+REFILL = {"medium": ("hard", 0.95, 3.0), "hard": ("expert", 1.6, 2.5)}   # source, min notes/s, void s
 TILTS_PER_MIN = {"easy": 8, "medium": 15, "hard": 20, "expert": 28}
 RUN_CAP = {"medium": 4, "hard": 4, "expert": 6}
 MID_SHARE = 0.45
@@ -94,6 +98,8 @@ class Post:
             else:
                 notes = self.easy_voids(notes)
             ch[d] = notes
+        for d in ("hard", "medium"):
+            ch[d] = self.refill(d, ch[d], ch[REFILL[d][0]])
         self.rising_tilts()
         return self.data
 
@@ -102,6 +108,8 @@ class Post:
             if n["k"] == "hold" and n["len"] * self.spb < HOLD_MIN_S - EPS:
                 n["k"] = "step"
                 del n["len"]
+            elif n["k"] == "hold" and n["len"] * self.spb > HOLD_MAX_S + EPS:
+                n["len"] = max(1.0, int(HOLD_MAX_S / self.spb * 2) / 2)
         return notes
 
     def stomps(self, d, notes):
@@ -141,7 +149,7 @@ class Post:
             self.log.append(f"{d}: re-entry tilt at b={end} {'added' if ok else 'REFUSED'}")
         return notes
 
-    def tilts(self, d, notes):
+    def tilts(self, d, notes, clear_max=CLEAR_MAX):
         """Keep the strongest tilts that leave the hands room; the rest go (a ring keeps its tap)."""
         ends = {rb + rl for rb, rl in self.rests}
         tilts = [n for n in notes if n["k"] in TILTS]
@@ -156,6 +164,15 @@ class Post:
         kept = []
         cleared = set()
         protected = set()
+        if d == "expert":
+            # the densest stretch (the Expert peak) keeps its taps: tilts there must find room
+            ts = sorted((self.t(m["b"]), id(m)) for m in others)
+            best, lo = (0, 0, 0), 0
+            for hi in range(len(ts)):
+                while ts[hi][0] - ts[lo][0] > V.RULES["peak_window_s"]:
+                    lo += 1
+                best = max(best, (hi - lo + 1, lo, hi))
+            protected.update(i for _, i in ts[best[1]:best[2] + 1])
         cap = int(TILTS_PER_MIN[d] * self.minutes)
         for n in order:
             tb, tt = n["b"], self.t(n["b"])
@@ -166,7 +183,7 @@ class Post:
             block = [m for m in others if abs(m["b"] - tb) >= EPS and abs(self.t(m["b"]) - tt) < ROOM[d] - EPS]
             plain = [m for m in block if m["k"] == "step" and id(m) not in protected
                      and sum(1 for x in others if abs(x["b"] - m["b"]) < EPS) == 1]
-            if block and (d == "easy" or len(plain) < len(block) or len(plain) > CLEAR_MAX):
+            if block and (d == "easy" or len(plain) < len(block) or len(plain) > clear_max):
                 ok = False
             # stomps and hold ends
             if ok and any(abs(self.t(s["b"]) - tt) < STOMP_TILT_S - EPS for s in stomps):
@@ -215,6 +232,8 @@ class Post:
                     out.append(m)
                 continue
             out.append(n)
+        if d in TILT_FLOOR and clear_max < 4 and len(kept) < TILT_FLOOR[d] * self.minutes:
+            return self.tilts(d, notes, 4)
         dropped = len(tilts) - len(kept)
         if dropped:
             self.log.append(f"{d}: {dropped} of {len(tilts)} tilts dropped")
@@ -374,6 +393,54 @@ class Post:
             self.log.append(f"easy: {added} notes added in long empty stretches")
         return notes
 
+    def refill(self, d, notes, src):
+        """Bring back plain steps the level above plays, on this level's grid: first into the
+        longest empty stretches, then on the strongest beats until the level reaches its density."""
+        _, min_nps, void_s = REFILL[d]
+        tilts = [self.t(n["b"]) for n in notes if n["k"] in TILTS]
+        stomps = [self.t(n["b"]) for n in notes if n["k"] == "stomp"]
+        rests = [(rb, rb + rl) for rb, rl in self.rests]
+        have = {round(n["b"], 4) for n in notes}
+        pool = []
+        for n in src:
+            b = n["b"]
+            if n["k"] != "step" or round(b, 4) in have or not V.on_eighth(b) or "lane" not in n:
+                continue
+            if any(rs - 1.0 - EPS <= b < re_ + 1.0 for rs, re_ in rests):
+                continue
+            t = self.t(b)
+            if any(abs(t - x) < ROOM[d] for x in tilts) or any(abs(t - x) < STOMP_TILT_S for x in stomps):
+                continue
+            pool.append(n)
+
+        def gap_at(ns, b):
+            ts = sorted(m["b"] for m in ns if m["k"] != "rest")
+            before = max([x for x in ts if x < b], default=0.0)
+            after = min([x for x in ts if x > b], default=self.song.end_b)
+            return self.t(after) - self.t(before)
+
+        want = int(min_nps * self.data["length"])
+        added = 0
+        for phase in ("voids", "density"):
+            if phase == "voids":
+                order = sorted(pool, key=lambda n: -gap_at(notes, n["b"]))
+            else:
+                order = sorted(pool, key=lambda n: -self.strength(n["b"]))
+            for n in order:
+                cnt = sum(1 for m in notes if m["k"] != "rest")
+                if phase == "density" and cnt >= want:
+                    break
+                if phase == "voids" and gap_at(notes, n["b"]) <= void_s:
+                    continue
+                if any(abs(m["b"] - n["b"]) < EPS for m in notes):
+                    continue
+                notes, ok = self.attempt(d, notes, lambda ns, n=n: ns + [{"b": n["b"], "k": "step", "lane": n["lane"]}])
+                if ok:
+                    added += 1
+        if added:
+            self.log.append(f"{d}: {added} steps brought back from {REFILL[d][0]}")
+        return notes
+
     def rising_tilts(self):
         """Tilts rise with the level: Easy < Medium, Hard >= 1.2 x Medium, Expert > Hard. A lower
         level gives up its weakest tilts (never a stand-still's re-entry)."""
@@ -400,8 +467,8 @@ class Post:
             if ids:
                 self.log.append(f"{d}: {len(ids)} tilts dropped so tilts rise with the level")
 
-        if count("hard") >= count("expert"):
-            trim("hard", count("expert") - 1)
+        if count("hard") > int(count("expert") / 1.25):
+            trim("hard", min(count("expert") - 1, int(count("expert") / 1.25)))
         want = min(count("hard") - 1, int(count("hard") / 1.2))
         if count("medium") > want:
             trim("medium", want)
