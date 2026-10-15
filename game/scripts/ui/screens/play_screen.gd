@@ -64,8 +64,11 @@ var lanes: LaneView
 var backdrop: StreetBackdrop     ## the street picture, the fire and the swaying portraits (songs)
 var words: JudgementWords
 var filter: PixelFilter           ## a lens over the whole screen (only when the World picture is off)
-var world: SubViewportContainer   ## the street, lanes and HUD drawn in hard texels, PxArt.FINE base px each
+var world: SubViewportContainer   ## the street, lanes and HUD drawn in hard texels (PxArt.texel base px each)
 var world_vp: SubViewport
+var _frame: Control               ## in world_vp: the screen's size, holding what the world draws
+var _density := {}                ## the world's PxArt.world_density, as last fitted
+static var _live := 0             ## play screens in the tree (the last one out clears the pictures)
 var paused := false
 var done := false
 
@@ -126,11 +129,11 @@ func build() -> void:
 	if gd is Dictionary and not (gd as Dictionary).is_empty():
 		ghost = Ghost.from_dict(gd)
 
-	# The pixel look draws the street, the lanes and the HUD straight into one picture of hard texels,
-	# PxArt.FINE base px each (480 across the 720-wide base screen: half an art pixel, so Daniele's
-	# pictures keep twice the detail they had at one texel per art pixel), and shows it enlarged with
-	# PxArt's sharp upscale: square texels, no smear, at a phone's own, non-whole scale. No filter
-	# reads the screen back and no other picture is drawn: the world is one plain blit.
+	# The pixel look draws the street, the lanes and the HUD straight into one picture of hard texels
+	# (PxArt.world_density: a whole number of screen px each, so a phone shows them as squares of one
+	# size with plain nearest; 360 across a 1080-wide phone, 430 across a 1290-wide one), and Daniele's
+	# pictures are shrunk to those texels. No filter reads the screen back and no other picture is
+	# drawn: the world is one plain blit. Settings > Graphics: Fast draws it at one texel per art px.
 	var host: Node = self
 	if not OS.has_environment("NO_WORLD"):
 		world = SubViewportContainer.new()
@@ -138,15 +141,10 @@ func build() -> void:
 		world.stretch = true
 		world.stretch_shrink = 1
 		# a container shrinks its picture by whole numbers only: it is laid out at the texels' size and
-		# scaled up by FINE, and its picture keeps the base screen's coordinates (size_2d_override)
+		# scaled up to the screen (_fit_world), and its picture keeps the base screen's coordinates
+		# (size_2d_override); what is drawn in it lies in _frame, the screen's own size
 		world.set_anchors_preset(Control.PRESET_TOP_LEFT)
-		world.scale = Vector2(PxArt.FINE, PxArt.FINE)
-		world.texture_filter = CanvasItem.TEXTURE_FILTER_LINEAR
-		world.material = PxArt.sharp_material()
-		if OS.has_environment("WORLD_NEAREST"):
-			# measuring: the plain nearest blit instead (columns of uneven width), to see the upscale's cost
-			world.material = null
-			world.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
+		world.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
 		world_vp = SubViewport.new()
 		world_vp.name = "WorldView"
 		world_vp.disable_3d = true
@@ -154,10 +152,14 @@ func build() -> void:
 		world_vp.size_2d_override_stretch = true
 		world_vp.canvas_item_default_texture_filter = Viewport.DEFAULT_CANVAS_ITEM_TEXTURE_FILTER_NEAREST
 		world.add_child(world_vp)
+		_frame = Control.new()
+		_frame.name = "Frame"
+		_frame.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		world_vp.add_child(_frame)
 		add_child(world)
 		resized.connect(_fit_world)
 		_fit_world()
-		host = world_vp
+		host = _frame
 	# a picture of its own does not inherit the app's theme: hand it on to what is drawn in it
 	var host_theme: Theme = null
 	if host != self:
@@ -422,13 +424,39 @@ func _begin_count(music_t: float) -> void:
 	_tick_count()
 
 
-## The world picture covers the screen in whole texels (the last row and column may hang off its edge).
+## The world picture covers the screen in whole texels of PxArt.world_density, each exactly
+## PxArt.texel base px: the base size it shows (size_2d_override) is a whole number of base px, so
+## its rows hang a few texels off the screen's lower edge where that makes the scale exact (at most
+## 64; a screen whose scale has no such fit gets the nearest, a few hundredths of a texel off).
 func _fit_world() -> void:
-	if world == null:
+	if world == null or not is_inside_tree():
 		return
-	var texels := (size / PxArt.FINE).ceil().max(Vector2.ONE)
-	world.size = texels
-	world_vp.size_2d_override = Vector2i((texels * PxArt.FINE).round())
+	var xf := get_viewport().get_final_transform() * get_global_transform_with_canvas()
+	var device := size * absf(xf.get_scale().x)
+	var d := PxArt.world_density(device, size)
+	var t: float = d.texel
+	var tx := maxi(1, ceili(size.x / t - 0.001))
+	var ty := maxi(1, ceili(size.y / t - 0.001))
+	var oy := roundf(ty * t)
+	for extra in 64:
+		var v := (ty + extra) * t
+		if absf(v - roundf(v)) < 0.002:
+			ty += extra
+			oy = roundf(v)
+			break
+	_density = d
+	PxArt.texel = t
+	PxArt.texel_px = d.px
+	world.scale = Vector2(t, t)
+	world.size = Vector2(tx, ty)
+	world_vp.size_2d_override = Vector2i(roundi(tx * t), int(oy))
+	_frame.position = Vector2.ZERO
+	_frame.size = size
+
+
+## The world picture's density as last fitted ({texel, px}; empty without the world).
+func world_density() -> Dictionary:
+	return _density
 
 
 func _layout_router() -> void:
@@ -438,8 +466,6 @@ func _layout_router() -> void:
 
 func _process(delta: float) -> void:
 	_clock += delta
-	if world != null:
-		PxArt.sharp_zoom(world)   # the window can be scaled without the screen's own size changing
 	_tick_shake(delta)
 	if _fail_at >= 0.0 and _clock >= _fail_at:
 		_fail_at = -1.0
@@ -1096,6 +1122,23 @@ func on_back() -> void:
 
 
 func _notification(what: int) -> void:
+	if what == NOTIFICATION_ENTER_TREE:
+		_live += 1
+		# the window can be scaled without this screen's own (base) size changing
+		if world != null and not get_viewport().size_changed.is_connected(_fit_world):
+			get_viewport().size_changed.connect(_fit_world)
+		_fit_world.call_deferred()
+	elif what == NOTIFICATION_EXIT_TREE:
+		if get_viewport().size_changed.is_connected(_fit_world):
+			get_viewport().size_changed.disconnect(_fit_world)
+		_live -= 1
+		if _live <= 0:
+			# the last play screen is gone: the pictures shrunk for its world go with it
+			PxArt.texel = PxArt.PX
+			PxArt.texel_px = 1.0
+			StreetSkin.clear_sized()
+			LaneView.clear_pictures()
+			Hud.clear_pictures()
 	if what == NOTIFICATION_APPLICATION_FOCUS_OUT or what == NOTIFICATION_APPLICATION_PAUSED:
 		if autoplay == null and not done and session != null:
 			pause()

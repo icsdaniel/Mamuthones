@@ -3,7 +3,7 @@ extends SceneTree
 ## average and worst frame times, and how much of them the scripts take.
 ##   godot --path game --rendering-driver opengl3 --resolution 1080x2400 -s res://tests/bench.gd -- \
 ##       [song] [difficulty] [from=<beat>] [frames=<n>] [anim=full|calm|off]
-##       [warm=<ms>] [hide=<Node>]
+##       [warm=<ms>] [hide=<Node>] [miss=<share of notes Autoplay misses>] [gfx=sharp|fast]
 ## Absolute numbers on a desktop or a software renderer are not a phone's; compare runs instead.
 
 const PROFILE := "user://bench_profile.cfg"
@@ -46,6 +46,12 @@ func _init() -> void:
 			root.content_scale_mode = Window.CONTENT_SCALE_MODE_VIEWPORT
 			root.content_scale_stretch = Window.CONTENT_SCALE_STRETCH_INTEGER
 			root.content_scale_size = Vector2i(540, 1080)
+		elif x.begins_with("miss="):
+			# missed notes and bells sweep on past the hit line: their pictures must be made already
+			start.miss_rate = float(x.substr(5))
+			start.human = true
+		elif x.begins_with("gfx="):
+			profile.set_setting("graphics", x.substr(4))
 		elif x == "vp":
 			root.content_scale_mode = Window.CONTENT_SCALE_MODE_VIEWPORT
 		elif x.begins_with("frames="):
@@ -90,8 +96,9 @@ func _tick() -> void:
 		var LV0: Script = load("res://scripts/ui/lane_view.gd")
 		LV0.set("draw_usec", 0)
 		LV0.set("draw_count", 0)
-		_keys0 = (load("res://scripts/art/street_skin.gd").get("_ai_sized") as Dictionary).keys()
-		_shrunk0 = _keys0.size()
+		var sk0: Script = load("res://scripts/art/street_skin.gd")
+		_keys0 = (sk0.get("_ai_sized") as Dictionary).keys()
+		_shrunk0 = int(sk0.get("shrunk")) if sk0.get("shrunk") != null else -1
 	if _times.size() >= _n:
 		var sorted := _times.duplicate()
 		sorted.sort()
@@ -116,9 +123,13 @@ func _tick() -> void:
 		var sk: Script = load("res://scripts/art/street_skin.gd")
 		var sheet: Object = sk.get("atlas")
 		var tex: Texture2D = sheet.get("_tex") if sheet != null else null
-		var shrunk := (sk.get("_ai_sized") as Dictionary).size()
+		var made := (sk.get("_ai_sized") as Dictionary).size()
 		var late: Array = (sk.get("_ai_sized") as Dictionary).keys().filter(func(k: String) -> bool: return not k in _keys0)
-		print("PICTURES shrunk=%d (%d of them while measuring: %s) note_sheet=%s" % [shrunk, late.size(), ", ".join(late), str(tex.get_size()) if tex != null else "-"])
+		var mid := int(sk.get("shrunk")) - _shrunk0 if sk.get("shrunk") != null else late.size()
+		# sizes first asked for mid-song: drawn from the nearest one made before (no picture shrunk),
+		# unless `shrunk while measuring` counts them
+		print("PICTURES sizes=%d shrunk_while_measuring=%d new_sizes_while_measuring=%d [%s] note_sheet=%s" % [made, mid, late.size(),
+			", ".join(late.slice(0, 8)), str(tex.get_size()) if tex != null else "-"])
 		print("RENDER draw_calls=%.0f primitives=%.0f window=%dx%d live_viewports=[%s] video_mem=%.1fMB" % [_draws / _times.size(),
 			_prims / _times.size(), root.size.x, root.size.y, ", ".join(vps),
 			Performance.get_monitor(Performance.RENDER_VIDEO_MEM_USED) / 1048576.0])

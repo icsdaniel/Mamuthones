@@ -10,11 +10,49 @@ extends RefCounted
 ## road's far end, so the backdrop, the road and the title scene share one grid.
 
 const PX := 3.0
-## One texel of the play screen's world picture, in base px: half an art pixel, so the world is drawn
-## 480 texels across the 720-wide base screen (twice the old 240 each way). Daniele's pictures
-## (notes, rings, buttons, HUD frames, the street) are shrunk to this grid; the drawn sprites and the
-## pixel type keep PX, two texels by two, so both grids line up.
-const FINE := PX / 2.0
+## The play screen's world picture (play_screen.gd): base px per texel, and screen px per texel.
+## Daniele's pictures (notes, rings, bell bars, rope, step buttons, HUD frames, the street) are shrunk
+## to its texels; the drawn sprites, the pixel type and the figures keep PX. Set by the play screen
+## from world_density() before anything is drawn in it (PX and 1 elsewhere).
+static var texel := PX
+static var texel_px := 1.0
+## The density's two settings (Profile "graphics"): sharp (default) draws the world at a whole
+## number of screen px per texel, up to SHARP_PX, so a phone shows every texel as a hard square of
+## the same size; fast draws it at one texel per art px (240 across the base screen), the cheapest.
+const SHARP_PX := 3
+const MIN_TEXELS := 240.0
+const GRAPHICS: Array[String] = ["sharp", "fast"]
+
+
+## "sharp" or "fast" (Settings: Graphics).
+static func graphics() -> String:
+	if OS.get_environment("GRAPHICS") in GRAPHICS:
+		return OS.get_environment("GRAPHICS")   # screenshots of either setting
+	var tree := Engine.get_main_loop() as SceneTree
+	var profile: Node = tree.root.get_node_or_null("Profile") if tree != null else null
+	var g := str(profile.call("get_setting", "graphics")) if profile != null else "sharp"
+	return g if g in GRAPHICS else "sharp"
+
+
+## The world picture for a screen `device` px big showing `base` base px: {texel: base px per
+## texel, px: screen px per texel}. Sharp: the most screen px per texel (at most SHARP_PX, a whole
+## number) that still gives MIN_TEXELS across, so each texel is a square of whole pixels and the
+## picture is shown with plain nearest. Fast: one texel per art pixel (PX base px).
+static func world_density(device: Vector2, base: Vector2, mode := "") -> Dictionary:
+	if mode == "":
+		mode = graphics()
+	var s := device.x / maxf(base.x, 1.0)
+	if mode == "fast" or s <= 0.0:
+		return {"texel": PX, "px": PX * s}
+	var k := clampi(floori(device.x / MIN_TEXELS + 0.001), 1, SHARP_PX)
+	return {"texel": float(k) / s, "px": float(k)}
+
+
+## Whole texels of the world picture over `base_len` base px.
+static func texels(base_len: float) -> int:
+	return maxi(1, roundi(base_len / texel))
+
+
 const SCENERY := "res://art/px/scenery/"
 const FIELD := "res://art/px/field/"
 
@@ -70,49 +108,36 @@ static func blit(ci: CanvasItem, t: Texture2D, at: Vector2, px := PX, modulate :
 		ci.draw_texture_rect(t, Rect2(at, sz), false, modulate)
 
 
-## The sharp-pixel upscale for a picture of whole texels shown bigger than 1:1 at a size that is not
-## a whole multiple (the world picture, 480 texels across, on a 1290-px-wide phone is 2.69x): each
-## texel stays a hard-edged square, and only the one screen pixel where two texels meet is blended, so
-## no column is a pixel wider than the next (nearest) and nothing is smeared (plain linear). It reads
-## its own picture once a pixel, as the plain blit did: no screen read, no extra pass. `zoom` is
-## screen px per texel (sharp_zoom keeps it up to date).
-const SHARP_SHADER := """
-shader_type canvas_item;
-uniform float zoom = 1.0;
-void fragment() {
-	vec2 ts = vec2(textureSize(TEXTURE, 0));
-	vec2 t = UV * ts;
-	vec2 seam = floor(t + 0.5);
-	t = seam + clamp((t - seam) * zoom, -0.5, 0.5);
-	COLOR = texture(TEXTURE, t / ts);
-}
-"""
-
-static var _sharp_shader: Shader
+## A round glow of white, its alpha falling from the middle out through `knee` = [offset, alpha] to
+## 0 at the edge, in BANDS flat rings (docs/art-style.md: large glows are stepped, so the light reads
+## as pixel art over the street, not an airbrush). Drawn nearest, each ring has a hard texel edge.
+const BANDS := 6
 
 
-## A material that shows a picture of hard texels sharply at any scale (SHARP_SHADER); the canvas
-## item it is set on must filter its texture linearly, and call sharp_zoom when its size on screen
-## changes.
-static func sharp_material() -> ShaderMaterial:
-	if _sharp_shader == null:
-		_sharp_shader = Shader.new()
-		_sharp_shader.code = SHARP_SHADER
-	var m := ShaderMaterial.new()
-	m.shader = _sharp_shader
-	return m
-
-
-## Sets ci's sharp material to its texels' size on screen: `texel` its own units per texel.
-static func sharp_zoom(ci: CanvasItem, texel := 1.0) -> void:
-	var m := ci.material as ShaderMaterial
-	if m == null or not ci.is_inside_tree():
-		return
-	var xf := ci.get_viewport().get_final_transform() * ci.get_global_transform_with_canvas()
-	var z := maxf(absf(xf.get_scale().x) * texel, 1.0)
-	var was: Variant = m.get_shader_parameter("zoom")
-	if was == null or not is_equal_approx(float(was), z):
-		m.set_shader_parameter("zoom", z)
+static func stepped_radial(knee: Vector2, size := 128) -> Texture2D:
+	var g := Gradient.new()
+	g.interpolation_mode = Gradient.GRADIENT_INTERPOLATE_CONSTANT
+	var offs := PackedFloat32Array()
+	var cols := PackedColorArray()
+	for i in BANDS:
+		var a := float(i) / BANDS
+		var mid := (float(i) + 0.5) / BANDS
+		# the smooth fall-off at the band's middle: 1 -> knee -> 0
+		var v := lerpf(1.0, knee.y, mid / knee.x) if mid < knee.x else lerpf(knee.y, 0.0, (mid - knee.x) / (1.0 - knee.x))
+		offs.append(a)
+		cols.append(Color(1, 1, 1, snappedf(v, 0.05)))
+	offs.append(0.999)
+	cols.append(Color(1, 1, 1, 0))
+	g.offsets = offs
+	g.colors = cols
+	var t := GradientTexture2D.new()
+	t.gradient = g
+	t.fill = GradientTexture2D.FILL_RADIAL
+	t.fill_from = Vector2(0.5, 0.5)
+	t.fill_to = Vector2(1.0, 0.5)
+	t.width = size
+	t.height = size
+	return t
 
 
 ## Ordered-dither threshold (0..1) of art pixel (x, y).

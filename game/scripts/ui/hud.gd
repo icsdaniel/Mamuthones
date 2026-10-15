@@ -244,10 +244,15 @@ func _to_frames(p: Vector2) -> Vector2:
 
 ## The pixel look's frames are Daniele's pictures (art/ai/hud_*.png, 2026-10-08), each in three
 ## slices: its two ends kept to their shape at the frame's height, its middle stretched between
-## them. Made once per size at one texel per texel of the world picture (PxArt.FINE), every texel
+## them. Made once per size at one texel per texel of the world picture (PxArt.texel), every texel
 ## wholly in or out, so they stay crisp.
 const SLICE := {"hud_plate": 240, "hud_bar": 90}   ## each picture's end width, its own px
 static var _sliced := {}
+
+
+## Forgets the frames made for a play screen's world.
+static func clear_pictures() -> void:
+	_sliced.clear()
 
 
 static func sliced(key: String, cells: Vector2i) -> Texture2D:
@@ -286,9 +291,9 @@ static func sliced(key: String, cells: Vector2i) -> Texture2D:
 	return tex
 
 
-## Draws picture `key` over r (base px), snapped to whole texels of the world picture (PxArt.FINE).
+## Draws picture `key` over r (base px), snapped to whole texels of the world picture (PxArt.texel).
 func _picture(ci: CanvasItem, key: String, r: Rect2, mod := Color.WHITE) -> void:
-	var px := PxArt.FINE
+	var px := PxArt.texel
 	var cells := Vector2i((r.size / px).round())
 	var tex := sliced(key, cells)
 	if tex != null:

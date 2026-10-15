@@ -54,6 +54,20 @@ func build() -> void:
 		anims.add_child(ab)
 	box.add_child(anims)
 	box.add_child(UIKit.label(tr("set_animations_note"), UIKit.CAPTION))
+	# graphics: sharp (the play screen at a whole number of screen px per texel) or fast (big pixels)
+	box.add_child(UIKit.label(tr("set_graphics"), UIKit.CAPTION))
+	var gfx := HBoxContainer.new()
+	gfx.name = "Graphics"
+	gfx.add_theme_constant_override("separation", 12)
+	for g in PxArt.GRAPHICS:
+		var gb := UIKit.button(tr("gfx_" + g), _graphics.bind(g, gfx))
+		gb.toggle_mode = true
+		gb.set_pressed_no_signal(PxArt.graphics() == g)
+		gb.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		gb.name = "Gfx_" + g
+		gfx.add_child(gb)
+	box.add_child(gfx)
+	box.add_child(UIKit.label(tr("set_graphics_note"), UIKit.CAPTION))
 
 	box.add_child(UIKit.label(tr("set_sound"), UIKit.SUB))
 	_slider(box, "music_volume", tr("set_music"), 0.0, 1.0, 0.05,
@@ -148,6 +162,13 @@ func _language(code: String) -> void:
 	Profile.set_setting("language", code)
 	I18n.set_locale(code)
 	app.rebuild_all()
+
+
+func _graphics(g: String, row: Control) -> void:
+	Sound.ui("tap")
+	Profile.set_setting("graphics", g)
+	for c in row.get_children():
+		(c as Button).set_pressed_no_signal(c.name == "Gfx_" + g)
 
 
 func _animations(a: String, row: Control) -> void:

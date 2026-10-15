@@ -118,6 +118,10 @@ func _ready() -> void:
 	var sh := Shader.new()
 	sh.code = PICTURE_SHADER
 	_mat.shader = sh
+	if ResourceLoader.exists(PixelFilter.LUT) and not OS.has_environment("SMOOTH_STREET"):
+		# the street in the pixel palette, dithered (PICTURE_SHADER's palette())
+		_mat.set_shader_parameter("lut", load(PixelFilter.LUT))
+		_mat.set_shader_parameter("quantize", true)
 	_pic.material = _mat
 	# The street never moves: it is drawn once (_bake) and shown still (_still), and only the fire's
 	# own corner of it (_fire_pic) runs the picture's shader every frame. Before, the whole screen ran
@@ -843,18 +847,7 @@ func _draw_glow(ci: CanvasItem) -> void:
 
 
 static func _radial() -> Texture2D:
-	var g := Gradient.new()
-	g.set_color(0, Color(1, 1, 1, 1))
-	g.set_color(1, Color(1, 1, 1, 0))
-	g.add_point(0.35, Color(1, 1, 1, 0.45))
-	var t := GradientTexture2D.new()
-	t.gradient = g
-	t.fill = GradientTexture2D.FILL_RADIAL
-	t.fill_from = Vector2(0.5, 0.5)
-	t.fill_to = Vector2(1.0, 0.5)
-	t.width = 128
-	t.height = 128
-	return t
+	return PxArt.stepped_radial(Vector2(0.35, 0.45))
 
 
 func _make_sparks() -> CPUParticles2D:
@@ -1018,6 +1011,22 @@ vec3 moving_road(sampler2D tex, vec2 p, vec3 c) {
 // stand out, with the lines' glow spilling onto it. The lines themselves stay the picture's.
 uniform bool smooth_lanes = false;
 
+// the pixel look: every texel snapped to the pixel palette (the lookup PixelFilter uses: 32 slices
+// of 32 x 32, blue picks the slice) through a 4 x 4 ordered dither, so the street's soft light and
+// the lanes' gradients come out as palette bands and dither, not an airbrushed painting
+uniform sampler2D lut : filter_nearest;
+uniform bool quantize = false;
+uniform float dither = 0.05;
+
+vec3 palette(vec3 c, vec2 cell) {
+	int x = int(mod(cell.x, 4.0));
+	int y = int(mod(cell.y, 4.0));
+	float b[16] = float[](0.0, 8.0, 2.0, 10.0, 12.0, 4.0, 14.0, 6.0, 3.0, 11.0, 1.0, 9.0, 15.0, 7.0, 13.0, 5.0);
+	c = clamp(c + ((b[y * 4 + x] + 0.5) / 16.0 - 0.5) * dither, 0.0, 1.0);
+	vec3 q = clamp(floor(c * 31.0 + 0.5), 0.0, 31.0);
+	return texture(lut, vec2((q.b * 32.0 + q.r + 0.5) / 1024.0, (q.g + 0.5) / 32.0)).rgb;
+}
+
 vec3 smooth_lane(sampler2D tex, vec2 p, vec3 c) {
 	if (p.y < far_y + 2.0) {
 		return c;
@@ -1070,6 +1079,9 @@ void fragment() {
 	c.rgb *= 1.0 + hot * (flare + flick * motion) - hot * 0.55 * dim;
 	// low health: the night closes in, the far end darkest
 	c.rgb *= 1.0 - 0.35 * dim;
+	if (quantize) {
+		c.rgb = palette(c.rgb, floor(FRAGCOORD.xy));
+	}
 	COLOR = vec4(c.rgb, 1.0);
 }
 """

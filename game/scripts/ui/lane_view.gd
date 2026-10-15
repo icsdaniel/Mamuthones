@@ -1530,25 +1530,45 @@ func warm(bells: bool) -> void:
 	if street == null:
 		return
 	for lane in 3:
-		var cr := _button_cells(lane)
+		var tc := _button_texels(lane)
 		for key in ["btn_idle", "btn_pressed"]:
-			_nine(key, cr * FINE_K, BTN_CAP)
-		_nine("btn_idle!white", (cr + Vector2i(2, 2)) * FINE_K, BTN_CAP)
-		for fh: int in _foot_sizes(cr.y):
-			var fw := maxi(roundi(fh * FOOT_ASPECT), 6 * FINE_K)
-			StreetSkin.ai_tex("foot", Vector2i(fw, fh))
-			StreetSkin.ai_tex("foot!mirror", Vector2i(fw, fh))
+			_nine(key, tc, BTN_CAP)
+		_nine("btn_idle!white", tc + Vector2i.ONE * 2 * _glow_texels(), BTN_CAP)
+		var ft := _foot_texels(_button_cells(lane).y)
+		StreetSkin.ai_tex("foot", ft)
+		StreetSkin.ai_tex("foot!mirror", ft)
+	StreetSkin.ai_tex("rope", StreetSkin.rope_texels())
 	if bells:
 		StreetSkin.warm(self, field_rect())
+	StreetSkin.sealed = true   # the song's pictures are made: none is shrunk mid-song
 
 
-## Texels of the world picture to an art pixel, each way: the buttons' pictures are shrunk to texels.
-const FINE_K := int(PxArt.PX / PxArt.FINE)
+## Forgets the step pictures made for a play screen's world.
+static func clear_pictures() -> void:
+	_nine_cache.clear()
 
 
-## The feet's height on a step `rows` cells tall, in texels (a list, for warm()).
-static func _foot_sizes(rows: int) -> Array[int]:
-	return [clampi(int(rows * 0.5), 16, 40) * FINE_K]
+## A step's picture size in texels of the world picture (its cells, less the side under it).
+func _button_texels(lane: int) -> Vector2i:
+	var c := _button_cells(lane)
+	return Vector2i(PxArt.texels(c.x * PxArt.PX), PxArt.texels(c.y * PxArt.PX))
+
+
+## The glow round a cued or hit step: about an art px, in whole texels.
+static func _glow_texels() -> int:
+	return maxi(1, PxArt.texels(PxArt.PX))
+
+
+## A bare foot's picture size in texels on a step `rows` cells tall.
+static func _foot_texels(rows: int) -> Vector2i:
+	var fh := PxArt.texels(clampi(int(rows * 0.5), 16, 40) * PxArt.PX)
+	return Vector2i(maxi(roundi(fh * FOOT_ASPECT), PxArt.texels(6.0 * PxArt.PX)), fh)
+
+
+## Where `at` (this control's coordinates) lies on the world picture's texel grid.
+func _texel_snap(at: Vector2) -> Vector2:
+	var xf := get_global_transform()
+	return xf.affine_inverse() * PxArt.snap2(xf * at, Vector2.ZERO, PxArt.texel * xf.get_scale().x)
 
 
 ## A step button's rect on the grid ...
@@ -1592,34 +1612,34 @@ func _draw_pixel_buttons() -> void:
 			_px(o, 2, rows - 1, cols - 4, side + 1, PX_BRONZE[0])
 			_px(o, 3, rows + side - 1, cols - 6, 1, PX_WOOD[0])
 		var down_pic := st == "pressed" or st == "hit"
-		# Daniele's pictures at the world's texels (FINE_K a cell each way); the step's shape stays on the cells
-		var tex := _nine("btn_pressed" if down_pic else "btn_idle", Vector2i(cols, rows) * FINE_K, BTN_CAP)
+		# Daniele's pictures one to one on the world's texels; the step's side stays on the art grid
+		var tc := _button_texels(lane)
+		var q := PxArt.texel
+		var to := _texel_snap(o)
+		var tex := _nine("btn_pressed" if down_pic else "btn_idle", tc, BTN_CAP)
 		var mod := {"idle": Color.WHITE, "cued": Color(1.2, 1.1, 0.92), "pressed": Color.WHITE,
 			"hit": Color(1.45, 1.2, 0.85), "miss": Color(0.95, 0.5, 0.45)}[st] as Color
 		if st == "cued" or st == "hit":
 			# a one-px glow around the step's own outline (its cut corners included)
 			var glow := Color("#fff2c0") if st == "hit" else Color("#ffc445")
-			var sil := _nine("btn_idle!white", Vector2i(cols + 2, rows + 2) * FINE_K, BTN_CAP)
+			var g := _glow_texels()
+			var sil := _nine("btn_idle!white", tc + Vector2i.ONE * 2 * g, BTN_CAP)
 			if sil != null:
-				draw_texture_rect(sil, Rect2(o - Vector2(p, p), Vector2(cols + 2, rows + 2) * p), false, Color(glow, 0.8))
+				draw_texture_rect(sil, Rect2(to - Vector2(g, g) * q, Vector2(tc + Vector2i.ONE * 2 * g) * q), false, Color(glow, 0.8))
 		if tex != null:
-			draw_texture_rect(tex, Rect2(o, Vector2(cols, rows) * p), false, mod)
+			draw_texture_rect(tex, Rect2(to, Vector2(tc) * q), false, mod)
 		# the feet carved into it
 		var fmod := {"idle": Color(0.82, 0.78, 0.72), "cued": Color(1, 0.97, 0.9), "pressed": Color.WHITE,
 			"hit": Color(1.15, 1.1, 1.0), "miss": Color(0.55, 0.32, 0.3)}[st] as Color
 		var feet := [-1.0, 1.0] if lane == 1 else ([-1.0] if lane == 0 else [1.0])
-		# the feet in texels of the world picture (FINE_K to a cell)
-		var fh: int = _foot_sizes(rows)[0]
-		var fw := maxi(roundi(fh * FOOT_ASPECT), 6 * FINE_K)
-		var q := PxArt.FINE
-		var tc := cols * FINE_K
-		var tr_ := rows * FINE_K
+		# the feet in texels of the world picture
+		var ft := _foot_texels(rows)
 		for i in feet.size():
-			var cx := tc * 0.5 + (0.0 if feet.size() == 1 else (float(i) - 0.5) * fw * 1.5)
-			var ftex := StreetSkin.ai_tex("foot" if feet[i] > 0.0 else "foot!mirror", Vector2i(fw, fh))
+			var cx := tc.x * 0.5 + (0.0 if feet.size() == 1 else (float(i) - 0.5) * ft.x * 1.5)
+			var ftex := StreetSkin.ai_tex("foot" if feet[i] > 0.0 else "foot!mirror", ft)
 			if ftex != null:
-				var fo := Vector2(roundf(cx - fw * 0.5), roundf(tr_ * 0.5 - fh * 0.5))
-				draw_texture_rect(ftex, Rect2(o + fo * q, Vector2(fw, fh) * q), false, fmod)
+				var fo := Vector2(roundf(cx - ft.x * 0.5), roundf(tc.y * 0.5 - ft.y * 0.5))
+				draw_texture_rect(ftex, Rect2(to + fo * q, Vector2(ft) * q), false, fmod)
 	_draw_street_marks(r, w)
 
 

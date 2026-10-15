@@ -39,7 +39,7 @@ const DISC_H := 0.1                  ## how thick a disc stands, in lane widths
 const FORE := 0.42                   ## how much the road's depth is foreshortened on screen
 const SIDES := 24                    ## a disc's facets round its edge
 const ROPE_W := 0.2                  ## the rope's width, in lane widths
-const ROPE_PIC_W := 36                ## texels across the rope's picture is shrunk to (the pixel look)
+const ROPE_PIC_W := 54.0              ## base px across the rope's picture is shrunk to (the pixel look), in texels of the world
 const STRAP_D := 0.42                ## the bell strap's depth along the road, in lane widths
 ## Bursts and sparks are drawn as opaque pixel shapes (no soft glows or fades, which turn to mud on the
 ## pixel grid): flashes, stamped rings and square embers.
@@ -142,23 +142,12 @@ static func _shade(n: Vector3, k: Array, flash: float) -> Color:
 static var _glow_tex: Texture2D
 
 
-## A soft round glow of colour col, radius r (x, y), centred at c.
+## A round glow of colour col in stepped rings, radius r (x, y), centred at c.
 static func _glow(ci: CanvasItem, c: Vector2, r: Vector2, col: Color) -> void:
 	if col.a <= 0.01:
 		return
 	if _glow_tex == null:
-		var g := Gradient.new()
-		g.set_color(0, Color(1, 1, 1, 1))
-		g.set_color(1, Color(1, 1, 1, 0))
-		g.add_point(0.45, Color(1, 1, 1, 0.35))
-		var t := GradientTexture2D.new()
-		t.gradient = g
-		t.fill = GradientTexture2D.FILL_RADIAL
-		t.fill_from = Vector2(0.5, 0.5)
-		t.fill_to = Vector2(1.0, 0.5)
-		t.width = 128
-		t.height = 128
-		_glow_tex = t
+		_glow_tex = PxArt.stepped_radial(Vector2(0.45, 0.35))   # in flat rings, as pixel-art light
 	ci.draw_texture_rect(_glow_tex, Rect2(c - r, r * 2.0), false, col)
 
 
@@ -183,7 +172,7 @@ static func disc_glow(ci: CanvasItem, c: Vector2, rx: float, k: Array, alpha: fl
 
 
 ## Daniele's pictures of the notes and the rings (game/art/ai, drawn by an outside image AI, 2026-10-08), by key,
-## and each shrunk to the sizes it is shown at: one picture pixel per texel of the world picture (PxArt.FINE), so it stays crisp.
+## and each shrunk to the sizes it is shown at: one picture pixel per texel of the world picture (PxArt.texel), so it stays crisp.
 static var _ai := {}
 static var _ai_sized := {}
 ## Per picture, halvings of it (the picture itself first): a size is shrunk from the smallest one at
@@ -202,6 +191,38 @@ static func ai_image(path: String) -> Image:
 	if r is Texture2D:
 		return (r as Texture2D).get_image()
 	return null
+
+
+## Set once the song's pictures are made (LaneView.warm): a size not made by then is never shrunk
+## mid-song, the nearest size already made of that picture is drawn instead (a missed bell sweeping
+## on past the hit line, the window resized). Cleared with the pictures.
+static var sealed := false
+## Pictures actually shrunk (bench.gd counts those made while it measures).
+static var shrunk := 0
+
+
+## Forgets every picture shrunk for a play screen's world (the sources and their halvings stay).
+static func clear_sized() -> void:
+	_ai_sized.clear()
+	sealed = false
+
+
+## The picture of `key` already made whose size is nearest `size` (null: none made yet).
+static func _nearest_sized(key: String, size: Vector2i) -> Texture2D:
+	var best: Texture2D = null
+	var best_d := INF
+	var prefix := key + "_"
+	for k: String in _ai_sized:
+		if not k.begins_with(prefix):
+			continue
+		var wh := k.substr(prefix.length()).split("_")
+		if wh.size() != 2 or not wh[0].is_valid_int():
+			continue
+		var d := absf(float(wh[0].to_int() - size.x)) + absf(float(wh[1].to_int() - size.y))
+		if d < best_d:
+			best_d = d
+			best = _ai_sized[k]
+	return best
 
 
 static func ai_tex(key: String, size: Vector2i) -> Texture2D:
@@ -230,7 +251,12 @@ static func ai_tex(key: String, size: Vector2i) -> Texture2D:
 		return null
 	size = size.max(Vector2i.ONE)
 	var k := "%s_%d_%d" % [key, size.x, size.y]
+	if not _ai_sized.has(k) and sealed:
+		var near := _nearest_sized(key, size)
+		if near != null:
+			_ai_sized[k] = near   # drawn stretched over the size asked for: nothing is shrunk
 	if not _ai_sized.has(k):
+		shrunk += 1
 		for m: Image in _ai_mips[key]:
 			if m.get_width() >= size.x * 2 and m.get_height() >= size.y * 2:
 				src = m
@@ -301,12 +327,13 @@ static func _bell_size(lv: LaneView, field: Rect2, y: float) -> Dictionary:
 		"arrow": ai_cells(Vector2(-a, -hh * 1.4), Vector2(a, hh * 0.4))}
 
 
-## The beam's picture size for its quad on screen (texels of PxArt.FINE): few sizes (a beam slides
-## down every frame), its width in steps of 16 texels.
+## The beam's picture size for its quad on screen (texels of the world picture): few sizes (a beam
+## slides down every frame), its width in steps of about 24 base px.
 static func bar_cells(quad: PackedVector2Array) -> Vector2i:
 	var w := quad[1].x - quad[0].x
 	var tall := quad[2].y - quad[1].y
-	return Vector2i(maxi(16, roundi(w / PxArt.FINE / 16.0) * 16), maxi(6, roundi(tall / PxArt.FINE)))
+	var step := PxArt.texels(24.0)
+	return Vector2i(maxi(step, roundi(w / PxArt.texel / step) * step), maxi(PxArt.texels(9.0), roundi(tall / PxArt.texel)))
 
 
 ## The pixel look's note from its picture: the picture stretched over the disc it stands for (r lane
@@ -336,10 +363,10 @@ static func ai_disc(lv, field: Rect2, cx: float, y: float, r: float, key: String
 	return true
 
 
-## Picture `key` over the box lo..hi in whole texels of the world picture (PxArt.FINE base px): shrunk
+## Picture `key` over the box lo..hi in whole texels of the world picture (PxArt.texel base px): shrunk
 ## to the texels it covers, drawn one to one.
 static func ai_draw(ci: CanvasItem, key: String, lo: Vector2, hi: Vector2, mod := Color.WHITE) -> void:
-	var px := PxArt.FINE
+	var px := PxArt.texel
 	var cells := ai_cells(lo, hi)
 	var tex := ai_tex(key, cells)
 	if tex == null:
@@ -350,10 +377,11 @@ static func ai_draw(ci: CanvasItem, key: String, lo: Vector2, hi: Vector2, mod :
 
 ## The picture size (cells) ai_draw shows a picture at between lo and hi on screen.
 static func ai_cells(lo: Vector2, hi: Vector2) -> Vector2i:
-	var cells := Vector2i(((hi - lo) / PxArt.FINE).round())
-	if cells.x > 80:
+	var cells := Vector2i(((hi - lo) / PxArt.texel).round())
+	if cells.x > PxArt.texels(120.0):
 		# past the sheet's sizes (a missed note sweeping past the line): fewer sizes to shrink to
-		cells = (cells / 8) * 8
+		var q := PxArt.texels(12.0)
+		cells = (cells / q) * q
 	return cells
 
 
@@ -543,11 +571,17 @@ static func _rope_sparks(lv: LaneView, f: Callable, h: float, yb: float, lane: f
 			_embers_px(lv, at, lw * 0.6, age, 4, int(lv._clock / 0.33) * 5 + i, PX_HOT, 0.8)
 
 
+## The rope picture's size in texels of the world picture.
+static func rope_texels() -> Vector2i:
+	var w := PxArt.texels(ROPE_PIC_W)
+	return Vector2i(w, roundi(w * 794.0 / 143.0))
+
+
 ## The pixel look's rope from Daniele's picture, laid along the hold through the cord's frame f: the
 ## picture repeats down the road, its twist fixed to the rope's far end (the hold's end) so it travels
 ## with it. False when there is no picture.
 static func _rope_pic(lv: LaneView, f: Callable, ya: float, yb: float, lane: float, lit: bool, alpha: float) -> bool:
-	var tex := ai_tex("rope", Vector2i(ROPE_PIC_W, roundi(ROPE_PIC_W * 794.0 / 143.0)))
+	var tex := ai_tex("rope", rope_texels())
 	if tex == null:
 		return false
 	# one picture's length along the road, flat px: its own shape, at the rope's width, foreshortened
@@ -927,8 +961,10 @@ static func _stamp(lv: LaneView, field: Rect2, what: String, n: Note, cx: float,
 	var lw: float = lv.road_scale(y) * _lane(field)
 	if lw < 2.0 or a <= 0.01:
 		return true
-	if not atlas.covers(lw):
+	if not atlas.is_painted():
 		return false
+	# past the sheet's biggest size (a missed note sweeping on past the hit line) the biggest is
+	# stretched: nothing is drawn in full or shrunk mid-song
 	if n.kind == Note.Kind.RING and what != "hold" and what != "knot":
 		bell(lv, field, y, n.up, a)
 	var c: Vector2 = lv.project(Vector2(cx, y))

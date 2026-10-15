@@ -158,6 +158,10 @@ anim_full,Full,Complete
 anim_calm,Calm,Calme
 anim_off,Off,Spente
 set_animations_note,"Off: the street, the fire and the figures stand still and only the notes move, for the smoothest play.","Spente: la strada, il fuoco e le figure restano fermi e si muovono solo le note, per il gioco più fluido."
+set_graphics,Graphics,Grafica
+gfx_sharp,Sharp,Nitida
+gfx_fast,Fast,Veloce
+set_graphics_note,"Fast: the play screen in big pixels, for older phones that stutter.","Veloce: la schermata di gioco a pixel grandi, per i telefoni più vecchi che scattano."
 set_sound,Sound,Suono
 set_music,Music,Musica
 set_sfx,Bells and effects,Campanacci ed effetti

@@ -3,13 +3,15 @@ extends Node
 ## The pixel look's note sheet. Drawing a note in full (a faceted solid, its shading, the pintadera's
 ## teeth) every frame cost most of a frame on a dense chart, so each kind is painted once here, by the
 ## same StreetSkin code, at a ladder of sizes down the road, into one small picture at one pixel per
-## texel of the world picture (PxArt.FINE). Notes are then stamped from it: one textured rectangle each, whatever their number.
+## texel of the world picture (PxArt.texel). Notes are then stamped from it: one textured rectangle
+## each, whatever their number. The sizes are packed in shelves (the small far ones side by side), so
+## the sheet is about half the picture a column of rows needed.
 ##
 ## A note's look depends only on how far down the road it is (its size and how flat it lies), so a
 ## sheet row per size covers the road; the nearest size is stretched by a few percent to fit.
 
 const KINDS := ["step", "off", "six", "call", "heal", "hold", "stomp", "knot"]
-const STEP := 6.0               ## sheet texels (PxArt.FINE) a cell grows by from one row to the next (a note is stretched by under 3 texels, 2%)
+const STEP := 6.0               ## sheet texels (PxArt.texel) a cell grows by from one size to the next (a note is stretched by under 3 texels, 2%)
 const CELL := Vector2(1.08, 0.78)  ## a cell's size in lane widths at its size (a stomp's disc fits)
 const REACH := 1.3             ## the sheet's biggest note: this times a note's size on the hit line
 
@@ -18,8 +20,8 @@ var _vp: SubViewport
 var _painter: _Painter
 var _ys: PackedFloat32Array = []      ## each row's depth on the road
 var _lws: PackedFloat32Array = []     ## ... its lane width on screen
-var _rows: Array[Rect2] = []          ## each row's cell (sheet pixels): its size, and y of its row
-var _key := Vector4.ZERO              ## the layout the sheet was painted for
+var _rows: Array[Rect2] = []          ## each size's first cell (sheet pixels): where it starts, and its size
+var _key := []                        ## the layout (and the world's texel) the sheet was painted for
 var _ready_frame := -1
 var _n := 0                           ## rows
 var _copied := false                  ## the painted sheet has been copied (or tried)
@@ -50,7 +52,7 @@ func _ready() -> void:
 ## True once the sheet is painted for the lanes' current layout; repaints it when that has changed.
 func ready_for(lv: LaneView) -> bool:
 	var f := lv.field_rect()
-	var key := Vector4(f.size.x, f.size.y, LaneSkin.hit_line_y(Rect2(Vector2.ZERO, f.size)), lv.project(Vector2.ZERO).y)
+	var key := [f.size, LaneSkin.hit_line_y(Rect2(Vector2.ZERO, f.size)), lv.project(Vector2.ZERO).y, PxArt.texel]
 	if key != _key:
 		_key = key
 		if _kept.get("key") == key:
@@ -92,9 +94,8 @@ func _layout(lv: LaneView) -> void:
 	_ys = PackedFloat32Array()   # fresh: the kept sheet may hold the old ones
 	_lws = PackedFloat32Array()
 	_rows = []
-	var px := PxArt.FINE
-	var top := 0.0
-	var width := 0.0
+	var px := PxArt.texel
+	var cells: Array[Vector2] = []
 	# just enough rows that the nearest is never more than STEP / 2 sheet px off: few, as the road
 	# narrows little, so the sheet is small and quick to paint
 	_n = clampi(ceili((lw1 - lw0) * CELL.x / px / STEP) + 1, 2, 64)
@@ -102,13 +103,22 @@ func _layout(lv: LaneView) -> void:
 		# sizes in equal ratios: the far notes change little, the near ones a lot
 		var lw := lw0 * pow(lw1 / lw0, float(i) / (_n - 1))
 		var y := _depth_for(lv, lane, lw, y0, y1)
-		var cell := (lw * CELL / px).ceil() + Vector2(4.0, 4.0)
 		_ys.append(y)
 		_lws.append(lw)
-		_rows.append(Rect2(Vector2(0.0, top), cell))
-		top += cell.y
-		width = maxf(width, cell.x * KINDS.size())
-	_vp.size = Vector2i(ceili(width), ceili(top))
+		cells.append((lw * CELL / px).ceil() + Vector2(4.0, 4.0))
+	# shelves as wide as the biggest size's row of kinds, each size's kinds side by side
+	var width := cells[_n - 1].x * KINDS.size()
+	var at := Vector2.ZERO
+	var shelf := 0.0
+	for cell in cells:
+		var w := cell.x * KINDS.size()
+		if at.x + w > width + 0.5:
+			at = Vector2(0.0, at.y + shelf)
+			shelf = 0.0
+		_rows.append(Rect2(at, cell))
+		at.x += w
+		shelf = maxf(shelf, cell.y)
+	_vp.size = Vector2i(ceili(width), ceili(at.y + shelf))
 	_vp.canvas_transform = Transform2D().scaled(Vector2.ONE / px)
 	_painter.view = lv
 	_painter.field = field
@@ -131,6 +141,11 @@ func _depth_for(lv: LaneView, lane: float, lw: float, a: float, b: float) -> flo
 
 
 ## Whether the sheet holds notes as big as lw (else the note is drawn in full).
+## Whether the sheet has its sizes laid out (stamp() can draw from it).
+func is_painted() -> bool:
+	return _n > 0
+
+
 func covers(lw: float) -> bool:
 	return _n > 0 and lw <= _lws[_n - 1] * 1.02
 
@@ -142,8 +157,8 @@ func stamp(lv: LaneView, key: String, c: Vector2, lw: float, a: float) -> void:
 		return
 	var i := clampi(int(roundf(log(lw / _lws[0]) / log(_lws[_n - 1] / _lws[0]) * (_n - 1))), 0, _n - 1)
 	var row := _rows[i]
-	var src := Rect2(row.size.x * col, row.position.y, row.size.x, row.size.y)
-	var s := lw / _lws[i] * PxArt.FINE
+	var src := Rect2(row.position.x + row.size.x * col, row.position.y, row.size.x, row.size.y)
+	var s := lw / _lws[i] * PxArt.texel
 	var dst := Rect2(c - row.size * 0.5 * s, row.size * s)
 	lv.draw_texture_rect_region(_tex, dst, src, Color(1.0, 1.0, 1.0, a))
 
@@ -166,7 +181,7 @@ class _Painter extends Node2D:
 	func _draw() -> void:
 		if view == null:
 			return
-		var px := PxArt.FINE
+		var px := PxArt.texel
 		var cx := field.size.x * 0.5
 		StreetSkin.paint_glow = false
 		var near := StreetSkin._near
@@ -176,7 +191,7 @@ class _Painter extends Node2D:
 			var row: Rect2 = atlas._rows[i]
 			_origin = view.project(Vector2(cx, y))
 			for col in NoteAtlas.KINDS.size():
-				_centre = (Vector2(row.size.x * col, row.position.y) + row.size * 0.5) * px
+				_centre = (row.position + Vector2(row.size.x * col, 0.0) + row.size * 0.5) * px
 				match str(NoteAtlas.KINDS[col]):
 					"step":
 						StreetSkin.step(self, field, cx, y, 1.0)

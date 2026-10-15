@@ -31,6 +31,7 @@ const DEFAULT_SETTINGS := {
 	"slam": false,
 	"reduced_motion": false,  # kept for older profiles: true reads as animations "calm"
 	"animations": "full",     # "full", "calm" or "off" (UIKit.animations)
+	"graphics": "sharp",      # "sharp" or "fast": the play screen's world picture (PxArt.world_density)
 	"note_speed": 1.0,
 	"music_volume": 1.0,
 	"sfx_volume": 1.0,
