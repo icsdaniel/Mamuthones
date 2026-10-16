@@ -144,12 +144,21 @@
   3,
   12,
   24,
-  29,
   37,
   42
  ],
  "seesaw": [],
  "end_beat": 183.0,
  "auto_bass_stomps": true,
- "drop_bass_window": 4
+ "drop_bass_window": 4,
+ "drone": [
+  [
+   7,
+   8
+  ],
+  [
+   39,
+   40
+  ]
+ ]
 }

@@ -269,5 +269,10 @@
    2
   ]
  ],
- "end_beat": 383.0
+ "end_beat": 383.0,
+ "bass_stomps": [
+  240,
+  364
+ ],
+ "four_on_floor": true
 }
