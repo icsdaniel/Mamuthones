@@ -49,15 +49,20 @@ import validate_charts as V  # noqa: E402
 DIFFS = ("easy", "medium", "hard", "expert")
 # notes per second the rhythm layer aims at, by section energy (0 calm, 1 groove, 2 loud)
 TARGET = {
-    "expert": (2.6, 4.6, 5.6),
-    "hard": (1.7, 2.7, 3.2),
-    "medium": (1.2, 1.9, 2.2),
-    "easy": (0.45, 0.7, 0.8),
+    "expert": (3.0, 5.0, 6.0),
+    "hard": (1.9, 3.0, 3.5),
+    "medium": (1.3, 2.0, 2.4),
+    "easy": (0.5, 0.85, 1.0),
 }
 # the least time between two tilts, and between two Expert chords (loud bars, other bars), in seconds:
 # a fast song tilts and chords less often per beat
-TILT_GAP = {"expert": 0.9, "hard": 1.1, "medium": 1.8, "easy": 4.0}
-CHORD_GAP = {"expert": (2.0, 1.0), "hard": (4.0, 4.0)}
+TILT_GAP = {"expert": 0.88, "hard": 1.0, "medium": 1.9, "easy": 4.0}
+CHORD_GAP = {"expert": (1.4, 0.7), "hard": (4.0, 4.0)}
+# the room a tilt keeps clear, in seconds: before it, and after it (Expert, other levels)
+TILT_BEFORE = 0.2
+TILT_AFTER = {"expert": 0.28, "hard": 0.4, "medium": 0.4, "easy": 0.8}
+# the least time between two stomps (Hard and Expert, Medium)
+STOMP_GAP = (8.0, 15.0)
 ON = 0.5          # a lead onset counts from this strength
 SIXTEENTH_ON = 0.5
 
@@ -144,12 +149,13 @@ def pick_rhythm(song, diff, bar):
         i = s % 16
         lead, drum = song.lead(s), song.drum(s)
         if diff == "expert":
-            ok = (i % 2 == 0 and lead >= ON) or (i % 2 == 1 and lead >= SIXTEENTH_ON and e >= 1)
+            six = SIXTEENTH_ON if song.spb / 4 < 0.2 else 0.35     # a slow song's sixteenths are roomy
+            ok = (i % 2 == 0 and lead >= ON) or (i % 2 == 1 and lead >= six and e >= 1)
             ok = ok or (i % 4 == 0 and drum >= 0.6 and kind in ("groove", "transition", "ending"))
             if kind == "build":
                 ok = song.a["dm"][s] >= 0.4 or lead >= ON or i % 4 == 0   # the snare roll as it sounds
         elif diff == "hard":
-            ok = i % 2 == 0 and (lead >= ON or (i % 4 == 0 and drum >= 0.6) or kind == "build")
+            ok = i % 2 == 0 and (lead >= ON or (i % 4 == 0 and drum >= 0.6) or drum >= 0.8 or kind == "build")
         elif diff == "medium":
             # the beat, plus the tune's eighths (its "& of 4" pickup above all)
             ok = (i % 4 == 0 and (lead >= ON or drum >= 0.6 or kind == "build")) or \
@@ -159,8 +165,6 @@ def pick_rhythm(song, diff, bar):
         if ok:
             cands.append(s)
     target = TARGET[diff][e] * song.spb * 4         # notes in this bar
-    if diff == "medium" and song.cfg["bpm"] < 80:    # a slow song's eighths are Hard's job
-        target *= song.cfg["bpm"] / 90
     if kind == "build":
         target = {"expert": 16, "hard": 8, "medium": 4, "easy": 2}[diff]
 
@@ -222,7 +226,8 @@ def lanes_for(song, diff, slots, forced=None):
     last_lane = 1
     for key in sorted(by_sec):
         ss = by_sec[key]
-        tuned = [song.pitch(s) for s in ss if song.lead(s) >= ON]
+        bars_ = sorted({s // 16 for s in ss})
+        tuned = [song.pitch(x) for b in bars_ for x in range(b * 16, min(b * 16 + 16, song.n)) if song.lead(x) >= ON]
         lane_of = phrase_lanes(tuned, pivot=diff != "easy")
         prev_p, prev_lane = None, last_lane
         for s in ss:
@@ -301,19 +306,22 @@ def stomp_slots(song, diff):
         return []
     bars = song.cfg["drops"] if lv >= 2 else song.cfg["medium_drops"]
     win = song.cfg.get("drop_bass_window", 2)     # slots after the downbeat the bass may land in
-    out = [b * 16 for b in bars if max(song.a["bass"][b * 16:b * 16 + win]) >= 0.6]
+    # a drop stomps when the bass lands with it, or the kick (or snare) comes back on its downbeat;
+    # the bar after a build always does
+    out = [b * 16 for b in bars if max(song.a["bass"][b * 16:b * 16 + win]) >= 0.6
+           or song.drum(b * 16) >= 0.6 or song.kind.get(b - 1) == "build"]
     extra = song.cfg.get("bass_stomps" if lv >= 2 else "medium_bass_stomps", [])
     out += [round(b * 4) for b in extra]
     if song.cfg.get("auto_bass_stomps"):
         # the bass landing on a loud phrase's downbeat with the kick: a stomp, eight bars apart
         # (the song's heaviest downbeat basses: its top fifth, and at least 0.45)
-        down = [max(song.a["bass"][b * 16:b * 16 + 2]) for b in range(song.bars) if song.kind.get(b) == "groove"]
+        down = [max(song.a["bass"][b * 16:b * 16 + 4]) for b in range(song.bars) if song.kind.get(b) == "groove"]
         heavy = max(0.45, float(np.percentile(down, 80))) if down else 9
         for bar in range(song.bars):
             s0 = bar * 16
             if (bar % 4 == 0 and song.kind.get(bar) == "groove" and song.energy.get(bar, 1) >= 2
-                    and max(song.a["bass"][s0:s0 + 2]) >= heavy and song.a["dl"][s0] >= 0.6
-                    and all(abs(s0 - x) >= (128 if lv >= 2 else 256) for x in out)):
+                    and max(song.a["bass"][s0:s0 + 4]) >= heavy and song.a["dl"][s0] >= 0.6
+                    and all(abs(s0 - x) * song.spb / 4 >= STOMP_GAP[lv < 2] for x in out)):
                 out.append(s0)
     return sorted(set(out))
 
@@ -339,11 +347,11 @@ def tilt_slots(song, diff, skip_bars=()):
             out += [s0, s0 + 8] if lv >= 2 else [s0] if lv == 1 else []
         elif k in ("groove", "transition") and bar not in skip_bars:
             if lv == 3:
-                out += [s0, s0 + 8]
-            elif lv == 2:
-                out += [s0, s0 + 8] if e >= 2 else [s0]
+                out += [s0, s0 + 8] if e >= 2 or bar % 4 == 3 else [s0]    # beat 3 in loud bars and phrase ends
+            elif lv == 2:     # a fast song's quieter bars tilt every other bar
+                out += [s0, s0 + 8] if e >= 2 else [s0] if bar % 2 == 0 or song.spb * 4 >= 2.0 else []
             elif lv == 1:
-                out += [s0 + 8]
+                out += [s0]
     if lv == 0:
         extra = []
         for bar in range(0, song.bars, 2):
@@ -351,6 +359,16 @@ def tilt_slots(song, diff, skip_bars=()):
             if song.kind.get(bar) == "groove" and all(abs(s0 - x) >= 32 for x in out + extra):
                 extra.append(s0)
         out += extra
+    # a tilt on silence reads as a mistake: it needs a drum, the bass or a tune note under it
+    out = [t for t in out if t < song.n and (song.drum(t) >= 0.4 or song.a["bass"][t] >= 0.5
+                                             or song.lead(t) >= ON or song.a["e"][t] > 0.5)]
+    # the tune's pickup into a downbeat (the last sixteenth of the bar) keeps its note at Expert:
+    # the downbeat tilt moves to beat 2 when the tune rests there
+    if lv == 3:
+        shifted = {t // 16 for t in out
+                   if t % 16 == 0 and song.kind.get(t // 16) in ("groove", "transition") and song.lead(t - 1) >= 0.7
+                   and song.lead(t) < ON and song.lead(t + 4) < ON and t + 4 not in out}
+        out = [t + 4 if t // 16 in shifted and t % 16 in (0, 8) else t for t in out]   # the bar's tilts, a beat later
     # a tilt takes the same time at any tempo: keep them a few tenths of a second apart (a fast
     # song tilts on the downbeat only), breaks and downbeats first
     gap = TILT_GAP[diff] / song.spb * 4          # in slots
@@ -358,7 +376,7 @@ def tilt_slots(song, diff, skip_bars=()):
     kept = []
     for s in order:
         brk = song.kind.get(s // 16) == "break"    # a break's answering pair stays, if not too quick
-        g = gap * (0.9 if lv == 3 and song.energy.get(s // 16, 1) >= 2 else 1.0)   # Expert's loud bars tilt more
+        g = gap
         if all(abs(s - x) >= (min(g, 0.4 / song.spb * 4) if brk and x // 16 == s // 16 else g) - 1e-6
                for x in kept):
             kept.append(s)
@@ -397,7 +415,11 @@ def build_chart(song, diff, reps):
                      if song.a["pc"][s] != piv and song.lead(s) >= ON]
             pp = [song.pitch(s) for s in range(s0, s0 + 16) if song.a["pc"][s] == piv]
             up = sum(1 for p in moves if p > pp[0]) >= len(moves) / 2 if pp else True
-            holds.append((s0 + 4, 0 if up else 2, 8))     # from beat 2, after the tilt
+            # from the pivot note's first sounding after beat 1 (the tilt), shorter as the level rises so
+            # the free thumb gets more of the tune
+            st = next((x for x in range(s0 + 2, s0 + 8) if song.a["pc"][x] == piv and song.lead(x) >= ON
+                       and x % (1 if lv == 3 else 2) == 0), s0 + 4)
+            holds.append((st, 0 if up else 2, {1: 8, 2: 6, 3: 4}[lv]))
         for a, c in song.cfg.get("tension_hold", []):  # through the stop, out into the drop
             holds.append((round(a * 4), 0, round((c - a) * 4)))
     hold_bars = {h[0] // 16 for h in holds}
@@ -417,21 +439,22 @@ def build_chart(song, diff, reps):
     rhythm = [s for s in rhythm if s not in stomps]
 
     # tilts: a tilt owns its space, an eighth after it (and a sixteenth before at Expert)
-    skip = hold_bars if lv == 1 else ()
+    skip = ()
     tilts = tilt_slots(song, diff, skip)
     tilts = [t for t in tilts if t not in stomps and t not in hold_slots
              and not any(abs(t - x) < 4 for x in stomps)
              and not any(h[0] <= t <= h[0] + h[2] for h in holds)]   # a tilt needs both thumbs
-    after = 1 if lv == 3 else 2 if lv >= 1 else 4
-    before_t = 1
+    slot_s = song.spb / 4
+    after = max(1, int(np.ceil(TILT_AFTER[diff] / slot_s - 1e-6)) - 1)
+    before_t = max(1, int(np.ceil(TILT_BEFORE / slot_s - 1e-6)) - 1)
     def ring_here(t):   # a full ring on a strong tune note; Expert's loud bars and Hard's phrase starts ring more
         e = song.energy.get(t // 16, 1)
-        th = 0.7 if (lv == 3 and e >= 2) or (lv == 2 and t % 64 == 0) else 0.9
+        th = 0.6 if lv == 3 else 0.7
         return song.lead(t) >= th
     keep_ring = {t for t in tilts if lv >= 2 and t in rhythm and ring_here(t)}
     rhythm = [s for s in rhythm if not any(0 < s - t <= after or 0 < t - s <= before_t for t in tilts)]
     rhythm = [s for s in rhythm if s not in tilts or s in keep_ring]
-    if lv == 2:      # Hard breaks: the bells alone on beats 1 and 2
+    if lv >= 2:      # Hard and Expert breaks: the bells alone on beats 1 and 2
         rhythm = [s for s in rhythm if not (song.kind.get(s // 16) == "break" and s % 16 < 8)]
 
     lane = lanes_for(song, diff, sorted(set(rhythm)), forced)
@@ -474,6 +497,8 @@ def build_chart(song, diff, reps):
     if lv >= 2:
         last = -99
         for s in sorted(notes):
+            if s not in notes:          # taken by a chord beside it
+                continue
             here = notes[s]
             e = song.energy.get(s // 16, 1)
             per = max(32 if lv == 2 else (4 if e >= 2 else 8),
@@ -483,7 +508,15 @@ def build_chart(song, diff, reps):
             bass, drum = song.a["bass"][s], song.drum(s)
             if bass < 0.6 and not (lv == 3 and drum >= 0.7 and song.lead(s) >= ON):
                 continue
-            if s in forced or any(0 < abs(x - s) <= 1 for x in notes):
+            if s in forced:
+                continue
+            near = [x for x in notes if 0 < abs(x - s) * song.spb / 4 < 0.2]
+            if near and lv == 3 and all(len(notes[x]) == 1 and notes[x][0]["k"] == "step" and x not in forced
+                                        and x % 2 and song.score(x) < song.score(s) - 1.0 for x in near):
+                for x in near:          # the chord wins over a weaker sixteenth beside it
+                    del notes[x]
+                near = []
+            if near:
                 continue
             other = 2 if here[0]["lane"] != 2 else 0
             here.append({"k": "step", "lane": other})
@@ -494,11 +527,12 @@ def build_chart(song, diff, reps):
     # more frequent"): a tune note that rings on with no new note after it becomes a hold of half a
     # beat to a beat, on a side button, when nothing else needs that thumb meanwhile
     if lv >= 1:
-        min_ring = {1: 4, 2: 3, 3: 3}[lv]
+        min_ring = {1: 4, 2: 3, 3: 2}[lv]
+        max_per_bar = 3 if lv == 3 else 2
         per_bar = {}
         for s in sorted(notes):
             here = notes[s]
-            if len(here) != 1 or here[0]["k"] != "step" or here[0]["lane"] == 1 or s in forced:
+            if len(here) != 1 or here[0]["k"] != "step" or s in forced:
                 continue
             if lv < 3 and s % 2:
                 continue
@@ -513,11 +547,12 @@ def build_chart(song, diff, reps):
                     bring += 1
             if ring + 1 < min_ring and bring + 1 < min_ring + 1:
                 continue
-            ln = 4 if max(ring + 1, bring) >= 5 else 2    # half a beat or a beat
+            # as long as the note rings, in eighths: half a beat up to a beat (two at Expert)
+            ln = min(max(ring + 1, bring) // 2 * 2, 8 if lv == 3 else 4)
             if ln < 2:
                 continue
             bar = s // 16
-            if per_bar.get(bar, 0) >= 2:
+            if per_bar.get(bar, 0) >= max_per_bar:
                 continue
             lane_ = here[0]["lane"]
             span = range(s + 1, s + ln + 2)
@@ -525,6 +560,11 @@ def build_chart(song, diff, reps):
                                                    for n in notes.get(x, []))):
                 continue
             if any(x in tilts or x in stomps for x in span):
+                continue
+            # the free thumb plays eighths at most while the other holds
+            others = sorted(x for x in range(s + 1, s + ln + 1) if x in notes)
+            if any(b - a < 2 or (b - a) * song.spb / 4 < 0.25 for a, b in zip(others, others[1:])) \
+                    or any(len(notes[x]) > 1 for x in others):
                 continue
             here[0] = {"k": "hold", "lane": lane_, "len": ln / 4}
             prio[(s, lane_)] = 80
@@ -558,7 +598,12 @@ def repair(song, diff, chart, prio):
         if not cand:
             cand = [n for n in chart if any(abs(n["b"] - b) < 1e-3 for b in bs) and n["k"] in ("bell", "ring")]
             if not cand:
-                raise SystemExit(f"{diff}: can't repair {errs[0]}")
+                held = [n for n in chart if n["k"] == "hold" and any(n["b"] < b + 1e-3 <= n["b"] + n["len"] + 1e-3 for b in bs)]
+                if not held:
+                    raise SystemExit(f"{diff}: can't repair {errs[0]}")
+                held[0]["k"] = "step"      # the hold gives way: a plain step
+                held[0].pop("len")
+                continue
         worst = min(cand, key=lambda n: prio.get((round(n["b"] * 4), n.get("lane", "b")), 0))
         if worst["k"] == "ring":
             worst["k"] = "bell"
