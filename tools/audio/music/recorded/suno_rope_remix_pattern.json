@@ -212,5 +212,11 @@
  "seesaw": [],
  "end_beat": 283.0,
  "auto_bass_stomps": true,
- "drop_bass_window": 4
+ "drop_bass_window": 4,
+ "drone": [
+  [
+   44,
+   46
+  ]
+ ]
 }
