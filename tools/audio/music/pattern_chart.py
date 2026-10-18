@@ -139,7 +139,7 @@ class Song:
         """Bar -> the earlier bar it repeats (itself if none): same kind of bar, and the same pitch
         class on at least three quarters of its sixteenths, or the same rhythm with half the pitches."""
         rep, seen = {}, []
-        drops = set(self.cfg.get("drops", []))
+        drops = set(self.cfg.get("drops", [])) | set(self.cfg.get("hit_bars", []))   # (a drum-hit bar too)
         for bar in range(self.bars):
             rep[bar] = bar
             if bar in drops:            # a drop is charted on its own
@@ -199,6 +199,18 @@ def pick_rhythm(song, diff, bar):
                 ok = True
         if ok:
             cands.append(s)
+    if bar in song.cfg.get("hit_bars", []) and diff != "easy":
+        # a drum-hit bar (the band stabs together): the taps go on the kicks and snares, not the tune
+        # (Expert the kicks and snares, Hard the kicks on the eighth grid, Medium the beats and the
+        # last kick)
+        kicks = [s for s in range(lo, hi) if song.a["dl"][s] >= 0.6]
+        if diff == "expert":
+            hits = sorted(set(kicks) | {s for s in range(lo, hi) if song.a["dm"][s] >= 0.6})
+        elif diff == "hard":       # an off-beat kick moves to the eighth before
+            hits = sorted({s - s % 2 for s in kicks})
+        else:
+            hits = sorted({s for s in range(lo, hi, 4) if song.drum(s) >= 0.4} | {s - s % 2 for s in kicks[-1:]})
+        return hits, len(hits)
     target = TARGET[diff][e] * song.spb * 4         # notes in this bar
     if kind == "build":
         target = {"expert": 16, "hard": 8, "medium": 8 if song.kind.get(bar - 1) == "build" else 4, "easy": 2}[diff]
@@ -435,6 +447,8 @@ def tilt_slots(song, diff, skip_bars=()):
                 out.append(s0)
         elif k == "tension":
             out += [s0, s0 + 8] if lv >= 2 else [s0] if lv == 1 else []
+        elif k in ("groove", "transition") and bar in song.cfg.get("hit_bars", []):
+            out.append(s0)          # a drum-hit bar rings its downbeat only: the hits are taps
         elif k in ("groove", "transition") and bar not in skip_bars:
             if lv == 3:
                 # beat 3 in loud bars, phrase ends, and every bar of a slow song (a bar of 3 s or more)
@@ -687,7 +701,7 @@ def build_chart(song, diff, reps, hold_floor=0):
             # song's long notes start late), not in a roll
             fresh = song.lead(s) >= ON or (lv < 3 and song.lead(s - 1) >= ON and song.a["pc"][s - 1] == song.a["pc"][s]
                                            and song.a["e"][s] > 0.3)
-            if not fresh or song.kind.get(s // 16) == "build":
+            if not fresh or song.kind.get(s // 16) == "build" or s // 16 in song.cfg.get("hit_bars", []):
                 continue
             if lv == 1 and (s in stomps or (s % 16 == 0 and song.energy.get(s // 16, 1) >= 2)):
                 continue

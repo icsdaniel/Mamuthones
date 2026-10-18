@@ -231,5 +231,8 @@
  "end_beat": 315.0,
  "auto_bass_stomps": true,
  "drop_bass_window": 4,
- "four_on_floor": true
+ "four_on_floor": true,
+ "hit_bars": [
+  40
+ ]
 }
