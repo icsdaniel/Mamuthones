@@ -446,7 +446,7 @@ def tilt_slots(song, diff, skip_bars=()):
                 # Daniele, 2026-10-16) beat 3 too every other bar
                 slow = song.spb * 4 >= 3.0
                 # (loud bars: beat 3 every other bar, on the bars where Expert has it too)
-                out += [s0, s0 + 8] if (e >= 2 or slow) and bar % 2 else [s0] if bar % 2 == 0 or e >= 2 or song.spb * 4 >= 2.4 or song.cfg.get("four_on_floor") else []
+                out += [s0, s0 + 8] if (e >= 2 or slow) and bar % 2 else [s0] if bar % 2 == 0 or e >= 2 or song.spb * 4 >= 2.4 else []
             elif lv == 1:     # every other bar, counted from the last bar that rang (a stomp bar can't);
                 # every bar when loud or the bar is long
                 # (on Hard's bars: the even ones, or the bar after a stomp bar that couldn't ring)
@@ -545,6 +545,8 @@ def build_chart(song, diff, reps, hold_floor=0):
             if r != bar and song.lead(r * 16 + i) >= ON and song.lead(x) < ON and song.kind.get(bar) != "build":
                 near = [y for y in (x + 1, x - 1) if song.lead(y) >= ON and y // 16 == bar and (lv == 3 or y % 2 == 0)]
                 if not near:
+                    if song.energy.get(bar, 1) >= 2:
+                        cs.append(x) if x not in cs else None     # a loud bar keeps its density
                     continue
                 x = near[0]
             if x not in cs:
@@ -875,6 +877,18 @@ def build_chart(song, diff, reps, hold_floor=0):
             want = min(2, la + 1) if pb > pa else max(0, la - 1)
             if want != la and want not in near:
                 st[0]["lane"] = want
+    # over a four-on-the-floor kick, Medium and Hard never leave beat 2 empty after the downbeat
+    if lv in (1, 2) and song.cfg.get("four_on_floor"):
+        for bar in range(song.bars):
+            s0 = bar * 16
+            if song.kind.get(bar) not in ("groove", "transition") or s0 not in notes or song.drum(s0 + 4) < 0.6:
+                continue
+            if any(x in notes for x in range(s0 + 1, s0 + 8)) or any(a <= s0 + 4 <= b for a, b in held):
+                continue
+            used = {n.get("lane") for x in (s0, s0 + 8) if x in notes for n in notes[x]}
+            lane = next((l for l in (1, 0, 2) if l not in used), 1)
+            notes[s0 + 4] = [{"k": "step", "lane": lane}]
+            prio[(s0 + 4, lane)] = 40
     # a build's snare roll is a two-thumb roll: left and right in turn (Hard and Expert)
     if lv >= 2:
         side = 0
@@ -919,6 +933,15 @@ def build_chart(song, diff, reps, hold_floor=0):
                     bad.add(nd["lane"])
                     if all(l in bad for l in (0, 1, 2)) and nd["lane"] not in hard_bad:
                         continue     # (no other button is free: the note stays where it is)
+            if lv >= 1 and song.kind.get(x // 16) != "build" and nd["lane"] not in bad:
+                # any level: a fourth press in a row on one button (within a second) moves to another
+                # button, whatever the pitch, if one is free
+                last3 = sorted({y: ln_ for y, ln_, od in presses() if 0 < (x - y) * slot_s < 1.0}.items())[-3:]
+                if len(last3) == 3 and all(l_ == nd["lane"] for _, l_ in last3):
+                    alt = [l for l in (0, 1, 2) if l not in bad and l != nd["lane"] and (x not in forced or l in forced[x])]
+                    if alt:
+                        nd["lane"] = min(alt, key=lambda l: abs(l - nd["lane"]))
+                    continue
             if nd["lane"] not in bad:
                 continue
             alt = [l for l in (0, 1, 2) if l not in bad and (x not in forced or l in forced[x])]
@@ -981,6 +1004,8 @@ def lift(song, diff, lower, upper):
                     ok = False
                 if m["k"] == "hold" and y < x < y + m["len"] * 4 + 0.3 / slot_s:
                     lanes_near.add(m["lane"])
+                if m["k"] == "hold" and abs(x - (y + m["len"] * 4)) * slot_s < 0.2 and any(sl(o) == x for o in up if o["k"] == "step"):
+                    ok = False      # (no chord as a hold lets go)
                 if dt < 0.2 and m["k"] == "step" and not (diff == "expert" and x == y and m["lane"] != n["lane"]):
                     ok = False      # (at Expert, Hard's tap on an Expert tap's slot may join it as a chord)
                 if dt < 0.3 and "lane" in m:
