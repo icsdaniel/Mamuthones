@@ -60,7 +60,7 @@ TILT_GAP = {"expert": 0.85, "hard": 1.0, "medium": 1.9, "easy": 4.0}
 CHORD_GAP = {"expert": (1.4, 0.7), "hard": (2.5, 2.5)}
 # the room a tilt keeps clear, in seconds: before it, and after it (Expert, other levels)
 # (a bell with no tap of its own keeps a little more before it at Expert: BELL_BEFORE)
-TILT_BEFORE = {"expert": 0.2, "hard": 0.2, "medium": 0.28, "easy": 0.5}
+TILT_BEFORE = {"expert": 0.2, "hard": 0.2, "medium": 0.25, "easy": 0.5}
 TILT_AFTER = {"expert": 0.22, "hard": 0.28, "medium": 0.28, "easy": 0.8}
 BELL_BEFORE = 0.2
 # the least time between two stomps (Hard and Expert, Medium)
@@ -331,8 +331,9 @@ def lanes_for(song, diff, slots, forced=None):
         pa, pb = song.pitch(a), song.pitch(b)
         la, lb = out[a], out[b]
         allow = forced.get(b, (0, 1, 2))
-        if pb == pa:
-            want = la if (b - a) * slot_s >= 0.2 and diff == "expert" else lb
+        if pb == pa:     # (a quick repeat below Expert trades with the middle button, not across)
+            gap_ok = (b - a) * slot_s >= (0.2 if diff == "expert" else 0.3)
+            want = la if gap_ok else (1 if la != 1 else lb) if diff != "expert" else lb
         elif (pb > pa) != (lb > la) or lb == la:
             want = min(2, la + 1) if pb > pa else max(0, la - 1)
             if want == la and (b - a) * slot_s < 0.2:
@@ -380,7 +381,7 @@ def stomp_slots(song, diff):
                 and (lv == 3 or x % 2 == 0)]     # below Expert on the eighth grid
         if hits:
             # (a drop stomp within a beat before the last hit gives way to it)
-            out = [x for x in out if x <= hits[-1] - 4 or x == hits[-1]] + [hits[-1]]
+            out = [x for x in out if x < hits[-1] - 4] + [hits[-1]]
         elif song.drum(lo) >= 0.5:
             out.append(lo)
     # the bass coming back after two bars or more without it (Medium and up)
@@ -425,7 +426,7 @@ def tilt_slots(song, diff, skip_bars=()):
                 # Daniele, 2026-10-16) beat 3 too every other bar
                 slow = song.spb * 4 >= 3.0
                 # (loud bars: beat 3 every other bar, on the bars where Expert has it too)
-                out += [s0, s0 + 8] if (e >= 2 or slow) and bar % 2 else [s0] if bar % 2 == 0 or e >= 2 or song.spb * 4 >= 2.4 else []
+                out += [s0, s0 + 8] if (e >= 2 or slow) and bar % 2 else [s0] if bar % 2 == 0 or e >= 2 or song.spb * 4 >= 1.7 else []
             elif lv == 1:     # every other bar, counted from the last bar that rang (a stomp bar can't);
                 # every bar when loud or the bar is long
                 if s0 not in stomp_bars and (song.spb * 4 >= 2.5 or e >= 2 or not any(x == s0 - 16 for x in out)):
@@ -628,7 +629,7 @@ def build_chart(song, diff, reps, hold_floor=0):
     # keeps its thumb; Hard and Expert hold at least as often as the level below
     held = [(h[0], h[0] + h[2]) for h in holds]
 
-    def short_holds(min_ring, max_per_bar, min_s, limit=10 ** 6):
+    def short_holds(min_ring, max_per_bar, min_s, limit=10 ** 6, reattack=False):
         made = 0
         per_bar = {}
         for a, b in held:
@@ -653,7 +654,7 @@ def build_chart(song, diff, reps, hold_floor=0):
                 continue
             ring = 0
             while s + ring + 1 < song.n and song.a["pc"][s + ring + 1] == song.a["pc"][s] \
-                    and song.lead(s + ring + 1) < (0.7 if lv == 3 else 0.9) and song.a["e"][s + ring + 1] > 0.3:   # no fresh attack
+                    and song.lead(s + ring + 1) < (1.01 if reattack else 0.7 if lv == 3 else 0.9) and song.a["e"][s + ring + 1] > 0.3:   # no fresh attack
                 ring += 1
             # or a bass note that rings on under it
             bring = 0
@@ -664,6 +665,8 @@ def build_chart(song, diff, reps, hold_floor=0):
                 continue
             # as long as the note rings, in eighths: half a beat up to a beat (two at Expert)
             ln = min(max(ring + 1, bring) // 2 * 2, 8 if lv == 3 and song.spb * 4 < 3.0 else 4)
+            if lv == 3 and slot_s * 2 < 0.3 and ln == 2 and max(ring + 1, bring) >= 3:
+                ln = 3      # Expert, a quick song: three sixteenths, so a short hold still reads as held
             if ln < 2 or ln * song.spb / 4 < min_s - 1e-6:      # shorter reads as a tap with a tail
                 continue
             if any(a <= s + ln + 1 and s <= b + 1 for a, b in held):     # one thumb holds at a time
@@ -696,7 +699,7 @@ def build_chart(song, diff, reps, hold_floor=0):
                                                            for n in notes[x])]
             # weaker taps on the held button inside the hold give way to it (a hold over a repeated
             # note): two at Expert, one at Hard
-            if clash and not (lv >= 2 and len(clash) <= (2 if lv == 3 else 1) and all(
+            if clash and not (lv >= 1 and len(clash) <= (2 if lv == 3 else 1) and all(
                     len(notes[x]) == 1 and notes[x][0]["k"] == "step" and x not in forced
                     and song.score(x) < song.score(s) for x in clash)):
                 continue
@@ -721,7 +724,9 @@ def build_chart(song, diff, reps, hold_floor=0):
         if lv == 1:      # Medium: one hold a bar at most, from about a third of a second, a third of the bars
             n_holds += short_holds(3, 1, 0.3)
             if n_holds < 0.35 * song.bars:
-                n_holds += short_holds(2, 1, 0.3, round(0.35 * song.bars - n_holds))
+                n_holds += short_holds(2, 1, 0.25, round(0.35 * song.bars - n_holds))   # half a beat, up to 120 BPM
+            if n_holds < 0.35 * song.bars:    # then over the same note struck again (a pivot note re-attacked)
+                n_holds += short_holds(3, 1, 0.3, round(0.35 * song.bars - n_holds), reattack=True)
         else:
             # long enough to feel held first (Hard 0.4 s, Expert 0.3 s); shorter ones only when the
             # level would hold less than it should (Expert half as often again as Hard)
@@ -729,6 +734,9 @@ def build_chart(song, diff, reps, hold_floor=0):
             for mr, mb, ms in ((3, 2, max(0.25, 2 * slot_s)), (2, 2, max(0.2, 2 * slot_s)), (2, 3, max(0.2, 2 * slot_s))):
                 if n_holds < hold_floor and (lv == 3 or mb == 2):
                     n_holds += short_holds(mr, mb, ms, round(hold_floor - n_holds))
+            # a slow song's sixteenth runs: a note struck twice on one button becomes a half-beat hold
+            if n_holds < hold_floor and song.spb * 4 >= 3.0:
+                n_holds += short_holds(2, 2, 0.4, round(hold_floor - n_holds), reattack=True)
 
     # chords: two layers striking together (a bass hit or a drum under a tune note). Hard about one
     # every two bars; Expert up to one a beat in the loud bars and one every half bar elsewhere
@@ -796,15 +804,21 @@ def build_chart(song, diff, reps, hold_floor=0):
         for a_, b_ in zip(order, order[1:]):
             if b_ - a_ > 2 or song.lead(a_) < ON or song.lead(b_) < ON or song.kind.get(b_ // 16) == "build":
                 continue
-            st = [n for n in notes[b_] if n["k"] == "step"]
+            st = [n for n in notes[b_] if n["k"] in ("step", "hold")]
             if len(notes[b_]) != 1 or not st or b_ in forced:
                 continue
+            if st[0]["k"] == "hold":     # a hold moves only to a button nothing presses while it's down
+                end = b_ + st[0]["len"] * 4
+                near = {n.get("lane") for y in notes if y != b_ and b_ - 0.3 / slot_s <= y <= end + 0.3 / slot_s
+                        for n in notes[y]}
+            else:
+                near = set()
             pa, pb = song.pitch(a_), song.pitch(b_)
             la, lb = lane_at(a_), st[0]["lane"]
             if pa == pb or la is None or ((pb > pa) == (lb > la) and lb != la):
                 continue
             want = min(2, la + 1) if pb > pa else max(0, la - 1)
-            if want != la:
+            if want != la and want not in near:
                 st[0]["lane"] = want
     # last: the same button never twice inside 0.2 s, and never pressed within 0.3 s of a hold on it
     # starting or letting go (a later pass may have made one); the tap moves to a free button or goes
@@ -884,10 +898,17 @@ def lift(song, diff, lower, upper):
             for m in up:
                 y = sl(m)
                 dt = abs(x - y) * slot_s
-                if m["k"] in ("bell", "ring", "stomp") and dt < 0.3:
+                # the level's own clearance around a tilt (a stomp keeps 0.3 s)
+                if m["k"] in ("bell", "ring") and (x - y) * slot_s < (TILT_AFTER[diff] if x > y else 0) - 1e-6 \
+                        and x > y or m["k"] in ("bell", "ring") and x <= y and (y - x) * slot_s < TILT_BEFORE[diff] - 1e-6 \
+                        or m["k"] == "stomp" and dt < 0.3:
                     ok = False
-                if m["k"] == "hold" and y - 1 <= x <= y + m["len"] * 4 + 1:
+                # under a hold the free thumb may play (on another button, not as the hold starts)
+                if m["k"] == "hold" and y - 1 <= x <= y + m["len"] * 4 + 1 and (
+                        abs(x - y) <= 1 or x >= y + m["len"] * 4 - 1 or n["lane"] == m["lane"] or diff != "expert"):
                     ok = False
+                if m["k"] == "hold" and y < x < y + m["len"] * 4:
+                    lanes_near.add(m["lane"])
                 if dt < 0.2 and m["k"] == "step":
                     ok = False
                 if dt < 0.3 and "lane" in m:
@@ -901,6 +922,61 @@ def lift(song, diff, lower, upper):
             up.append(m)
             added.append(m)
             need -= 1
+    if diff == "expert":     # Expert holds wherever Hard does: Hard's hold on Expert's tap on the same note
+        nh = lambda ch: sum(1 for n in ch if n["k"] == "hold")
+        for h in sorted((n for n in lower if n["k"] == "hold"), key=lambda n: -song.score(sl(n))):
+            if nh(up) >= nh(lower) * 1.3:
+                break
+            x, ln = sl(h), round(h["len"] * 4)
+            if any(m["k"] == "hold" and sl(m) - 2 <= x + ln and x - 2 <= sl(m) + m["len"] * 4 for m in up):
+                continue
+            at = [m for m in up if sl(m) == x]
+            if any(m["k"] != "step" for m in at) or len(at) > 2:
+                continue
+            if len(at) == 2:         # a chord: the hold takes the button Hard holds, if it's one of the two
+                at = [m for m in at if m["lane"] == h["lane"]]
+                if not at:
+                    continue
+            elif not at:             # an empty slot: Hard's hold, if nothing on Expert crowds it
+                if any(m["k"] != "rest" and abs(sl(m) - x) * slot_s < 0.2 for m in up):
+                    continue
+                at = [{"b": h["b"], "k": "step", "lane": h["lane"]}]
+                up.append(at[0])
+            lane = at[0]["lane"]
+            if any(m.get("lane") == lane and 0 < (x - sl(m)) * slot_s < 0.3 for m in up):
+                continue
+            span = [m for m in up if x < sl(m) <= x + ln + 1]
+            if any(m["k"] in ("bell", "ring", "stomp") for m in span):
+                continue
+            # the held button's taps inside give way (at most two); the free thumb keeps the rest
+            same = [m for m in span if m.get("lane") == lane]
+            if len(same) > 2 or any(m["k"] != "step" for m in same):
+                continue
+            for m in same:
+                up.remove(m)
+            at[0]["k"], at[0]["len"] = "hold", h["len"]
+            added.append(at[0])
+        # the tune's note just after a ring, when the tilt leaves room for it (a slow song's sixteenth)
+        if TILT_AFTER[diff] <= slot_s + 1e-6:
+            for r in [m for m in up if m["k"] in ("bell", "ring")]:
+                x = sl(r) + 1
+                if song.lead(x) < 0.6 or any(m["k"] != "rest" and (abs(sl(m) - x) * slot_s < 0.2 or
+                                                                      (m["k"] == "hold" and sl(m) <= x <= sl(m) + m["len"] * 4))
+                                              for m in up if m is not r):
+                    continue
+                nxt = min((m for m in up if m["k"] == "step" and sl(m) > x), key=sl, default=None)
+                if nxt is None:
+                    continue
+                d = 1 if song.pitch(x) > song.pitch(sl(nxt)) else -1
+                lane = min(2, max(0, nxt["lane"] + d))
+                if lane == nxt["lane"]:
+                    lane = 1
+                busy = {m.get("lane") for m in up if m["k"] != "rest" and abs(sl(m) - x) * slot_s < 0.3}
+                if lane in busy:
+                    continue
+                m = {"b": x / 4, "k": "step", "lane": lane}
+                up.append(m)
+                added.append(m)
     up.sort(key=lambda n: (n["b"], n["k"]))
     prio = {(sl(n), n.get("lane", "b")): (0 if any(n is a for a in added) else 50) for n in up}
     prio.update({(sl(n), n.get("lane", "b")): 100 for n in up if n["k"] in ("hold", "stomp")})
@@ -989,7 +1065,7 @@ def main(argv):
         # Hard holds at least as often as Medium and about every other bar, Expert half as often
         # again as Hard and most bars
         floor = max(sum(1 for n in below if n["k"] == "hold") * (1.5 if d == "expert" else 1.3),
-                    {"hard": 0.7 if song.spb * 4 >= 3.0 else 0.5, "expert": 0.9}.get(d, 0) * song.bars)
+                    {"hard": 0.9 if song.spb * 4 >= 3.0 else 0.5, "expert": 1.2 if song.spb * 4 >= 3.0 else 0.9}.get(d, 0) * song.bars)
         charts[d] = build_chart(song, d, reps, round(floor))
     for lo_, hi_ in (("medium", "hard"), ("hard", "expert")):
         charts[hi_] = lift(song, hi_, charts[lo_], charts[hi_])
