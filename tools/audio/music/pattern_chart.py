@@ -187,9 +187,15 @@ def pick_rhythm(song, diff, bar):
             step = 4 if song.spb >= 0.75 else 8       # a slow song's Easy plays on the beat
             ok = i % step == 0 and (lead >= ON or drum >= 0.5 or e == 0)
             # the tune rests on the beat but sounds an eighth later: Easy plays the tune note
-            if step == 8 and i % 8 == 2 and lead >= 0.6 and song.lead(s - 2) < ON:
+            # (not over a four-on-the-floor kick: there Easy keeps the kick)
+            if step == 8 and i % 8 == 2 and lead >= 0.6 and song.lead(s - 2) < ON \
+                    and not (song.cfg.get("four_on_floor") and song.a["dl"][s - 2] >= 0.6):
                 ok = True
                 cands = [c for c in cands if c != s - 2]
+            # a quick song's Easy also takes the tune's notes on slots 6 and 14 (the & of 2 and the
+            # pickup into the next bar), which stay 0.6 s clear of beats 1 and 3
+            if step == 8 and i in (6, 14) and lead >= 0.6 and 2 * song.spb / 2 >= 0.6 - 1e-6 and kind != "build":
+                ok = True
         if ok:
             cands.append(s)
     target = TARGET[diff][e] * song.spb * 4         # notes in this bar
@@ -426,7 +432,7 @@ def tilt_slots(song, diff, skip_bars=()):
                 # Daniele, 2026-10-16) beat 3 too every other bar
                 slow = song.spb * 4 >= 3.0
                 # (loud bars: beat 3 every other bar, on the bars where Expert has it too)
-                out += [s0, s0 + 8] if (e >= 2 or slow) and bar % 2 else [s0] if bar % 2 == 0 or e >= 2 or song.spb * 4 >= 1.7 else []
+                out += [s0, s0 + 8] if (e >= 2 or slow) and bar % 2 else [s0] if bar % 2 == 0 or e >= 2 or song.spb * 4 >= 2.4 else []
             elif lv == 1:     # every other bar, counted from the last bar that rang (a stomp bar can't);
                 # every bar when loud or the bar is long
                 if s0 not in stomp_bars and (song.spb * 4 >= 2.5 or e >= 2 or not any(x == s0 - 16 for x in out)):
@@ -707,6 +713,8 @@ def build_chart(song, diff, reps, hold_floor=0):
             # under the hold gives way
             others = sorted(x for x in range(s + 1, s + ln + 1) if x in notes and x not in clash)
             drop = list(clash)
+            if lv == 1 and drop and sum(1 for x in notes if x // 16 == bar) - len(drop) < 4:
+                continue      # a Medium bar keeps four events at least
             if any((b - a) * song.spb / 4 < 0.2 or (b - a < 2 and song.spb / 4 < 0.2) for a, b in zip(others, others[1:])) \
                     or any(len(notes[x]) > 1 for x in others):
                 continue
@@ -815,6 +823,10 @@ def build_chart(song, diff, reps, hold_floor=0):
                 near = set()
             pa, pb = song.pitch(a_), song.pitch(b_)
             la, lb = lane_at(a_), st[0]["lane"]
+            if song.a["pc"][a_] == song.a["pc"][b_] and la is not None and st[0]["k"] == "step" and lb != la \
+                    and (b_ - a_) * slot_s >= (0.2 if lv == 3 else 0.3) - 1e-6 and len(notes[a_]) == 1:
+                st[0]["lane"] = la      # a repeated note keeps its button (the jack pass below has the last word)
+                continue
             if pa == pb or la is None or ((pb > pa) == (lb > la) and lb != la):
                 continue
             want = min(2, la + 1) if pb > pa else max(0, la - 1)
@@ -847,6 +859,13 @@ def build_chart(song, diff, reps, hold_floor=0):
                     if (y != x and abs(dt) < 0.3) or (0 <= (x - end) * slot_s < 0.3) or y <= x <= end:
                         bad.add(ln_)
             bad |= {n.get("lane") for n in notes[x] if n is not nd}
+            hard_bad = set(bad)
+            if lv == 3:      # Expert: a moving tune never takes one button three times inside 0.75 s
+                prev = sorted(y for y, ln_, od in presses() if ln_ == nd["lane"] and 0 < (x - y) * slot_s < 0.75)
+                if len(prev) >= 2 and song.pitch(prev[-1]) != song.pitch(x):
+                    bad.add(nd["lane"])
+                    if all(l in bad for l in (0, 1, 2)) and nd["lane"] not in hard_bad:
+                        continue     # (no other button is free: the note stays where it is)
             if nd["lane"] not in bad:
                 continue
             alt = [l for l in (0, 1, 2) if l not in bad and (x not in forced or l in forced[x])]
