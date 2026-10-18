@@ -458,14 +458,26 @@ def tilt_slots(song, diff, skip_bars=()):
             if gro and len(hits) * 2 > len(gro):
                 shifted |= set(gro)
         out = [t + 4 if t // 16 in shifted and t % 16 in (0, 8) else t for t in out]   # the bar's tilts, a beat later
-    if lv == 3:      # the tune's pickup on the bar's last sixteenth keeps its note: no bell on the downbeat
-        def pickup(t):     # a two-note pickup into the downbeat (the hook's tail)
-            return (t % 16 == 0 and song.spb / 4 < 0.2 and song.kind.get(t // 16) != "break" and song.lead(t - 1) >= 0.6
-                    and song.lead(t - 2) >= 0.6)
+    if lv == 3 and not song.cfg.get("four_on_floor"):
+        # the tune's two-note pickup into a downbeat where the tune rests keeps its notes at Expert: the
+        # bell moves to beat 2. Decided per 8 bars (a riff keeps its bell in place), only in phrases where
+        # most bars have a real pickup, never in stomp bars, and only onto a drum or the bass
+        def pickup(s0):
+            return (song.spb / 4 < 0.2 and song.lead(s0 - 1) >= 0.6 and song.lead(s0 - 2) >= 0.6
+                    and song.lead(s0 - 3) < ON and song.lead(s0 - 4) < ON and song.lead(s0) < ON
+                    and sum(song.lead(x) >= ON for x in range(s0 - 16, s0)) < 12)
+        shift = set()
+        for blk in range(0, song.bars, 8):
+            gro = [b for b in range(blk, blk + 8) if song.kind.get(b) in ("groove", "transition")
+                   and b * 16 not in stomp_bars]
+            hits = [b for b in gro if pickup(b * 16)]
+            if gro and len(hits) * 2 >= len(gro):
+                shift |= set(hits)
         moved = []
         for t in out:
-            if pickup(t):      # the bell moves to beat 2 if the tune rests there, else rings beat 3
-                moved.append(t + 4 if song.lead(t + 4) < ON else t + 8)
+            b = t // 16
+            if t % 16 == 0 and b in shift and song.lead(t + 4) < ON and (song.drum(t + 4) >= 0.4 or song.a["bass"][t + 4] >= 0.5):
+                moved.append(t + 4)
             else:
                 moved.append(t)
         out = moved
