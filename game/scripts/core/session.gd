@@ -99,7 +99,6 @@ const MISS_DROP := 2
 const WRONG_DROP := 1        ## a wrong step
 const WRONG_REACH := 2.0     ## the pressed lane's own note within 2 × Early/Late keeps a tap stray
 const SILENCE_DROP := 1
-const LET_GO_DROP := 1
 const STRAY_DROP := 1        ## a stray tap (no note due anywhere)
 const STOMP_FOLLOW := 0.200  ## a tap this soon after a stomp on its lane is a late thumb, not stray
 const LOCK_TAPS := 3         ## this many stray or wrong taps...
@@ -316,7 +315,7 @@ func _acc_sum() -> float:
 ## Letter grades, worst to best. A run's grade comes from its accuracy (GRADE_MIN, the least accuracy
 ## for each letter), capped by misses (capped_rank). S+ needs no missed note but may have stray taps
 ## or Oks (Daniele, 2026-10-09: reachable without a full combo). A full combo
-## (no miss, wrong step, stray tap, lost hold or bell rung into a stand-still) is its own mark beside
+## (no miss, wrong step, stray tap or bell rung into a stand-still; a hold let go early only loses its bonus) is its own mark beside
 ## the grade. The rank is the index in GRADES (F = 0 .. S+ = 7).
 const GRADES: Array[String] = ["F", "E", "D", "C", "B", "A", "S", "S+"]
 const OK_ACC := 0.5            ## what an Ok (early/late) counts for in accuracy
@@ -360,7 +359,7 @@ func grade() -> String:
 ## Nothing broke the combo over the whole chart (every note played).
 func full_combo() -> bool:
 	return stats.total > 0 and stats.miss == 0 and stats.wrong == 0 and stats.stray == 0 \
-			and stats.let_go == 0 and stats.silence == 0
+			and stats.silence == 0
 
 
 static func rank_for(acc: float) -> int:
@@ -1004,18 +1003,10 @@ func _end_hold(n: Note, t: float, kept: bool) -> void:
 		_refresh_score(t)
 		judged.emit(n, "held", t - n.end_t)
 	else:
-		# Letting go early is a miss (Daniele, 2026-10-19): the hold's head no longer counts as hit,
-		# it costs health and caps the grade like any lost note.
+		# Letting go early only loses the hold's bonus (Daniele, 2026-10-19: "When you lift a hold note
+		# DON'T make it a miss. No health loss, no combo break"): the head was hit and stays hit.
 		stats.let_go += 1
-		if n.judgement in ["perfect", "good", "early", "late"]:
-			stats[n.judgement] -= 1
-		stats.miss += 1
-		n.judgement = "let_go"
-		combo = 0
-		unison_streak = 0
-		_set_unison(unison_level - LET_GO_DROP, t)
 		judged.emit(n, "let_go", t - n.end_t)
-		_hurt()
 	hold_ended.emit(n.lane, kept)
 
 

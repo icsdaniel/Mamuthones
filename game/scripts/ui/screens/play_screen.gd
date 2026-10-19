@@ -744,7 +744,7 @@ func _on_judged(note: Note, judgement: String, offset: float) -> void:
 		lift.hit(judgement)
 	elif soft:
 		lift.ok()
-	elif judgement in ["miss", "silence", "let_go"]:
+	elif judgement in ["miss", "silence"]:
 		lift.miss()
 	var quality := judgement
 	if not quality in ["perfect", "good", "early", "late", "miss", "held"]:
@@ -788,11 +788,11 @@ func _on_judged(note: Note, judgement: String, offset: float) -> void:
 		elif note != null and not note.is_bell():
 			scene.jolt("step")
 		UIKit.vibrate(30 if note != null and note.is_bell() else 14)
-	elif judgement in ["miss", "silence", "let_go"]:
+	elif judgement in ["miss", "silence"]:
 		scene.jolt("miss")
 		if note != null and note.is_bell():
 			_bell_chain = 0
-	if judgement == "miss" or judgement == "let_go":
+	if judgement == "miss":
 		Sound.miss()
 
 

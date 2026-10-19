@@ -404,7 +404,9 @@ func test_hold_kept_and_let_go() -> void:
 	s.release(_bt(20) - 0.2, 9)
 	check_eq(ends[2], [2, false], "released 200 ms early is let go")
 	check_eq(s.stats.let_go, 1, "let go counted")
-	check_eq(s.combo, 0, "letting go breaks the combo")
+	check_eq(s.combo, 3, "letting go keeps the combo (Daniele, 2026-10-19)")
+	check_eq(s.health, Session.MAX_HEALTH, "and costs no health")
+	check(s.full_combo(), "nor the full combo")
 	check_eq(s.score, 450 + 450 + 300, "no bonus when let go")
 	check_eq(s.stats.held, 2, "two kept")
 
@@ -601,14 +603,14 @@ func test_still_bonus_per_beat_and_hit_cap() -> void:
 	check_near(l.still_beats(l.notes[3]), 6.0, 1e-9, "still_beats")
 
 
-func test_let_go_costs_one_unison_level() -> void:
+func test_let_go_keeps_the_unison_level() -> void:
 	var s := Session.new(make(steps(24) + [{"b": 24, "k": "hold", "lane": 1, "len": 4}]), "easy")
 	for i in 24:
 		s.tap(1, _bt(i), 0)
 	s.tap(1, _bt(24), 5)
 	check_eq(s.unison_level, 2, "×2 before")
 	s.release(_bt(25), 5)
-	check_eq(s.unison_level, 1, "letting go drops one level")
+	check_eq(s.unison_level, 2, "letting go only loses the hold's bonus")
 
 
 func test_note_lock_in_fast_streams() -> void:

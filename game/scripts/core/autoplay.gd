@@ -72,9 +72,7 @@ func _play(n: Note, at: float) -> void:
 		Note.Kind.HOLD:
 			_tap(n.lane, at, id, -1.0)
 			var end := n.end_t
-			# (3 %: a hold let go early is a miss since 2026-10-19, and the old 5 % of a sloppy thumb
-			# ran a good player out of health on holds alone in the hold-heavy Expert charts)
-			if human and rng.randf() < 0.03:
+			if human and rng.randf() < 0.05:
 				end -= 0.3
 			_releases.append([end, id])
 			_holding[id] = n.lane

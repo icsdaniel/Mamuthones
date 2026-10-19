@@ -68,6 +68,11 @@ STOMP_GAP = (8.0, 12.0)
 EASY_TILT_S = 4.0   # Easy rings about this often in the grooves
 ON = 0.5          # a lead onset counts from this strength
 SIXTEENTH_ON = 0.4
+SLOW_SIXTEENTH_ON = 0.35   # a slow song's sixteenths are roomy
+# The new Expert (Daniele, 2026-10-19: "New expert is not more difficult than hard") is built like the
+# old one with these settings: more of the tune's sixteenths, denser bars, chords and tilts closer
+EXPERT_PLUS = {"TARGET": {"expert": (4.0, 6.0, 7.0)}, "SIXTEENTH_ON": 0.3, "SLOW_SIXTEENTH_ON": 0.25,
+               "CHORD_GAP": {"expert": (0.9, 0.45)}, "TILT_GAP": {"expert": 0.7}}
 
 
 def rng(spec):
@@ -169,7 +174,7 @@ def pick_rhythm(song, diff, bar):
         i = s % 16
         lead, drum = song.lead(s), song.drum(s)
         if diff == "expert":
-            six = SIXTEENTH_ON if song.spb / 4 < 0.2 else 0.35     # a slow song's sixteenths are roomy
+            six = SIXTEENTH_ON if song.spb / 4 < 0.2 else SLOW_SIXTEENTH_ON
             ok = (i % 2 == 0 and lead >= ON) or (i % 2 == 1 and lead >= six and e >= 1)
             ok = ok or (i % 4 == 0 and drum >= 0.6 and kind in ("groove", "transition", "ending"))
             if kind == "build":
@@ -1370,7 +1375,9 @@ SHIFT = {"easy": "medium", "medium": "hard", "hard": "expert"}
 # The longest run of presses with no breath in it (a gap of BREATH_S or more), by new level: a miss
 # inside a long crowded run cascaded into the next notes until input fell apart (same playtest).
 # And the longest burst of presses under BURST_S apart.
-BREATH_S = 0.33
+# (Expert counts only presses under 0.25 s apart as one run: its steady eighths stay, its fast runs
+# breathe; "New expert is not more difficult than hard", same day)
+BREATH_S = {"easy": 0.33, "medium": 0.33, "hard": 0.33, "expert": 0.25}
 MAX_RUN = {"easy": 6, "medium": 8, "hard": 12, "expert": 16}
 BURST_S = 0.2
 MAX_BURST = {"hard": 3, "expert": 4}
@@ -1407,7 +1414,7 @@ def breathe(song, chart, level):
     def strength(b):
         under = any(a < b <= e for a, e in held)     # a free-thumb tap under a hold goes first
         return song.score(slot_of(song, b)) - (1.0 if under else 0.0)
-    for gap_s, cap in ((BURST_S, MAX_BURST.get(level)), (BREATH_S, MAX_RUN[level])):
+    for gap_s, cap in ((BURST_S, MAX_BURST.get(level)), (BREATH_S[level], MAX_RUN[level])):
         if cap is None:
             continue
         changed = True
@@ -1524,6 +1531,49 @@ def harden(song, chart):
         ch.append({"b": b, "k": "step", "lane": lane})
         if not playable():
             ch.pop()
+    # the tune's sixteenths: a run note between two taps (the launeddas runs in sixteenths) gets its
+    # own tap on a thumb that is free of both neighbours, away from the tilts and holds; the bursts
+    # stay short (MAX_BURST, in breathe)
+    tilt_bs = sorted(n["b"] for n in ch if n["k"] in ("bell", "ring"))
+    for s in range(1, song.end_slot, 2):
+        b = s / 4 + song.swing
+        if song.lead(s) < ON or song.kind.get(s // 16) == "build" or at(b, 0.1) \
+                or any(abs(t - b) * spb < 0.25 for t in tilt_bs) or any(a - 0.01 <= b <= e for a, e, _ in held):
+            continue
+        prev = [m for m in ch if m["k"] in ("step", "ring") and 0 < b - m["b"] <= 0.3]
+        nxt = [m for m in ch if m["k"] in ("step", "ring", "stomp") and 0 < m["b"] - b <= 0.3]
+        if not prev and not nxt:
+            continue
+        taken = {m["lane"] for m in prev + nxt}
+        pl = max(prev, key=lambda m: m["b"])["lane"] if prev else 1
+        d = song.pitch(s) - song.pitch(s - 1)
+        free = [l for l in (0, 1, 2) if l not in taken and not by_hold(b, l)]
+        if not free:
+            continue
+        lane = min(free, key=lambda l: (0 if (d > 0 and l > pl) or (d < 0 and l < pl) else 1, abs(l - pl)))
+        ch.append({"b": b, "k": "step", "lane": lane})
+        if not playable():
+            ch.pop()
+    # the drums too: in grooves and drops a kick, snare or hat the tune leaves alone gets a tap from
+    # the thumb that is free, so Expert plays the band and not just its tune (only real hits, on the
+    # eighths or on a sixteenth with nothing pressed within 0.2 s; the breaths come after)
+    for s in range(0, song.end_slot):
+        b = s / 4 + (song.swing if s % 2 else 0.0)
+        if song.drum(s) < (0.6 if s % 2 == 0 else 0.8) or song.lead(s) >= ON \
+                or song.kind.get(s // 16, "groove") not in ("groove", "transition", "ending") \
+                or song.energy.get(s // 16, 1) < 1 or at(b, 0.2):
+            continue
+        if any(a - 0.01 <= b <= e for a, e, _ in held):
+            continue
+        prev = max((m for m in ch if m["k"] in ("step", "ring") and m["b"] < b), key=lambda m: m["b"], default=None)
+        if prev is None:
+            continue
+        lane = 2 if prev["lane"] == 0 else 0 if prev["lane"] == 2 else 1   # the other thumb answers
+        if by_hold(b, lane) or any(m.get("lane") == lane for m in at(b, 0.3)):
+            continue
+        ch.append({"b": b, "k": "step", "lane": lane})
+        if not playable():
+            ch.pop()
     ch.sort(key=lambda n: (n["b"], n.get("lane", -1)))
     return ch
 
@@ -1548,11 +1598,17 @@ def main(argv):
     # one rung up for every level, a new Expert on top, and the crowded runs broken at every level
     built = charts
     charts = {d: breathe(song, built[SHIFT[d]], d) for d in ("easy", "medium")}
-    charts["expert"] = breathe(song, harden(song, built["expert"]), "expert")
-    # Hard is the old Expert, made only of notes the new Expert keeps
-    kept = {(n["b"], n["k"], n.get("lane")) for n in charts["expert"]}
-    charts["hard"] = breathe(song, [n for n in built["expert"] if (n["b"], n["k"], n.get("lane")) in kept
-                                    or (n["k"] == "step" and (n["b"], "ring", n.get("lane")) in kept)], "hard")
+    charts["hard"] = breathe(song, built["expert"], "hard")
+    g = globals()
+    saved = {k: g[k] for k in EXPERT_PLUS}
+    for k, v in EXPERT_PLUS.items():
+        g[k] = dict(g[k], **v) if isinstance(v, dict) else v
+    try:
+        plus = build_chart(song, "expert", reps, round(floor))
+    finally:
+        g.update(saved)
+    plus = hold_guard(song, lift(song, "expert", charts["hard"], plus))
+    charts["expert"] = breathe(song, harden(song, plus), "expert")
     length = cfg["length"]
     for d in DIFFS:
         ch = charts[d]
