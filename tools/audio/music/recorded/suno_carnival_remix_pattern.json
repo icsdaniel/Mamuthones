@@ -234,5 +234,10 @@
  "four_on_floor": true,
  "hit_bars": [
   40
+ ],
+ "medium_pivot_right": [
+  21,
+  43,
+  57
  ]
 }

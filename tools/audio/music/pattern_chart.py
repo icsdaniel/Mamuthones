@@ -594,6 +594,8 @@ def build_chart(song, diff, reps, hold_floor=0):
             first = max([t for t in tilts0 if s0 <= t < s0 + 8], default=s0)
             st = next((x for x in range(first + clear, s0 + 8) if song.a["pc"][x] == piv and song.lead(x) >= ON
                        and x % (1 if lv == 3 else 2) == 0), first + max(4, clear))
+            if lv == 1 and bar in song.cfg.get("medium_pivot_right", []):
+                up = False      # (the tune falls below or stays on the pivot here: the right thumb holds)
             holds.append((st, 0 if up else 2, {1: 8, 2: 6, 3: 4}[lv]))
         for a, c in song.cfg.get("tension_hold", []):  # through the stop, out into the drop
             st = round(a * 4)
@@ -1059,8 +1061,9 @@ def build_chart(song, diff, reps, hold_floor=0):
                     bad.add(nd["lane"])
                     if all(l in bad for l in (0, 1, 2)) and nd["lane"] not in hard_bad:
                         continue     # (no other button is free: the note stays where it is)
-            if lv >= 1 and song.kind.get(x // 16) != "build" and nd["lane"] not in bad and x not in copied \
-                    and x not in pivot_mapped:
+            last_same = max((y for y, ln_, od in presses() if ln_ == nd["lane"] and y < x), default=-99)
+            spared = (x in copied or x in pivot_mapped) and (x - last_same) * slot_s >= 0.3 - 1e-6
+            if lv >= 1 and song.kind.get(x // 16) != "build" and nd["lane"] not in bad and not spared:
                 # any level: a fourth press in a row on one button (within a second, or four eighths
                 # of a slow song) moves to another button, whatever the pitch, if one is free: to the
                 # side the tune moves toward
@@ -1081,6 +1084,45 @@ def build_chart(song, diff, reps, hold_floor=0):
                 notes[x].remove(nd)
         if not notes[x]:
             del notes[x]
+
+    # Expert: under a short hold the free thumb keeps the tune's eighths (a new tune note with nothing
+    # pressed within 0.2 s), on a button the hold doesn't take, following the tune from the note before
+    if lv == 3:
+        for a, b in held:
+            hl = next((n["lane"] for n in notes.get(a, []) if n["k"] == "hold"), None)
+            if hl is None:
+                continue
+            for x in range(a + 2, b + 1, 2):
+                if x in notes or song.lead(x) < ON or x in forced or song.kind.get(x // 16) == "build" \
+                        or any(t in notes and any(n["k"] in ("bell", "ring", "stomp") for n in notes[t])
+                               for t in range(x - 2, x + 3)):
+                    continue
+                if any(y in notes and y != a and abs(y - x) * slot_s < 0.2 for y in range(x - 3, x + 4)):
+                    continue
+                prev = max((y for y in notes if y < x and y != a and any(n["k"] in ("step", "ring") for n in notes[y])), default=None)
+                near = {n.get("lane") for y in notes if y != a and abs(y - x) * slot_s < 0.3 for n in notes[y]}
+                free = [l for l in (0, 1, 2) if l != hl and l not in near]
+                if not free:
+                    continue
+                if prev is not None and prev > a:
+                    pl = max(n.get("lane", 1) for n in notes[prev])
+                    d = step_of(prev, x)
+                    want = min(free, key=lambda l: (0 if d == 0 and l == pl else
+                                                    0 if d > 0 and l > pl or d < 0 and l < pl else 1, abs(l - pl)))
+                else:
+                    want = 1 if 1 in free else free[0]
+                notes[x] = [{"k": "step", "lane": want}]
+                prio[(x, want)] = song.score(x) - 1.0
+    # last of all: under a hold the free thumb never plays two presses inside 0.2 s (the weaker goes)
+    for x in sorted(notes):
+        for nd in [n for n in notes.get(x, []) if n["k"] == "hold"]:
+            end = x + nd["len"] * 4
+            inside = sorted(y for y in notes if x < y <= end)
+            for y0, y1 in zip(inside, inside[1:]):
+                if y0 in notes and y1 in notes and (y1 - y0) * slot_s < 0.2 - 1e-6:
+                    weak = min((y0, y1), key=song.score)
+                    if all(n["k"] == "step" for n in notes[weak]):
+                        del notes[weak]
 
     chart = []
     for s in sorted(notes):
