@@ -1346,6 +1346,23 @@ def grid_text(song, charts):
     return "\n".join(lines)
 
 
+def hold_guard(song, chart):
+    """After lift: under a hold the free thumb plays every other button (Middle too), so two presses
+    inside 0.2 s there lose the weaker one when it is a plain step."""
+    beat_s = song.spb
+    holds = [(n["b"], n["b"] + n["len"]) for n in chart if n["k"] == "hold"]
+    drop = set()
+    for a, e in holds:
+        ins = sorted({n["b"] for n in chart if a < n["b"] <= e + 1e-6})
+        for b0, b1 in zip(ins, ins[1:]):
+            if b0 in drop or (b1 - b0) * beat_s >= 0.2 - 1e-6:
+                continue
+            weak = min((b0, b1), key=lambda b: song.score(round(b * 4)))
+            if all(n["k"] == "step" for n in chart if n["b"] == weak):
+                drop.add(weak)
+    return [n for n in chart if n["b"] not in drop]
+
+
 def main(argv):
     cfg = json.load(open(argv[1]))
     ana = json.load(open(cfg["analysis"]))
@@ -1362,7 +1379,7 @@ def main(argv):
                     {"hard": 0.9 if song.spb * 4 >= 3.0 else 0.5, "expert": 1.2 if song.spb * 4 >= 3.0 else 0.9}.get(d, 0) * song.bars)
         charts[d] = build_chart(song, d, reps, round(floor))
     for lo_, hi_ in (("medium", "hard"), ("hard", "expert")):
-        charts[hi_] = lift(song, hi_, charts[lo_], charts[hi_])
+        charts[hi_] = hold_guard(song, lift(song, hi_, charts[lo_], charts[hi_]))
     length = cfg["length"]
     for d in DIFFS:
         ch = charts[d]
