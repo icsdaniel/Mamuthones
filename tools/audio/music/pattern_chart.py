@@ -1365,7 +1365,15 @@ def hold_guard(song, chart):
             weak = min((b0, b1), key=lambda b: song.score(round(b * 4)))
             if all(n["k"] == "step" for n in chart if n["b"] == weak):
                 drop.add(weak)
-    return [n for n in chart if n["b"] not in drop]
+    out = [n for n in chart if n["b"] not in drop]
+    # a chord as a hold ends needs the holding thumb too: its note farther from the hold goes
+    for h in [n for n in out if n["k"] == "hold"]:
+        e = h["b"] + h["len"]
+        for b in sorted({n["b"] for n in out if e - 1e-6 <= n["b"] and (n["b"] - e) * beat_s < 0.12}):
+            pair = [n for n in out if n["b"] == b and n["k"] == "step"]
+            if len(pair) == 2 and len([n for n in out if n["b"] == b]) == 2:
+                out.remove(max(pair, key=lambda n: abs(n["lane"] - h["lane"])))
+    return out
 
 
 # Levels after Daniele's playtest (2026-10-19: "Easy is too easy and expert is too feasible. You could
@@ -1465,8 +1473,8 @@ def harden(song, chart):
     for n in sorted([n for n in ch if n["k"] == "step"], key=lambda n: n["b"]):
         b = n["b"]
         s = slot_of(song, b)
-        if s % 4 or any(a <= b <= e for a, e, _ in held) or song.kind.get(s // 16) == "build":
-            continue
+        if s % 4 or any(a <= b and (b - e) * spb < 0.3 for a, e, _ in held) or song.kind.get(s // 16) == "build":
+            continue     # (a chord needs both thumbs: not under a hold, nor just as one ends)
         loud = song.energy.get(s // 16, 1) >= 2
         if b - last < (1 if loud else 2) - 1e-6:
             continue
