@@ -22,6 +22,9 @@ var key_root := 60
 ## How late a swung song's off-beat sixteenths sound, in beats (0: straight). Expert's gaps shrink
 ## by it, since a late sixteenth sits that much closer to the next eighth.
 var swing := 0.0
+## Which level's chart rules each chart follows: songs charted one rung up after Daniele's
+## 2026-10-19 playtest play Medium's rules at Easy and so on ({} = each level its own).
+var level_rules := {}
 var sections: Array = []
 var lessons: Array = []
 var charts: Dictionary = {}
@@ -64,6 +67,8 @@ static func from_dict(d: Dictionary) -> SongData:
 	s.preview = float(d.get("preview", 0.0))
 	s.key_root = int(d.get("key_root", 60))
 	s.swing = float(d.get("swing", 0.0))
+	var lr = d.get("level_rules", {})
+	s.level_rules = lr if lr is Dictionary else {}
 	var sec = d.get("sections", [])
 	s.sections = sec if sec is Array else []
 	var les = d.get("lessons", [])

@@ -1363,6 +1363,171 @@ def hold_guard(song, chart):
     return [n for n in chart if n["b"] not in drop]
 
 
+# Levels after Daniele's playtest (2026-10-19: "Easy is too easy and expert is too feasible. You could
+# almost make medium the new easy and create a new difficulty"): each level plays the chart one rung
+# up, and Expert gets a new rung above the old Expert. The charter still builds the four old rungs.
+SHIFT = {"easy": "medium", "medium": "hard", "hard": "expert"}
+# The longest run of presses with no breath in it (a gap of BREATH_S or more), by new level: a miss
+# inside a long crowded run cascaded into the next notes until input fell apart (same playtest).
+# And the longest burst of presses under BURST_S apart.
+BREATH_S = 0.33
+MAX_RUN = {"easy": 6, "medium": 8, "hard": 12, "expert": 16}
+BURST_S = 0.2
+MAX_BURST = {"hard": 3, "expert": 4}
+
+
+def slot_of(song, b):
+    """The sixteenth a chart beat sits on (a swung sixteenth is drawn late, after its slot)."""
+    f = int(np.floor(b * 4 + 1e-6))
+    return f if b * 4 - f > 0.01 else round(b * 4)
+
+
+def hand_problems(song, ch, level):
+    """How many inputs of a chart no hand can play, by the validator's rules for the level it plays."""
+    sd = {"bpm": song.cfg["bpm"], "kind": "story", "swing": song.swing}
+    _, hand, clear = V.rule_fns(sd, SHIFT.get(level, "expert"), ch)
+    return len(V.assign_hands(ch, hand, clear))
+
+
+def breathe(song, chart, level):
+    """Breaks crowded runs: a run of presses with no gap of BREATH_S longer than the level allows
+    gives up its weakest plain tap (from its second half, so the run reads as a phrase and a rest),
+    and a burst of fast presses longer than the level allows does the same."""
+    spb = song.spb
+    ch = list(chart)
+    def events():
+        by = {}
+        for n in ch:
+            if n["k"] != "rest":
+                by.setdefault(n["b"], []).append(n)
+        return sorted(by.items())
+    def droppable(ns):
+        return len(ns) == 1 and ns[0]["k"] == "step"
+    held = [(n["b"], n["b"] + n["len"]) for n in ch if n["k"] == "hold"]
+    def strength(b):
+        under = any(a < b <= e for a, e in held)     # a free-thumb tap under a hold goes first
+        return song.score(slot_of(song, b)) - (1.0 if under else 0.0)
+    for gap_s, cap in ((BURST_S, MAX_BURST.get(level)), (BREATH_S, MAX_RUN[level])):
+        if cap is None:
+            continue
+        changed = True
+        while changed:
+            changed = False
+            ev = events()
+            i = 0
+            while i < len(ev):
+                j = i
+                while j + 1 < len(ev) and (ev[j + 1][0] - ev[j][0]) * spb < gap_s - 1e-6:
+                    j += 1
+                if j - i + 1 > cap:
+                    lo, hi = i + max(1, cap // 2), min(j, i + cap)   # a breath inside the allowed run
+                    cands = [k for k in range(lo, hi + 1) if droppable(ev[k][1])] or \
+                            [k for k in range(i + 1, j) if droppable(ev[k][1])]
+                    base = hand_problems(song, ch, level)
+                    for k in sorted(cands, key=lambda k: (strength(ev[k][0]), -k)):
+                        n = ev[k][1][0]
+                        ch.remove(n)
+                        if hand_problems(song, ch, level) <= base:   # a drop never makes it unplayable
+                            changed = True
+                            break
+                        ch.append(n)
+                        ch.sort(key=lambda m: (m["b"], m.get("lane", -1)))
+                    if changed:
+                        break
+                i = j + 1
+    return ch
+
+
+def harden(song, chart):
+    """The new Expert, above the old one: more chords, the tune's notes in the sparse spots, and the
+    crowded runs broken up, so it is harder by what it asks at once rather than by long streams."""
+    spb = song.spb
+    slot_s = spb / 4
+    ch = [dict(n) for n in chart]
+    held = [(n["b"], n["b"] + n["len"], n["lane"]) for n in ch if n["k"] == "hold"]
+    def at(b, w):
+        return [n for n in ch if n["k"] != "rest" and abs(n["b"] - b) * spb < w - 1e-6]
+    base = [hand_problems(song, ch, "expert")]
+    def playable():         # an added note never leaves an input no hand can play
+        return hand_problems(song, ch, "expert") <= base[0]
+    def by_hold(b, lane):   # the button is held, or let go or pressed for a hold, within 0.3 s
+        return any(l == lane and (a - b) * spb < 0.3 and (b - e) * spb < 0.3 for a, e, l in held)
+    # chords: a single tap on a beat over the kick or the bass gets the other thumb too, about one a
+    # beat in loud bars and one a half bar elsewhere
+    last = -99.0
+    for n in sorted([n for n in ch if n["k"] == "step"], key=lambda n: n["b"]):
+        b = n["b"]
+        s = slot_of(song, b)
+        if s % 4 or any(a <= b <= e for a, e, _ in held) or song.kind.get(s // 16) == "build":
+            continue
+        loud = song.energy.get(s // 16, 1) >= 2
+        if b - last < (1 if loud else 2) - 1e-6:
+            continue
+        if max(song.drum(s), song.a["bass"][s] if s < song.n else 0) < 0.5:
+            continue
+        near = at(b, 0.25)
+        if any(m["k"] != "step" for m in near) or len([m for m in near if m["b"] == b]) > 1:
+            continue
+        other = 2 if n["lane"] == 0 else 0 if n["lane"] == 2 else (2 if song.pitch(s) >= song.pitch(max(0, s - 2)) else 0)
+        if any(m.get("lane") == other for m in at(b, 0.2)) or by_hold(b, other):
+            continue
+        ch.append({"b": b, "k": "step", "lane": other})
+        if not playable():
+            ch.pop()
+            continue
+        last = b
+    # rings: a lone tap on a beat of a groove becomes a tap and a tilt together, when no tilt is
+    # near and the taps around it leave the room a tilt needs
+    tilts = sorted(n["b"] for n in ch if n["k"] in ("bell", "ring"))
+    for n in sorted([n for n in ch if n["k"] == "step"], key=lambda n: n["b"]):
+        b = n["b"]
+        s = slot_of(song, b)
+        if s % 4 or song.kind.get(s // 16, "groove") not in ("groove", "transition", "ending") \
+                or any(a <= b <= e for a, e, _ in held) or any(abs(t - b) * spb < TILT_GAP["expert"] for t in tilts):
+            continue
+        near = [m for m in at(b, TILT_AFTER["expert"]) if m is not n]
+        if near or len([m for m in ch if m["b"] == b and m is not n]):
+            continue
+        n["k"] = "ring"
+        if not playable():
+            n["k"] = "step"
+            continue
+        tilts = sorted(tilts + [b])
+    # bells: an empty beat (or a drum hit on the & of a beat) with room around it rings the bell on its own
+    for s in range(0, song.end_slot, 2):
+        b = s / 4
+        if song.kind.get(s // 16, "groove") == "build" or (s % 4 and song.drum(s) < 0.6) \
+                or any(a - 0.01 <= b <= e for a, e, _ in held) or any(abs(t - b) * spb < TILT_GAP["expert"] for t in tilts) \
+                or at(b, TILT_AFTER["expert"]):
+            continue
+        ch.append({"b": b, "k": "bell"})
+        if not playable():
+            ch.pop()
+            continue
+        tilts = sorted(tilts + [b])
+    # the sparse spots: an eighth with a tune note and nothing within 0.3 s of it gets its tap
+    for s in range(0, song.end_slot, 2):
+        b = s / 4
+        if song.lead(s) < ON or song.kind.get(s // 16) == "build" or at(b, 0.3):
+            continue
+        if any(a - 0.01 <= b <= e for a, e, _ in held):
+            continue
+        prev = max((m for m in ch if m["k"] in ("step", "ring") and m["b"] < b), key=lambda m: m["b"], default=None)
+        nxt = min((m for m in ch if m["k"] != "rest" and m["b"] > b), key=lambda m: m["b"], default=None)
+        if prev is None or nxt is None or (nxt["b"] - prev["b"]) * spb < 0.75:
+            continue
+        ps = slot_of(song, prev["b"])
+        d = song.pitch(s) - song.pitch(ps)
+        lane = max(0, min(2, prev["lane"] + (1 if d > 0 else -1 if d < 0 else 0)))
+        if by_hold(b, lane):
+            continue
+        ch.append({"b": b, "k": "step", "lane": lane})
+        if not playable():
+            ch.pop()
+    ch.sort(key=lambda n: (n["b"], n.get("lane", -1)))
+    return ch
+
+
 def main(argv):
     cfg = json.load(open(argv[1]))
     ana = json.load(open(cfg["analysis"]))
@@ -1380,6 +1545,14 @@ def main(argv):
         charts[d] = build_chart(song, d, reps, round(floor))
     for lo_, hi_ in (("medium", "hard"), ("hard", "expert")):
         charts[hi_] = hold_guard(song, lift(song, hi_, charts[lo_], charts[hi_]))
+    # one rung up for every level, a new Expert on top, and the crowded runs broken at every level
+    built = charts
+    charts = {d: breathe(song, built[SHIFT[d]], d) for d in ("easy", "medium")}
+    charts["expert"] = breathe(song, harden(song, built["expert"]), "expert")
+    # Hard is the old Expert, made only of notes the new Expert keeps
+    kept = {(n["b"], n["k"], n.get("lane")) for n in charts["expert"]}
+    charts["hard"] = breathe(song, [n for n in built["expert"] if (n["b"], n["k"], n.get("lane")) in kept
+                                    or (n["k"] == "step" and (n["b"], "ring", n.get("lane")) in kept)], "hard")
     length = cfg["length"]
     for d in DIFFS:
         ch = charts[d]
@@ -1396,6 +1569,7 @@ def main(argv):
         p = os.path.join(ROOT, "game", "data", "songs", cfg["song"] + ".json")
         data = json.load(open(p))
         data["charts"] = charts
+        data["level_rules"] = dict(SHIFT, expert="expert")
         with open(p, "w") as f:
             json.dump(data, f, indent=1, ensure_ascii=False)
             f.write("\n")

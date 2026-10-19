@@ -218,10 +218,14 @@ func test_stray_tap_breaks_the_combo() -> void:
 
 
 func test_mashing_locks_the_buttons() -> void:
-	var s := Session.new(make(steps(30, 1)), "easy")
+	# Beats 0-4, then nothing until beat 10: mashing in the gap locks the buttons.
+	var gap := []
+	for b in [0, 1, 2, 3, 4, 10, 11]:
+		gap.append({"b": b, "k": "step", "lane": 1})
+	var s := Session.new(make(gap), "easy")
 	var locks := []
 	s.input_locked.connect(func(until): locks.append(until))
-	var t0 := _bt(4) + 0.25   # between beats 4 and 5, nothing due
+	var t0 := _bt(5) + 0.25   # after beat 4, nothing due until beat 10
 	check_eq(s.tap(0, t0, 0).judgement, "stray", "first random tap")
 	check_eq(s.tap(2, t0 + 0.05, 1).judgement, "stray", "second")
 	check(not s.is_locked(t0 + 0.06), "not locked yet")
@@ -230,16 +234,20 @@ func test_mashing_locks_the_buttons() -> void:
 	check_eq(locks.size(), 1, "input_locked fired once")
 	check_near(s.lock_left(t0 + 0.1), Session.LOCK_TIME, 1e-6, "for LOCK_TIME")
 	check_eq(s.stats.locks, 1, "counted")
-	var due := s.notes[5]
-	check(due.t < t0 + 0.1 + Session.LOCK_TIME, "a note comes during the lock")
-	check_eq(s.tap(1, due.t, 3).judgement, "locked", "a press on time while locked judges nothing")
-	check(not due.done, "the note is still open")
-	s.update(due.t + 0.2)
-	check_eq(due.judgement, "miss", "and is missed")
+	check_eq(s.tap(1, t0 + 0.3, 3).judgement, "locked", "a press while locked judges nothing")
 	var after := t0 + 0.1 + Session.LOCK_TIME + 0.01
 	check(not s.is_locked(after), "the lock ends")
-	var n := s.notes[6]
+	var n := s.notes[5]
 	check_eq(s.tap(1, n.t, 4).judgement, "perfect", "and taps count again")
+	# The lock never falls where it would cost a note (Daniele, 2026-10-19: in crowded runs one slip
+	# cascaded into the next notes): the same mashing just before a note is due locks nothing.
+	var r := Session.new(make(steps(30, 1)), "easy")
+	var r0 := _bt(4) + 0.25
+	for i in 4:
+		r.tap(0 if i % 2 == 0 else 2, r0 + 0.04 * i, i)
+	check_eq(r.stats.locks, 0, "no lock with a note due")
+	var due := r.notes[5]
+	check_eq(r.tap(1, due.t, 9).judgement, "perfect", "the next note is still playable")
 	# Slow random taps never lock.
 	var q := Session.new(make(steps(30, 1)), "easy")
 	for i in 6:
@@ -247,14 +255,18 @@ func test_mashing_locks_the_buttons() -> void:
 	check_eq(q.stats.stray, 6, "six strays")
 	check_eq(q.stats.locks, 0, "a stray a beat apart never locks")
 	# Wrong steps count toward the lock too, when the buttons are pressed more often than the notes
-	# come: here two buttons for every note.
+	# come (here two buttons for every note), once no note is left due.
 	var chart := [{"b": 0, "k": "step", "lane": 0}, {"b": 0.25, "k": "step", "lane": 0}, {"b": 0.5, "k": "step", "lane": 0}, {"b": 8, "k": "step", "lane": 0}]
 	var w := Session.new(make(chart), "easy")
 	for i in 3:
 		w.tap(2, _bt(0.25 * i), 10 + i)
 		w.tap(1, _bt(0.25 * i) + 0.01, 20 + i)
 	check(w.stats.wrong >= 3, "wrong steps (%d)" % w.stats.wrong)
-	check(w.is_locked(_bt(0.5) + 0.02), "lock the buttons too")
+	check(not w.is_locked(_bt(0.5) + 0.02), "but not while their note is still due")
+	w.tap(2, _bt(1.5), 30)
+	w.tap(1, _bt(1.5) + 0.01, 31)
+	w.tap(2, _bt(1.5) + 0.02, 32)
+	check(w.is_locked(_bt(1.5) + 0.03), "mashing on after them locks the buttons")
 	# One wrong press per note is a player on the wrong button, not mashing: no lock.
 	var v := Session.new(make(chart), "easy")
 	for i in 3:

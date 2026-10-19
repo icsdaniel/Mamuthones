@@ -56,6 +56,7 @@ const TOUCH_WINDOW := 0.10    ## seconds after a touch during which accel rings 
 const RETRY_DROP := 0.8       ## a forgiven lobe has passed a peak once it falls under this × that peak
 const HELD_TILT := 0.06       ## seconds of steady turning before a full ring's tap that make its tilt
 const FORGIVE_PEAK := 0.75    ## a forgiven lobe re-arms only if it peaked under this × typical_peak
+const BACK_DROP := 0.6        ## a ring's return lobe is over once it falls under this × its peak
 ## Song threshold as a share of the calibrated flick's peak. Daniele calibrated with big flicks
 ## (peaks 333 °/s) and played much softer; replaying his six 2026-10-10 runs, 0.3 catches every bell
 ## the old adaptive threshold did.
@@ -105,6 +106,8 @@ var _cand_peak := 0.0
 var _cand_pred := 0.0         # peak predicted from the rising slope
 var _rise_since := NAN        # first fresh reading of the current lobe on its rising slope
 var _lobe_over := false # the current lobe already went over the threshold
+var _ring_sign := 0.0         # the sign of the lobe that last rang
+var _back_max := 0.0          # highest reading the other way since that ring (its return lobe)
 var _prev_v := 0.0
 var _prev_t := -INF
 var _last_vec := Vector3(NAN, NAN, NAN)
@@ -245,6 +248,15 @@ func feed(t: float, acc: Vector3, gyro_dps: Vector3) -> bool:
 			_calm_since = NAN
 		if t - last_t >= lockout() and not is_nan(_calm_since) and t - _calm_since >= CALM:
 			_armed = true
+		# Two tilts in a row: the next flick, the other way, can start while the last one's return lobe
+		# still swings, so the signal never calms between them. Once that return lobe has passed its
+		# peak (falling under BACK_DROP of it) after the lockout, the detector re-arms and the next rise
+		# rings. A lone return lobe that rings nothing is forgiven like any stray lobe.
+		elif fresh and _ring_sign != 0.0:
+			if signf(vec[axis]) == -_ring_sign:
+				_back_max = maxf(_back_max, v)
+			if t - last_t >= lockout() and _back_max >= threshold and v < minf(BACK_DROP * _back_max, threshold):
+				_armed = true
 	# A held reading says nothing new about a starting ring.
 	if not fresh:
 		return false
@@ -326,6 +338,8 @@ func claim(t: float) -> void:
 	last_t = t
 	_retry_t = NAN
 	_offered_t = INF
+	_ring_sign = signf(_last_vec[axis]) if not is_nan(_last_vec[axis]) else 0.0
+	_back_max = 0.0
 
 
 ## A retry rang a bell: the rest of that lobe offers nothing more.
@@ -345,6 +359,8 @@ func _fire() -> void:
 	last_t = _cand_t - _reading_age()
 	var s := signf(_cand_vec[axis]) * up_sign
 	last_up = s >= 0.0
+	_ring_sign = signf(_cand_vec[axis])
+	_back_max = 0.0
 	last_strength = strength_of(maxf(_cand_peak, _cand_pred))
 	_cand_t = NAN
 	rang.emit(last_t, last_up)

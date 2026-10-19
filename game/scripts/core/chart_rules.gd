@@ -50,6 +50,7 @@ static func check(song: SongData, difficulty: String) -> Array[String]:
 	if raw.is_empty():
 		out.append("%s: empty chart" % where)
 		return out
+	difficulty = str(song.level_rules.get(difficulty, difficulty))
 	var prev_b := -INF
 	var last_bell := -INF
 	var holds := []   # [lane, start, end]

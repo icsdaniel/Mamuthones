@@ -38,7 +38,8 @@ extends RefCounted
 ## LOCK_SPAN lock the step buttons for LOCK_TIME, but only while the player is pressing more often
 ## than the chart asks (from the first of those taps, more presses than lane notes due, plus
 ## LOCK_SPARE): a player who falls behind in a dense passage and taps late, once per note, is
-## struggling, not mashing, and is never locked. Taps while locked judge nothing (judgement "locked").
+## struggling, not mashing, and is never locked. Nor does the lock fall when a lane note is due
+## before it would end: it only stops mashing where it costs no notes. Taps while locked judge nothing (judgement "locked").
 ##
 ## Matching uses note-lock: an input goes to the EARLIEST open note whose window contains it, so a
 ## late player in a fast stream reads as late instead of drifting onto the next note.
@@ -951,11 +952,25 @@ func _bad_tap(t: float) -> void:
 	_bad_taps.append(t)
 	while not _bad_taps.is_empty() and t - _bad_taps[0] > LOCK_SPAN:
 		_bad_taps.pop_front()
-	if _bad_taps.size() >= LOCK_TAPS and _over_pressing(_bad_taps[0] - win_touch.z, t):
+	if _bad_taps.size() >= LOCK_TAPS and _over_pressing(_bad_taps[0] - win_touch.z, t) \
+			and not _lane_note_due(t, t + LOCK_TIME + win_touch.z):
 		_bad_taps.clear()
 		_locked_until = t + LOCK_TIME
 		stats.locks += 1
 		input_locked.emit(_locked_until)
+
+
+# Whether an open lane note is due between t0 and t1. The lock never falls where it would cost notes:
+# in a crowded run one slip then locked the buttons through the next notes, and the misses cascaded
+# (Daniele, 2026-10-19: "one mistake cascades to the others and inputting becomes impossible").
+func _lane_note_due(t0: float, t1: float) -> bool:
+	for k in range(_first_open, notes.size()):
+		var n := notes[k]
+		if n.t > t1:
+			break
+		if not n.done and n.uses_lane() and n.t >= t0 - win_touch.z:
+			return true
+	return false
 
 
 # Whether the presses from lo to t outnumber, by more than LOCK_SPARE, the presses the chart asks
@@ -989,11 +1004,18 @@ func _end_hold(n: Note, t: float, kept: bool) -> void:
 		_refresh_score(t)
 		judged.emit(n, "held", t - n.end_t)
 	else:
+		# Letting go early is a miss (Daniele, 2026-10-19): the hold's head no longer counts as hit,
+		# it costs health and caps the grade like any lost note.
 		stats.let_go += 1
+		if n.judgement in ["perfect", "good", "early", "late"]:
+			stats[n.judgement] -= 1
+		stats.miss += 1
+		n.judgement = "let_go"
 		combo = 0
 		unison_streak = 0
 		_set_unison(unison_level - LET_GO_DROP, t)
 		judged.emit(n, "let_go", t - n.end_t)
+		_hurt()
 	hold_ended.emit(n.lane, kept)
 
 

@@ -284,17 +284,21 @@ def is_chord(lst) -> bool:
 
 def check_chart(song: dict, name: str, notes: list, audio_len: float | None):
     errs = []
+    # a song charted one rung up (pattern charts after the 2026-10-19 playtest) is held to the rules of
+    # the level each chart now plays: its Easy is checked as a Medium, and so on
+    label = name
+    name = song.get("level_rules", {}).get(name, name)
     bpm = song["bpm"]
     spb = 60.0 / bpm
     kind = song.get("kind", "story")
     tutorial = kind == "tutorial"
     level = DIFFS.index(name) if name in DIFFS else 3
     if not isinstance(notes, list) or not notes:
-        return [f"{name}: chart is empty"], {}
+        return [f"{label}: chart is empty"], {}
 
     # format
     for i, n in enumerate(notes):
-        where = f"{name}[{i}]"
+        where = f"{label}[{i}]"
         if not isinstance(n, dict) or "b" not in n or "k" not in n:
             errs.append(f"{where}: needs b and k")
             continue
@@ -329,14 +333,14 @@ def check_chart(song: dict, name: str, notes: list, audio_len: float | None):
     # sorted, inside audio
     for i in range(1, len(notes)):
         if notes[i]["b"] < notes[i - 1]["b"] - 1e-9:
-            errs.append(f"{name}: notes not sorted at index {i} (b={notes[i]['b']})")
+            errs.append(f"{label}: notes not sorted at index {i} (b={notes[i]['b']})")
             break
     last_end = max(n["b"] + (n.get("len", 0) if n["k"] in ("hold", "rest") else 0) for n in notes)
     end_t = song["offset"] + last_end * spb
     if audio_len is not None and end_t > audio_len - 0.25:
-        errs.append(f"{name}: last note ends at {end_t:.2f}s, audio is {audio_len:.2f}s")
+        errs.append(f"{label}: last note ends at {end_t:.2f}s, audio is {audio_len:.2f}s")
     if end_t > song.get("length", 1e9) + 1e-3:
-        errs.append(f"{name}: last note ends at {end_t:.2f}s after song length {song.get('length')}")
+        errs.append(f"{label}: last note ends at {end_t:.2f}s after song length {song.get('length')}")
 
     overall_fn, hand_fn, clear_fn = rule_fns(song, name, notes)
 
@@ -347,43 +351,43 @@ def check_chart(song: dict, name: str, notes: list, audio_len: float | None):
     for b, lst in groups.items():
         lanes = [n["lane"] for n in lst if "lane" in n]
         if len(lanes) != len(set(lanes)):
-            errs.append(f"{name}: two notes on one lane at b={b}")
+            errs.append(f"{label}: two notes on one lane at b={b}")
         bells = [n for n in lst if n["k"] in ("bell", "ring")]
         if len(bells) > 1:
-            errs.append(f"{name}: more than one bell at b={b}")
+            errs.append(f"{label}: more than one bell at b={b}")
         if any(n["k"] == "bell" for n in lst) and any(n["k"] in ("step", "hold") for n in lst):
-            errs.append(f"{name}: a step and a bell on one beat must be written as a ring (b={b})")
+            errs.append(f"{label}: a step and a bell on one beat must be written as a ring (b={b})")
         if len(lst) > 1:
             kinds = sorted(n["k"] for n in lst)
             triple = kinds == ["ring", "step"]
             if is_chord(lst):
                 if level < RULES["min_level"]["chord"] and not tutorial:
-                    errs.append(f"{name}: chord below medium at b={b}")
+                    errs.append(f"{label}: chord below medium at b={b}")
             elif not triple:
-                errs.append(f"{name}: {kinds} together at b={b}")
+                errs.append(f"{label}: {kinds} together at b={b}")
             elif level < RULES["min_level"]["triple"] and not tutorial:
-                errs.append(f"{name}: triple ring below expert at b={b}")
+                errs.append(f"{label}: triple ring below expert at b={b}")
         if any(n["k"] == "rest" for n in lst) and len(lst) > 1:
-            errs.append(f"{name}: a rest shares its beat with a note at b={b}")
+            errs.append(f"{label}: a rest shares its beat with a note at b={b}")
 
     # Medium and Hard stay on the eighth grid (beats, half-beats, triplet eighths)
     if name in ("medium", "hard") and not tutorial:
         for n in notes:
             if n["k"] != "rest" and not on_eighth(n["b"]):
-                errs.append(f"{name}: note at b={n['b']} is finer than an eighth (sixteenths are Expert's)")
+                errs.append(f"{label}: note at b={n['b']} is finer than an eighth (sixteenths are Expert's)")
 
     # overall spacing between distinct beats
     beats = sorted(b for b, lst in groups.items() if any(n["k"] != "rest" for n in lst))
     for a, c in zip(beats, beats[1:]):
         g = max(overall_fn(a), overall_fn(c))
         if c - a < g - EPS:
-            errs.append(f"{name}: inputs {c - a:.3f} beats apart at b={a} (min {g:.3f})")
+            errs.append(f"{label}: inputs {c - a:.3f} beats apart at b={a} (min {g:.3f})")
 
     # bells half a beat apart
     bell_bs = [n["b"] for n in notes if n["k"] in ("bell", "ring")]
     for a, c in zip(bell_bs, bell_bs[1:]):
         if c - a < RULES["bell_gap"] - EPS:
-            errs.append(f"{name}: bells {c - a:.3f} beats apart at b={a}")
+            errs.append(f"{label}: bells {c - a:.3f} beats apart at b={a}")
 
     # nothing under a hold's own lane; nothing inside a stand-still
     for n in notes:
@@ -391,20 +395,20 @@ def check_chart(song: dict, name: str, notes: list, audio_len: float | None):
             hb, he = n["b"], n["b"] + n["len"]
             for m in notes:
                 if m is not n and m.get("lane") == n["lane"] and hb - EPS <= m["b"] <= he + EPS:
-                    errs.append(f"{name}: note hidden under the hold at b={hb} (lane {n['lane']}, b={m['b']})")
+                    errs.append(f"{label}: note hidden under the hold at b={hb} (lane {n['lane']}, b={m['b']})")
         if n["k"] == "rest":
             rb, re_ = n["b"], n["b"] + n.get("len", 1)
             for m in notes:
                 if m is not n and rb - EPS <= m["b"] < re_ - EPS:
-                    errs.append(f"{name}: note inside the stand-still at b={rb} (b={m['b']})")
+                    errs.append(f"{label}: note inside the stand-still at b={rb} (b={m['b']})")
                 if m is not n and m["k"] == "hold" and m["b"] < rb and m["b"] + m["len"] > rb + EPS:
-                    errs.append(f"{name}: hold runs into the stand-still at b={rb}")
+                    errs.append(f"{label}: hold runs into the stand-still at b={rb}")
 
     # hands
     for (i, msg) in assign_hands(notes, hand_fn, clear_fn):
-        errs.append(f"{name}: {msg}")
+        errs.append(f"{label}: {msg}")
     for (i, msg) in jacks(notes, spb):
-        errs.append(f"{name}: {msg}")
+        errs.append(f"{label}: {msg}")
 
     # bells per level (design section 4)
     bells = [n for n in notes if n["k"] in ("bell", "ring")]
@@ -416,11 +420,11 @@ def check_chart(song: dict, name: str, notes: list, audio_len: float | None):
             f = n["b"] % 1
             strong = f < EPS or f > 1 - EPS
             if not strong:
-                errs.append(f"{name}: bell off the beat at b={n['b']} ({name} bells sit on strong beats)")
+                errs.append(f"{label}: bell off the beat at b={n['b']} ({name} bells sit on strong beats)")
             per.setdefault(int(n["b"] // span + EPS), []).append(n)
         for key, lst in per.items():
             if len(lst) > 1:
-                errs.append(f"{name}: {len(lst)} bells within {span} beats at b={lst[0]['b']} "
+                errs.append(f"{label}: {len(lst)} bells within {span} beats at b={lst[0]['b']} "
                             f"({'one per phrase' if name == 'easy' else 'one per bar'})")
 
     # mechanics per level (story songs; the tutorial teaches everything at every level)
@@ -428,7 +432,7 @@ def check_chart(song: dict, name: str, notes: list, audio_len: float | None):
     if kind == "story" and name in DIFFS:
         for m, lv in RULES["min_level"].items():
             if mech.get(m) and level < lv:
-                errs.append(f"{name}: {m} is not used below {DIFFS[lv]}")
+                errs.append(f"{label}: {m} is not used below {DIFFS[lv]}")
 
     count, avg, peak = nps_stats(notes, bpm, song["offset"], RULES["peak_window_s"])
     if name == "easy" and not tutorial and peak > RULES["easy_peak_nps"] + EPS:

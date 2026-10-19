@@ -208,6 +208,24 @@ func test_half_beat_bells_still_ring() -> void:
 	check_eq(rings.size(), 8, "bells half a beat apart all ring")
 
 
+## Two tilts in a row (Daniele, 2026-10-19: "tilting twice in a row is non responsive"): the second
+## flick, the other way, starts while the first one's return lobe is still swinging, so the signal
+## never rests between them. It still rings.
+func test_back_to_back_tilts_both_ring() -> void:
+	for bpm: float in [90.0, 110.0, 140.0]:
+		for dur: float in [0.3, 0.4, 0.5]:
+			for mode: String in ["gyro", "accel"]:
+				var sy := Synth.new(11)
+				sy.gyro_noise = 5.0
+				sy.acc_noise = 0.3
+				var beat := 60.0 / bpm
+				var gap := maxf(beat, dur)
+				for i in 8:
+					sy.flick(1.0 + i * gap, i % 2 == 0, 400, 12, dur)
+				var rings := _run(_detector(bpm, mode), sy, 2.0 + 8 * gap)
+				check_eq(rings.size(), 8, "%s at %d bpm, %.1f s flicks %.2f s apart: 8 rings" % [mode, bpm, dur, gap])
+
+
 func test_taps_do_not_ring() -> void:
 	for mode: String in ["gyro", "accel"]:
 		var sy := Synth.new(9)
