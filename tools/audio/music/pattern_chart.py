@@ -452,8 +452,8 @@ def tilt_slots(song, diff, skip_bars=()):
         elif k in ("groove", "transition") and bar not in skip_bars:
             if lv == 3:
                 # beat 3 in loud bars, phrase ends, and every bar of a slow song (a bar of 3 s or more)
-                # (in loud bars only where beat 3 has a tune note to ring, or every other bar)
-                b3 = (e >= 2 and (song.lead(s0 + 8) >= 0.6 or bar % 2 == 1)) or bar % 4 == 3 or song.spb * 4 >= 3.0
+                # (in loud bars every other bar, so the hands get bars of taps between)
+                b3 = (e >= 2 and bar % 2 == 1) or bar % 4 == 3 or song.spb * 4 >= 3.0
                 out += [s0, s0 + 8] if b3 else [s0]
             elif lv == 2:     # quieter bars tilt every other bar, unless the bar is long
                 # (a slow song's Hard is made harder with bells, chords and holds, not sixteenths:
@@ -681,6 +681,8 @@ def build_chart(song, diff, reps, hold_floor=0):
     # beat to a beat, when nothing else needs that thumb meanwhile. Made before the chords, so a hold
     # keeps its thumb; Hard and Expert hold at least as often as the level below
     held = [(h[0], h[0] + h[2]) for h in holds]
+    held_lane = [h[1] for h in holds]
+    handed = set()          # holds handed to the other thumb: the contour pass leaves them there
 
     def short_holds(min_ring, max_per_bar, min_s, limit=10 ** 6, reattack=False):
         made = 0
@@ -727,7 +729,7 @@ def build_chart(song, diff, reps, hold_floor=0):
             bar = s // 16
             if per_bar.get(bar, 0) >= max_per_bar:
                 continue
-            lane_ = here[0]["lane"]
+            lane_ = orig_lane = here[0]["lane"]
             # no press on the held button just before the hold starts (0.3 s) or just after it ends
             # (0.2 s): the hold takes another button, or isn't made
             def near_lanes():
@@ -739,8 +741,19 @@ def build_chart(song, diff, reps, hold_floor=0):
                         out |= {n.get("lane") for n in notes[x]}
                 return out
             busy = near_lanes()
-            if lane_ in busy:
-                alt = [l for l in (0, 2, 1) if l not in busy]
+            # the thumbs take turns holding: a new hold goes to the side that has held less in the last
+            # 8 bars, if that button is free and the tune's shape allows it (it moves the way the tune
+            # moves from the note before); against the shape only when one side has held three more
+            recent = [l for (a, _), l in zip(held, held_lane) if s - 128 <= a < s]
+            if lane_ != 1 and s not in forced:
+                opp = 2 - lane_
+                prev = max((x for x in notes if s - 8 <= x < s and any("lane" in n for n in notes[x])), default=None)
+                fits_shape = prev is None or song.pitch(prev) == song.pitch(s) or \
+                    (opp > max(n.get("lane", 1) for n in notes[prev])) == (song.pitch(s) > song.pitch(prev))
+                if recent.count(lane_) - recent.count(opp) >= (1 if fits_shape else 3) and opp not in busy:
+                    lane_ = opp      # (the tap keeps its button if the hold isn't made)
+            if lane_ in busy:      # (to the side that has held less)
+                alt = sorted((l for l in (0, 2, 1) if l not in busy), key=lambda l: (l == 1, recent.count(l)))
                 if not alt:
                     continue
                 lane_ = alt[0]
@@ -769,6 +782,9 @@ def build_chart(song, diff, reps, hold_floor=0):
                 del notes[x]
             here[0] = {"k": "hold", "lane": lane_, "len": ln / 4}
             held.append((s, s + ln))
+            held_lane.append(lane_)
+            if lane_ != orig_lane:
+                handed.add(s)
             prio[(s, lane_)] = 80
             per_bar[bar] = per_bar.get(bar, 0) + 1
             made += 1
@@ -871,7 +887,7 @@ def build_chart(song, diff, reps, hold_floor=0):
             if b_ - a_ > 2 or song.lead(a_) < ON or song.lead(b_) < ON or song.kind.get(b_ // 16) == "build":
                 continue
             st = [n for n in notes[b_] if n["k"] in ("step", "hold")]
-            if len(notes[b_]) != 1 or not st or b_ in forced:
+            if len(notes[b_]) != 1 or not st or b_ in forced or b_ in handed:
                 continue
             if st[0]["k"] == "hold":     # a hold moves only to a button nothing presses while it's down
                 end = b_ + st[0]["len"] * 4
@@ -913,6 +929,42 @@ def build_chart(song, diff, reps, hold_floor=0):
             if len(st) == 1 and len(notes[x]) == 1:
                 st[0]["lane"] = side
                 side = 2 - side
+    # twin half bars (the same pitches and the same tune and drum rhythm on seven of eight sixteenths)
+    # play like the first time: the same taps (up to two added, one swapped) on the same buttons, so
+    # a riff and its answer read alike. Tilts, stomps, holds and chords keep their places
+    hits_ = set(song.cfg.get("hit_bars", []))
+    def sig_at(s):
+        return (pc[s], song.lead(s) >= ON, song.drum(s) >= 0.6)
+    def plain(x):          # a single tap the pass may move or copy
+        return x in notes and len(notes[x]) == 1 and notes[x][0]["k"] == "step"
+    def held_at(x):
+        return x in forced or any(a <= x <= b for a, b in held)
+    firsts = []
+    for h in range(min(song.n, song.end_slot + 1) // 8):
+        bar = h // 2
+        if song.kind.get(bar) in ("build", "break") or bar in hits_:
+            continue
+        src = next((g for g in firsts if song.kind.get(g // 2) == song.kind.get(bar)
+                    and sum(sig_at(g * 8 + i) == sig_at(h * 8 + i) for i in range(8)) >= 7), None)
+        if src is None:
+            firsts.append(h)
+            continue
+        # the taps: where the first time had a plain tap and this one nothing (or the reverse)
+        # (Easy's taps keep their spacing; its buttons follow below)
+        add = [i for i in range(8) if plain(src * 8 + i) and h * 8 + i not in notes and not held_at(h * 8 + i)]
+        # (a tap the first time didn't have is cut only when one is added too: the level keeps its density)
+        cut = [i for i in range(8) if plain(h * 8 + i) and src * 8 + i not in notes]
+        if lv >= 1 and len(add) >= len(cut) and 0 < len(add) + len(cut) <= 3:
+            for i in cut:
+                del notes[h * 8 + i]
+            for i in add:
+                notes[h * 8 + i] = [dict(notes[src * 8 + i][0])]
+                prio[(h * 8 + i, notes[h * 8 + i][0]["lane"])] = 10
+        # the buttons
+        for i in range(8):
+            a_, b_ = src * 8 + i, h * 8 + i
+            if plain(a_) and plain(b_) and (b_ not in forced or notes[a_][0]["lane"] in forced[b_]):
+                notes[b_][0]["lane"] = notes[a_][0]["lane"]
     # last: the same button never twice inside 0.2 s, and never pressed within 0.3 s of a hold on it
     # starting or letting go (a later pass may have made one); the tap moves to a free button or goes
     def presses():
@@ -927,7 +979,7 @@ def build_chart(song, diff, reps, hold_floor=0):
     for x in sorted(notes):
         if x not in notes:
             continue
-        for nd in [n for n in notes[x] if n["k"] == "step"]:
+        for nd in [n for n in notes[x] if n["k"] in ("step", "ring")]:     # (a ring: the fourth-press rule only)
             bad = set()
             for y, ln_, od in presses():
                 if od is nd:
@@ -941,27 +993,30 @@ def build_chart(song, diff, reps, hold_floor=0):
                         bad.add(ln_)
             bad |= {n.get("lane") for n in notes[x] if n is not nd}
             hard_bad = set(bad)
-            if lv == 3 and song.kind.get(x // 16) != "build":      # Expert: a moving tune never takes one button three times inside 0.75 s
+            if lv == 3 and song.kind.get(x // 16) != "build" and nd["k"] == "step":      # Expert: a moving tune never takes one button three times inside 0.75 s
                 prev = sorted(y for y, ln_, od in presses() if ln_ == nd["lane"] and 0 < (x - y) * slot_s < 0.75)
                 if len(prev) >= 2 and song.pitch(prev[-1]) != song.pitch(x):
                     bad.add(nd["lane"])
                     if all(l in bad for l in (0, 1, 2)) and nd["lane"] not in hard_bad:
                         continue     # (no other button is free: the note stays where it is)
             if lv >= 1 and song.kind.get(x // 16) != "build" and nd["lane"] not in bad:
-                # any level: a fourth press in a row on one button (within a second) moves to another
-                # button, whatever the pitch, if one is free
-                last3 = sorted({y: ln_ for y, ln_, od in presses() if 0 < (x - y) * slot_s < 1.0}.items())[-3:]
+                # any level: a fourth press in a row on one button (within a second, or four eighths
+                # of a slow song) moves to another button, whatever the pitch, if one is free: to the
+                # side the tune moves toward
+                last3 = sorted({y: ln_ for y, ln_, od in presses() if 0 < (x - y) * slot_s < max(1.0, 6.5 * slot_s)}.items())[-3:]
                 if len(last3) == 3 and all(l_ == nd["lane"] for _, l_ in last3):
                     alt = [l for l in (0, 1, 2) if l not in bad and l != nd["lane"] and (x not in forced or l in forced[x])]
                     if alt:
-                        nd["lane"] = min(alt, key=lambda l: abs(l - nd["lane"]))
+                        d = song.pitch(x) - song.pitch(last3[-1][0])
+                        toward = [l for l in alt if (l - nd["lane"]) * d > 0]
+                        nd["lane"] = min(toward or alt, key=lambda l: abs(l - nd["lane"]))
                     continue
             if nd["lane"] not in bad:
                 continue
             alt = [l for l in (0, 1, 2) if l not in bad and (x not in forced or l in forced[x])]
             if alt:
                 nd["lane"] = min(alt, key=lambda l: abs(l - nd["lane"]))
-            else:
+            elif nd["k"] == "step":     # (a ring with nowhere to go stays: the repair pass decides)
                 notes[x].remove(nd)
         if not notes[x]:
             del notes[x]
@@ -993,6 +1048,30 @@ def lift(song, diff, lower, upper):
     lb, ub = per_bar(lower), per_bar(upper)
     up = list(upper)
     added = []
+    def fit(x, want):
+        """The button a tap at slot x can take on this level (want, if free), or None."""
+        lanes_near = set()
+        for m in up:
+            y = sl(m)
+            dt = abs(x - y) * slot_s
+            # the level's own clearance around a tilt (a stomp keeps 0.3 s)
+            if m["k"] in ("bell", "ring") and (x - y) * slot_s < (TILT_AFTER[diff] if x > y else 0) - 1e-6 \
+                    and x > y or m["k"] in ("bell", "ring") and x <= y and (y - x) * slot_s < TILT_BEFORE[diff] - 1e-6 \
+                    or m["k"] == "stomp" and dt < 0.3:
+                return None
+            # under a hold the free thumb may play (on another button, not as the hold starts)
+            if m["k"] == "hold" and y - 1 <= x <= y + m["len"] * 4 + 1 and (
+                    abs(x - y) <= 1 or want == m["lane"] or diff != "expert"):
+                return None
+            if m["k"] == "hold" and y < x < y + m["len"] * 4 + 0.3 / slot_s:
+                lanes_near.add(m["lane"])
+            if m["k"] == "hold" and abs(x - (y + m["len"] * 4)) * slot_s < 0.2 and any(sl(o) == x for o in up if o["k"] == "step"):
+                return None      # (no chord as a hold lets go)
+            if dt < 0.2 and m["k"] == "step" and not (diff == "expert" and x == y and m["lane"] != want):
+                return None      # (at Expert, Hard's tap on an Expert tap's slot may join it as a chord)
+            if dt < 0.3 and "lane" in m:
+                lanes_near.add(m["lane"])
+        return want if want not in lanes_near else next((l for l in (0, 2, 1) if l not in lanes_near), None)
     for bar, cnt in sorted(lb.items()):
         need = cnt - ub.get(bar, 0) + (1 if diff == "hard" and cnt >= 3 and song.kind.get(bar) == "groove" else 0)
         if need <= 0:
@@ -1001,38 +1080,39 @@ def lift(song, diff, lower, upper):
                         key=lambda n: -song.score(sl(n))):
             if need <= 0:
                 break
-            x = sl(n)
-            ok = True
-            lanes_near = set()
-            for m in up:
-                y = sl(m)
-                dt = abs(x - y) * slot_s
-                # the level's own clearance around a tilt (a stomp keeps 0.3 s)
-                if m["k"] in ("bell", "ring") and (x - y) * slot_s < (TILT_AFTER[diff] if x > y else 0) - 1e-6 \
-                        and x > y or m["k"] in ("bell", "ring") and x <= y and (y - x) * slot_s < TILT_BEFORE[diff] - 1e-6 \
-                        or m["k"] == "stomp" and dt < 0.3:
-                    ok = False
-                # under a hold the free thumb may play (on another button, not as the hold starts)
-                if m["k"] == "hold" and y - 1 <= x <= y + m["len"] * 4 + 1 and (
-                        abs(x - y) <= 1 or n["lane"] == m["lane"] or diff != "expert"):
-                    ok = False
-                if m["k"] == "hold" and y < x < y + m["len"] * 4 + 0.3 / slot_s:
-                    lanes_near.add(m["lane"])
-                if m["k"] == "hold" and abs(x - (y + m["len"] * 4)) * slot_s < 0.2 and any(sl(o) == x for o in up if o["k"] == "step"):
-                    ok = False      # (no chord as a hold lets go)
-                if dt < 0.2 and m["k"] == "step" and not (diff == "expert" and x == y and m["lane"] != n["lane"]):
-                    ok = False      # (at Expert, Hard's tap on an Expert tap's slot may join it as a chord)
-                if dt < 0.3 and "lane" in m:
-                    lanes_near.add(m["lane"])
-            if not ok:
-                continue
-            lane = n["lane"] if n["lane"] not in lanes_near else next((l for l in (0, 2, 1) if l not in lanes_near), None)
+            lane = fit(sl(n), n["lane"])
             if lane is None:
                 continue
             m = {"b": n["b"], "k": "step", "lane": lane}
             up.append(m)
             added.append(m)
             need -= 1
+    if diff == "hard":     # Hard never plays Medium's rhythm in a groove bar: two more of its own candidates
+        when = lambda ch, bar: {sl(n) for n in ch if n["k"] != "rest" and sl(n) // 16 == bar}
+        for bar in range(song.bars):
+            lo_ = when(lower, bar)
+            if song.kind.get(bar) not in ("groove", "transition", "ending") or len(lo_) < 3 or when(up, bar) != lo_:
+                continue
+            k_ = 0
+            # (its rhythm's candidates first, then any eighth with the tune, a drum or the bass on it)
+            extra = [x for x in range(bar * 16, min(bar * 16 + 16, song.end_slot), 2)
+                     if song.lead(x) >= ON or song.drum(x) >= 0.4 or song.a["bass"][x] >= 0.5]
+            cands = sorted(pick_rhythm(song, diff, bar)[0], key=lambda s: -song.score(s))
+            for x in cands + sorted((x for x in extra if x not in cands), key=lambda s: -song.score(s)):
+                if k_ >= 2:
+                    break
+                if x in lo_ or x // 16 != bar:
+                    continue
+                prev = max((m for m in up if "lane" in m and sl(m) < x), key=sl, default=None)
+                want = 1 if prev is None else min(2, max(0, prev["lane"] + (1 if song.pitch(x) > song.pitch(sl(prev)) else
+                                                                            -1 if song.pitch(x) < song.pitch(sl(prev)) else 0)))
+                lane = fit(x, want)
+                if lane is None:
+                    continue
+                m = {"b": round(x / 4 + (song.swing if x % 2 else 0.0), 4), "k": "step", "lane": lane}
+                up.append(m)
+                added.append(m)
+                k_ += 1
     if diff == "expert":     # Expert holds wherever Hard does: Hard's hold on Expert's tap on the same note
         nh = lambda ch: sum(1 for n in ch if n["k"] == "hold")
         for h in sorted((n for n in lower if n["k"] == "hold"), key=lambda n: -song.score(sl(n))):
