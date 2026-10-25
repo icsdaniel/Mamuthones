@@ -348,6 +348,43 @@ static func ai_draw(ci: CanvasItem, key: String, lo: Vector2, hi: Vector2, mod :
 	ci.draw_texture_rect(tex, Rect2(at, Vector2(cells) * px), false, mod)
 
 
+## The pxl pictures (tools/art/pxl, drawn pixel by pixel at each size they take) of `key` in
+## res://art/pxl/<group>/: {Vector2i size: path}, read once.
+static var _pxl := {}
+
+
+static func _pxl_sizes(group: String, key: String) -> Dictionary:
+	var k := group + "/" + key
+	if not _pxl.has(k):
+		var found := {}
+		var dir := "res://art/pxl/%s/" % group
+		for f in ResourceLoader.list_directory(dir):
+			if not (f.begins_with(key + "_") and f.ends_with(".png")):
+				continue
+			var wh := f.trim_prefix(key + "_").trim_suffix(".png").split("x")
+			if wh.size() == 2 and wh[0].is_valid_int() and wh[1].is_valid_int():
+				found[Vector2i(int(wh[0]), int(wh[1]))] = dir + f
+		_pxl[k] = found
+	return _pxl[k]
+
+
+## Draws pxl picture `key` (group `group`) at the size nearest the cells between lo and hi, one art px
+## to a cell, centred on the box. False when there is none (the caller falls back).
+static func pxl_draw(ci: CanvasItem, group: String, key: String, lo: Vector2, hi: Vector2, mod := Color.WHITE) -> bool:
+	var sizes := _pxl_sizes(group, key)
+	if sizes.is_empty():
+		return false
+	var want := ai_cells(lo, hi)
+	var best := Vector2i.ZERO
+	for s: Vector2i in sizes:
+		if best == Vector2i.ZERO or (s - want).length_squared() < (best - want).length_squared():
+			best = s
+	var px := PxArt.PX
+	var at := PxArt.snap2((lo + hi) * 0.5 - Vector2(best) * px * 0.5)
+	ci.draw_texture_rect(PxArt.tex(sizes[best]), Rect2(at, Vector2(best) * px), false, mod)
+	return true
+
+
 ## The picture size (cells) ai_draw shows a picture at between lo and hi on screen.
 static func ai_cells(lo: Vector2, hi: Vector2) -> Vector2i:
 	var cells := Vector2i(((hi - lo) / PxArt.PX).round())
@@ -1061,11 +1098,15 @@ static func _ring_pic(lv: LaneView, sil: PackedVector2Array, k: float, g: float,
 		ci_poly(lv, sil, _a(kk[1], 0.35 * near * near))
 		mod = mod.lerp(kk[0] * 1.25, near)
 	if locked:
-		ai_draw(lv, "ring_red", lo, hi)
+		if not pxl_draw(lv, "rings", "ring_red", lo, hi):
+			ai_draw(lv, "ring_red", lo, hi)
 		return
-	ai_draw(lv, "ring_idle", lo, hi, mod)
+	if not pxl_draw(lv, "rings", "ring_idle", lo, hi, mod):
+		ai_draw(lv, "ring_idle", lo, hi, mod)
 	if g > 0.05:
-		ai_draw(lv, "ring_gold", lo, hi, Color(1.0, 1.0, 1.0, clampf(g * 1.5, 0.0, 1.0)))
+		var lit := Color(1.0, 1.0, 1.0, clampf(g * 1.5, 0.0, 1.0))
+		if not pxl_draw(lv, "rings", "ring_gold", lo, hi, lit):
+			ai_draw(lv, "ring_gold", lo, hi, lit)
 
 
 # ------------------------------------------------------------------ the bell strike
