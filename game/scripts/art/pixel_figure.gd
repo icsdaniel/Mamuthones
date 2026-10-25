@@ -16,6 +16,9 @@ extends Node2D
 ## The origin is the feet (the pictures' bottom centre).
 
 const DIR := "res://art/pixel/"
+## Pieces drawn with pxl (tools/art/pxl/art/<figure>.px.js) take the place of the older pictures of
+## the same name where they exist.
+const PXL_DIR := "res://art/pxl/"
 ## The row (art px from the top) each figure's body is split at: the shins, just under the
 ## Mamuthone's fleece and the Issohadore's trousers, which drop over them (a cut higher shows its
 ## straight edge). Every piece is above it.
@@ -54,7 +57,7 @@ func _init(p_figure := "mamuthone") -> void:
 ## The body as two slices of its picture (the legs stay planted, the rest drops over them, so the
 ## seam is always exact), then the pieces over it.
 func _ready() -> void:
-	var tex: Texture2D = load(DIR + "%s_body.png" % figure)
+	var tex: Texture2D = _piece("body")
 	if tex == null:
 		return
 	_size = tex.get_size()
@@ -62,9 +65,16 @@ func _ready() -> void:
 	_legs = _sprite(tex, "Legs", knee, _size.y)
 	_upper = _sprite(tex, "Upper", 0.0, knee)
 	for spec: Array in PIECES.get(figure, []):
-		var pt: Texture2D = load(DIR + "%s_%s.png" % [figure, spec[0]])
+		var pt: Texture2D = _piece(str(spec[0]))
 		if pt != null:
 			_pieces.append([_sprite(pt, str(spec[0]).capitalize().replace(" ", ""), 0.0, _size.y), str(spec[1])])
+
+
+func _piece(part: String) -> Texture2D:
+	var pxl := "%s%s/%s_%s.png" % [PXL_DIR, figure, figure, part]
+	if ResourceLoader.exists(pxl):
+		return load(pxl)
+	return load(DIR + "%s_%s.png" % [figure, part])
 
 
 func _sprite(tex: Texture2D, n: String, top: float, bottom: float) -> Sprite2D:

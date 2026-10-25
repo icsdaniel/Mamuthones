@@ -25,8 +25,10 @@ keys({
 include("mam_head.px.js")
 // The mantle: a bell flaring from the shoulders (y 34) to the hem (y ~138).
 const CX = 71
+const LEAN = 0.13                                   // the whole upper body leans toward the road (left)
+const cx = (y) => CX - (138 - y) * LEAN
 const half = (y) => y < 62 ? 13 + 22 * Math.pow(Math.max(0, (y - 34) / 28), 0.7) : 35 + 17 * Math.pow((y - 62) / 70, 0.9)
-const edge = (y) => [Math.round(CX - half(y)), Math.round(CX + half(y))]
+const edge = (y) => [Math.round(cx(y) - half(y)), Math.round(cx(y) + half(y))]
 
 // Hanging tufts, shingled: each row hangs over the one below, so draw bottom up. A tuft is a clump
 // of two points: body mid tone, the side away from the fire a step darker, a dark root under the
@@ -61,7 +63,7 @@ function mantle(c) {
       const t = (x - l) / (rr - l)
       // lit toward the fire (left) and the shoulders, with a little tuft to tuft variety
       const lit = Math.max(0, 1 - t * 1.35) * (0.6 + 0.5 * (1 - (y - 36) / 100)) + (r() * 0.2 - 0.05)
-      const out = ((x - CX) / 20) | 0
+      const out = ((x - cx(y)) / 20) | 0
       tuft(c, x, y, 11 + (r() * 3 | 0), 16 + (r() * 7 | 0), out + (r() * 3 | 0) - 1, lit)
     }
   }
@@ -97,27 +99,38 @@ function arm(c, x0, y0, x1, y1, lit) {
   c.vline(hx - 1, hy + 2, 4, "s"); c.vline(hx + 1, hy + 2, 4, "s")     // fingers
 }
 
-sprite("test_figure", { w: 142, h: 172, outline: "k" },
-  // back bells above the right shoulder, behind everything
-  (c) => { bell(c, 99, 22, 17, 20, 25); bell(c, 112, 37, 14, 17, 40); bell(c, 119, 54, 11, 14, 60) },
-  // legs: dark trousers, leather-banded gaiters, boots
-  (c) => {
-    for (const [x0, lit] of [[38, 1], [82, 0]]) {
-      c.poly([x0 + 2, 120, x0 + 22, 120, x0 + 22, 166, x0, 166], lit ? "b" : "a")
-      c.vline(x0 + 2, 122, 42, lit ? "c" : "b")
-      for (let y = 134; y < 162; y += 4) { c.hline(x0, y, 22, "m"); c.hline(x0, y + 1, 22, "l") }
-      c.poly([x0 - 4, 161, x0 + 24, 161, x0 + 31, 169, x0 + 30, 171, x0 - 6, 171], "x")
-      c.poly([x0 - 4, 161, x0 + 8, 161, x0 + 8, 171, x0 - 6, 171], lit ? "y" : "x")
-      c.hline(x0 - 6, 169, 36, "w"); c.hline(x0 - 4, 161, 28, lit ? "z" : "y")
+// ------------------------------------------------------------------ the game's pieces
+// Every piece is 142 x 172 (140 x 170 plus the 1 px outline), the same canvas as the figure it
+// replaces, so PixelFigure bobs them unchanged: the body (legs, mantle, arms), then the back bells,
+// the front bells with their strap, and the head, which sit over it.
+const PIECE = { w: 140, h: 170, outline: "k" }
+const legs = (c) => {
+    const leg = (hx, fx, fy, lit, heel) => {
+      c.poly([hx - 11, 118, hx + 11, 118, fx + 11, fy, fx - 11, fy], lit ? "b" : "a")
+      c.line(hx - 9, 120, fx - 9, fy, lit ? "c" : "b", 2)
+      for (let y = 134; y < fy - 2; y += 4) {
+        const x = Math.round(hx + (fx - hx) * (y - 118) / (fy - 118))
+        c.hline(x - 11, y, 23, "m"); c.hline(x - 11, y + 1, 23, "l")
+      }
+      const bx = fx
+      if (heel) c.poly([bx - 12, fy, bx + 12, fy, bx + 18, fy + 7, bx + 6, fy + 9, bx - 12, fy + 4], "x")
+      else c.poly([bx - 18, fy, bx + 12, fy, bx + 14, fy + 7, bx - 22, fy + 9], "x")
+      c.hline(bx - 18, fy, 30, lit ? "z" : "y")
+      c.hline(bx - 22, fy + 8, 36, "w")
     }
-  },
+    leg(54, 40, 160, true, false)
+    leg(90, 104, 152, false, true)
+}
+sprite("mamuthone_body", PIECE,
+  legs,
   (c) => { for (let y = 34; y <= 124; y++) { const [l, r] = edge(y); c.hline(l, y, r - l + 1, "a") } },
   mantle,
-  // arms hang at the sides over the mantle, hands at the hips
-  (c) => { arm(c, 34, 80, 30, 96, true); arm(c, 108, 80, 112, 96, false) },
-  // the strap and the bell bandolier across the chest
-  line(52, 40, 90, 100, "n", 4), line(52, 40, 90, 100, "m", 1), line(54, 40, 92, 100, "o", 1),
-  (c) => { [[58, 62], [68, 74], [78, 86], [64, 84], [74, 96]].forEach(([x, y], i) => bell(c, x, y, 11, 13, 0, i < 3)) },
-  stamp("head", 36, 0),
-  // the bonfire's rim on the left edge of the mantle (the fire is to the left of this figure)
-  (c) => { for (let y = 36; y < 126; y++) for (let x = 0; x < 72; x++) if (c.is(x, y, "*")) { c.px(x, y, "r"); if (y % 3 === 0) c.px(x + 1, y, "R"); break } })
+  (c) => { arm(c, 24, 80, 18, 96, true); arm(c, 98, 80, 104, 96, false) },
+  // the bonfire's rim on the fire's edge of the mantle: warm leather, a fire pixel now and then
+  (c) => { for (let y = 36; y < 126; y++) for (let x = 0; x < 72; x++) if (c.is(x, y, "*")) { c.px(x, y, y % 4 === 0 ? "r" : "e"); break } })
+sprite("mamuthone_back_bells", PIECE,
+  (c) => { bell(c, 87, 20, 17, 20, 25); bell(c, 100, 36, 14, 17, 42); bell(c, 108, 54, 11, 14, 62) })
+sprite("mamuthone_front_bells", PIECE,
+  line(42, 40, 82, 100, "n", 4), line(42, 40, 82, 100, "m", 1), line(44, 40, 84, 100, "o", 1),
+  (c) => { [[48, 62], [58, 74], [68, 86], [54, 84], [64, 96]].forEach(([x, y], i) => bell(c, x, y, 11, 13, 0, i < 3)) })
+sprite("mamuthone_head", { w: 142, h: 172 }, stamp("_head", 22, 0))

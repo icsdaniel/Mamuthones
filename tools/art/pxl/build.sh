@@ -16,3 +16,6 @@ for n in $names; do
   echo "$n: $(ls "$GAME/art/pxl/$n" | grep -c png) pictures"
 done
 rm -rf "$TMP"
+# Note: game/scripts/art/pixel_figure.gd uses res://art/pxl/<figure>/<figure>_<part>.png in place of
+# res://art/pixel/ when it exists. The pxl Mamuthone is not built into the game until it beats the
+# current figure in the play screen (see tools/art/pxl/art/mamuthone.px.js).

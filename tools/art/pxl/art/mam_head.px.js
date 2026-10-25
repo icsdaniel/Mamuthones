@@ -8,7 +8,7 @@ keys({
 ramps("wxyzv", "lmno")
 // Mask, 3/4 view facing left, the fire on the left: lit left cheek, brow and nose bridge.
 // 18 wide x 30 tall. Slit eyes (k), long straight nose, thin mouth.
-sprite("mask", { outline: "k" }, `
+sprite("_mask", { outline: "k" }, `
   ....xyyyyyyyxx....
   ..xyyzzzzyyyyxxx..
   .xyzzzvzzyyyyyxxx.
@@ -38,7 +38,7 @@ sprite("mask", { outline: "k" }, `
 `)
 // Kerchief: brown, wrapped over the head, falling past the mask on both sides, knotted under the chin.
 // Drawn as one silhouette, then tone steps along the leather ramp and a few folds.
-sprite("hood", { w: 36, h: 46, outline: "k" },
+sprite("_hood", { w: 36, h: 46, outline: "k" },
   poly([8, 4, 14, 1, 24, 1, 31, 5, 34, 14, 34, 28, 32, 36, 28, 41, 20, 43, 10, 41, 5, 34, 3, 22, 4, 12], "n"),
   // lit on the left (the fire), dark on the right
   light([0, 0, 14, 46], 1, 1),
@@ -50,7 +50,7 @@ sprite("hood", { w: 36, h: 46, outline: "k" },
   line(10, 5, 5, 26, "m"), line(13, 4, 8, 30, "m"), line(28, 6, 32, 28, "l"), line(25, 4, 30, 26, "l"),
   line(6, 30, 12, 40, "m"), line(32, 30, 27, 40, "l"))
 // the knot and the two ends falling from it, under the chin
-sprite("knot", { outline: "k" }, `
+sprite("_knot", { outline: "k" }, `
   .mnnnm.
   mnooonm
   mnonnnm
@@ -59,7 +59,7 @@ sprite("knot", { outline: "k" }, `
   mnn.mnn
   mn...nn
   m.....n`)
-scene("head", { w: 40, h: 56 },
-  layer("hood", stamp("hood", 2, 0)),
-  layer("mask", stamp("mask", 11, 8)),
-  layer("knot", stamp("knot", 16, 38)))
+scene("_head", { w: 40, h: 56 },
+  layer("hood", stamp("_hood", 2, 0)),
+  layer("mask", stamp("_mask", 11, 8)),
+  layer("knot", stamp("_knot", 16, 38)))
