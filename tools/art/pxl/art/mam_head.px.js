@@ -38,17 +38,18 @@ sprite("_mask", { outline: "k" }, `
 `)
 // Kerchief: brown, wrapped over the head, falling past the mask on both sides, knotted under the chin.
 // Drawn as one silhouette, then tone steps along the leather ramp and a few folds.
-sprite("_hood", { w: 36, h: 46, outline: "k" },
-  poly([8, 4, 14, 1, 24, 1, 31, 5, 34, 14, 34, 28, 32, 36, 28, 41, 20, 43, 10, 41, 5, 34, 3, 22, 4, 12], "n"),
+const HK = 1.15
+sprite("_hood", { w: 42, h: 53, outline: "k" },
+  poly([8, 4, 14, 1, 24, 1, 31, 5, 34, 14, 34, 28, 32, 36, 28, 41, 20, 43, 10, 41, 5, 34, 3, 22, 4, 12].map((v) => Math.round(v * HK)), "n"),
   // lit on the left (the fire), dark on the right
-  light([0, 0, 14, 46], 1, 1),
-  shade([22, 0, 14, 46], 1, 1),
-  shade([27, 0, 9, 46], 1, 1),
+  light([0, 0, 16, 53], 1, 1),
+  shade([25, 0, 17, 53], 1, 1),
+  shade([31, 0, 11, 53], 1, 1),
   // top of the head catches the light
-  light([10, 1, 14, 6], 1, 1),
+  light([11, 1, 16, 7], 1, 1),
   // folds: strokes of the darker leather running from the crown down past the mask
-  line(10, 5, 5, 26, "m"), line(13, 4, 8, 30, "m"), line(28, 6, 32, 28, "l"), line(25, 4, 30, 26, "l"),
-  line(6, 30, 12, 40, "m"), line(32, 30, 27, 40, "l"))
+  line(12, 6, 6, 30, "m"), line(15, 5, 9, 34, "m"), line(32, 7, 37, 32, "l"), line(29, 5, 35, 30, "l"),
+  line(7, 34, 14, 46, "m"), line(37, 34, 31, 46, "l"))
 // the knot and the two ends falling from it, under the chin
 sprite("_knot", { outline: "k" }, `
   .mnnnm.
@@ -59,7 +60,7 @@ sprite("_knot", { outline: "k" }, `
   mnn.mnn
   mn...nn
   m.....n`)
-scene("_head", { w: 40, h: 56 },
+scene("_head", { w: 46, h: 62 },
   layer("hood", stamp("_hood", 2, 0)),
-  layer("mask", stamp("_mask", 11, 8)),
-  layer("knot", stamp("_knot", 16, 38)))
+  layer("mask", stamp("_mask", 13, 9)),
+  layer("knot", stamp("_knot", 18, 45)))
