@@ -1,0 +1,105 @@
+{
+ "title": {
+  "en": "The Workshop (Suno test)",
+  "it": "La bottega (prova Suno)"
+ },
+ "stop": 1,
+ "bpm": 101.0,
+ "offset": 0.595,
+ "targets": {
+  "easy": 0.7,
+  "medium": 1.8,
+  "hard": 3.22,
+  "expert": 5.25
+ },
+ "id": "suno_workshop",
+ "audio": "res://audio/music/suno_workshop.ogg",
+ "length": 139.535,
+ "features": "/mnt/project-files/suno-songs/work/features-stems/workshop_feat.json",
+ "preview": 40.0,
+ "rests": [],
+ "sections": [
+  [
+   "intro",
+   0,
+   4,
+   0
+  ],
+  [
+   "verse1",
+   4,
+   4,
+   1
+  ],
+  [
+   "chorus1",
+   8,
+   4,
+   2
+  ],
+  [
+   "verse2",
+   12,
+   4,
+   1
+  ],
+  [
+   "chorus2",
+   16,
+   8,
+   2
+  ],
+  [
+   "verse3",
+   24,
+   8,
+   2
+  ],
+  [
+   "drums",
+   32,
+   4,
+   1
+  ],
+  [
+   "chorus3",
+   36,
+   8,
+   2
+  ],
+  [
+   "lift",
+   44,
+   4,
+   3
+  ],
+  [
+   "build",
+   48,
+   4,
+   2
+  ],
+  [
+   "climax",
+   52,
+   4,
+   3
+  ],
+  [
+   "end",
+   56,
+   1,
+   1
+  ]
+ ],
+ "thresholds": {
+  "hat": 0.25,
+  "snare": 0.4,
+  "kick": 0.4,
+  "mel": 0.35,
+  "chorus": 0.2,
+  "tune": 0.2,
+  "bass": 0.4,
+  "bell": 0.4
+ }
+}

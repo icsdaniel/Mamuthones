@@ -463,9 +463,11 @@ func stop_count_in() -> void:
 ## Not part of the play API: stops every sound at once (quitting, tests). The audio
 ## server needs a moment afterwards to release the streams.
 func stop_all() -> void:
-	for pool in [_bell_pool, _accent_pool, _row_pool, _foot_pool, _tone_pool, _sfx_pool, _hold_players, _amb_players]:
+	for pool in [_bell_pool, _accent_pool, _row_pool, _foot_pool, _tone_pool, _sfx_pool, _miss_pool, _hold_players, _amb_players]:
 		for p: AudioStreamPlayer in pool:
 			p.stop()
+	_set_distort(false)
+	_distort_left = 0.0
 	if _jangle_player:
 		_jangle_player.stop()
 	if _count_player:
@@ -595,7 +597,10 @@ func _play(pool: Array[AudioStreamPlayer], which: int, stream: AudioStream, gain
 	p.volume_db = gain_db
 	p.pitch_scale = pitch
 	var base: StringName = bus if bus != &"" else p.get_meta("bus", p.bus)
-	if _cueing:
+	# a miss distorts the cued sounds already ringing (the missed note's own); one cued while that
+	# lasts is the next note's, heard clean: it was on the cued bus and came out distorted, so in a
+	# fast run one miss spoilt the on-time notes after it for 0.4 s
+	if _cueing and _distort_left <= 0.0:
 		base = BUS_SFX_CUED if base == &"Sfx" else BUS_BELLS_CUED
 	p.bus = base
 	p.play()
@@ -787,13 +792,15 @@ func _set_loop(s: AudioStream) -> void:
 
 
 func _make_players() -> void:
-	_fill(_bell_pool, 10, "Bells")
+	# enough voices that a dense passage never cuts a sound off mid-ring (a stolen voice stops dead,
+	# a click): bells and chimes ring up to 1 s, and on time every bell layers a thump and a chime or two
+	_fill(_bell_pool, 12, "Bells")
 	_fill(_row_pool, 6, "Bells")
-	_fill(_foot_pool, 4, "Sfx")
-	_fill(_tone_pool, 4, "Sfx")
+	_fill(_foot_pool, 6, "Sfx")
+	_fill(_tone_pool, 6, "Sfx")
 	_fill(_sfx_pool, 6, "Sfx")
 	_fill(_miss_pool, 3, "Bells")
-	_fill(_accent_pool, 4, "Bells")
+	_fill(_accent_pool, 8, "Bells")
 	_fill(_hold_players, LANES, "Sfx")
 	_fill(_amb_players, AMBIENCES.size(), "Ambience")
 	for i in AMBIENCES.size():

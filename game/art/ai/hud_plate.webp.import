@@ -1,0 +1,14 @@
+[remap]
+
+importer="image"
+type="Image"
+uid="uid://ckf8vet64jivx"
+path="res://.godot/imported/hud_plate.webp-ae5b5ee1b1f51eaed8d2a212384d525f.image"
+
+[deps]
+
+source_file="res://art/ai/hud_plate.webp"
+dest_files=["res://.godot/imported/hud_plate.webp-ae5b5ee1b1f51eaed8d2a212384d525f.image"]
+
+[params]
+

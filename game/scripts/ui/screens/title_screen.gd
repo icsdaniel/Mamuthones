@@ -17,7 +17,6 @@ var _t := 0.0
 func build() -> void:
 	var next_id := Progression.next_stop()
 	var next_song := SongLibrary.get_song(next_id)
-	var stop := next_song.stop if next_song != null else maxi(Progression.highest_stop(), 1)
 	var safe := UIKit.safe_margins(self)
 
 	var root := VBoxContainer.new()
@@ -56,7 +55,7 @@ func build() -> void:
 	logo.offset_left = 12.0
 	logo.offset_right = -12.0
 	top.add_child(logo)
-	Sound.ambience(UIKit.ambience_for(stop))
+	Sound.stop_ambience()   # no background loops (Daniele, 2026-10-15)
 
 	# ---- the menu
 	var margin := MarginContainer.new()

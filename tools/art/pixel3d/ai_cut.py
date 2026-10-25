@@ -5,7 +5,7 @@
 The image AI paints a light grey checkerboard where the background should be see-through, so the
 background is everything light and grey joined to the sheet's edges (a real alpha channel is used
 as is). What is left is split into its separate pieces, and each piece is cropped and written to
-game/art/ai/<name>.png at the sheet's own size. The users scale them to the play screen's grid.
+game/art/ai/<name>.webp (lossless; imported as images, never as textures) at the sheet's own size. The users scale them to the play screen's grid.
 """
 import os
 import sys
@@ -102,7 +102,10 @@ def main(src, only=None):
             out = rgba.copy()
             out[..., 3] = np.where(fg & m, 255, 0)
             out[out[..., 3] == 0, :3] = 0
-            Image.fromarray(out[t:b, l:r]).save(os.path.join(SOURCES if name in ("mamuthone", "issohadore") else OUT, name + ".png"))
+            if name in ("mamuthone", "issohadore"):
+                Image.fromarray(out[t:b, l:r]).save(os.path.join(SOURCES, name + ".png"))
+            else:
+                Image.fromarray(out[t:b, l:r]).save(os.path.join(OUT, name + ".webp"), lossless=True, quality=100, method=6, exact=True)
             print(name, (r - l, b - t))
 
 
@@ -116,9 +119,9 @@ def silver(src, dst):
     dark, light = np.array([70, 76, 96], np.float32), np.array([250, 252, 255], np.float32)
     out = a.copy()
     out[..., :3] = dark + (light - dark) * lum[..., None]
-    Image.fromarray(out.astype(np.uint8)).save(dst)
+    Image.fromarray(out.astype(np.uint8)).save(dst, lossless=True, quality=100, method=6, exact=True)
 
 
 if __name__ == "__main__":
     main(sys.argv[1], sys.argv[2:])
-    silver(os.path.join(OUT, "note_step.png"), os.path.join(OUT, "note_six.png"))
+    silver(os.path.join(OUT, "note_step.webp"), os.path.join(OUT, "note_six.webp"))

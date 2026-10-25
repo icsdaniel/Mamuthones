@@ -39,6 +39,9 @@ var thumbs := 0          ## stomps: thumbs that landed (0, 1 or 2)
 ## Steps: a half-beat note that is half of a sixteenth pair (another lane note a quarter beat before
 ## or after it): drawn silver with the sixteenth, since the two are played as one quick double.
 var quick := false
+## An off-grid note: it sits between the sixteenths (or the triplets) where the music plays something
+## that no grid holds. Expert only; drawn in its own colour (teal).
+var free := false
 var tied := 0            ## holds: other notes played on time (Perfect or Good) while it was held
 
 

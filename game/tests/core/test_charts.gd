@@ -52,6 +52,24 @@ func test_rules_catch_problems() -> void:
 	check(_problems([{"b": 12.3333, "k": "bell"}, {"b": 12.8333, "k": "bell"}]).filter(_not_grid).is_empty(), "thirds rounded to 4 decimals are half a beat apart")
 
 
+func test_free_notes_between_the_sixteenths() -> void:
+	# 120 bpm: a beat is 0.5 s. A free note sits anywhere between the grid positions, on Expert only,
+	# 90 ms from every other input, 150 ms from a tilt or from the same button's other inputs, and
+	# never under its button's hold.
+	var base := [{"b": 0, "k": "step", "lane": 0}, {"b": 1, "k": "step", "lane": 2}]
+	var mid := {"b": 0.6, "k": "step", "lane": 1, "free": true}     # 300 ms after the first, 200 ms before the second
+	check_eq(_problems([base[0], mid, base[1]], "story", "expert"), [] as Array[String], "an off-grid note is fine at expert")
+	check(_problems([base[0], {"b": 0.8, "k": "step", "lane": 2, "free": true}, base[1]], "story", "expert").any(func(p): return "same button" in p), "100 ms before the same button's input is too close")
+	check(_problems([{"b": 0, "k": "step", "lane": 2}, {"b": 0.4, "k": "step", "lane": 2, "free": true}], "story", "expert").is_empty(), "200 ms after the same button's input is fine")
+	check(_problems([{"b": 0, "k": "step", "lane": 0}, {"b": 0.1, "k": "step", "lane": 2, "free": true}], "story", "expert").any(func(p): return "another input" in p), "50 ms from another input is too close")
+	check(_problems([base[0], mid, base[1]], "story", "hard").any(func(p): return "free is only for plain Expert" in p), "not on Hard")
+	check(_problems([{"b": 0, "k": "hold", "lane": 2, "len": 2}, {"b": 0.9, "k": "step", "lane": 2, "free": true}], "story", "expert").any(func(p): return "under a hold" in p), "not under the button's hold")
+	check(_problems([{"b": 0, "k": "bell"}, {"b": 0.4, "k": "step", "lane": 0, "free": true}], "story", "expert").is_empty(), "200 ms from a tilt is fine")
+	check(_problems([{"b": 0, "k": "bell"}, {"b": 0.2, "k": "step", "lane": 0, "free": true}], "story", "expert").any(func(p): return "another input" in p), "100 ms from a tilt is too close")
+	var n := SongData.from_dict({"id": "c", "kind": "story", "bpm": 120, "offset": 1.0, "charts": {"expert": [base[0], mid, base[1]]}}).notes("expert")
+	check(n[1].free and not n[0].free, "the song loads the flag")
+
+
 func _sectioned(chart: Array, diff: String, sections: Array, bpm := 120.0) -> Array[String]:
 	var s := SongData.from_dict({"id": "c", "kind": "story", "bpm": bpm, "offset": 1.0, "sections": sections, "charts": {diff: chart}})
 	return ChartRules.check(s, diff)

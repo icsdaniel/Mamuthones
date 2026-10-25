@@ -38,7 +38,8 @@ extends RefCounted
 ## LOCK_SPAN lock the step buttons for LOCK_TIME, but only while the player is pressing more often
 ## than the chart asks (from the first of those taps, more presses than lane notes due, plus
 ## LOCK_SPARE): a player who falls behind in a dense passage and taps late, once per note, is
-## struggling, not mashing, and is never locked. Taps while locked judge nothing (judgement "locked").
+## struggling, not mashing, and is never locked. Nor does the lock fall when a lane note is due
+## before it would end: it only stops mashing where it costs no notes. Taps while locked judge nothing (judgement "locked").
 ##
 ## Matching uses note-lock: an input goes to the EARLIEST open note whose window contains it, so a
 ## late player in a fast stream reads as late instead of drifting onto the next note.
@@ -98,9 +99,9 @@ const MISS_DROP := 2
 const WRONG_DROP := 1        ## a wrong step
 const WRONG_REACH := 2.0     ## the pressed lane's own note within 2 × Early/Late keeps a tap stray
 const SILENCE_DROP := 1
-const LET_GO_DROP := 1
 const STRAY_DROP := 1        ## a stray tap (no note due anywhere)
 const STOMP_FOLLOW := 0.200  ## a tap this soon after a stomp on its lane is a late thumb, not stray
+const MISS_FOLLOW := 0.350   ## a tap on a lane up to this long after its note was missed is the late thumb: it costs nothing more
 const LOCK_TAPS := 3         ## this many stray or wrong taps...
 const LOCK_SPAN := 0.75      ## ...within this many seconds...
 const LOCK_TIME := 0.6       ## ...lock the step buttons this long...
@@ -158,6 +159,7 @@ var _locked_until := -INF
 var _bad_taps: Array[float] = []   # times of recent stray and wrong taps, for the mashing lock
 var _presses: Array[float] = []    # times of recent presses (not while locked), for the same
 var _stomp_at: Array[float] = [-INF, -INF, -INF]   # last stomp judged per lane
+var _missed_at: Array[float] = [-INF, -INF, -INF]  # time of the last note missed per lane
 var _taps_from := NAN   # the first and last moment a lane note is due (NAN: no lane notes)
 var _taps_to := NAN
 
@@ -315,7 +317,7 @@ func _acc_sum() -> float:
 ## Letter grades, worst to best. A run's grade comes from its accuracy (GRADE_MIN, the least accuracy
 ## for each letter), capped by misses (capped_rank). S+ needs no missed note but may have stray taps
 ## or Oks (Daniele, 2026-10-09: reachable without a full combo). A full combo
-## (no miss, wrong step, stray tap, lost hold or bell rung into a stand-still) is its own mark beside
+## (no miss, wrong step, stray tap or bell rung into a stand-still; a hold let go early only loses its bonus) is its own mark beside
 ## the grade. The rank is the index in GRADES (F = 0 .. S+ = 7).
 const GRADES: Array[String] = ["F", "E", "D", "C", "B", "A", "S", "S+"]
 const OK_ACC := 0.5            ## what an Ok (early/late) counts for in accuracy
@@ -359,7 +361,7 @@ func grade() -> String:
 ## Nothing broke the combo over the whole chart (every note played).
 func full_combo() -> bool:
 	return stats.total > 0 and stats.miss == 0 and stats.wrong == 0 and stats.stray == 0 \
-			and stats.let_go == 0 and stats.silence == 0
+			and stats.silence == 0
 
 
 static func rank_for(acc: float) -> int:
@@ -520,8 +522,8 @@ func tap(lane: int, t: float, touch_id: int = 0) -> Dictionary:
 		# A tap with neither breaks the combo as a stray (a press a little early for the lane's own
 		# coming note is neither).
 		var other := _find_other_lane_note(lane, t)
-		if _own_note_near(lane, t) != null:
-			pass
+		if _own_note_near(lane, t) != null or t - _missed_at[clampi(lane, 0, 2)] <= MISS_FOLLOW:
+			pass   # (the second: a late thumb after a miss is already paid for)
 		elif other != null:
 			_wrong(other, t, t - other.t, WRONG_DROP)
 			wrong_step.emit(lane, other, t - other.t)
@@ -907,6 +909,8 @@ func _miss(n: Note, t: float) -> void:
 	n.judgement = "miss"
 	stats.miss += 1
 	stats.notes += 1
+	if n.uses_lane():
+		_missed_at[clampi(n.lane, 0, 2)] = n.t
 	combo = 0
 	unison_streak = 0
 	_set_unison(unison_level - MISS_DROP, t)
@@ -951,11 +955,25 @@ func _bad_tap(t: float) -> void:
 	_bad_taps.append(t)
 	while not _bad_taps.is_empty() and t - _bad_taps[0] > LOCK_SPAN:
 		_bad_taps.pop_front()
-	if _bad_taps.size() >= LOCK_TAPS and _over_pressing(_bad_taps[0] - win_touch.z, t):
+	if _bad_taps.size() >= LOCK_TAPS and _over_pressing(_bad_taps[0] - win_touch.z, t) \
+			and not _lane_note_due(t, t + LOCK_TIME + win_touch.z):
 		_bad_taps.clear()
 		_locked_until = t + LOCK_TIME
 		stats.locks += 1
 		input_locked.emit(_locked_until)
+
+
+# Whether an open lane note is due between t0 and t1. The lock never falls where it would cost notes:
+# in a crowded run one slip then locked the buttons through the next notes, and the misses cascaded
+# (Daniele, 2026-10-19: "one mistake cascades to the others and inputting becomes impossible").
+func _lane_note_due(t0: float, t1: float) -> bool:
+	for k in range(_first_open, notes.size()):
+		var n := notes[k]
+		if n.t > t1:
+			break
+		if not n.done and n.uses_lane() and n.t >= t0 - win_touch.z:
+			return true
+	return false
 
 
 # Whether the presses from lo to t outnumber, by more than LOCK_SPARE, the presses the chart asks
@@ -989,10 +1007,9 @@ func _end_hold(n: Note, t: float, kept: bool) -> void:
 		_refresh_score(t)
 		judged.emit(n, "held", t - n.end_t)
 	else:
+		# Letting go early only loses the hold's bonus (Daniele, 2026-10-19: "When you lift a hold note
+		# DON'T make it a miss. No health loss, no combo break"): the head was hit and stays hit.
 		stats.let_go += 1
-		combo = 0
-		unison_streak = 0
-		_set_unison(unison_level - LET_GO_DROP, t)
 		judged.emit(n, "let_go", t - n.end_t)
 	hold_ended.emit(n.lane, kept)
 

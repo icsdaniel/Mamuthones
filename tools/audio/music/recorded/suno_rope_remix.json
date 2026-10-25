@@ -1,0 +1,15 @@
+{
+ "title": {
+  "en": "The Rope remix (Suno test)",
+  "it": "La fune remix (prova Suno)"
+ },
+ "stop": 5,
+ "bpm": 116.0,
+ "offset": 0.502,
+ "id": "suno_rope_remix",
+ "audio": "res://audio/music/suno_rope_remix.ogg",
+ "length": 148.98,
+ "preview": 40.0,
+ "rests": [],
+ "swing": 0.03
+}

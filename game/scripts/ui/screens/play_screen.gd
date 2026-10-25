@@ -74,6 +74,12 @@ var _spb := 0.5
 var _stomp_sounded := false       ## a stomp sounded on this touch: no plain step knock
 var _sched := 0                  ## next note to check for calls and accents
 var _last_accent_t := -INF       ## the last accent's note time (a chord swells once)
+const CLANK_GAP := 0.15
+## Notes make no sounds of their own for now (Daniele, 2026-10-15: "remove notes sounds, we'll work
+## on these again later"): no lane tones, bells, stomps, hold drones and chimes, bell cue ticks or
+## calls. The music and its lift on good hits are what the player hears.
+const NOTE_SOUNDS := false
+var _clank_at := -INF            ## when the last stand-still clank sounded (_clank)
 var _hold_ends: Array[Note] = []  ## holds whose end chime is still to come (_schedule)
 var _bell_sched := 0             ## next note to check for the bell cue
 var _bell_cue := false           ## a soft tick half a beat before each bell (Easy and Medium)
@@ -271,8 +277,9 @@ func build() -> void:
 		session.health_changed.connect(func(h: int, d: int) -> void: rl.event(_song_t, "health", {"health": h, "delta": d}))
 		session.unison_changed.connect(func(level: int) -> void: rl.event(_song_t, "unison", {"level": level}))
 	session.unison_changed.connect(_on_unison)
-	session.hold_started.connect(func(lane: int) -> void: Sound.hold_start(lane))
-	session.hold_ended.connect(func(lane: int, _kept: bool) -> void: Sound.hold_stop(lane))
+	if NOTE_SOUNDS:
+		session.hold_started.connect(func(lane: int) -> void: Sound.hold_start(lane))
+		session.hold_ended.connect(func(lane: int, _kept: bool) -> void: Sound.hold_stop(lane))
 	session.wrong_step.connect(_on_wrong_step)
 	session.stray.connect(_on_stray)
 	session.stomp_landed.connect(_on_stomp)
@@ -299,7 +306,7 @@ func build() -> void:
 	_bell_cue = bell_cue_on(difficulty)
 	Sound.set_key(song.key_root)
 	Sound.row_bells(0)
-	Sound.ambience(UIKit.ambience_for(song.stop))
+	Sound.stop_ambience()   # no background loops: the music and the bells are the sound (Daniele, 2026-10-15)
 	resized.connect(_layout_router)
 	_start.call_deferred()
 
@@ -453,7 +460,7 @@ func _process(delta: float) -> void:
 	if backdrop != null:
 		var hb := hud.get_global_transform() * Vector2(0.0, hud.frames_bottom())
 		backdrop.set_hud_bottom((backdrop.get_global_transform().affine_inverse() * hb).y)
-	_schedule(t)
+	_schedule(t, delta)
 	if not _no_lift:
 		conductor.set_lift(lift.tick(delta, _spb))
 	_count_in(t)
@@ -525,22 +532,25 @@ func _set_beat(beat: float) -> void:
 ## Things that happen on the music, not on the player: the Issohadore's call with off-beat steps (a
 ## touch early so it is heard on time), every note's accent (as if hit on time: the tune swells and a
 ## step's lane tone sounds; a miss is corrected afterwards), standing still.
-func _schedule(t: float) -> void:
+func _schedule(t: float, delta := 0.0) -> void:
 	# The whole sound delay, not just the output latency: with Bluetooth headphones (200 ms on
 	# Daniele's) the call and the cue otherwise came a fifth of a second after the music.
-	var lead := conductor.heard_delay()
+	# Sounds can only start on a frame: one due before the middle of the next frame plays now, so
+	# each lands within half a frame of its beat instead of up to a whole frame late (a flam
+	# against the music's own drum at 30-60 fps).
+	var lead := conductor.heard_delay() - minf(delta, 0.05) * 0.5
 	var notes := session.notes
 	while _sched < notes.size():
 		var n := notes[_sched]
 		var at := n.t - lead
 		if at > t:
 			break
-		if n.call:
+		if n.call and NOTE_SOUNDS:
 			Sound.call_out()
 		if n.kind != Note.Kind.REST and n.t > _last_accent_t + 0.01 and not _no_lift:
 			_last_accent_t = n.t
 			lift.accent()
-		if not _no_lift:
+		if not _no_lift and NOTE_SOUNDS:
 			_cue(n)
 		_sched += 1
 	# The bell cue: on Easy and Medium the music's rim clicks come before many beats with no bell, so
@@ -553,7 +563,7 @@ func _schedule(t: float) -> void:
 			continue
 		if n.t - 0.5 * _spb - lead > t:
 			break
-		if _bell_cue and not n.done and n.t > t:
+		if _bell_cue and NOTE_SOUNDS and not n.done and n.t > t:
 			Sound.ui("cue")
 		_bell_sched += 1
 	# a hold's small bell at its end, unless it was let go
@@ -563,7 +573,7 @@ func _schedule(t: float) -> void:
 		if h.end_t - lead > t:
 			k += 1
 			continue
-		if h.judgement != "let_go" and h.judgement != "miss":
+		if h.judgement != "let_go" and h.judgement != "miss" and NOTE_SOUNDS:
 			Sound.cued(Sound.hold_done.bind(h.lane))
 		_hold_ends.remove_at(k)
 	var still := false
@@ -670,7 +680,11 @@ func _on_rang(result: Dictionary) -> void:
 	var up := bool(result.get("up", true))
 	# A bell note already rang on the music (_schedule), heard on its beat; only a tilt with no bell
 	# to ring (free) or one in a stand-still (silence) sounds now.
-	if q == "free" or q == "silence":
+	if not NOTE_SOUNDS:
+		pass
+	elif q == "silence":
+		_clank(up, strength)
+	elif q == "free":
 		Sound.bell(BellSets.STANDARD, up, q, strength)
 	scene.jolt("bell")
 	if q == "perfect" or q == "good":
@@ -692,8 +706,17 @@ func _on_played_under(hold: Note, _note: Note) -> void:
 ## The phone tilted in a stand-still (gently, short of a ring): the load gives the Mamuthone away with
 ## a soft clank, and the stand-still is broken (the session judged it "silence").
 func _on_moved_still(_note: Note) -> void:
-	Sound.bell(BellSets.STANDARD, true, "silence", 0.2)
+	_clank()
 	UIKit.vibrate(12)
+
+
+## The load's clank in a stand-still. One shake is heard once: the tilt that broke it and the ring
+## the same flick then made (moved_still, then rang with "silence") came 20-60 ms apart, a double clank.
+func _clank(up := true, strength := 0.2) -> void:
+	if _clock - _clank_at < CLANK_GAP:
+		return
+	_clank_at = _clock
+	Sound.bell(BellSets.STANDARD, up, "silence", strength)
 
 
 ## A bell rung on time, the tilt's reward (stomp-sized, but the tilt's own): the strap strikes across
@@ -721,7 +744,7 @@ func _on_judged(note: Note, judgement: String, offset: float) -> void:
 		lift.hit(judgement)
 	elif soft:
 		lift.ok()
-	elif judgement in ["miss", "silence", "let_go"]:
+	elif judgement in ["miss", "silence"]:
 		lift.miss()
 	var quality := judgement
 	if not quality in ["perfect", "good", "early", "late", "miss", "held"]:
@@ -769,7 +792,7 @@ func _on_judged(note: Note, judgement: String, offset: float) -> void:
 		scene.jolt("miss")
 		if note != null and note.is_bell():
 			_bell_chain = 0
-	if judgement == "miss" or judgement == "let_go":
+	if judgement == "miss":
 		Sound.miss()
 
 
@@ -789,7 +812,7 @@ func _on_time_step(note: Note, judgement: String) -> void:
 
 
 ## A note's colour in the pixel look (StreetSkin's kinds): heal green, call pink, hold gold, an Expert
-## sixteenth silver, an off-beat violet, a step blue.
+## sixteenth silver, an off-grid note teal, an off-beat violet, a step blue.
 func note_colour(note: Note) -> Color:
 	if note.heal:
 		return StreetSkin.K_HEAL[3]
@@ -797,6 +820,8 @@ func note_colour(note: Note) -> Color:
 		return StreetSkin.K_CALL[3]
 	if note.kind == Note.Kind.HOLD:
 		return StreetSkin.K_HOLD[3]
+	if note.free:
+		return StreetSkin.K_FREE[3]
 	if lanes._sixteenth(note):
 		return StreetSkin.K_SIX[3]
 	var fr := fposmod(note.beat, 1.0)
@@ -1005,6 +1030,8 @@ func _on_pause_choice(what: String) -> void:
 		run_log.event(_song_t, "menu", {"choice": what})
 	match what:
 		"resume":
+			if _pause_panel == null:
+				return   # a second tap on Resume while the menu closes
 			_pause_panel.queue_free()
 			_pause_panel = null
 			# Back to a bar line one to two bars before the pause, count one bar in on the beat grid,
