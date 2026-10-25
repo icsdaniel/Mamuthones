@@ -226,6 +226,25 @@ func test_back_to_back_tilts_both_ring() -> void:
 				check_eq(rings.size(), 8, "%s at %d bpm, %.1f s flicks %.2f s apart: 8 rings" % [mode, bpm, dur, gap])
 
 
+func test_ripples_of_one_flick_ring_once() -> void:
+	# A hard flick swings back (return lobe) and ripples once more; the ripple is over the threshold but
+	# is not a new tilt (Daniele, 2026-10-25: calibration rang extra bells). A second real flick the
+	# other way, as strong as the first, still rings.
+	var det := _detector(100.0, "gyro")
+	var rings := 0
+	var t := 0.0
+	var lobes := [[1.0, 500.0, 0.14], [1.14, -350.0, 0.14], [1.28, 220.0, 0.12], [1.40, -90.0, 0.12], [2.2, -500.0, 0.14], [2.34, 350.0, 0.14], [2.48, -220.0, 0.12]]
+	while t < 3.2:
+		var v := 0.0
+		for l in lobes:
+			if t >= l[0] and t < l[0] + l[2]:
+				v += l[1] * sin(PI * (t - l[0]) / l[2])
+		if det.feed(t, Vector3.ZERO, Vector3(v, 0.0, 0.0)):
+			rings += 1
+		t += 1.0 / 100.0
+	check_eq(rings, 2, "two flicks, two rings, however the first one rippled")
+
+
 func test_taps_do_not_ring() -> void:
 	for mode: String in ["gyro", "accel"]:
 		var sy := Synth.new(9)

@@ -1620,7 +1620,8 @@ def finish(song, chart, level):
 
 
 FREE_MIN = {"lead": 0.8, "drum": 0.9}   # strength a between-the-sixteenths onset needs to get a note
-FREE_PER_MIN = 6                          # at most this many a minute: they are rare on purpose
+FREE_PER_MIN = 0                          # off: Daniele (2026-10-25) found the first batch off place; the onsets behind them were too noisy to trust. 0 adds none.
+FREE_WAS = 6                          # at most this many a minute: they are rare on purpose
 FREE_APART_S = 1.0                        # off-grid notes at least this far from each other (they are rare on purpose)
 
 
@@ -1632,7 +1633,7 @@ def add_free(song, chart):
     limits validate_charts.check_free holds it to, with a margin), and never crowds a run: at most
     five presses within a second."""
     path = song.cfg["analysis"].replace("_ana.json", "_offgrid.json")
-    if not os.path.exists(path):
+    if FREE_PER_MIN <= 0 or not os.path.exists(path):
         return chart
     spb = song.spb
     ch = [dict(n) for n in chart]
