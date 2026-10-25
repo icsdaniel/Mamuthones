@@ -6,8 +6,8 @@
 include("palette.px.js")
 keys({
   k: "K0", K: "K1",
-  // fleece, dark to lit
-  a: "FLEECE0", b: "FLEECE1", c: "FLEECE2", d: "FLEECE3", e: "FLEECE4", f: "FLEECE5",
+  // fleece, dark to lit: near-black sheepskin whose tips take the firelight
+  a: "FLEECE0", b: "FLEECE2", c: "FLEECE4", d: "FLEECE5", e: "LEATHER2", f: "LEATHER3", E: "STONE5",
   // kerchief / leather
   l: "LEATHER0", m: "LEATHER1", n: "LEATHER2", o: "LEATHER3",
   // mask wood
@@ -22,104 +22,102 @@ keys({
   p: "NIGHT0", q: "NIGHT1", Q: "NIGHT2"
 })
 
-// --- a hanging tuft: a few strands pointing down, lighter at the tip -------------------------
-sprite("_tuft_a", `
-  .cc.
-  .cdc
-  .cdc
-  .cde
-  ..de
-  ..de
-  ..e.`)
-sprite("_tuft_b", `
-  c.c.
-  cdc.
-  cdd.
-  .dde
-  .dde
-  ..ee
-  ..e.`)
-sprite("_tuft_c", `
-  ..cc
-  .cdc
-  .cdd
-  cdde
-  cde.
-  .ee.`)
-group("_tufts", ["_tuft_a", "_tuft_b", "_tuft_c"])
-sprite("_tuft_dark", `
-  .bb.
-  .bcb
-  .bcb
-  ..cb
-  ..c.`)
+include("mam_head.px.js")
+// The mantle: a bell flaring from the shoulders (y 34) to the hem (y ~138).
+const CX = 71
+const half = (y) => y < 62 ? 13 + 22 * Math.pow(Math.max(0, (y - 34) / 28), 0.7) : 35 + 17 * Math.pow((y - 62) / 70, 0.9)
+const edge = (y) => [Math.round(CX - half(y)), Math.round(CX + half(y))]
 
-// the mantle's outline: shoulders (y 36) down to a ragged hem near y 138
-const MANTLE = [
-  38, 42, 50, 36, 62, 33, 80, 33, 92, 37, 103, 46, 111, 62, 117, 86, 124, 112, 128, 134,
-  118, 140, 110, 136, 100, 144, 90, 138, 80, 146, 70, 139, 60, 145, 50, 138, 40, 144,
-  30, 136, 20, 141, 14, 134, 18, 110, 24, 86, 29, 62
-]
-
-sprite("mamuthone", { w: 142, h: 172, outline: "k" },
-  // --- back bells, peeking over the right shoulder
-  layer("backbells",
-    poly([88, 6, 104, 4, 108, 22, 94, 28], "h"),
-    poly([88, 6, 104, 4, 105, 9, 89, 11], "j"),
-    ellipse(96, 6, 8, 3, "g"),
-    poly([104, 20, 120, 18, 124, 34, 108, 40], "h"),
-    ellipse(112, 20, 8, 3, "g"),
-    poly([114, 32, 126, 31, 128, 46, 116, 50], "h"),
-    ellipse(120, 32, 6, 2, "g")),
-  // --- legs: dark cloth, striped gaiters, boots
-  layer("legs",
-    poly([44, 136, 66, 136, 64, 150, 62, 166, 44, 166, 46, 150], "p"),
-    poly([76, 136, 98, 136, 100, 150, 100, 162, 82, 162, 80, 150], "p"),
-    // gaiter stripes
-    ...[148, 152, 156, 160].map((y) => rect(46, y, 18, 2, "m")),
-    ...[146, 150, 154, 158].map((y) => rect(80, y, 18, 2, "m")),
-    // boots
-    poly([40, 164, 66, 164, 68, 170, 36, 171], "x"),
-    poly([82, 160, 106, 160, 112, 168, 104, 171, 82, 170], "x"),
-    rect(40, 168, 28, 2, "w"), rect(84, 167, 26, 2, "w")),
-  // --- the fleece mantle
-  layer("mantle",
-    poly(MANTLE, "b"),
-    // the dark inner mass under the tufts, darker toward the right (away from the fire)
-    poly([34, 60, 110, 60, 118, 120, 28, 120], "a"),
-    // tufts from the shoulders down, rows getting lighter at the edges on the fire's side
-    scatter("_tuft_dark", 20, 40, 100, 100, 220, { on: "ab", clip: true, seed: 3, rflip: "x" }),
-    scatter("_tufts", 14, 36, 112, 112, 360, { on: "abc", clip: true, seed: 7, rflip: "x" })),
-  // --- arms: dark sleeves, hands
-  layer("arms",
-    poly([24, 72, 40, 66, 46, 96, 36, 112, 24, 104], "c"),
-    poly([24, 72, 40, 66, 41, 74, 26, 80], "d"),
-    ellipse(30, 116, 6, 7, "t"), ellipse(30, 116, 6, 7, "s", true),
-    poly([100, 66, 116, 72, 120, 104, 108, 112, 98, 96], "b"),
-    ellipse(112, 118, 6, 7, "t")),
-  // --- bandolier of bells at the chest
-  layer("bandolier",
-    poly([46, 44, 58, 44, 84, 100, 74, 104], "n"),
-    poly([86, 44, 98, 44, 72, 104, 62, 100], "m"),
-    ...[[54, 74], [64, 82], [74, 74], [60, 92], [70, 90]].map(([x, y]) => [
-      poly([x - 5, y - 2, x + 5, y - 2, x + 7, y + 10, x - 7, y + 10], "h"),
-      rect(x - 5, y - 2, 10, 3, "j"), rect(x - 1, y + 9, 2, 3, "g")]).flat()),
-  // --- kerchief and mask
-  layer("head",
-    poly([44, 12, 60, 4, 78, 4, 94, 14, 98, 36, 88, 44, 76, 40, 66, 40, 54, 44, 42, 38], "n"),
-    poly([44, 12, 60, 4, 78, 4, 90, 10, 80, 12, 62, 12, 50, 20], "o"),
-    // the mask: dark carved wood, oval, with slit eyes and a long nose
-    ellipse(70, 28, 12, 17, "x"),
-    ellipse(70, 28, 12, 17, "w", true),
-    // lit cheek on the fire's side
-    rect(60, 22, 3, 14, "z"),
-    // eyes, nose, mouth
-    rect(62, 22, 5, 2, "k"), rect(73, 22, 5, 2, "k"),
-    vline(70, 24, 11, "y"), rect(68, 34, 4, 1, "w"),
-    rect(66, 40, 8, 1, "k")),
-  // the rim light: a one pixel warm edge on the fire's (left) side of the mantle
-  (c) => {
-    for (let y = 36; y < 140; y++) for (let x = 0; x < 70; x++) {
-      if (c.is(x, y, "*") && !c.is(x - 1, y, "*")) { c.px(x, y, "r"); break }
+// Hanging tufts, shingled: each row hangs over the one below, so draw bottom up. A tuft is a clump
+// of two points: body mid tone, the side away from the fire a step darker, a dark root under the
+// row above, and on the fire's side a lit edge and warm tips.
+function tuft(c, x, y, w, L, lean, lit) {
+  const l = x - (w >> 1), r = x + (w >> 1), tx = x + lean, ty = y + L
+  const body = lit > 0.55 ? "c" : "b"
+  const dark = lit > 0.55 ? "b" : "a"
+  // the second, shorter point, to the lit side
+  c.poly([l - 1, y + 1, x, y + 1, l + lean - 2, y + L * 0.7], body)
+  c.poly([l, y, r + 1, y, tx + 1, ty], body)
+  c.poly([x + 1, y, r + 1, y, tx + 1, ty], dark)
+  c.hline(l - 1, y, w + 2, "a"); c.hline(l - 1, y + 1, w + 2, "a")
+  if (lit <= 0.3) {
+    // away from the fire: only a dim strand edge and tip, in the cold
+    c.line(l, y + 2, tx, ty - 1, "c")
+    if (((x + y) & 3) === 0) c.px(tx, ty - 1, "d")
+  }
+  if (lit > 0.3) {
+    c.line(l, y + 2, tx, ty - 1, lit > 0.7 ? "e" : "d")
+    c.line(l - 1, y + 3, l + lean - 2, y + L * 0.7 - 1, lit > 0.6 ? "d" : "c")
+    if (lit > 0.6) c.px(tx, ty - 1, "f")
+    if (lit > 0.82) { c.px(tx, ty - 2, "E"); c.px(l + lean - 2, y + L * 0.7 - 1, "f") }
+  }
+}
+function mantle(c) {
+  const r = c.rng(5)
+  for (let y = 118; y >= 36; y -= 7) {
+    const [l, rr] = edge(y + 6)
+    const pitch = 9
+    for (let x = l - 3 + (((y / 7) | 0) % 2) * 4; x <= rr + 3; x += pitch) {
+      const t = (x - l) / (rr - l)
+      // lit toward the fire (left) and the shoulders, with a little tuft to tuft variety
+      const lit = Math.max(0, 1 - t * 1.35) * (0.6 + 0.5 * (1 - (y - 36) / 100)) + (r() * 0.2 - 0.05)
+      const out = ((x - CX) / 20) | 0
+      tuft(c, x, y, 11 + (r() * 3 | 0), 16 + (r() * 7 | 0), out + (r() * 3 | 0) - 1, lit)
     }
-  })
+  }
+}
+
+// ---- cowbells: a rotated, ramped bell drawn from its outline; (cx, cy) the bell's middle, a in degrees
+function bell(c, cx, cy, w, h, a, lit = 1) {
+  const A = a * Math.PI / 180, ca = Math.cos(A), sa = Math.sin(A)
+  const P = (u, v) => [Math.round(cx + u * ca - v * sa), Math.round(cy + u * sa + v * ca)]
+  // body: narrow shoulder at the top, wide mouth at the bottom
+  const body = [P(-w * 0.28, -h / 2), P(w * 0.28, -h / 2), P(w / 2, h / 2), P(-w / 2, h / 2)].flat()
+  c.poly(body, "h")
+  // lit left half, dark right half, bright rim at the mouth and a hot streak
+  c.poly([...P(-w * 0.28, -h / 2), ...P(0, -h / 2), ...P(0, h / 2), ...P(-w / 2, h / 2)], lit ? "i" : "h")
+  c.poly([...P(w * 0.1, -h / 2), ...P(w * 0.28, -h / 2), ...P(w / 2, h / 2), ...P(w * 0.2, h / 2)], "g")
+  c.line(...P(-w * 0.18, -h * 0.4), ...P(-w * 0.34, h * 0.3), "j")
+  c.line(...P(-w / 2, h / 2), ...P(w / 2, h / 2), "j")
+  c.line(...P(-w / 2, h / 2 - 1), ...P(w / 2, h / 2 - 1), "g")
+  // the mouth: a dark slot, and the clapper
+  c.line(...P(-w * 0.4, h / 2 + 1), ...P(w * 0.4, h / 2 + 1), "k")
+  c.px(...P(0, h / 2 + 2), "j")
+  c.px(...P(0, -h / 2 - 1), "j")
+}
+// ---- a forearm in a dark wool sleeve swinging out of the mantle, with a cuff and a hand
+function arm(c, x0, y0, x1, y1, lit) {
+  c.line(x0, y0, x1, y1, lit ? "c" : "b", 9)
+  c.line(x0 + (lit ? 3 : -3), y0, x1 + (lit ? 3 : -3), y1, lit ? "b" : "a", 4)
+  c.line(x0 + (lit ? -4 : 4), y0 + 1, x1 + (lit ? -4 : 4), y1, lit ? "d" : "c", 1)
+  c.hline(x1 - 5, y1, 11, "m"); c.hline(x1 - 5, y1 + 1, 11, "l")      // the leather cuff
+  const hx = x1, hy = y1 + 8
+  c.ellipse(hx, hy, 5, 6, lit ? "t" : "s")
+  c.ellipse(hx + (lit ? 1 : -1), hy + 1, 3, 4, lit ? "u" : "t")
+  c.vline(hx - 1, hy + 2, 4, "s"); c.vline(hx + 1, hy + 2, 4, "s")     // fingers
+}
+
+sprite("test_figure", { w: 142, h: 172, outline: "k" },
+  // back bells above the right shoulder, behind everything
+  (c) => { bell(c, 99, 22, 17, 20, 25); bell(c, 112, 37, 14, 17, 40); bell(c, 119, 54, 11, 14, 60) },
+  // legs: dark trousers, leather-banded gaiters, boots
+  (c) => {
+    for (const [x0, lit] of [[38, 1], [82, 0]]) {
+      c.poly([x0 + 2, 120, x0 + 22, 120, x0 + 22, 166, x0, 166], lit ? "b" : "a")
+      c.vline(x0 + 2, 122, 42, lit ? "c" : "b")
+      for (let y = 134; y < 162; y += 4) { c.hline(x0, y, 22, "m"); c.hline(x0, y + 1, 22, "l") }
+      c.poly([x0 - 4, 161, x0 + 24, 161, x0 + 31, 169, x0 + 30, 171, x0 - 6, 171], "x")
+      c.poly([x0 - 4, 161, x0 + 8, 161, x0 + 8, 171, x0 - 6, 171], lit ? "y" : "x")
+      c.hline(x0 - 6, 169, 36, "w"); c.hline(x0 - 4, 161, 28, lit ? "z" : "y")
+    }
+  },
+  (c) => { for (let y = 34; y <= 124; y++) { const [l, r] = edge(y); c.hline(l, y, r - l + 1, "a") } },
+  mantle,
+  // arms hang at the sides over the mantle, hands at the hips
+  (c) => { arm(c, 34, 80, 30, 96, true); arm(c, 108, 80, 112, 96, false) },
+  // the strap and the bell bandolier across the chest
+  line(52, 40, 90, 100, "n", 4), line(52, 40, 90, 100, "m", 1), line(54, 40, 92, 100, "o", 1),
+  (c) => { [[58, 62], [68, 74], [78, 86], [64, 84], [74, 96]].forEach(([x, y], i) => bell(c, x, y, 11, 13, 0, i < 3)) },
+  stamp("head", 36, 0),
+  // the bonfire's rim on the left edge of the mantle (the fire is to the left of this figure)
+  (c) => { for (let y = 36; y < 126; y++) for (let x = 0; x < 72; x++) if (c.is(x, y, "*")) { c.px(x, y, "r"); if (y % 3 === 0) c.px(x + 1, y, "R"); break } })
