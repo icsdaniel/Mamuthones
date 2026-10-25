@@ -962,10 +962,16 @@ static func cord(lv: LaneView, field: Rect2, x0: float, x1: float, y: float, alp
 		return
 	var a: Vector2 = lv.project(Vector2(x0, y))
 	var b: Vector2 = lv.project(Vector2(x1, y))
-	var w := maxf(2.0, lw * 0.11)
-	lv.draw_line(a, b, _a(K_STEP[2], alpha), w + maxf(2.0, lw * 0.05))
-	lv.draw_line(a, b, _a(K_STEP[1], alpha), w)
-	lv.draw_line(a + Vector2(0, -w * 0.22), b + Vector2(0, -w * 0.22), _a(K_STEP[0], alpha * 0.8), maxf(1.0, w * 0.3))
+	# a bone cord, 2 art px thick on the grid with an ink outline and a lit top: a link, not a hold
+	# (a hold is the gold rope; the cord takes no note's colour)
+	var px := PxArt.PX
+	var th := maxf(1.0, roundf(lw * 0.13 / px)) * px
+	var x_a := PxArt.snap(minf(a.x, b.x))
+	var x_b := PxArt.snap(maxf(a.x, b.x))
+	var y0 := PxArt.snap(a.y - th * 0.5)
+	lv.draw_rect(Rect2(x_a, y0 - px, x_b - x_a, th + px * 2.0), _a(PixelPalette.K[0], alpha))
+	lv.draw_rect(Rect2(x_a, y0, x_b - x_a, th), _a(PixelPalette.BONE[2], alpha))
+	lv.draw_rect(Rect2(x_a, y0, x_b - x_a, px), _a(PixelPalette.BONE[4], alpha))
 
 
 ## Stamps a note from the pixel look's sheet, with its glow drawn live under it. False when the
