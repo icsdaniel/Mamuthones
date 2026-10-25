@@ -812,7 +812,7 @@ func _on_time_step(note: Note, judgement: String) -> void:
 
 
 ## A note's colour in the pixel look (StreetSkin's kinds): heal green, call pink, hold gold, an Expert
-## sixteenth silver, an off-beat violet, a step blue.
+## sixteenth silver, an off-grid note teal, an off-beat violet, a step blue.
 func note_colour(note: Note) -> Color:
 	if note.heal:
 		return StreetSkin.K_HEAL[3]
@@ -820,6 +820,8 @@ func note_colour(note: Note) -> Color:
 		return StreetSkin.K_CALL[3]
 	if note.kind == Note.Kind.HOLD:
 		return StreetSkin.K_HOLD[3]
+	if note.free:
+		return StreetSkin.K_FREE[3]
 	if lanes._sixteenth(note):
 		return StreetSkin.K_SIX[3]
 	var fr := fposmod(note.beat, 1.0)

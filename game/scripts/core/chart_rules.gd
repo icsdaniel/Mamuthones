@@ -24,6 +24,9 @@ const OVERALL_GAP_THIRD := {"easy": 1.0, "medium": 1.0 / 3.0, "hard": 1.0 / 3.0,
 const BELL_CLEAR := {"medium": 0.5, "hard": 0.5}
 const BELL_CLEAR_S := {"expert": 0.15}
 const EASY_MIN_GAP_S := 0.6
+const FREE_GAP_S := 0.09     ## an off-grid note ("free"): this far (s) from every other input...
+const FREE_BELL_S := 0.15    ## ... this far from a tilt...
+const FREE_HAND_S := 0.15    ## ... and this far from the same button's other inputs
 const MIN_STILL_BEATS := 2
 const THIRDS: Array[float] = [1.0 / 3.0, 2.0 / 3.0, 1.0 / 6.0, 5.0 / 6.0]
 const LEVEL_EXTRAS := {
@@ -56,6 +59,7 @@ static func check(song: SongData, difficulty: String) -> Array[String]:
 	var holds := []   # [lane, start, end]
 	var rests := []   # [start, end]
 	var notes := []   # well-formed notes, for the spacing rules
+	var frees := []   # off-grid notes: outside the grid and gap rules, checked on their own
 	for item in raw:
 		if not (item is Dictionary):
 			out.append("%s: a note is not an object" % where)
@@ -78,6 +82,11 @@ static func check(song: SongData, difficulty: String) -> Array[String]:
 		var lane := int(item.get("lane", -1))
 		if k in ["step", "hold", "ring", "stomp"] and (lane < 0 or lane > 2):
 			out.append("%s: %s needs lane 0, 1 or 2" % [at, k])
+			continue
+		if bool(item.get("free", false)):
+			if k != "step" or difficulty != "expert" or bool(item.get("call", false)):
+				out.append("%s: free is only for plain Expert steps" % at)
+			frees.append({"b": b, "lane": lane})
 			continue
 		var length := float(item.get("len", 1.0))
 		if (k == "hold" or k == "rest") and length <= 0.0:
@@ -109,6 +118,7 @@ static func check(song: SongData, difficulty: String) -> Array[String]:
 							out.append("%s: bell inside a stand-still" % at)
 							break
 	out.append_array(_check_spacing(song, difficulty, notes, where))
+	out.append_array(_check_free(song, frees, notes, where))
 	# Report each problem once.
 	var seen := {}
 	var unique: Array[String] = []
@@ -117,6 +127,29 @@ static func check(song: SongData, difficulty: String) -> Array[String]:
 			seen[p] = true
 			unique.append(p)
 	return unique
+
+
+## Off-grid notes (see Note.free): FREE_GAP_S from every other input, FREE_BELL_S from a tilt,
+## FREE_HAND_S from the same button's other inputs, never under a hold of their button or in a
+## stand-still. Mirrors check_free in tools/audio/validate_charts.py.
+static func _check_free(song: SongData, frees: Array, notes: Array, where: String) -> Array[String]:
+	var out: Array[String] = []
+	var spb := 60.0 / song.bpm
+	for f: Dictionary in frees:
+		var at := "%s b=%s" % [where, f.b]
+		for m: Dictionary in notes:
+			if m.k == "rest":
+				if f.b > m.b - TOL and f.b < m.b + m.len - TOL:
+					out.append("%s: free note inside a stand-still" % at)
+				continue
+			var dt := absf(float(m.b) - float(f.b)) * spb
+			if dt < (FREE_BELL_S if m.k in ["bell", "ring"] else FREE_GAP_S) - 0.0001:
+				out.append("%s: free note %d ms from another input" % [at, roundi(dt * 1000.0)])
+			if m.lane == f.lane and m.k in ["step", "hold", "ring", "stomp"] and dt < FREE_HAND_S - 0.0001:
+				out.append("%s: free note %d ms from the same button's input" % [at, roundi(dt * 1000.0)])
+			if m.k == "hold" and m.lane == f.lane and f.b > m.b - TOL and f.b < m.b + m.len - TOL:
+				out.append("%s: free note under a hold" % at)
+	return out
 
 
 ## On the beat, the half-beat or a triplet eighth: where Medium and Hard notes sit.

@@ -1586,6 +1586,64 @@ def harden(song, chart):
     return ch
 
 
+FREE_MIN = {"lead": 0.8, "drum": 0.9}   # strength a between-the-sixteenths onset needs to get a note
+FREE_PER_MIN = 6                          # at most this many a minute: they are rare on purpose
+FREE_APART_S = 1.0                        # off-grid notes at least this far from each other (they are rare on purpose)
+
+
+def add_free(song, chart):
+    """Expert's off-grid notes: where the music plays a strong hit between the sixteenths (a flam, a
+    triplet turn, a late pickup) the note sits on the hit itself and is drawn in its own colour
+    ("free"). Candidates come from offgrid_onsets.py. A free note goes on an outer button no input
+    within 0.3 s uses, with the other thumb free, clear of tilts, holds and stand-stills (the same
+    limits validate_charts.check_free holds it to, with a margin), and never crowds a run: at most
+    five presses within a second."""
+    path = song.cfg["analysis"].replace("_ana.json", "_offgrid.json")
+    if not os.path.exists(path):
+        return chart
+    spb = song.spb
+    ch = [dict(n) for n in chart]
+    cands = [c for c in json.load(open(path)) if c["s"] >= FREE_MIN[c["src"]]]
+    cands.sort(key=lambda c: -c["s"])
+    taken = []
+    most = int(song.cfg["length"] / 60.0 * FREE_PER_MIN)
+    def sec(n):
+        return n["b"] * spb
+    def inputs():
+        return [n for n in ch if n["k"] != "rest"]
+    for c in cands:
+        if len(taken) >= most:
+            break
+        t = c["t"] - song.cfg["offset"]
+        b = round(t / spb, 3)
+        if b < 1.0 or any(abs(t - x) < FREE_APART_S for x in taken) or c["t"] > song.cfg["length"] - 1.0:
+            continue
+        ins = inputs()
+        if any(abs(sec(n) - t) < (0.17 if n["k"] in ("bell", "ring") else 0.10) for n in ins):
+            continue
+        if any(n["k"] == "rest" and n["b"] - 0.01 <= b < n["b"] + n["len"] for n in ch):
+            continue
+        near = [n for n in ins if abs(sec(n) - t) < 0.3]
+        if any(n.get("lane") == 1 and abs(sec(n) - t) < 0.2 for n in ins) or any(n["k"] == "stomp" for n in near):
+            continue
+        holds = [n for n in ch if n["k"] == "hold" and n["b"] - 0.01 <= b < n["b"] + n["len"] + 0.01]
+        if any(h["lane"] == 1 for h in holds):
+            continue
+        used = {n.get("lane") for n in near}
+        prev = max((n for n in ins if n["k"] in ("step", "hold", "ring") and sec(n) < t), key=sec, default=None)
+        order = [0, 2] if prev is None or prev["lane"] != 0 else [2, 0]
+        lane = next((l for l in order if l not in used and not any(h["lane"] == l for h in holds)
+                     and not any(h["lane"] != l for h in holds if l == 1)), None)
+        if lane is None:
+            continue
+        if sum(1 for n in ins if abs(sec(n) - t) < 0.5) >= 5:
+            continue
+        ch.append({"b": b, "k": "step", "lane": lane, "free": True})
+        ch.sort(key=lambda n: (n["b"], n.get("lane", -1)))
+        taken.append(t)
+    return ch
+
+
 def main(argv):
     cfg = json.load(open(argv[1]))
     ana = json.load(open(cfg["analysis"]))
@@ -1616,7 +1674,7 @@ def main(argv):
     finally:
         g.update(saved)
     plus = hold_guard(song, lift(song, "expert", charts["hard"], plus))
-    charts["expert"] = breathe(song, harden(song, plus), "expert")
+    charts["expert"] = add_free(song, breathe(song, harden(song, plus), "expert"))
     length = cfg["length"]
     for d in DIFFS:
         ch = charts[d]
@@ -1624,7 +1682,7 @@ def main(argv):
         tilts = sum(1 for n in ch if n["k"] in ("bell", "ring"))
         _, avg, peak = V.nps_stats(ch, cfg["bpm"], cfg["offset"], 4.0)
         print(f"  {d:7} {len(ch):4d} notes  {avg:.2f}/s avg  {peak:.2f}/s peak  tilts {tilts / length * 60:4.1f}/min  "
-              + " ".join(f"{k}:{v}" for k, v in sorted(m.items())))
+              + " ".join(f"{k}:{v}" for k, v in sorted(m.items())) + (f" free:{sum(1 for n in ch if n.get('free'))}" if d == "expert" else ""))
     if "--grid" in argv:
         out = os.path.splitext(cfg["analysis"])[0] + "_grid.txt"
         open(out, "w").write(grid_text(song, charts))

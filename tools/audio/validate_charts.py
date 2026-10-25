@@ -282,6 +282,36 @@ def is_chord(lst) -> bool:
 
 # ------------------------------------------------------------------ chart check
 
+# An off-grid note keeps FREE_GAP_S (seconds) from every other input and FREE_BELL_S from a tilt; the
+# button that played the input before it has a breath of FREE_HAND_S; it never sits under a hold of
+# its own button or inside a stand-still.
+FREE_GAP_S = 0.09
+FREE_HAND_S = 0.15
+FREE_BELL_S = 0.15
+
+
+def check_free(song, label, notes, free):
+    spb = 60.0 / song["bpm"]
+    errs = []
+    others = [n for n in notes if n["k"] != "rest"]
+    for f in free:
+        t = f["b"] * spb
+        for m in others:
+            if m is f:
+                continue
+            dt = abs(m["b"] * spb - t)
+            near_bell = m["k"] in ("bell", "ring")
+            if dt < (FREE_BELL_S if near_bell else FREE_GAP_S) - 1e-4:
+                errs.append(f"{label}: free note at b={f['b']} {dt * 1000:.0f} ms from the input at b={m['b']}")
+            if m.get("lane") == f["lane"] and m["k"] in ("step", "hold", "ring", "stomp") and \
+                    dt < FREE_HAND_S - 1e-4 and m["b"] != f["b"]:
+                errs.append(f"{label}: free note at b={f['b']} {dt * 1000:.0f} ms after the same button's input at b={m['b']}")
+            if m["k"] == "hold" and m["lane"] == f["lane"] and m["b"] - EPS <= f["b"] < m["b"] + m["len"] - EPS:
+                errs.append(f"{label}: free note under the hold at b={m['b']}")
+            if m["k"] == "rest" and m["b"] - EPS <= f["b"] < m["b"] + m.get("len", 1) - EPS:
+                errs.append(f"{label}: free note inside the stand-still at b={m['b']}")
+    return errs
+
 def check_chart(song: dict, name: str, notes: list, audio_len: float | None):
     errs = []
     # a song charted one rung up (pattern charts after the 2026-10-19 playtest) is held to the rules of
@@ -324,7 +354,9 @@ def check_chart(song: dict, name: str, notes: list, audio_len: float | None):
                         f"{RULES['rest_min_beats']:g} beats")
         if "call" in n and (k != "step" or n["call"] is not True):
             errs.append(f"{where}: call is only for steps and must be true")
-        extra = set(n) - {"b", "k", "lane", "len", "call"}
+        if "free" in n and (k != "step" or n["free"] is not True or n.get("call") or name != "expert"):
+            errs.append(f"{where}: free is only for plain Expert steps and must be true")
+        extra = set(n) - {"b", "k", "lane", "len", "call", "free"}
         if extra:
             errs.append(f"{where}: unknown fields {sorted(extra)}")
     if errs:
@@ -341,6 +373,13 @@ def check_chart(song: dict, name: str, notes: list, audio_len: float | None):
         errs.append(f"{label}: last note ends at {end_t:.2f}s, audio is {audio_len:.2f}s")
     if end_t > song.get("length", 1e9) + 1e-3:
         errs.append(f"{label}: last note ends at {end_t:.2f}s after song length {song.get('length')}")
+
+    # Off-grid notes ("free": between the sixteenths, where the music plays something no grid holds)
+    # sit outside the grid and gap rules; they have rules of their own, in seconds (see check_free)
+    free = [n for n in notes if n.get("free")]
+    if free:
+        errs += check_free(song, label, notes, free)
+        notes = [n for n in notes if not n.get("free")]
 
     overall_fn, hand_fn, clear_fn = rule_fns(song, name, notes)
 

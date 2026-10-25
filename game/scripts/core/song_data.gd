@@ -172,6 +172,7 @@ func notes(difficulty: String, use_remix := false, mirror := false, from_beat :=
 		n.end_t = n.t
 		n.lane = int(item.get("lane", -1))
 		n.call = bool(item.get("call", false))
+		n.free = bool(item.get("free", false))
 		if n.kind == Note.Kind.HOLD:
 			n.end_t = n.t + float(item.get("len", 1.0)) * spb
 		elif n.kind == Note.Kind.REST:
