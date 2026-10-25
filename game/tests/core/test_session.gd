@@ -311,6 +311,24 @@ func test_stray_exemptions() -> void:
 	check_eq(sl.tap(1, _bt(2) + 0.25, 1).judgement, "stray", "the middle can stray")
 
 
+func test_late_thumb_after_a_miss_is_free() -> void:
+	# Lane 0 due at beat 0, lane 2 at beat 1 (0.5 s later). The lane-0 note is missed; the thumb that
+	# lands on it 0.2 s after its time, while lane 2's note is the one now due, costs nothing more
+	# (Daniele, 2026-10-25: after a miss or a late tap everything felt like it dragged).
+	var s := Session.new(make([{"b": 0, "k": "step", "lane": 0}, {"b": 1, "k": "step", "lane": 2}, {"b": 4, "k": "step", "lane": 0}]), "easy")
+	s.update(_bt(0) + 0.3)
+	check_eq(s.stats.miss, 1, "the first note was missed")
+	var r := s.tap(0, _bt(0) + 0.2 + 0.1, 0)
+	check_eq(r.judgement, "", "a late thumb on the missed lane's button is free")
+	check_eq(s.stats.wrong, 0, "no wrong step")
+	check_eq(s.stats.stray, 0, "no stray")
+	# Well after the miss, with lane 2's note due, the same button is a wrong step again.
+	var s2 := Session.new(make([{"b": 0, "k": "step", "lane": 0}, {"b": 1, "k": "step", "lane": 2}, {"b": 4, "k": "step", "lane": 0}]), "easy")
+	s2.update(_bt(0) + 0.3)
+	check_eq(s2.tap(0, _bt(0) + Session.MISS_FOLLOW + 0.15, 1).judgement, "wrong", "past the follow time it is judged as before")
+	check_eq(s.tap(2, _bt(1), 2).judgement, "perfect", "the next note still counts")
+
+
 func test_tap_with_own_note_coming_is_stray() -> void:
 	# Lane 0 due at 1.0 s, lane 2 due at 1.25 s: pressing lane 2 at 1.0 s is inside lane 0's window,
 	# but lane 2's own note is 250 ms away (within 2 × 140 ms), so the tap is free (not even a stray).

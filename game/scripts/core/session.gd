@@ -101,6 +101,7 @@ const WRONG_REACH := 2.0     ## the pressed lane's own note within 2 × Early/La
 const SILENCE_DROP := 1
 const STRAY_DROP := 1        ## a stray tap (no note due anywhere)
 const STOMP_FOLLOW := 0.200  ## a tap this soon after a stomp on its lane is a late thumb, not stray
+const MISS_FOLLOW := 0.350   ## a tap on a lane up to this long after its note was missed is the late thumb: it costs nothing more
 const LOCK_TAPS := 3         ## this many stray or wrong taps...
 const LOCK_SPAN := 0.75      ## ...within this many seconds...
 const LOCK_TIME := 0.6       ## ...lock the step buttons this long...
@@ -158,6 +159,7 @@ var _locked_until := -INF
 var _bad_taps: Array[float] = []   # times of recent stray and wrong taps, for the mashing lock
 var _presses: Array[float] = []    # times of recent presses (not while locked), for the same
 var _stomp_at: Array[float] = [-INF, -INF, -INF]   # last stomp judged per lane
+var _missed_at: Array[float] = [-INF, -INF, -INF]  # time of the last note missed per lane
 var _taps_from := NAN   # the first and last moment a lane note is due (NAN: no lane notes)
 var _taps_to := NAN
 
@@ -520,8 +522,8 @@ func tap(lane: int, t: float, touch_id: int = 0) -> Dictionary:
 		# A tap with neither breaks the combo as a stray (a press a little early for the lane's own
 		# coming note is neither).
 		var other := _find_other_lane_note(lane, t)
-		if _own_note_near(lane, t) != null:
-			pass
+		if _own_note_near(lane, t) != null or t - _missed_at[clampi(lane, 0, 2)] <= MISS_FOLLOW:
+			pass   # (the second: a late thumb after a miss is already paid for)
 		elif other != null:
 			_wrong(other, t, t - other.t, WRONG_DROP)
 			wrong_step.emit(lane, other, t - other.t)
@@ -907,6 +909,8 @@ func _miss(n: Note, t: float) -> void:
 	n.judgement = "miss"
 	stats.miss += 1
 	stats.notes += 1
+	if n.uses_lane():
+		_missed_at[clampi(n.lane, 0, 2)] = n.t
 	combo = 0
 	unison_streak = 0
 	_set_unison(unison_level - MISS_DROP, t)
