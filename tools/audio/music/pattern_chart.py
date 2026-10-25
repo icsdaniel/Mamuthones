@@ -1586,6 +1586,39 @@ def harden(song, chart):
     return ch
 
 
+def finish(song, chart, level):
+    """The last safety net: nothing may end within 0.35 s of the audio's end, and an input no hand can
+    play (a rare clash the other passes could not see) is dropped, or softened: a ring to a bell,
+    a stomp to a step."""
+    spb = song.spb
+    limit = (song.cfg["length"] - 0.35 - song.cfg["offset"]) / spb
+    ch = []
+    for n in chart:
+        n = dict(n)
+        if n["b"] >= limit - 1e-6:
+            continue
+        if n["k"] in ("hold", "rest") and n["b"] + n["len"] > limit:
+            n["len"] = round(limit - n["b"] - 0.01, 3)
+            if n["len"] < (0.5 if n["k"] == "hold" else 2.0):
+                continue
+        ch.append(n)
+    sd = {"bpm": song.cfg["bpm"], "kind": "story", "swing": song.swing}
+    for _ in range(40):
+        _, hand, clear = V.rule_fns(sd, SHIFT.get(level, "expert"), ch)
+        probs = V.assign_hands(ch, hand, clear)
+        if not probs:
+            break
+        n = ch[probs[0][0]]
+        if n["k"] == "ring":
+            n["k"] = "bell"
+            n.pop("lane", None)
+        elif n["k"] == "stomp":
+            n["k"] = "step"
+        else:
+            ch.pop(probs[0][0])
+    return ch
+
+
 FREE_MIN = {"lead": 0.8, "drum": 0.9}   # strength a between-the-sixteenths onset needs to get a note
 FREE_PER_MIN = 6                          # at most this many a minute: they are rare on purpose
 FREE_APART_S = 1.0                        # off-grid notes at least this far from each other (they are rare on purpose)
@@ -1663,8 +1696,8 @@ def main(argv):
         charts[hi_] = hold_guard(song, lift(song, hi_, charts[lo_], charts[hi_]))
     # one rung up for every level, a new Expert on top, and the crowded runs broken at every level
     built = charts
-    charts = {d: breathe(song, built[SHIFT[d]], d) for d in ("easy", "medium")}
-    charts["hard"] = breathe(song, built["expert"], "hard")
+    charts = {d: finish(song, breathe(song, built[SHIFT[d]], d), d) for d in ("easy", "medium")}
+    charts["hard"] = finish(song, breathe(song, built["expert"], "hard"), "hard")
     g = globals()
     saved = {k: g[k] for k in EXPERT_PLUS}
     for k, v in EXPERT_PLUS.items():
@@ -1674,7 +1707,7 @@ def main(argv):
     finally:
         g.update(saved)
     plus = hold_guard(song, lift(song, "expert", charts["hard"], plus))
-    charts["expert"] = add_free(song, breathe(song, harden(song, plus), "expert"))
+    charts["expert"] = add_free(song, finish(song, breathe(song, harden(song, plus), "expert"), "expert"))
     length = cfg["length"]
     for d in DIFFS:
         ch = charts[d]

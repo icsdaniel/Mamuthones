@@ -479,8 +479,9 @@ def check_chart(song: dict, name: str, notes: list, audio_len: float | None):
     min_peak = RULES["expert_peak_swung_nps" if song.get("swing") else "expert_peak_nps"]
     if name == "expert" and kind == "story" and peak < min_peak - EPS:
         errs.append(f"expert: peak {peak:.2f} notes/s is below {min_peak}")
-    # the finale (stop 7): Expert has triplets and triple rings
-    if name == "expert" and kind == "story" and song.get("stop") == 7:
+    # the finale (stop 7): Expert has triplets and triple rings (a Suno test song follows its audio,
+    # which decides whether it has triplets)
+    if name == "expert" and kind == "story" and song.get("stop") == 7 and not str(song.get("id", "")).startswith("suno_"):
         if not mech.get("triple"):
             errs.append("expert: the finale needs triple rings")
         if not is_third_grid(notes):
