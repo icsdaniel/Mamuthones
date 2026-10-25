@@ -1,0 +1,190 @@
+{
+ "frames": {
+  "burst_miss_56x20_0": {
+   "frame": {
+    "x": 0,
+    "y": 0,
+    "w": 77,
+    "h": 58
+   },
+   "rotated": false,
+   "trimmed": false,
+   "spriteSourceSize": {
+    "x": 0,
+    "y": 0,
+    "w": 77,
+    "h": 58
+   },
+   "sourceSize": {
+    "w": 77,
+    "h": 58
+   },
+   "duration": 50
+  },
+  "burst_miss_56x20_1": {
+   "frame": {
+    "x": 77,
+    "y": 0,
+    "w": 77,
+    "h": 58
+   },
+   "rotated": false,
+   "trimmed": false,
+   "spriteSourceSize": {
+    "x": 0,
+    "y": 0,
+    "w": 77,
+    "h": 58
+   },
+   "sourceSize": {
+    "w": 77,
+    "h": 58
+   },
+   "duration": 50
+  },
+  "burst_miss_56x20_2": {
+   "frame": {
+    "x": 154,
+    "y": 0,
+    "w": 77,
+    "h": 58
+   },
+   "rotated": false,
+   "trimmed": false,
+   "spriteSourceSize": {
+    "x": 0,
+    "y": 0,
+    "w": 77,
+    "h": 58
+   },
+   "sourceSize": {
+    "w": 77,
+    "h": 58
+   },
+   "duration": 50
+  },
+  "burst_miss_56x20_3": {
+   "frame": {
+    "x": 231,
+    "y": 0,
+    "w": 77,
+    "h": 58
+   },
+   "rotated": false,
+   "trimmed": false,
+   "spriteSourceSize": {
+    "x": 0,
+    "y": 0,
+    "w": 77,
+    "h": 58
+   },
+   "sourceSize": {
+    "w": 77,
+    "h": 58
+   },
+   "duration": 50
+  },
+  "burst_miss_56x20_4": {
+   "frame": {
+    "x": 308,
+    "y": 0,
+    "w": 77,
+    "h": 58
+   },
+   "rotated": false,
+   "trimmed": false,
+   "spriteSourceSize": {
+    "x": 0,
+    "y": 0,
+    "w": 77,
+    "h": 58
+   },
+   "sourceSize": {
+    "w": 77,
+    "h": 58
+   },
+   "duration": 50
+  },
+  "burst_miss_56x20_5": {
+   "frame": {
+    "x": 385,
+    "y": 0,
+    "w": 77,
+    "h": 58
+   },
+   "rotated": false,
+   "trimmed": false,
+   "spriteSourceSize": {
+    "x": 0,
+    "y": 0,
+    "w": 77,
+    "h": 58
+   },
+   "sourceSize": {
+    "w": 77,
+    "h": 58
+   },
+   "duration": 50
+  },
+  "burst_miss_56x20_6": {
+   "frame": {
+    "x": 462,
+    "y": 0,
+    "w": 77,
+    "h": 58
+   },
+   "rotated": false,
+   "trimmed": false,
+   "spriteSourceSize": {
+    "x": 0,
+    "y": 0,
+    "w": 77,
+    "h": 58
+   },
+   "sourceSize": {
+    "w": 77,
+    "h": 58
+   },
+   "duration": 50
+  },
+  "burst_miss_56x20_7": {
+   "frame": {
+    "x": 539,
+    "y": 0,
+    "w": 77,
+    "h": 58
+   },
+   "rotated": false,
+   "trimmed": false,
+   "spriteSourceSize": {
+    "x": 0,
+    "y": 0,
+    "w": 77,
+    "h": 58
+   },
+   "sourceSize": {
+    "w": 77,
+    "h": 58
+   },
+   "duration": 50
+  }
+ },
+ "meta": {
+  "app": "pxl",
+  "image": "burst_miss_56x20.png",
+  "format": "RGBA8888",
+  "size": {
+   "w": 616,
+   "h": 58
+  },
+  "scale": "1",
+  "frameTags": [
+   {
+    "name": "burst_miss_56x20",
+    "from": 0,
+    "to": 7,
+    "direction": "forward"
+   }
+  ]
+ }
+}

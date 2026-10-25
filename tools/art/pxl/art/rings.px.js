@@ -1,19 +1,21 @@
 // The hit rings on the hit line: a raised bone-white rim lying on the road, one per lane.
 // The far (top) edge of its top catches the bonfire; the near outer wall and the far inner wall
 // fall into shadow; four carved notches echo the pintadera's teeth. Ink outline outside and round
-// the hollow. Idle is neutral so the game can tint it toward the coming note's colour; gold burns
+// the hollow. Every lane shows the same ring; the coming note's colour lights only its inner lip (ring_lip); gold burns
 // when a lane is struck, red while the buttons are locked.
 //   node tools/art/pxl/bin/pxl.js build tools/art/pxl/art/rings.px.js
 // Sizes are the cells the game asks for (StreetSkin._ring_pic): w x h art px.
 include("palette.px.js")
-keys({ k: "K0", K: "K1", a: "BONE0", b: "BONE1", c: "BONE2", d: "BONE3", e: "BONE4",
+keys({ H: "WOOD1", I: "STONE3", W: "BONE4", k: "K0", K: "K1", a: "BONE0", b: "BONE1", c: "BONE2", d: "BONE3", e: "BONE4",
        A: "GOLD1", B: "GOLD2", C: "GOLD3", D: "GOLD4", E: "GOLD5",
        S: "GOLD4", T: "GOLD2", r: "RED0", s: "RED1", t: "RED2", u: "RED3", v: "RED4" })
 
-const SIZES = [[60, 24], [64, 24], [56, 22], [68, 26]]
+const SIZES = [[60, 24], [64, 24], [56, 22], [68, 26]]   // 60x24 at every phone size measured
 const WALL = 3      // how far the rim stands up, in art px
 
-function rim(c) {
+// part: "rim" the ring itself with its hollow plate; "lip" only the 1-px inner edge of its top,
+// in white, which the game tints with the coming note's colour as it nears.
+const rim = (part) => (c) => {
   const w = c.w, h = c.h
   const rx = w / 2 - 1, ry = (h - 2 - WALL) / 2
   const cx = w / 2, cy = 1 + ry
@@ -39,6 +41,8 @@ function rim(c) {
         if ((m < 0.05 || m > 0.95) && Math.abs(mid - 1) < 0.3) k = "b"
       } else if (hole && !inE(px, py, irx, iry, WALL)) {
         k = "b"                                              // the far inner wall, in shadow
+      } else if (hole) {
+        k = "H"                                              // the hollow: a dim wooden plate
       } else if (!top && inE(px, py, rx, ry, WALL) && py > cy) {
         k = inE(px, py, rx, ry, 1) ? "b" : "a"               // the near outer wall
       }
@@ -50,8 +54,26 @@ function rim(c) {
     const x0 = Math.round(cx + sx * (rx + irx) / 2 - 1), y0 = Math.round(cy - 1)
     for (let y = y0; y < y0 + 2; y++) for (let x = x0; x < x0 + 2; x++) key[y][x] = y === y0 ? "S" : "T"
   }
-  // ink round the outside and round the hollow's edge
   const solid = (x, y) => x >= 0 && y >= 0 && x < w && y < h && key[y][x] !== "."
+  if (part === "lip") {
+    // the top's pixels touching the hollow
+    const isHole = (x, y) => x >= 0 && y >= 0 && x < w && y < h && (key[y][x] === "H" || key[y][x] === "b" && inE(x + 0.5, y + 0.5, irx, iry))
+    for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) {
+      if (!solid(x, y) || isHole(x, y)) continue
+      if (!inE(x + 0.5, y + 0.5, rx, ry)) continue
+      if (isHole(x - 1, y) || isHole(x + 1, y) || isHole(x, y - 1) || isHole(x, y + 1)) c.px(x, y, "W")
+      else if (isHole(x - 2, y) || isHole(x + 2, y)) c.px(x, y, "W")       // 2 px wide on the sides
+    }
+    return
+  }
+  // the plate's far edge, under the inner wall, catches a little firelight
+  for (let y = 1; y < h; y++) for (let x = 0; x < w; x++)
+    if (key[y][x] === "H" && key[y - 1][x] === "b") key[y][x] = "I"
+  // a dark crease where the top meets the plate on the near side
+  const lit = (x, y) => x >= 0 && y >= 0 && x < w && y < h && "cde".includes(key[y][x])
+  for (let y = 0; y < h; y++) for (let x = 0; x < w; x++)
+    if (key[y][x] === "H" && y + 0.5 > cy && (lit(x, y + 1) || lit(x - 1, y) || lit(x + 1, y))) key[y][x] = "K"
+  // ink round the outside
   for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) {
     if (solid(x, y)) { c.px(x, y, key[y][x]); continue }
     if (solid(x - 1, y) || solid(x + 1, y) || solid(x, y - 1) || solid(x, y + 1)) c.px(x, y, "k")
@@ -59,7 +81,8 @@ function rim(c) {
 }
 
 for (const [w, h] of SIZES) {
-  sprite(`ring_idle_${w}x${h}`, { w, h }, rim)
+  sprite(`ring_idle_${w}x${h}`, { w, h }, rim("rim"))
+  sprite(`ring_lip_${w}x${h}`, { w, h }, rim("lip"))
   sprite(`ring_gold_${w}x${h}`, { base: `ring_idle_${w}x${h}`, swap: { a: "A", b: "B", c: "C", d: "D", e: "E" } })
   sprite(`ring_red_${w}x${h}`, { base: `ring_idle_${w}x${h}`, swap: { a: "r", b: "s", c: "t", d: "u", e: "v" } })
 }

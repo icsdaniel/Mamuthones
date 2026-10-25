@@ -743,6 +743,8 @@ const PX_HOT := [Color("#fffaf0"), Color("#ffe9a8"), Color("#ffd35a"), Color("#f
 ## in the hit's colour that breaks up as it fades, a shock ring running out, and square embers thrown
 ## up that cool from white through gold to red. A miss: a dull red ring and grey cinders.
 static func _burst_px(ci: CanvasItem, at: Vector2, quality: String, age: float, tt: float, lw: float) -> void:
+	if _burst_pxl(ci, at, quality, tt, lw):
+		return
 	var px := PxArt.PX
 	var e := 1.0 - pow(1.0 - tt, 3.0)
 	var seed := int(absf(at.x) * 13.0) + quality.length() * 7
@@ -776,6 +778,43 @@ static func _burst_px(ci: CanvasItem, at: Vector2, quality: String, age: float, 
 	if tt < 0.55:
 		_ring(ci, at, Vector2(r, r * FORE) * (1.0 + 0.9 * e), px * (2.0 if tt < 0.3 else 1.0), col.lerp(Color.WHITE, 0.3))
 	_embers_px(ci, at, lw * big, age, 14 if quality == "stomp" else 10, seed, PX_HOT, 1.0)
+
+
+const BURST_FRAMES := 8              ## frames in a pxl hit burst (tools/art/pxl/art/bursts.px.js)
+const BURST_RISE := 30               ## art px above a burst's footprint, for its embers
+const BURST_BIG := {"perfect": 1.25, "stomp": 1.6}
+const BURST_KIND := {"early": "ok", "late": "ok"}
+
+
+## The pxl hit burst (an 8-frame strip drawn pixel by pixel) for `quality`, its slot footprint
+## centred on `at`. False when there is none.
+static func _burst_pxl(ci: CanvasItem, at: Vector2, quality: String, tt: float, lw: float) -> bool:
+	var q: String = BURST_KIND.get(quality, quality)
+	var big: float = BURST_BIG.get(q, 1.0)
+	# the caller's stomp is already 1.6 lanes; the strip draws its own size
+	var base := lw / 1.6 if q == "stomp" else lw
+	var fw := 2.0 * base * DISC_R / PxArt.PX
+	var sizes := _pxl_sizes("bursts", "burst_" + q)
+	if sizes.is_empty():
+		sizes = _pxl_sizes("bursts", "burst_good")
+		if sizes.is_empty():
+			return false
+		q = "good"
+	var best := Vector2i.ZERO
+	for sz: Vector2i in sizes:
+		if best == Vector2i.ZERO or absf(sz.x - fw) < absf(best.x - fw):
+			best = sz
+	var tex := PxArt.tex(sizes[best])
+	if tex == null:
+		return false
+	var fwh := Vector2(tex.get_width() / BURST_FRAMES, tex.get_height())
+	var ry0 := float(best.y) / 2.0 * big
+	var anchor := Vector2(floorf(fwh.x / 2.0), fwh.y - ceilf(ry0 * 1.3) - 2.0)
+	var f := clampi(int(tt * BURST_FRAMES), 0, BURST_FRAMES - 1)
+	var px := PxArt.PX
+	var top := PxArt.snap2(at - anchor * px)
+	ci.draw_texture_rect_region(tex, Rect2(top, fwh * px), Rect2(Vector2(fwh.x * f, 0.0), fwh))
+	return true
 
 
 ## Square embers (whole pixels) thrown up from `at` and falling back, cooling through `ramp`.
@@ -1097,16 +1136,25 @@ static func _ring_pic(lv: LaneView, sil: PackedVector2Array, k: float, g: float,
 		var near: float = incoming[1]
 		ci_poly(lv, sil, _a(kk[1], 0.35 * near * near))
 		mod = mod.lerp(kk[0] * 1.25, near)
-	if locked:
-		if not pxl_draw(lv, "rings", "ring_red", lo, hi):
-			ai_draw(lv, "ring_red", lo, hi)
+	if not _pxl_sizes("rings", "ring_idle").is_empty():
+		# the pxl rings: every lane the same ring; the coming note's colour lights only its inner lip
+		if locked:
+			pxl_draw(lv, "rings", "ring_red", lo, hi)
+			return
+		pxl_draw(lv, "rings", "ring_idle", lo, hi)
+		if incoming != null:
+			var near: float = incoming[1]
+			pxl_draw(lv, "rings", "ring_lip", lo, hi, Color(incoming[0][0], clampf(near * 1.4, 0.0, 1.0)))
+		if g > 0.05:
+			pxl_draw(lv, "rings", "ring_gold", lo, hi, Color(1.0, 1.0, 1.0, clampf(g * 1.5, 0.0, 1.0)))
 		return
-	if not pxl_draw(lv, "rings", "ring_idle", lo, hi, mod):
-		ai_draw(lv, "ring_idle", lo, hi, mod)
+	if locked:
+		ai_draw(lv, "ring_red", lo, hi)
+		return
+	ai_draw(lv, "ring_idle", lo, hi, mod)
 	if g > 0.05:
 		var lit := Color(1.0, 1.0, 1.0, clampf(g * 1.5, 0.0, 1.0))
-		if not pxl_draw(lv, "rings", "ring_gold", lo, hi, lit):
-			ai_draw(lv, "ring_gold", lo, hi, lit)
+		ai_draw(lv, "ring_gold", lo, hi, lit)
 
 
 # ------------------------------------------------------------------ the bell strike
