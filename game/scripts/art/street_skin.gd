@@ -1159,6 +1159,25 @@ static func _ring_pic(lv: LaneView, sil: PackedVector2Array, k: float, g: float,
 
 # ------------------------------------------------------------------ the bell strike
 
+## The sound arcs "( )" beside a struck cowbell, from the pxl pictures (tools/art/pxl/art/chimes.px.js):
+## the arc of radius `rad` (screen px) about `c`, tinted `col`, 1 or 2 art px thick by `wid`. False when
+## there are none.
+static func _chime(ci: CanvasItem, c: Vector2, rad: float, col: Color, wid: float) -> bool:
+	var px := PxArt.PX
+	var want := clampi(int(roundf(rad / px / 2.0)) * 2, 14, 72)
+	var t := 1 if wid < px * 1.6 else 2
+	var tex := PxArt.tex("res://art/pxl/chimes/chime_%d_%d.png" % [want, t])
+	if tex == null:
+		return false
+	var sz := Vector2(tex.get_width(), tex.get_height()) * px
+	var y := PxArt.snap(c.y - sz.y * 0.5)
+	var xl := PxArt.snap(c.x - rad)
+	ci.draw_texture_rect(tex, Rect2(Vector2(xl, y), sz), false, col)
+	var xr := PxArt.snap(c.x + rad - sz.x)
+	ci.draw_texture_rect(tex, Rect2(Vector2(xr + sz.x, y), Vector2(-sz.x, sz.y)), false, col)
+	return true
+
+
 const STRIKE_TIME := 0.5          ## how long a bell strike shows
 const STRIKE_HOLD := 0.16         ## the struck strap stays on the hit line this long
 const K_WHITE := [Color("#ffffff"), Color("#fff6dc"), Color("#c8b48c"), Color("#ffffff")]
@@ -1204,7 +1223,9 @@ static func bell_strike(lv: LaneView, field: Rect2, up: bool, quality: String, c
 		var hot_col: Color = PX_HOT[mini(int(kk * 4.0), 3)]
 		_glow(lv, (p0 + p1) * 0.5, Vector2((p1.x - p0.x) * 0.55, sl * 0.25), _a(k[3], 0.5 * (1.0 - kk)))
 		var thick := maxf(PxArt.PX, sl * 0.07 * (1.0 - kk) * big)
-		lv.draw_line(p0, p1, hot_col if hot else col, thick)
+		# whole pixels: a bar on the art grid, not a smoothed line
+		var bar := maxf(1.0, roundf(thick / PxArt.PX)) * PxArt.PX
+		lv.draw_rect(Rect2(p0.x, PxArt.snap(p0.y - bar * 0.5), p1.x - p0.x, bar), hot_col if hot else col)
 	# the cowbells thrown off the strap, swinging, ringing
 	var hy := lv.project(Vector2(0.0, hl)).y
 	var bs := lw * 0.42 * big
@@ -1223,8 +1244,9 @@ static func bell_strike(lv: LaneView, field: Rect2, up: bool, quality: String, c
 			var rad := bs * (0.6 + 1.1 * rk) * (1.0 + 0.12 * float(r))
 			var rc: Color = ([Color.WHITE, PX_HOT[1], PX_HOT[2], PX_HOT[3]] if hot or perfect else [Color.WHITE, k[0], k[3], k[1]])[mini(int(rk * 4.0), 3)]
 			var wid := maxf(PxArt.PX, bs * 0.09 * (1.0 - rk))
-			lv.draw_arc(c, rad, -0.5, 0.5, 6, rc, wid)
-			lv.draw_arc(c, rad, PI - 0.5, PI + 0.5, 6, rc, wid)
+			if not _chime(lv, c, rad, rc, wid):
+				lv.draw_arc(c, rad, -0.5, 0.5, 6, rc, wid)
+				lv.draw_arc(c, rad, PI - 0.5, PI + 0.5, 6, rc, wid)
 		lv.draw_set_transform(at, swing * (1.0 if i == 0 else -1.0), Vector2.ONE)
 		_cowbell(lv, Vector2(0.0, bs * 0.0), bs, fade)
 		lv.draw_set_transform(Vector2.ZERO, 0.0, Vector2.ONE)
