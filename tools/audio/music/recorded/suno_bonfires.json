@@ -1,0 +1,14 @@
+{
+ "title": {
+  "en": "Around the Bonfires (Suno test)",
+  "it": "Intorno ai falò (prova Suno)"
+ },
+ "stop": 3,
+ "bpm": 100.06,
+ "offset": 0.65,
+ "id": "suno_bonfires",
+ "audio": "res://audio/music/suno_bonfires.ogg",
+ "length": 114.76,
+ "preview": 40.0,
+ "rests": []
+}
