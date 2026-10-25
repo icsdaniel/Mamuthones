@@ -55,44 +55,51 @@ for (const tone of Object.keys(TONES)) for (const [size, w, h] of [["s", 9, 15],
     })
 }
 
-// ---------------------------------------------------------------- the mantle's outline
-// Left and right edge per row, every 4 rows from y 34 (taken from the figure's own layout).
-const LEFT = [56, 35, 17, 15, 14, 13, 13, 13, 13, 14, 15, 15, 16, 17, 18, 18, 17, 19, 20, 20, 18, 17, 17, 17, 18, 19, 21, 23, 25]
-const RIGHT = [92, 92, 93, 98, 97, 96, 100, 103, 103, 103, 100, 97, 98, 100, 102, 102, 99, 102, 104, 104, 103, 103, 102, 101, 99, 98, 99, 100, 101]
-const at = (arr, y) => {
-  const f = Math.max(0, Math.min(arr.length - 1.001, (y - 34) / 4)), i = Math.floor(f)
-  return arr[i] + (arr[i + 1] - arr[i]) * (f - i)
+// ---------------------------------------------------------------- the two tiers
+// Like the figure it replaces: a short fleece cape over the shoulders (y 38..92), a dark wool torso and
+// sleeves showing under it, a belt, and a longer ragged skirt of fleece (y 96..142) over the legs.
+const capeL = (y) => 12 + Math.max(0, 52 - y) * 0.9 - (y - 52) * 0.1
+const capeR = (y) => 96 + (y - 38) * 0.18
+const skirtL = (y) => 19 - (y - 96) * 0.3
+const skirtR = (y) => 98 + (y - 96) * 0.25
+
+sprite("_torso", { w: 140, h: 170 },
+  // dark wool torso and sleeves under the cape, lit on the left
+  poly([26, 44, 84, 44, 88, 96, 22, 96], "b"),
+  clip([18, 44, 26, 58], rect(0, 0, 140, 170, "c")),
+  clip([60, 44, 30, 54], rect(0, 0, 140, 170, "a")),
+  // sleeves: the fire's arm swings forward-left, the far arm hangs dark at the right
+  line(20, 56, 12, 90, "c", 11), line(24, 58, 16, 90, "b", 4), line(15, 58, 8, 88, "d", 1),
+  line(94, 56, 99, 92, "a", 10), line(92, 58, 96, 90, "b", 1),
+  // the belt
+  rect(20, 92, 76, 3, "m"), rect(20, 94, 76, 2, "l"), rect(46, 91, 7, 6, "i"), rect(48, 92, 3, 4, "g"),
+  // the skirt's dark base
+  poly([17, 100, 101, 100, 103, 134, 15, 134], "a"),
+  clip([15, 100, 26, 34], rect(0, 0, 140, 170, "b")))
+
+// A row of tufts along x0..x1 at row y, tone chosen by `toneAt(t, y)` (t 0 at the fire's side).
+function row(c, r, y, x0, x1, pitch, sizes, toneAt) {
+  for (let x = x0 + (((y / 7) | 0) % 2) * (pitch / 2); x < x1; x += pitch) {
+    const t = (x - x0) / (x1 - x0)
+    const size = sizes[(r() * sizes.length) | 0]
+    const w = size === "s" ? 9 : size === "m" ? 11 : 13
+    // outward on the right half: flip so the tips curve away from the body
+    c.stamp(`_t_${toneAt(t, y)}_${size}`, Math.round(x - w / 2 + (r() * 3 - 1.5)), y + Math.round(r() * 3 - 1.5), { flip: t > 0.5 ? "x" : undefined })
+  }
 }
-const HEM = 132
-const mantle = []
-for (let y = 36; y <= HEM; y += 4) mantle.push(Math.round(at(LEFT, y)), y)
-for (let y = HEM; y >= 36; y -= 4) mantle.push(Math.round(at(RIGHT, y)), y)
+const fire = (t, y) => { const lit = 1 - t * 1.3 + (1 - (y - 38) / 100) * 0.3; return lit > 0.55 ? "lit" : lit > 0.12 ? "mid" : "cold" }
 
-sprite("_mass", { w: 140, h: 170 },
-  poly(mantle, "a"),
-  // the fire's side of the mantle a step lighter, falling off to the right
-  clip([14, 40, 34, 94], rect(0, 0, 140, 170, "b")),
-  clip([14, 40, 16, 60], rect(0, 0, 140, 170, "c")))
-
-// Rows of tufts, bottom up so each row hangs over the one below. Which tone a tuft takes follows the
-// fire: lit on the left and on the shoulders, cold on the right.
 sprite("_fleece", { w: 140, h: 170 },
-  stamp("_mass", 0, 0),
+  stamp("_torso", 0, 0),
   (c) => {
-    const r = c.rng(21)
-    for (let y = 124; y >= 34; y -= 7) {
-      const l = at(LEFT, y + 8), rr = at(RIGHT, y + 8), span = rr - l
-      for (let x = l - 5 + (((y / 7) | 0) % 2) * 5; x < rr + 3; x += 10) {
-        const t = (x - l) / span, up = 1 - (y - 34) / 100
-        const lit = 1 - t * 1.25 + up * 0.35 + (r() - 0.5) * 0.3
-        const tone = lit > 0.62 ? "lit" : lit > 0.18 ? "mid" : "cold"
-        const size = y > 118 ? "l" : (r() < 0.45 ? "m" : "s")
-        const w = size === "s" ? 9 : size === "m" ? 11 : 13
-        c.stamp(`_t_${tone}_${size}`, Math.round(x - w / 2 + (r() * 3 - 1.5)), y + Math.round(r() * 3 - 1), { rflip: r() < 0.25 ? "x" : undefined })
-      }
-    }
+    const r = c.rng(31)
+    // the skirt, bottom up
+    for (let y = 126; y >= 92; y -= 7) row(c, r, y, skirtL(y) - 3, skirtR(y) + 4, 10, y > 108 ? ["l", "l", "m"] : ["m", "l"], fire)
+    // the far shoulder's fleece hangs lower on the right
+    for (let y = 80; y >= 68; y -= 6) row(c, r, y, 68, 100, 10, ["m", "l"], () => "cold")
+    // the cape, bottom up: long tufts at its hem, shorter above
+    for (let y = 66; y >= 38; y -= 6) row(c, r, y, capeL(y) - 3, capeR(y) + 4, 10, y > 56 ? ["m", "l"] : ["s", "m"], fire)
   })
-
 
 // ---------------------------------------------------------------- bells, arms, legs
 // a cowbell: narrow shoulder, wide mouth, lit on the left half; (cx, cy) its middle, a in degrees
@@ -120,14 +127,17 @@ const legs = (c) => {
   const leg = (x0, x1, y0, y1, lit) => {
     c.poly([x0, y0, x1, y0, x1, y1, x0, y1], lit ? "b" : "a")
     c.vline(x0 + 1, y0, y1 - y0, lit ? "c" : "b")
-    for (let y = y0 + 8; y < y1 - 3; y += 4) { c.hline(x0, y, x1 - x0 + 1, "m"); c.hline(x0, y + 1, x1 - x0 + 1, "l") }
+    // leather straps wound round the gaiter, slanting like a spiral wrap
+    for (let y = y0 + 8; y < y1 - 3; y += 5) { c.line(x0, y + 2, x1, y, "m"); c.line(x0, y + 3, x1, y + 1, "l") }
   }
-  leg(26, 39, 128, 162, true)
-  leg(90, 104, 128, 156, false)
-  // the planted boot, toe toward the road
-  c.poly([10, 160, 40, 160, 41, 169, 9, 169], "x"); c.hline(10, 160, 30, "z"); c.hline(9, 168, 33, "w"); c.vline(10, 161, 7, "y")
+  leg(26, 39, 124, 162, true)
+  leg(90, 104, 124, 156, false)
+  // the planted boot, toe toward the road: black leather, a lit top edge, laces, a thick sole
+  c.poly([10, 159, 40, 159, 41, 170, 9, 170], "x"); c.hline(10, 159, 30, "z"); c.poly([9, 166, 41, 166, 41, 170, 9, 170], "w")
+  c.vline(10, 160, 6, "y"); c.hline(28, 162, 8, "n"); c.hline(30, 164, 6, "n"); c.hline(8, 169, 34, "l")
   // the trailing boot, heel up, toe down
-  c.poly([88, 154, 106, 154, 108, 160, 98, 168, 88, 168], "x"); c.hline(88, 154, 18, "y"); c.vline(88, 156, 12, "w")
+  c.poly([88, 154, 106, 154, 109, 160, 99, 169, 88, 168], "x"); c.hline(88, 154, 18, "y"); c.vline(88, 156, 11, "w")
+  c.hline(94, 157, 7, "n"); c.line(98, 164, 108, 160, "w")
 }
 const PIECE = { w: 140, h: 170, outline: "k" }   // 140 x 170 plus the 1 px outline = the 142 x 172 canvas
 sprite("mamuthone_body", PIECE,
@@ -135,7 +145,7 @@ sprite("mamuthone_body", PIECE,
   stamp("_fleece", 0, 0),
   forearm,
   // the bonfire's rim on the left edge of the mantle: warm leather, a fire pixel now and then
-  (c) => { for (let y = 38; y < 132; y++) for (let x = 0; x < 72; x++) if (c.is(x, y, "*") && !c.is(x, y, "k")) { if (y % 4 === 0) c.px(x, y, "r"); break } })
+  (c) => { for (let y = 38; y < 132; y++) for (let x = 0; x < 40; x++) if (c.is(x, y, "*") && !c.is(x, y, "k")) { if (y % 4 === 0) c.px(x, y, "r"); break } })
 sprite("mamuthone_back_bells", PIECE,
   (c) => { bell(c, 70, 14, 24, 27, 28); bell(c, 88, 30, 20, 23, 46); bell(c, 97, 50, 16, 19, 64) },
   line(60, 24, 94, 56, "m", 2))
@@ -143,5 +153,5 @@ sprite("mamuthone_front_bells", PIECE,
   line(26, 52, 62, 98, "n", 4), line(26, 52, 62, 98, "m", 1), line(28, 52, 64, 98, "o", 1),
   (c) => { [[32, 64], [42, 74], [52, 86], [38, 84], [48, 96]].forEach(([x, y], i) => bell(c, x, y, 12, 14, 0, i < 3)) })
 sprite("mamuthone_head", { w: 142, h: 172 }, stamp("_head", 17, 5))
-sprite("test_figure", { w: 142, h: 172 },
+sprite("_test_figure", { w: 142, h: 172 },
   stamp("mamuthone_body", 0, 0), stamp("mamuthone_back_bells", 0, 0), stamp("mamuthone_front_bells", 0, 0), stamp("mamuthone_head", 0, 0))
