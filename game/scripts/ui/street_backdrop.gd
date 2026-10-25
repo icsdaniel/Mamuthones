@@ -166,6 +166,7 @@ func _ready() -> void:
 		_cells.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
 		_cells.mouse_filter = Control.MOUSE_FILTER_IGNORE
 		_cells.set_anchors_preset(Control.PRESET_FULL_RECT)
+		_cells.material = _snap_material()
 		add_child(_cells)
 	else:
 		_still.set_anchors_preset(Control.PRESET_FULL_RECT)
@@ -194,6 +195,37 @@ func _ready() -> void:
 		_sparks.visible = false
 	resized.connect(_fit)
 	_fit()
+
+
+## Snaps every cell of the street to the one pixel-art palette (art/pixel/palette.png), so the smooth
+## light, the moving cobbles and the fire's glow are drawn in the same few colours as every other
+## picture, not in thousands. Nearest colour, no dither: bands read as pixel art; blends do not.
+const SNAP_SHADER := """
+shader_type canvas_item;
+uniform sampler2D palette : filter_nearest, repeat_disable;
+uniform int count = 78;
+void fragment() {
+	vec4 c = texture(TEXTURE, UV);
+	float best = 1e9;
+	vec3 pick = c.rgb;
+	for (int i = 0; i < 78; i++) {
+		vec3 p = texelFetch(palette, ivec2(i, 0), 0).rgb;
+		vec3 d = (c.rgb - p) * vec3(0.9, 1.0, 1.1);
+		float dd = dot(d, d);
+		if (dd < best) { best = dd; pick = p; }
+	}
+	COLOR = vec4(pick, c.a);
+}
+"""
+
+
+static func _snap_material() -> ShaderMaterial:
+	var m := ShaderMaterial.new()
+	var sh := Shader.new()
+	sh.code = SNAP_SHADER
+	m.shader = sh
+	m.set_shader_parameter("palette", load("res://art/pixel/palette.png"))
+	return m
 
 
 # ------------------------------------------------------------------ the picture on screen
