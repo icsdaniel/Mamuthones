@@ -1,0 +1,1 @@
+Vendored from https://github.com/crsolver/claude-pxl at 21fee41f7ecce00bc868d7567f24ffd0f3acc8fa (MIT). Run: node tools/art/pxl/bin/pxl.js build <file.px.js>
