@@ -354,6 +354,10 @@ func _settle() -> void:
 	await get_tree().process_frame
 	if lanes != null:
 		lanes.warm(session.notes.any(func(n: Note) -> bool: return n.kind == Note.Kind.BELL or n.kind == Note.Kind.RING))
+	if hud != null:
+		hud.warm()
+	if words != null:
+		words.warm(JUDGE_WORDS.values() + ["judge_one_thumb", "judge_wrong", "judge_still_kept"])
 	var until := Time.get_ticks_msec() + int(SETTLE_MAX * 1000.0)
 	var steady := 0
 	var last := Time.get_ticks_usec()

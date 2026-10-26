@@ -134,10 +134,18 @@ func _heart_pic(i: int, c: Vector2, pts: int, pulse: float, flare: float) -> voi
 				var b := _tex("heart_broken")
 				if b != null:
 					var up := PxArt.snap2(Vector2(0.0, -12.0 * a))
-					draw_texture_rect(b, Rect2(at + up, sz), false, Color(1, 1, 1, 1.0 - a))
+					draw_texture_rect(b, Rect2(at + up, Vector2(b.get_size()) * px), false, Color(1, 1, 1, 1.0 - a))
 
 
 static var _texs := {}
+
+
+## Makes every heart picture before the song (a broken heart was first made mid-song on the first
+## lost point).
+static func warm() -> void:
+	if _pictures():
+		for k in ["heart_full", "heart_empty", "heart_crack", "heart_broken"]:
+			_tex(k)
 
 ## A heart picture shrunk to HEART_CELLS, every texel wholly in or out (made once).
 static func _tex(key: String) -> Texture2D:
@@ -149,7 +157,8 @@ static func _tex(key: String) -> Texture2D:
 			var img: Image = (r as Image).duplicate() if r is Image else (r as Texture2D).get_image()
 			img.decompress()
 			img.convert(Image.FORMAT_RGBA8)
-			img.resize(HEART_CELLS.x, HEART_CELLS.y, Image.INTERPOLATE_LANCZOS)
+			# at its own proportions (the broken heart is wider than the others)
+			img.resize(HEART_CELLS.x, maxi(1, roundi(HEART_CELLS.x * float(img.get_height()) / img.get_width())), Image.INTERPOLATE_LANCZOS)
 			for y in img.get_height():
 				for x in img.get_width():
 					var c := img.get_pixel(x, y)

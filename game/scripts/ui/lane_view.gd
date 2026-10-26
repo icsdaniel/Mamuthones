@@ -1535,6 +1535,7 @@ func warm(bells: bool) -> void:
 		for key in ["btn_idle", "btn_pressed"]:
 			_nine(key, cr, BTN_CAP)
 		_nine("btn_idle!white", cr + Vector2i(2, 2), BTN_CAP)
+	StreetSkin.warm_notes(self, field_rect())
 	if bells:
 		StreetSkin.warm(self, field_rect())
 
@@ -1619,29 +1620,43 @@ func _draw_crates() -> void:
 	for lane in 3:
 		var br := _button_rect(lane)
 		var st := _button_state(lane)
-		var cells := _button_cells(lane) + Vector2i(0, PX_LIFT)
+		var slot := _button_cells(lane) + Vector2i(0, PX_LIFT)
 		var down_pic := st == "pressed" or st == "hit"
 		var key := "crate_%s_%d" % ["pressed" if down_pic else "idle", lane]
+		var cells := _crate_cells(lane, key)
 		var mod := {"idle": Color.WHITE, "cued": Color(1.2, 1.1, 0.92), "pressed": Color.WHITE,
 			"hit": Color(1.35, 1.2, 0.9), "miss": Color(0.95, 0.5, 0.45)}[st] as Color
-		var o := br.position
+		var o := br.position + Vector2(float((slot.x - cells.x) / 2), float(slot.y - cells.y)) * p
 		if st == "cued" or st == "hit":
 			var glow := Color("#fff2c0") if st == "hit" else Color("#ffc445")
-			var sil := StreetSkin.ai_tex("crate_idle_%d!white" % lane, cells + Vector2i(2, 2))
+			var ic := _crate_cells(lane, "crate_idle_%d" % lane)
+			var sil := StreetSkin.ai_tex("crate_idle_%d!white" % lane, ic + Vector2i(2, 2))
 			if sil != null:
-				draw_texture_rect(sil, Rect2(o - Vector2(p, p), Vector2(cells + Vector2i(2, 2)) * p), false, Color(glow, 0.8))
+				var io := br.position + Vector2(float((slot.x - ic.x) / 2), float(slot.y - ic.y)) * p
+				draw_texture_rect(sil, Rect2(io - Vector2(p, p), Vector2(ic + Vector2i(2, 2)) * p), false, Color(glow, 0.8))
 		var tex := StreetSkin.ai_tex(key, cells)
 		if tex != null:
 			draw_texture_rect(tex, Rect2(o, Vector2(cells) * p), false, mod)
 
 
+## A crate picture's size in cells: its button's slot, the picture at its own proportions inside it
+## (never stretched: Daniele, 2026-10-26), standing on the slot's floor.
+func _crate_cells(lane: int, key: String) -> Vector2i:
+	var slot := _button_cells(lane) + Vector2i(0, PX_LIFT)
+	var asp := StreetSkin.ai_aspect(key)
+	if asp <= 0.0:
+		return slot
+	if float(slot.x) / float(slot.y) > asp:
+		return Vector2i(roundi(slot.y * asp), slot.y)
+	return Vector2i(slot.x, roundi(slot.x / asp))
+
+
 ## Paints every crate picture at its size before the song (each was a hitch on its first press).
 func _warm_crates() -> void:
 	for lane in 3:
-		var cells := _button_cells(lane) + Vector2i(0, PX_LIFT)
 		for k in ["idle", "pressed"]:
-			StreetSkin.ai_tex("crate_%s_%d" % [k, lane], cells)
-		StreetSkin.ai_tex("crate_idle_%d!white" % lane, cells + Vector2i(2, 2))
+			StreetSkin.ai_tex("crate_%s_%d" % [k, lane], _crate_cells(lane, "crate_%s_%d" % [k, lane]))
+		StreetSkin.ai_tex("crate_idle_%d!white" % lane, _crate_cells(lane, "crate_idle_%d" % lane) + Vector2i(2, 2))
 
 
 ## A bare footprint (left foot for -1, right for 1): the sole and five toes.

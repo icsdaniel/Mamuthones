@@ -123,7 +123,7 @@ func setup(p_session: Session, p_ghost: Ghost) -> void:
 	_unison = Label.new()
 	_unison.name = "Unison"
 	pstyle(_unison, 60, GOLD_INK, true, 8)
-	PxType.label(_unison, "num_gold")
+	PxType.label(_unison, "num_white")
 	_unison.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	_unison.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
 	_unison.mouse_filter = Control.MOUSE_FILTER_IGNORE
@@ -289,6 +289,22 @@ static func sliced(key: String, cells: Vector2i) -> Texture2D:
 	return tex
 
 
+static var _aspects := {}
+
+
+## Picture key's width over its height (1 when there is none).
+static func _aspect(key: String) -> float:
+	if not _aspects.has(key):
+		var path := "res://art/ai/%s.webp" % key
+		var a := 1.0
+		if ResourceLoader.exists(path):
+			var img := StreetSkin.ai_image(path)
+			if img != null and img.get_height() > 0:
+				a = float(img.get_width()) / img.get_height()
+		_aspects[key] = a
+	return _aspects[key]
+
+
 ## Draws picture `key` over r (base px), snapped to whole cells.
 func _picture(ci: CanvasItem, key: String, r: Rect2, mod := Color.WHITE) -> void:
 	var px := PxArt.PX
@@ -304,6 +320,9 @@ func _panel(ci: CanvasItem, r: Rect2, glow := 1.0) -> void:
 	# the plate's diamonds stand out past the frame's points, as the drawn ones did
 	var grow := r.size.y * 0.16
 	var rr := r.grow_individual(grow, grow * 0.35, grow, grow * 0.35)
+	# the plate at its own proportions (never stretched: Daniele, 2026-10-26), as wide as its box
+	var ph := rr.size.x / _aspect("hud_plate")
+	rr = Rect2(rr.position.x, rr.get_center().y - ph * 0.5, rr.size.x, ph)
 	_glow_round(ci, rr, glow)
 	_picture(ci, "hud_plate", rr)
 
@@ -409,7 +428,8 @@ func _glow_round(ci: CanvasItem, r: Rect2, glow: float) -> void:
 func _diamond(ci: CanvasItem, at: Vector2, r: float, col := EDGE_HOT) -> void:
 	# Daniele's stud, tinted toward the badge's colour when it is not plain gold
 	var tint := Color.WHITE if col == EDGE_HOT else Color.WHITE.lerp(col, 0.5) * 1.2
-	_picture(ci, "hud_stud", Rect2(at - Vector2(r, r) * 1.25, Vector2(r, r) * 2.5), tint)
+	var sz := Vector2(r * 2.5 * 52.0 / 56.0, r * 2.5)   # its own proportions (cut_sheets.py)
+	_picture(ci, "hud_stud", Rect2(at - sz * 0.5, sz), tint)
 
 
 func _draw_frames() -> void:
@@ -422,8 +442,10 @@ func _draw_frames() -> void:
 	var a := _to_frames(Vector2(line.x + 14.0, line.z))
 	var e := _to_frames(Vector2(line.y - 14.0, line.z))
 	# Daniele's bar, its groove filling with a glowing rod as the song goes on
-	var bh := 21.0
-	var bar := Rect2(Vector2(line.x, line.z - bh * 0.5), Vector2(line.y - line.x, bh))
+	# at its own proportions (never stretched): as long as it is for this height, centred on the line
+	var bh := 24.0
+	var bl := minf(line.y - line.x, bh * _aspect("hud_bar"))
+	var bar := Rect2(Vector2((line.x + line.y - bl) * 0.5, line.z - bh * 0.5), Vector2(bl, bh))
 	_picture(ci, "hud_bar", bar)
 	var px := PxArt.PX
 	var g0 := PxArt.snap2(Vector2(bar.position.x + bh * 0.9, line.z - px))
@@ -477,30 +499,33 @@ func _draw_badge(ci: CanvasItem, b: Array) -> void:
 	var hx := PackedVector2Array()
 	for q in [Vector2(0.0, -0.5), Vector2(0.5, -0.24), Vector2(0.5, 0.24), Vector2(0.0, 0.5), Vector2(-0.5, 0.24), Vector2(-0.5, -0.24)]:
 		hx.append(ctr + q * r.size * sc)
-	var key := "hud_badge_%d" % (FireTiers.tier_of(Session.UNISON_MULTS[clampi(lvl, 0, Session.UNISON_MULTS.size() - 1)]) + 1)
+	var key := _badge_key(lvl)
 	if ResourceLoader.exists("res://art/ai/%s.webp" % key):
 		# Daniele's ChatGPT badge for the tier (x1 dark bronze .. x4 gold and fire), its lettering
-		# taken out: the multiplier is written over it. A warm glow round it, swelling on a gain.
-		var bh := r.size.y * 1.12 * sc
-		var bw := bh * 36.0 / 41.0
-		_glow_round(ci, Rect2(ctr - Vector2(bw, bh) * 0.5, Vector2(bw, bh)), 1.0 + 0.8 * float(lvl) + 2.0 * fl + 1.5 * _bounce)
-		_picture(ci, key, Rect2(ctr - Vector2(bw, bh) * 0.5, Vector2(bw, bh)), Color(1.0 + 0.4 * fl, 1.0 + 0.3 * fl, 1.0 + 0.2 * fl))
-		hx = PackedVector2Array()
-		for q in [Vector2(0.0, -0.5), Vector2(0.5, -0.25), Vector2(0.5, 0.25), Vector2(0.0, 0.5), Vector2(-0.5, 0.25), Vector2(-0.5, -0.25)]:
-			hx.append(ctr + q * Vector2(bw, bh) * 0.92)
+		# taken out: the multiplier is written over it. It takes one of two sizes made before the song
+		# (warm()): its own, and two art px taller on the beat, so it never shimmers. A warm glow round
+		# it, swelling on a gain.
+		var cells := _badge_cells(lvl, _bounce_up())
+		var px := PxArt.PX
+		var at := PxArt.snap2(ctr - Vector2(cells) * px * 0.5)
+		var br := Rect2(at, Vector2(cells) * px)
+		_glow_round(ci, br, 1.0 + 0.8 * float(lvl) + 2.0 * fl + 1.5 * _bounce)
+		var tex := sliced(key, cells)
+		if tex != null:
+			ci.draw_texture_rect(tex, br, false, Color(1.0 + 0.4 * fl, 1.0 + 0.3 * fl, 1.0 + 0.2 * fl))
 	else:
 		_shape(ci, hx, 1.0 + 0.8 * float(lvl) + 2.0 * fl + 1.5 * _bounce, pal)
-	if _streak > 0.0:
-		var p0 := _to_frames(hx[4])
-		var p1 := _to_frames(hx[3])
-		var p2 := _to_frames(hx[2])
-		var k := clampf(_streak, 0.0, 1.0) * 2.0
-		var q := p0.lerp(p1, minf(k, 1.0))
-		ci.draw_line(p0, q, pal[1], 5.0)
-		if k > 1.0:
-			ci.draw_line(p1, p1.lerp(p2, k - 1.0), pal[1], 5.0)
-	for p in ([] if ResourceLoader.exists("res://art/ai/hud_badge_1.webp") else [hx[0], hx[3]]):
-		_diamond(ci, p, 8.0 * sc, Color.WHITE.lerp(pal[1], 1.0 - fl))
+		if _streak > 0.0:
+			var p0 := _to_frames(hx[4])
+			var p1 := _to_frames(hx[3])
+			var p2 := _to_frames(hx[2])
+			var k := clampf(_streak, 0.0, 1.0) * 2.0
+			var q := p0.lerp(p1, minf(k, 1.0))
+			ci.draw_line(p0, q, pal[1], 5.0)
+			if k > 1.0:
+				ci.draw_line(p1, p1.lerp(p2, k - 1.0), pal[1], 5.0)
+		for p in [hx[0], hx[3]]:
+			_diamond(ci, p, 8.0 * sc, Color.WHITE.lerp(pal[1], 1.0 - fl))
 	# the little spurs at its foot (the pixel look's badge stands on its own: they read as stray marks)
 	for sx: float in []:
 		var c := _to_frames(Vector2(ctr.x + sx * (r.size.x * 0.5 * sc + 10.0), ctr.y + r.size.y * 0.5 * sc - 8.0))
@@ -523,18 +548,45 @@ func _tier(level: int) -> Array:
 	return tiers[clampi(level, 0, tiers.size() - 1)].duplicate()
 
 
-## The badge's size now: bigger at each unison level, and a bounce on every beat (smaller with
-## reduced motion).
+## The badge's size now: bigger at each unison level, and a step up on every beat (none with
+## reduced motion). It steps between two whole sizes, never in between.
 func badge_scale() -> float:
 	var lvl := session.unison_level if session != null else 0
+	if ResourceLoader.exists("res://art/ai/%s.webp" % _badge_key(lvl)):
+		return float(_badge_cells(lvl, _bounce_up()).y) / float(_badge_cells(0, false).y)
 	return (1.0 + 0.07 * float(lvl)) * (1.0 + (0.05 + 0.025 * float(lvl)) * _bounce)
+
+
+func _bounce_up() -> bool:
+	return _bounce > 0.45
+
+
+func _badge_key(lvl: int) -> String:
+	return "hud_badge_%d" % (FireTiers.tier_of(Session.UNISON_MULTS[clampi(lvl, 0, Session.UNISON_MULTS.size() - 1)]) + 1)
+
+
+## The badge picture's size in cells at unison level lvl (up: on the beat, two art px taller).
+func _badge_cells(lvl: int, up: bool) -> Vector2i:
+	var hc := roundi(BADGE.y * 1.12 * (1.0 + 0.07 * float(lvl)) / PxArt.PX) + (2 if up else 0)
+	return Vector2i(roundi(hc * 36.0 / 41.0), hc)
+
+
+## Makes, before the song, every picture the HUD would otherwise make the first time it is needed
+## mid-song: the badge at every level in its two sizes, the studs, the hearts.
+func warm() -> void:
+	for lvl in Session.UNISON_MULTS.size():
+		for up in [false, true]:
+			sliced(_badge_key(lvl), _badge_cells(lvl, up))
+	for r in [8.0]:
+		sliced("hud_stud", Vector2i((Vector2(r * 2.5 * 52.0 / 56.0, r * 2.5) / PxArt.PX).round()))
+	HealthPips.warm()
 
 
 ## The pause button: two bars in a small carved hexagon.
 func _draw_pause() -> void:
 	var down := _pause.button_pressed or _pause.is_hovered()
 	var c := _pause.size * 0.5 + (Vector2(0, DEPTH * 0.5) if down else Vector2.ZERO)
-	var sz := Vector2(48.0, 53.0)
+	var sz := Vector2(51.0, 51.0)   # square, as drawn
 	_picture(_pause, "hud_pause", Rect2(c - sz * 0.5, sz), Color(0.8, 0.8, 0.8) if down else Color.WHITE)
 
 

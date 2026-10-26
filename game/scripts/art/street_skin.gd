@@ -31,16 +31,17 @@ const K_UP := [Color("#ff9c8c"), Color("#c8282a"), Color("#5e0c10"), Color("#ff5
 const K_OFF := [Color("#d8b4ff"), Color("#8a3fd8"), Color("#461a7a"), Color("#b070ff")]   ## the pixel look's off-beat step
 const K_SIX := [Color("#ffffff"), Color("#d2d8e8"), Color("#6c7490"), Color("#eef2ff")]   ## ... a sixteenth (Expert): silver
 const K_FREE := [Color("#c4fff4"), Color("#14c8b0"), Color("#07625a"), Color("#30f0d8")]   ## ... an off-grid note (between the sixteenths): teal
-const K_CALL := [Color("#ffb0d8"), Color("#e0408c"), Color("#7a1446"), Color("#ff70b0")]  ## ... and its call
+const K_CALL := [Color("#ffb0a0"), Color("#e0242a"), Color("#7a1c0a"), Color("#ff5a42")]  ## ... and its call: a true red (pink read as the off-beat's violet)
 const K_DOWN := [Color("#a4b6ff"), Color("#3450c0"), Color("#141e5e"), Color("#6080ff")]
 const DISC_R := 0.4                  ## a pintadera's radius, in lane widths
 const OFF_R := 0.3                   ## ... an off-beat step's or a call's
 const STOMP_R := 0.48                ## ... a stomp's
+const SIX_SCALE := 0.8               ## a sixteenth's coin, of a step's (the pictures)
 const DISC_H := 0.1                  ## how thick a disc stands, in lane widths
 const FORE := 0.42                   ## how much the road's depth is foreshortened on screen
 const SIDES := 24                    ## a disc's facets round its edge
 const ROPE_W := 0.2                  ## the rope's width, in lane widths
-const ROPE_PIC_W := 18                ## cells across the rope's picture is shrunk to (the pixel look)
+const ROPE_PIC_W := 16                ## cells across the rope's picture is shrunk to (the pixel look)
 const STRAP_D := 0.42                ## the bell strap's depth along the road, in lane widths
 ## Bursts and sparks are drawn as opaque pixel shapes (no soft glows or fades, which turn to mud on the
 ## pixel grid): flashes, stamped rings and square embers.
@@ -313,8 +314,9 @@ static func _bell_size(lv: LaneView, field: Rect2, y: float) -> Dictionary:
 ## width in steps of 8 cells.
 static func bar_cells(quad: PackedVector2Array) -> Vector2i:
 	var w := quad[1].x - quad[0].x
-	var tall := quad[2].y - quad[1].y
-	return Vector2i(maxi(8, roundi(w / PxArt.PX / 8.0) * 8), maxi(3, roundi(tall / PxArt.PX)))
+	var cw := maxi(8, roundi(w / PxArt.PX / 8.0) * 8)
+	var asp := ai_aspect("bar_up")
+	return Vector2i(cw, maxi(2, roundi(cw / asp))) if asp > 0.0 else Vector2i(cw, maxi(3, roundi((quad[2].y - quad[1].y) / PxArt.PX)))
 
 
 ## The pixel look's note from its picture: the picture stretched over the disc it stands for (r lane
@@ -330,6 +332,39 @@ static func ai_disc(lv, field: Rect2, cx: float, y: float, r: float, key: String
 	var f := _frame3(lv, field, cx, y, r * lane, 2.0 * r * lw * FORE)
 	if alpha <= 0.01 or lw < 2.0:
 		return true
+	var box := _fit(key, _disc_box(f, h))
+	var lo: Vector2 = box[0]
+	var hi: Vector2 = box[1]
+	if paint_glow:
+		disc_glow(lv, f.call(Vector3.ZERO), r * lw, K_STEP if key == "note_step" else K_HOLD, alpha, glow)
+	ai_draw(lv, key, lo, hi, Color(1.0, 1.0, 1.0, alpha))
+	return true
+
+
+## The box lo..hi narrowed to picture key's own proportions: as wide, its height from the picture,
+## about the same middle (Daniele, 2026-10-26: the art is never stretched; the coins are drawn in
+## their own perspective, not squashed flat to the road's).
+static func _fit(key: String, box: Array) -> Array:
+	var asp := ai_aspect(key)
+	if asp <= 0.0:
+		return box
+	var lo: Vector2 = box[0]
+	var hi: Vector2 = box[1]
+	var c := (lo + hi) * 0.5
+	var half := Vector2(hi.x - lo.x, (hi.x - lo.x) / asp) * 0.5
+	return [c - half, c + half]
+
+
+## Picture key's width over its height (0 when there is none).
+static func ai_aspect(key: String) -> float:
+	ai_tex(key, Vector2i.ONE)
+	var img: Image = _ai.get(key)
+	if img == null or img.get_height() == 0:
+		return 0.0
+	return float(img.get_width()) / float(img.get_height())
+
+
+static func _disc_box(f: Callable, h: float) -> Array:
 	var lo := Vector2(INF, INF)
 	var hi := -lo
 	for level: float in [0.0, h]:
@@ -338,14 +373,52 @@ static func ai_disc(lv, field: Rect2, cx: float, y: float, r: float, key: String
 			var q: Vector2 = f.call(Vector3(cos(an), level, sin(an)))
 			lo = lo.min(q)
 			hi = hi.max(q)
-	if paint_glow:
-		disc_glow(lv, f.call(Vector3.ZERO), r * lw, K_STEP if key == "note_step" else K_HOLD, alpha, glow)
-	ai_draw(lv, key, lo, hi, Color(1.0, 1.0, 1.0, alpha))
-	return true
+	return [lo, hi]
+
+
+## Shrinks, before the song, every note picture at every size it takes sliding down each lane to a
+## little past the hit line (each size was otherwise made the first time a note reached it, mid-song).
+static func warm_notes(lv, field: Rect2) -> void:
+	if ai_tex("note_step", Vector2i.ONE) == null:
+		return
+	var lane := _lane(field)
+	var kinds := [["note_step", DISC_R, DISC_H], ["note_offbeat", DISC_R, DISC_H], ["note_call", DISC_R, DISC_H],
+		["note_heal", DISC_R, DISC_H], ["note_six", DISC_R * SIX_SCALE, DISC_H], ["note_hold", DISC_R, DISC_H],
+		["note_stomp", STOMP_R, DISC_H * 1.6], ["knot", ROPE_W * 1.35, ROPE_W * 0.9]]
+	var end := LaneSkin.hit_line_y(field) + lane * 1.2
+	var done := {}
+	for li in 3:
+		var cx := lane * (float(li) + 0.5)
+		var y := 0.0
+		while y < end:
+			var lw: float = lv.road_scale(y) * lane
+			if lw >= 2.0:
+				for k: Array in kinds:
+					var r: float = k[1]
+					var f := _frame3(lv, field, cx, y, r * lane, 2.0 * r * lw * FORE)
+					var box := _fit(k[0], _disc_box(f, k[2]))
+					var cells := ai_cells(box[0], box[1])
+					var dk := "%s_%d_%d" % [k[0], cells.x, cells.y]
+					if not done.has(dk):
+						done[dk] = true
+						ai_tex(k[0], cells)
+			y += 3.0
 
 
 ## Picture `key` over the box lo..hi in whole cells: shrunk to the cells it covers, drawn one to one.
 static func ai_draw(ci: CanvasItem, key: String, lo: Vector2, hi: Vector2, mod := Color.WHITE) -> void:
+	# never stretched (Daniele, 2026-10-26): the picture at its own proportions inside the box,
+	# across its middle and standing on its floor
+	var asp := ai_aspect(key)
+	if asp > 0.0 and hi.y > lo.y and hi.x > lo.x:
+		var w := hi.x - lo.x
+		var h := hi.y - lo.y
+		if w / h > asp:
+			var cx := (lo.x + hi.x) * 0.5
+			lo.x = cx - h * asp * 0.5
+			hi.x = cx + h * asp * 0.5
+		else:
+			lo.y = hi.y - w / asp
 	var px := PxArt.PX
 	var cells := ai_cells(lo, hi)
 	var tex := ai_tex(key, cells)
@@ -464,7 +537,8 @@ static func step(lv, field: Rect2, cx: float, y: float, alpha: float, small := f
 	# the pixel look keeps every tap round and full size; the kind shows in its colour: blue on
 	# the beat, violet on the half-beat (or a triplet), silver on a sixteenth, pink for a call
 	var k: Array = K_CALL if call else (K_FREE if free else (K_SIX if six else (K_OFF if small else K_STEP)))
-	if ai_disc(lv, field, cx, y, DISC_R, "call" if call else ("free" if free else ("six" if six else ("offbeat" if small else "step"))), alpha):
+	# (a sixteenth's coin is smaller and plainer than a step's, so it never reads as a hold or a stomp)
+	if ai_disc(lv, field, cx, y, DISC_R * (SIX_SCALE if six and not call and not free else 1.0), "call" if call else ("free" if free else ("six" if six else ("offbeat" if small else "step"))), alpha):
 		return
 	var top := disc(lv, field, cx, y, DISC_R, k, alpha)
 	_pintadera(lv, top, lw, CREAM, 0.92 * alpha)
@@ -591,11 +665,12 @@ static func _rope_sparks(lv: LaneView, f: Callable, h: float, yb: float, lane: f
 ## picture repeats down the road, its twist fixed to the rope's far end (the hold's end) so it travels
 ## with it. False when there is no picture.
 static func _rope_pic(lv: LaneView, f: Callable, ya: float, yb: float, lane: float, lit: bool, alpha: float) -> bool:
-	var tex := ai_tex("rope", Vector2i(ROPE_PIC_W, roundi(ROPE_PIC_W * 794.0 / 143.0)))
-	if tex == null:
+	var asp := ai_aspect("rope")
+	if asp <= 0.0:
 		return false
+	var tex := ai_tex("rope", Vector2i(ROPE_PIC_W, roundi(ROPE_PIC_W / asp)))
 	# one picture's length along the road, flat px: its own shape, at the rope's width, foreshortened
-	var tile := lane * ROPE_W * (794.0 / 143.0) * 0.5 / FORE
+	var tile := lane * ROPE_W / asp * 0.5 / FORE
 	var span := maxf(yb - ya, 1.0)
 	var mod := Color(1.0, 1.0, 1.0, alpha) if lit else Color(0.85, 0.85, 0.85, alpha)
 	# in pieces that never cross a picture's end, so each piece maps into the one picture
@@ -671,12 +746,17 @@ static func bell(lv: LaneView, field: Rect2, y: float, up: bool, alpha := 1.0, p
 static func _bell_pic(lv: LaneView, f: Callable, h: float, lane: float, lw: float, y: float, up: bool, alpha: float, hot: bool, cowbells: bool) -> void:
 	var mod := Color(1.45, 1.4, 1.3, alpha) if hot else Color(1.0, 1.0, 1.0, alpha)
 	var quad := PackedVector2Array([f.call(Vector3(-1, h, -1)), f.call(Vector3(1, h, -1)), f.call(Vector3(1, 0, 1)), f.call(Vector3(-1, 0, 1))])
-	var tall := quad[2].y - quad[1].y
-	var tex := ai_tex("bar_up" if up else "bar_down", bar_cells(quad))
-	lv.draw_polygon(quad, PackedColorArray([mod, mod, mod, mod]), PackedVector2Array([Vector2(0, 0), Vector2(1, 0), Vector2(1, 1), Vector2(0, 1)]), tex)
+	# the beam at its own proportions (never stretched), as wide as the road, standing on the strap's
+	# near edge
+	var cells := bar_cells(quad)
+	var tex := ai_tex("bar_up" if up else "bar_down", cells)
+	var px := PxArt.PX
+	var o := PxArt.snap2(Vector2((quad[0].x + quad[1].x) * 0.5 - cells.x * px * 0.5, quad[2].y - cells.y * px))
+	lv.draw_texture_rect(tex, Rect2(o, Vector2(cells) * px), false, mod)
 	if lw < 6.0:
 		return
-	var top := (quad[0].y + quad[2].y) * 0.5 - h * lw
+	var tall := cells.y * px
+	var top := o.y + tall * 0.5
 	for i in (2 if cowbells else 0):
 		var at := Vector2(lv.project(Vector2(lane * float(i + 1), y)).x, top + tall * 0.25)
 		var s := lw * 0.34

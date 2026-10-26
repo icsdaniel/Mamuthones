@@ -5,9 +5,10 @@
 notes.png    -> game/art/ai/note_{step,offbeat,call,heal,six}.webp (blue, violet, red bell, green,
                 bone-white: the sheet's plain row), note_hold (the bone-white coin in bronze) and
                 note_stomp (the bone-white coin in black cloth, its emblem in bone)
-controls.png -> crate_{idle,pressed}_{0,1,2}.webp (the step crates, feet carved in), bar_up / bar_down
-                (the red and blue tilt beams, lengthened, their own arrow cut out as
-                bar_arrow; their bells are too small, bar_bell stays the game's), rope.webp (the segment, repeated), knot.webp
+controls.png -> crate_{idle,pressed}_{0,1,2}.webp (the step crates, feet carved in; the idle ones'
+                feet lightened to bone), bar_up / bar_down (the red and blue tilt beams as drawn,
+                their own arrow cut out as bar_arrow; their bells are too small, bar_bell stays the
+                game's). The rope and knot: hemp.py
 hud_kit.png  -> hud_plate, hud_badge_{1..4} (x1..x4 with the lettering taken out: the game writes
                 the multiplier), hud_pause, hud_bar, hud_stud, heart_{full,empty,crack,broken},
                 hud_combo, hud_seal, judge_plate (a judgement banner with its word taken out)
@@ -125,12 +126,70 @@ def notes():
     names = ["note_step", "note_offbeat", "note_call", "note_heal", "note_six"]
     for (l, r), name in zip(xs, names):
         p = cut(s, (l - 8, 65, r + 8, 356), f)
-        c.save(p, os.path.join(AI, name + ".webp"), K)
         if name == "note_six":
             white = p
+            p = plain_face(p)
+        if name == "note_call":
+            # the sheet's bell coin is magenta-pink, too near the off-beat's violet at a distance:
+            # a true red face with a bone-white bell (review of round 1)
+            p = swap(p, {"#701a46": "#a8161c", "#e0408c": "#e2d6ca", "#ffacd0": "#fbf3e8"})
+        c.save(p, os.path.join(AI, name + ".webp"), K)
     c.save(recolour_face(white, ["#4a2c0e", "#8a5a1c", "#c0683a", "#d8802e", "#fba832"]), os.path.join(AI, "note_hold.webp"), K)
-    c.save(recolour_face(white, ["#120e0e", "#251e1f", "#3a3132"], invert=True, emblem=["#a89ea6", "#e2d6ca", "#fbf3e8"]),
-        os.path.join(AI, "note_stomp.webp"), K)
+    stomp = recolour_face(white, ["#120e0e", "#251e1f", "#3a3132"], invert=True, emblem=["#a89ea6", "#e2d6ca", "#fbf3e8"])
+    c.save(iron_rim(stomp), os.path.join(AI, "note_stomp.webp"), K)
+
+
+def swap(a, table):
+    out = a.copy()
+    for k, v in table.items():
+        m = (a[..., :3] == np.array(c._rgb(k), np.uint8)).all(-1) & (a[..., 3] > 0)
+        out[m, :3] = c._rgb(v)
+    return out
+
+
+def _face(a, hexes):
+    lin = np.zeros(a.shape[:2], bool)
+    for hx in hexes:
+        lin |= (a[..., :3] == np.array(c._rgb(hx), np.uint8)).all(-1)
+    face = ndimage.binary_fill_holes(cv2.morphologyEx(lin.astype(np.uint8), cv2.MORPH_CLOSE, np.ones((5, 5), np.uint8)) > 0)
+    lab, n = ndimage.label(face)
+    if n > 1:
+        sizes = ndimage.sum(face, lab, range(1, n + 1))
+        face = lab == (sizes.argmax() + 1)
+    return face
+
+
+def plain_face(a):
+    """The sixteenth: the bone coin with its emblem taken out, a plain bone face with a thin grey
+    ring inside the rim and one small dot (it is drawn smaller too: StreetSkin.step)."""
+    face = _face(a, ["#6e6672", "#a89ea6", "#e2d6ca", "#fbf3e8"])
+    out = a.copy()
+    out[face, :3] = c._rgb("#e2d6ca")
+    inner = cv2.erode(face.astype(np.uint8), np.ones((3, 3), np.uint8)) > 0
+    out[face & ~inner, :3] = c._rgb("#a89ea6")
+    top = cv2.erode(face.astype(np.uint8), np.ones((5, 5), np.uint8)) > 0
+    ys, xs = np.nonzero(face)
+    cy, cx = int(ys.mean()), int(xs.mean())
+    yy, xx = np.mgrid[:a.shape[0], :a.shape[1]]
+    hi = face & (yy < cy - 0.35 * (ys.max() - ys.min())) & top
+    out[hi, :3] = c._rgb("#fbf3e8")
+    dot = (np.abs(yy - cy) <= 1) & (np.abs(xx - cx) <= 2)
+    out[dot & face, :3] = c._rgb("#6e6672")
+    return out
+
+
+def iron_rim(a):
+    """The stomp's bronze rim turned to dark iron (by lightness), its face kept: so the stomp, the
+    hold (bronze face) and the sixteenth (bone face) never read alike."""
+    face = _face(a, ["#120e0e", "#251e1f", "#3a3132", "#a89ea6", "#e2d6ca", "#fbf3e8"])
+    rim = (a[..., 3] > 0) & ~face
+    L = lum(a)
+    ramp = np.array([c._rgb(x) for x in ["#07060a", "#1a1420", "#3a3132", "#6e6672", "#a89ea6", "#e2d6ca"]], np.uint8)
+    lo, hi = L[rim].min(), L[rim].max()
+    q = np.clip((L - lo) / max(hi - lo, 1e-3), 0, 0.999)
+    out = a.copy()
+    out[rim, :3] = ramp[(q[rim] * len(ramp)).astype(int)]
+    return out
 
 
 def controls():
@@ -140,6 +199,8 @@ def controls():
     for row, (t, b), kind in [(0, (91, 421), "idle"), (1, (473, 791), "pressed")]:
         for i, (l, r) in enumerate(crates):
             p = cut(s, (l - 6, t - 6, r + 6, b + 6), f)
+            if kind == "idle":
+                p = bone_feet(p)
             c.save(p, os.path.join(AI, "crate_%s_%d.webp" % (kind, i)), K)
     # the beams: the red one tilts up, the blue one down
     for name, (t, b) in [("bar_up", (823, 928)), ("bar_down", (952, 1057))]:
@@ -150,11 +211,33 @@ def controls():
             # (its bells are 13 x 16 art px, too small to read once shrunk on the road: the
             # game keeps its own bar_bell picture; bell_of() is kept for a later, bigger cut)
             c.save(arrow_of(p), os.path.join(AI, "bar_arrow.webp"), K)
-        c.save(lengthen(p, 14.0), os.path.join(AI, name + ".webp"), K)
-    seg = cut(s, (1130, 845, 1192, 1018), f)
-    reps = max(2, round(5.5 * seg.shape[1] / seg.shape[0]))
-    c.save(np.concatenate([seg] * reps, 0), os.path.join(AI, "rope.webp"), K)
-    c.save(cut(s, (1236, 885, 1340, 975), f), os.path.join(AI, "knot.webp"), K)
+        # as drawn: never lengthened (Daniele, 2026-10-26: the art is never stretched); the game
+        # fits it to the road's width at its own proportions
+        c.save(p, os.path.join(AI, name + ".webp"), K)
+    # (the rope and its knot are drawn by hemp.py: the sheet's were too small)
+
+
+def bone_feet(p):
+    """The idle crate's carved feet lightened to bone with a dark outline, so left / both / right
+    read at a glance on the brown lid (the pressed crate keeps its glowing orange feet)."""
+    h, w = p.shape[:2]
+    peach = np.zeros((h, w), bool)
+    for hx in ["#ecb894", "#c48262", "#e8975a", "#f6c48a"]:
+        peach |= (p[..., :3] == np.array(c._rgb(hx), np.uint8)).all(-1)
+    peach[int(h * 0.62):] = False
+    lab, n = ndimage.label(peach)
+    sizes = ndimage.sum(peach, lab, range(1, n + 1))
+    feet = np.isin(lab, [i + 1 for i, sz in enumerate(sizes) if sz >= 6])
+    feet = ndimage.binary_fill_holes(cv2.morphologyEx(feet.astype(np.uint8), cv2.MORPH_CLOSE, np.ones((3, 3), np.uint8)) > 0) & (p[..., 3] > 0)
+    out = p.copy()
+    L = lum(p)
+    ramp = np.array([c._rgb(x) for x in ["#a89ea6", "#e2d6ca", "#e2d6ca", "#fbf3e8"]], np.uint8)
+    lo, hi = L[feet].min(), L[feet].max()
+    q = np.clip((L - lo) / max(hi - lo, 1e-3), 0, 0.999)
+    out[feet, :3] = ramp[(q[feet] * len(ramp)).astype(int)]
+    ring = (cv2.dilate(feet.astype(np.uint8), np.ones((3, 3), np.uint8)) > 0) & ~feet & (p[..., 3] > 0)
+    out[ring, :3] = c._rgb("#1a0e0a")
+    return out
 
 
 def bell_of(p):
