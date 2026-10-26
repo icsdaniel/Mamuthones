@@ -1,13 +1,13 @@
 @tool
 class_name Logo
 extends Control
-## The game's mark in pixel art (tools/art/pixel/logo.py), drawn at the largest whole multiple that
-## fits, with nearest filtering:
-##   mode "full"   the whole logo: the hooded Mamuthone, bells, the soha, the MAMUTHONES word mark, the
-##                 banner (the translated subtitle is written on it) and the bonfire lozenge
-##   mode "title"  the word mark alone with the subtitle under it between gold rules and red lozenges,
-##                 as on the title screen's sky
-##   mode "mark"   the hooded mask with its bells (a seal)
+## The game's mark: Daniele's ChatGPT logo (tools/art/chatgpt/setup.py), the carved mask with two
+## bells over the SONAZZOS word mark, drawn at the largest whole multiple that fits, with nearest
+## filtering:
+##   mode "full"   the whole logo, the translated subtitle under it between gold rules
+##   mode "title"  the same (the word sits over the mask's beard, so it is not cut out), on the title
+##                 screen's sky
+##   mode "mark"   the mask with its bells (a seal)
 ## `show_title` is kept for older callers: it picks "full" (the logo with its name) over "mark".
 
 @export_enum("full", "title", "mark") var mode := "mark":
@@ -25,7 +25,7 @@ extends Control
 	set(v):
 		subtitle = v
 		queue_redraw()
-@export var title := "Mamuthones"
+@export var title := "Sonazzos"
 ## Largest multiple to draw at (3 keeps the art on the base screen's grid).
 @export var max_scale := 3
 
@@ -47,7 +47,7 @@ func _tex() -> Texture2D:
 
 ## Height the title mode's subtitle line needs under the word mark.
 func _sub_h() -> float:
-	return 0.0 if mode != "title" or subtitle == "" else SUB_SIZE * 1.5
+	return 0.0 if mode == "mark" or subtitle == "" else SUB_SIZE * 1.5
 
 
 func _scale_for(tex: Texture2D) -> int:
@@ -72,13 +72,8 @@ func _draw() -> void:
 	if subtitle == "":
 		return
 	var font := Palette.serif_font("Bold")
-	if mode == "full":
-		var box := Rect2(pos + BANNER.position * k, BANNER.size * k)
-		var fs := _fit(font, subtitle, maxi(SUB_MIN, int(box.size.y * 0.95)), box.size.x - 8.0 * k)
-		var w := font.get_string_size(subtitle, HORIZONTAL_ALIGNMENT_LEFT, -1, fs).x
-		var base := box.position.y + box.size.y * 0.5 + font.get_ascent(fs) * 0.36
-		_text(font, subtitle, Vector2(box.position.x + (box.size.x - w) * 0.5, base), fs, Palette.BONE)
-	elif mode == "title":
+	# Daniele's ChatGPT logo (tools/art/chatgpt/setup.py) has no banner: the subtitle goes under it
+	if mode == "full" or mode == "title":
 		title_subtitle(self, font, subtitle, Vector2(size.x * 0.5, pos.y + ts.y + SUB_SIZE * 0.95), size.x * 0.92, SUB_SIZE)
 
 

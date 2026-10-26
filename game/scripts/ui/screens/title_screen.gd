@@ -51,7 +51,7 @@ func build() -> void:
 	logo.subtitle = tr("app_title")
 	logo.set_anchors_preset(Control.PRESET_TOP_WIDE)
 	logo.offset_top = 30.0 + safe.y
-	logo.offset_bottom = logo.offset_top + 132.0
+	logo.offset_bottom = logo.offset_top + 270.0
 	logo.offset_left = 12.0
 	logo.offset_right = -12.0
 	top.add_child(logo)
