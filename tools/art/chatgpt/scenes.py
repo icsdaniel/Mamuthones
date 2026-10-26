@@ -6,8 +6,8 @@ village_square.png -> game/art/px/scenery/title_scene{,_lit,_dim}.png: the night
     stars, 240 art px wide (the base screen's width), cut so the lit middle of the square, where the
     title's bonfire burns (TitleScene.FIRE, 58 art px over the bottom), is the fire's place; the lit
     and dim twins are the same picture warmer and brighter / darker (the beat's light)
-workshop.png       -> game/art/px/stops/stop_1{,_bg}.png (and an empty stop_1_front): the carver's
-    workshop, 320 x 184 (StopCells.WORLD)
+workshop.png       -> game/art/px/stops/stop_1_bg.png (and an empty stop_1_front): the carver's
+    workshop, 320 x 184 (StopCells.WORLD); stop_1.png is its card (StopCells.CARD, at CARD_AT)
 village_street.png -> stop_2{,_bg}.png: the village street at night, its stone fire ring where the
     stop's bonfire burns
 village_lane.png   -> game/art/px/ui/backdrop.png: the stone every menu stands on, now a lit lane
@@ -50,10 +50,16 @@ def title():
         c.save(c.snap(tone(g, k, w), PAL), os.path.join(PX, "scenery", name + ".png"))
 
 
+# each stop card's top-left in its world (StopCells.STOPS[n].card), the card StopCells.CARD big
+CARD = (212, 148)
+CARD_AT = {1: (54, 30), 2: (100, 30)}
+
+
 def stop(name, n, front=True):
     a = rgba(name)
     g = c.snap(c.grid(a, None, (320, 184)), PAL)
-    c.save(g, os.path.join(PX, "stops", "stop_%d.png" % n))
+    x, y = CARD_AT[n]
+    c.save(g[y:y + CARD[1], x:x + CARD[0]], os.path.join(PX, "stops", "stop_%d.png" % n))
     c.save(g, os.path.join(PX, "stops", "stop_%d_bg.png" % n))
     if front:
         c.save(np.zeros_like(g), os.path.join(PX, "stops", "stop_%d_front.png" % n))

@@ -180,7 +180,7 @@ func shown_rects() -> Array[Rect2]:
 ## is translated. False when there is no picture (the gold rules are drawn instead).
 func _plate(box: Control, w: Label) -> bool:
 	var P := PxArt.PX
-	var wc := Vector2i(roundi(w.size.x / P) + 22, roundi(w.size.y / P) + 6)
+	var wc := Vector2i(roundi(w.size.x / P) + 14, roundi(w.size.y / P) + 4)
 	var tex := Hud.sliced("judge_plate", wc)
 	if tex == null:
 		return false

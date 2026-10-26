@@ -66,7 +66,7 @@ const STOPS := {
 		"glows": [[296, 36, "glow_36x28"]], "smoke": [],
 		"cast": [["mamuthone_black_stand", 246, 174, true, ""]],
 		"rope": [], "row": {"x": 0.77, "ground": 174, "front": 1, "back": 0, "isso": 0, "far": false, "flip": true}},
-	2: {"name": "Sant'Antonio's Fires", "sky": "night", "ground": 172, "card": Vector2i(54, 30), "top": Color("#0a0c24"), "sparks": true,
+	2: {"name": "Sant'Antonio's Fires", "sky": "night", "ground": 172, "card": Vector2i(100, 30), "top": Color("#0a0c24"), "sparks": true,
 		"layers": ["bg", "mid", "front"], "fires": [[255, 152, "big"]],
 		"glows": [[255, 120, "glow_96x72"]], "smoke": [[255, 76]],
 		"cast": [["mamuthone_black_stand", 118, 152, false, "halfdim"], ["mamuthone_black_stand", 136, 153, false, "halfdim"], ["mamuthone_dark_brown_stand", 196, 152, true, "halfdim"], ["mamuthone_black_stand", 88, 178, false, ""], ["issohadore_throw", 212, 174, true, ""], ["mamuthone_black_land", 246, 180, true, ""]],
