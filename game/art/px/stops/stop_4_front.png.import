@@ -2,16 +2,16 @@
 
 importer="texture"
 type="CompressedTexture2D"
-uid="uid://brfbsl6qkq321"
-path="res://.godot/imported/stop_7_mid.png-dc1733fbbb0b011568dce2c13a63393f.ctex"
+uid="uid://jfu3hc44u1uj"
+path="res://.godot/imported/stop_4_front.png-18b01b42ab3477e186f83fdc59de39cb.ctex"
 metadata={
 "vram_texture": false
 }
 
 [deps]
 
-source_file="res://art/px/stops/stop_7_mid.png"
-dest_files=["res://.godot/imported/stop_7_mid.png-dc1733fbbb0b011568dce2c13a63393f.ctex"]
+source_file="res://art/px/stops/stop_4_front.png"
+dest_files=["res://.godot/imported/stop_4_front.png-18b01b42ab3477e186f83fdc59de39cb.ctex"]
 
 [params]
 

@@ -1,0 +1,125 @@
+{
+ "1": {
+  "card": [
+   0,
+   6
+  ],
+  "layers": [
+   "bg",
+   "front"
+  ],
+  "fires": [],
+  "glows": [
+   [
+    245,
+    54,
+    36,
+    28
+   ]
+  ],
+  "smoke": [],
+  "top": "#07060a"
+ },
+ "2": {
+  "card": [
+   100,
+   30
+  ],
+  "layers": [
+   "bg",
+   "front"
+  ],
+  "fires": [
+   [
+    255,
+    152,
+    "big"
+   ]
+  ],
+  "glows": [
+   [
+    255,
+    120,
+    96,
+    72
+   ]
+  ],
+  "smoke": [
+   [
+    255,
+    76
+   ]
+  ],
+  "top": "#0b1a33"
+ },
+ "3": {
+  "card": [
+   74,
+   26
+  ],
+  "layers": [
+   "bg",
+   "front"
+  ],
+  "fires": [],
+  "glows": [],
+  "smoke": [],
+  "top": "#07060a"
+ },
+ "4": {
+  "card": [
+   54,
+   18
+  ],
+  "layers": [
+   "bg",
+   "front"
+  ],
+  "fires": [],
+  "glows": [],
+  "smoke": [],
+  "top": "#fba832"
+ },
+ "5": {
+  "card": [
+   54,
+   18
+  ],
+  "layers": [
+   "bg",
+   "front"
+  ],
+  "fires": [],
+  "glows": [],
+  "smoke": [],
+  "top": "#5a2e2a"
+ },
+ "6": {
+  "card": [
+   54,
+   18
+  ],
+  "layers": [
+   "bg",
+   "front"
+  ],
+  "fires": [],
+  "glows": [],
+  "smoke": [],
+  "top": "#23305a"
+ },
+ "7": {
+  "card": [
+   54,
+   18
+  ],
+  "layers": [
+   "bg",
+   "front"
+  ],
+  "fires": [],
+  "glows": [],
+  "smoke": [],
+  "top": "#0b1a33"
+ }
+}

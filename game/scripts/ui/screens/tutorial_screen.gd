@@ -20,6 +20,8 @@ var _last: Session               ## the last try, for what went wrong in the pla
 
 func build() -> void:
 	song = SongLibrary.get_song(str(args.get("song_id", ""))) if args.has("song_id") else null
+	if song != null and song.lessons.is_empty():
+		song = null   # a song without lessons (a remix of the workshop's): the tutorial song teaches
 	if song == null:
 		for s in SongLibrary.story():
 			if s.kind == "tutorial":

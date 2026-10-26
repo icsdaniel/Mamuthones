@@ -72,6 +72,94 @@ def ring(g, cx, cy, r=4):
     return out
 
 
+def glass(g, scr):
+    """The game on the phone's glass, as the old drawing had it: the night road with its three lanes
+    in gold, the hit line in bone near the bottom, and a step, an off-beat and a call note coming
+    down (the glass's own outline kept)."""
+    out = g.copy()
+    inner = scr & (np.roll(scr, 1, 0) & np.roll(scr, -1, 0) & np.roll(scr, 1, 1) & np.roll(scr, -1, 1))
+    ys, xs = np.nonzero(inner)
+    t, b = ys.min(), ys.max()
+    sky, road = c._rgb("#0b1a33"), c._rgb("#13284a")
+    # the glass's sides as straight lines (the thumbs cut into some rows): fitted to the rows' ends
+    rows = [(y, np.nonzero(inner[y])[0]) for y in range(t, b + 1)]
+    rows = [(y, rr.min(), rr.max()) for y, rr in rows if rr.size]
+    yy = np.array([q[0] for q in rows], float)
+    lf = np.polyfit(yy, [q[1] for q in rows], 1)
+    rf = np.polyfit(yy, [q[2] for q in rows], 1)
+    lf[1] -= 0.0
+    edge_l = lambda y: int(round(np.polyval(lf, y)))
+    edge_r = lambda y: int(round(np.polyval(rf, y)))
+    for y in range(t, b + 1):
+        row = np.nonzero(inner[y])[0]
+        if row.size == 0:
+            continue
+        out[y, row, :3] = sky if (y - t) / max(b - t, 1) < 0.12 else road
+        l, r = edge_l(y), edge_r(y)
+        v = (y - t) / max(b - t, 1)
+        if v < 0.12:
+            continue
+        # the lanes narrow toward the top
+        k = 0.45 + 0.55 * (v - 0.12) / 0.88
+        mid, half = (l + r) / 2.0, (r - l) / 2.0 * k
+        for u, col in ((-1.0, "#c8400c"), (-1 / 3, "#fba832"), (1 / 3, "#fba832"), (1.0, "#c8400c")):
+            x = int(round(mid + u * (half - 0.5)))
+            if inner[y, x]:
+                out[y, x, :3] = c._rgb(col)
+        if abs(v - 0.82) < 0.025:
+            for x in range(l + 1, r):
+                if (x - l) % 3 and inner[y, x]:
+                    out[y, x, :3] = c._rgb("#e2d6ca")
+    for lane, vv, cols in ((0, 0.5, ("#173c8a", "#2f78e0", "#9cc4ff")), (2, 0.34, ("#44176a", "#8a2fd0", "#c8a0ff")),
+                           (1, 0.66, ("#5a0e12", "#a8161c", "#fbf3e8"))):
+        y = int(round(t + vv * (b - t)))
+        l, r = edge_l(y), edge_r(y)
+        k = 0.45 + 0.55 * (vv - 0.12) / 0.88
+        mid, half = (l + r) / 2.0, (r - l) / 2.0 * k
+        cx = int(round(mid + (lane - 1) * 2 / 3 * half))
+        rr = max(2, int(round(half / 3 * 0.6)))
+        for dy in range(-rr, rr + 1):
+            for dx in range(-rr - 1, rr + 2):
+                d = (dx / (rr + 1.0)) ** 2 + (dy / float(rr)) ** 2
+                yy, xx = y + dy, cx + dx
+                if d <= 1.0 and inner[yy, xx]:
+                    out[yy, xx, :3] = c._rgb(cols[0] if d > 0.6 else (cols[2] if d < 0.12 else cols[1]))
+    return out
+
+
+def fade_bottom(g, rows=10):
+    """The hands' straight cut at the bottom of the picture dissolved in an ordered dither, so it
+    does not end in a hard line."""
+    out = g.copy()
+    bayer = np.array([[0, 8, 2, 10], [12, 4, 14, 6], [3, 11, 1, 9], [15, 7, 13, 5]]) / 16.0
+    ys = np.nonzero(out[..., 3].any(1))[0]
+    b = ys.max()
+    for i in range(rows):
+        y = b - i
+        k = (rows - i) / (rows + 1.0)          # share of the row taken out
+        for x in range(out.shape[1]):
+            if bayer[y % 4, x % 4] < k:
+                out[y, x, 3] = 0
+                out[y, x, :3] = 0
+    return out
+
+
+def rim(g, col="#d8802e", hot="#fba832"):
+    """A warm rim of firelight round a dark piece: a one px outline on its upper and outer sides,
+    the topmost edge hotter."""
+    out = g.copy()
+    a = g[..., 3] > 0
+    edge = np.zeros_like(a)
+    for dy, dx in ((-1, 0), (0, -1), (0, 1), (-1, -1), (-1, 1)):
+        edge |= np.roll(np.roll(a, dy, 0), dx, 1)
+    edge &= ~a
+    out[edge, :3] = c._rgb(col)
+    out[edge, 3] = 255
+    top = edge & ~np.roll(edge | a, 1, 0)
+    out[top, :3] = c._rgb(hot)
+    return out
+
+
 def phones():
     for i in range(9):
         a = biggest(c.keyed(c.load(c.src("phone-restart/phone_%d.png" % i)), loose=True))
@@ -80,6 +168,7 @@ def phones():
         ys, xs = np.nonzero(scr)
         t, b, l, r = ys.min(), ys.max(), xs.min(), xs.max()
         spots = [(l + (r - l) // 4, b - (b - t) // 5), (r - (r - l) // 4, b - (b - t) // 5)]
+        g = fade_bottom(glass(g, scr))
         for lp in (0, 1):
             for rp in (0, 1):
                 p = g
@@ -101,7 +190,11 @@ def drum():
 
 
 def headphones():
-    c.save(fit(biggest(c.keyed(c.load(c.src("headphones.png")))), (128, 104), "middle"), os.path.join(SETUP, "headphones.png"))
+    # dark grey on the dark scene: a rim of firelight round it (review of round 1)
+    g = fit(biggest(c.keyed(c.load(c.src("headphones.png")))), (126, 102), "middle")
+    out = np.zeros((104, 128, 4), np.uint8)
+    out[1:103, 1:127] = g
+    c.save(rim(out), os.path.join(SETUP, "headphones.png"))
 
 
 def logo():
@@ -109,7 +202,8 @@ def logo():
     title.png are the whole logo (the title screen shows it over the sky), mark.png the mask and
     bells above the word (a seal)."""
     a = c.crop_alpha(biggest(c.keyed(c.load(c.src("logo.png")))))
-    f = a.shape[1] / 200.0
+    # 120 art px wide: drawn at one art px a texel (Logo, 3x on the base screen), on the play grid
+    f = a.shape[1] / 120.0
     g = c.crop_alpha(c.snap(c.grid(a, f), PAL))
     c.save(g, os.path.join(LOGO, "logo.png"))
     c.save(g, os.path.join(LOGO, "title.png"))

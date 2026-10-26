@@ -113,7 +113,24 @@ static func draw_hit_line(ci: CanvasItem, field: Rect2, pulse := 0.0) -> void:
 
 
 static func draw_step(ci: CanvasItem, lane: Rect2, y: float, call := false, alpha := 1.0) -> void:
+	if _coin(ci, "note_call" if call else "note_step", Vector2(lane.get_center().x, y), lane.size.x * 0.78, alpha):
+		return
 	FireSkin.draw_gem(ci, Vector2(lane.get_center().x, y), _sc(lane.size.x), call, alpha)
+
+
+## The play screen's coin (Daniele's ChatGPT notes, art/ai/note_*) w px wide at its own proportions,
+## centred on c, on the art grid; false when there is no picture. For the flat previews (Settings'
+## note speed, the tutorial's lesson pictures), so they show the notes the song does.
+static func _coin(ci: CanvasItem, key: String, c: Vector2, w: float, alpha := 1.0) -> bool:
+	var asp := StreetSkin.ai_aspect(key)
+	if asp <= 0.0:
+		return false
+	var cells := Vector2i(maxi(2, roundi(w / PxArt.PX)), maxi(2, roundi(w / PxArt.PX / asp)))
+	var tex := StreetSkin.ai_tex(key, cells)
+	var sz := Vector2(cells) * PxArt.PX
+	# (across on the grid; down the lane it slides smoothly, never stepping)
+	ci.draw_texture_rect(tex, Rect2(Vector2(PxArt.snap(c.x - sz.x * 0.5), c.y - sz.y * 0.5), sz), false, Color(1, 1, 1, alpha))
+	return true
 
 
 static func draw_hold(ci: CanvasItem, lane: Rect2, y_head: float, y_tail: float, holding := false) -> void:
@@ -147,6 +164,18 @@ static func draw_rest(ci: CanvasItem, field: Rect2, y_top: float, y_bottom: floa
 
 
 static func draw_button(ci: CanvasItem, rect: Rect2, lane: int, state: String) -> void:
+	# the play screen's step crates, at their own proportions, standing on the rect's floor
+	var key := "crate_%s_%d" % ["pressed" if state == "pressed" or state == "hit" else "idle", clampi(lane, 0, 2)]
+	var asp := StreetSkin.ai_aspect(key)
+	if asp > 0.0:
+		var P := PxArt.PX
+		var cw := floori(rect.size.x / P)
+		var ch := floori(rect.size.y / P)
+		var cells := Vector2i(cw, roundi(cw / asp)) if float(cw) / ch < asp else Vector2i(roundi(ch * asp), ch)
+		var sz := Vector2(cells) * P
+		var at := PxArt.snap2(Vector2(rect.get_center().x - sz.x * 0.5, rect.end.y - sz.y))
+		ci.draw_texture_rect(StreetSkin.ai_tex(key, cells), Rect2(at, sz), false)
+		return
 	FireSkin.draw_button(ci, rect, lane, state)
 
 

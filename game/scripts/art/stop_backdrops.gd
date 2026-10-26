@@ -228,6 +228,15 @@ static func _bayer(x: int, y: int) -> float:
 ## Draws a character: `sprite` is a FigureSprites name ("mamuthone_black_stand"), `variant` "" (the
 ## sprite as drawn), "dim" (the back line), "half"/"halfdim" (far away) or "ghost". Feet at `feet`.
 static func draw_figure(ci: CanvasItem, sprite: String, variant: String, feet: Vector2, flip := false, rot := 0.0) -> void:
+	# Daniele's ChatGPT figures in place of the drawn ones: half size far off, darker when dim, faint
+	# as a ghost
+	var mod := Color.WHITE
+	if variant.ends_with("dim"):
+		mod = Color(0.55, 0.5, 0.55)
+	elif variant == "ghost":
+		mod = Color(1.0, 1.0, 1.0, 0.4)
+	if FigureSprites.draw_new(ci, sprite, feet, 1.0, flip, mod, rot, 0.5 if variant.begins_with("half") else 1.0):
+		return
 	if variant == "":
 		FigureSprites.draw(ci, sprite, feet, 1.0, flip, Color.WHITE, rot)
 		return

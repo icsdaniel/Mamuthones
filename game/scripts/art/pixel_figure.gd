@@ -49,11 +49,11 @@ var _legs: Sprite2D
 var _pieces: Array = []       ## [Sprite2D, kind]
 var _size := Vector2.ONE
 ## Daniele's ChatGPT bob (tools/art/chatgpt/outputs.py -> art/ai/fig/<figure>_bob_<i>.png): four
-## drawn poses, 0 up, 1 going down, 2 down, 3 coming back. Where they exist the figure is one
+## drawn poses, 0 up, 1 going down, 2 down, 3 coming back (the beat snaps to 2, then 3, then 0). Where they exist the figure is one
 ## picture swapped by the beat instead of pieces moved.
 const BOB_DIR := "res://art/ai/fig/"
 ## Seconds after the beat each drawn pose ends (snap down on the beat, a quick return, then up).
-const BOB_FRAMES := [[0.08, 2], [0.12, 1], [0.17, 3]]
+const BOB_FRAMES := [[0.1, 2], [0.17, 3]]   ## (1, the pose going down, is never shown on the way up)
 var _bob_tex: Array[Texture2D] = []
 
 

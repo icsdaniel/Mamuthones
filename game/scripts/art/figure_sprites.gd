@@ -81,6 +81,8 @@ static func art_height(name: String) -> float:
 ## Draws sprite `name` with its feet at `feet` on canvas item ci. `squash` < 1 flattens it onto its
 ## feet (a landing), `rot` leans it about the feet (radians).
 static func draw(ci: CanvasItem, name: String, feet: Vector2, px: float, flip := false, modulate := Color.WHITE, rot := 0.0, squash := 1.0) -> void:
+	if draw_new(ci, name, feet, px, flip, modulate, rot):
+		return
 	var t := tex(name)
 	if t == null or not FigureCells.CELLS.has(name):
 		return
@@ -91,3 +93,73 @@ static func draw(ci: CanvasItem, name: String, feet: Vector2, px: float, flip :=
 	ci.draw_set_transform(feet, rot, Vector2(sx, px * squash))
 	ci.draw_texture_rect(t, Rect2(-a, cell), false, modulate)
 	ci.draw_set_transform(Vector2.ZERO)
+
+
+# ------------------------------------------------------------------ Daniele's ChatGPT figures
+
+## Daniele's ChatGPT Mamuthone and Issohadore (art/ai/fig/<figure>_bob_<i>.png, tools/art/chatgpt/
+## outputs.py) stand in for the drawn ones everywhere outside the play screen too (title, story
+## stops, workshop, procession): the same size as the drawing they replace (its standing height),
+## shrunk once per size at their own proportions. A pose becomes a bob frame: Mamuthones never jump,
+## they bob down on the beat ("land" is the down frame, "crouch" the way back up).
+const NEW_DIR := "res://art/ai/fig/"
+static var _new := {}
+
+
+## The ChatGPT figure for sprite `name` ("mamuthone", "issohadore", or "" when it has none).
+static func new_figure(name: String) -> String:
+	var n := name.trim_prefix("big_")
+	for f in ["mamuthone", "issohadore"]:
+		if n.begins_with(f + "_") and ResourceLoader.exists(NEW_DIR + f + "_bob_0.png"):
+			return f
+	return ""
+
+
+static func bob_frame(name: String) -> int:
+	if name.ends_with("_land"):
+		return 2
+	if name.ends_with("_crouch"):
+		return 3
+	return 0
+
+
+## The figure's bob frame `frame` shrunk to h art px tall (its own proportions), every texel wholly
+## in or out.
+static func new_tex(figure: String, frame: int, h: int) -> Texture2D:
+	var k := "%s_%d_%d" % [figure, frame, h]
+	if not _new.has(k):
+		var t: Texture2D = null
+		var path := NEW_DIR + "%s_bob_%d.png" % [figure, frame]
+		if ResourceLoader.exists(path):
+			var r: Resource = load(path)
+			var img: Image = (r as Image).duplicate() if r is Image else (r as Texture2D).get_image()
+			img.decompress()
+			img.convert(Image.FORMAT_RGBA8)
+			var w := maxi(1, roundi(float(img.get_width()) * h / img.get_height()))
+			img.resize(w, h, Image.INTERPOLATE_LANCZOS)
+			var d := img.get_data()
+			for i in range(3, d.size(), 4):
+				d[i] = 255 if d[i] > 127 else 0
+			img.set_data(w, h, false, Image.FORMAT_RGBA8, d)
+			t = ImageTexture.create_from_image(img)
+		_new[k] = t
+	return _new[k]
+
+
+## Draws the ChatGPT figure in place of sprite `name` (size_k: 0.5 for the half-size far figures).
+## False when the sprite has none.
+static func draw_new(ci: CanvasItem, name: String, feet: Vector2, px: float, flip := false, modulate := Color.WHITE, rot := 0.0, size_k := 1.0) -> bool:
+	var fig := new_figure(name)
+	if fig == "":
+		return false
+	var stand := name.substr(0, name.rfind("_") + 1) + "stand"
+	var h := roundi((art_height(stand) if FigureCells.CELLS.has(stand) else art_height(name)) * size_k)
+	var t := new_tex(fig, bob_frame(name), maxi(h, 4))
+	if t == null:
+		return false
+	var sz := t.get_size()
+	RenderingServer.canvas_item_set_default_texture_filter(ci.get_canvas_item(), RenderingServer.CANVAS_ITEM_TEXTURE_FILTER_NEAREST)
+	ci.draw_set_transform(feet, rot, Vector2(px * (-1.0 if flip else 1.0), px))
+	ci.draw_texture_rect(t, Rect2(Vector2(-floorf(sz.x * 0.5), -sz.y), sz), false, modulate)
+	ci.draw_set_transform(Vector2.ZERO)
+	return true
