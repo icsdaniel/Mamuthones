@@ -208,7 +208,7 @@ static func ai_image(path: String) -> Image:
 static func ai_tex(key: String, size: Vector2i) -> Texture2D:
 	if not _ai.has(key):
 		# "<name>!flip": the picture upside down; "<name>!mirror": left for right
-		var path := "res://art/ai/%s.webp" % key.trim_suffix("!flip").trim_suffix("!mirror")
+		var path := "res://art/ai/%s.webp" % key.trim_suffix("!flip").trim_suffix("!mirror").trim_suffix("!white")
 		var img: Image = null
 		if ResourceLoader.exists(path):
 			img = ai_image(path)
@@ -218,6 +218,13 @@ static func ai_tex(key: String, size: Vector2i) -> Texture2D:
 					img.flip_y()
 				elif key.ends_with("!mirror"):
 					img.flip_x()
+				elif key.ends_with("!white"):
+					# its silhouette in white, for a glow tinted by modulate
+					img.convert(Image.FORMAT_RGBA8)
+					var d := img.get_data()
+					for i in range(0, d.size(), 4):
+						d[i] = 255; d[i + 1] = 255; d[i + 2] = 255
+					img.set_data(img.get_width(), img.get_height(), false, Image.FORMAT_RGBA8, d)
 		_ai[key] = img if img != null and not img.is_empty() else null
 		if _ai[key] != null:
 			var mips: Array[Image] = [img]

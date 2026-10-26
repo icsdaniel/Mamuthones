@@ -139,6 +139,8 @@ static func _overlaps(a: Control, b: Control) -> bool:
 func _draw_rules(box: Control, w: Label) -> void:
 	if box.get_child_count() > 1 and (box.get_child(1) as Control).visible:
 		return
+	if _plate(box, w):
+		return
 	var P := PxArt.PX
 	var y := roundf((w.position.y + w.size.y * 0.5) / P) * P
 	for sd in [-1.0, 1.0]:
@@ -171,3 +173,18 @@ func shown_rects() -> Array[Rect2]:
 		if (spot[0] as Control).modulate.a > 0.5:
 			out.append((spot[0] as Control).get_global_rect())
 	return out
+
+
+## Daniele's ChatGPT judgement banner (art/ai/judge_plate: a carved bronze-framed board with its word
+## taken out, tools/art/chatgpt/cut_sheets.py) behind the word, which stays the game's own text so it
+## is translated. False when there is no picture (the gold rules are drawn instead).
+func _plate(box: Control, w: Label) -> bool:
+	var P := PxArt.PX
+	var wc := Vector2i(roundi(w.size.x / P) + 22, roundi(w.size.y / P) + 6)
+	var tex := Hud.sliced("judge_plate", wc)
+	if tex == null:
+		return false
+	var c := w.position + w.size * 0.5
+	var at := Vector2(roundf((c.x - wc.x * P * 0.5) / P) * P, roundf((c.y - wc.y * P * 0.5) / P) * P)
+	box.draw_texture_rect(tex, Rect2(at, Vector2(wc) * P), false)
+	return true

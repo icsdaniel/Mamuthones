@@ -1,0 +1,14 @@
+[remap]
+
+importer="image"
+type="Image"
+uid="uid://b40qspv0vc2vm"
+path="res://.godot/imported/hud_seal.webp-722987e9fec61754eb3feef3b3ce97f0.image"
+
+[deps]
+
+source_file="res://art/ai/hud_seal.webp"
+dest_files=["res://.godot/imported/hud_seal.webp-722987e9fec61754eb3feef3b3ce97f0.image"]
+
+[params]
+

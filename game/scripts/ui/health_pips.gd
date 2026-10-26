@@ -72,6 +72,9 @@ func _draw() -> void:
 				lit_at = maxf(lit_at, float(_lit[k]))
 		var flare := clampf(1.0 - (_clock - lit_at) / LIGHT_TIME, 0.0, 1.0)
 		var col := Color("#e8322a").lerp(Color("#ff7a5a"), pulse * 0.6).lerp(Color("#fff0c0"), flare)
+		if _pictures():
+			_heart_pic(i, c, pts, pulse, flare)
+			continue
 		# each heart stands in relief: its side shows below it, and its upper left swells into the light
 		_heart(c + Vector2(0, DEPTH), 15.0, Color("#0a0608"), 3.0)
 		_heart(c, 15.0, Color("#0a0608"), 3.0)
@@ -104,3 +107,54 @@ func _heart(c: Vector2, r: float, col: Color, grow: float, half := false) -> voi
 			p.x = 0.0
 		pts.append(c + p + Vector2(0, 1.5))
 	draw_colored_polygon(pts, col)
+
+
+## Daniele's ChatGPT hearts (art/ai/heart_{full,empty,crack,broken}, tools/art/chatgpt/cut_sheets.py):
+## full, empty, a half (cracked), and a lost point breaking in two as it rises off its heart. Drawn
+## on whole art px (PxArt.PX), each 22 x 20 cells.
+const HEART_CELLS := Vector2i(12, 11)
+
+static func _pictures() -> bool:
+	return ResourceLoader.exists("res://art/ai/heart_full.webp")
+
+
+func _heart_pic(i: int, c: Vector2, pts: int, pulse: float, flare: float) -> void:
+	var px := PxArt.PX
+	var sz := Vector2(HEART_CELLS) * px
+	var at := PxArt.snap2(c - sz * 0.5)
+	var key: String = ["heart_empty", "heart_crack", "heart_full"][pts]
+	var mod := Color.WHITE.lerp(Color(1.3, 0.85, 0.8), pulse * 0.6).lerp(Color(1.6, 1.5, 1.3), flare)
+	var tex := _tex(key)
+	if tex != null:
+		draw_texture_rect(tex, Rect2(at, sz), false, mod if pts > 0 else Color.WHITE)
+	for k in [i * 2, i * 2 + 1]:
+		if _lost.has(k) and session != null and k >= session.health:
+			var a := clampf((_clock - float(_lost[k])) / LOSE_TIME, 0.0, 1.0)
+			if a < 1.0:
+				var b := _tex("heart_broken")
+				if b != null:
+					var up := PxArt.snap2(Vector2(0.0, -12.0 * a))
+					draw_texture_rect(b, Rect2(at + up, sz), false, Color(1, 1, 1, 1.0 - a))
+
+
+static var _texs := {}
+
+## A heart picture shrunk to HEART_CELLS, every texel wholly in or out (made once).
+static func _tex(key: String) -> Texture2D:
+	if not _texs.has(key):
+		var t: Texture2D = null
+		var path := "res://art/ai/%s.webp" % key
+		if ResourceLoader.exists(path):
+			var r: Resource = load(path)
+			var img: Image = (r as Image).duplicate() if r is Image else (r as Texture2D).get_image()
+			img.decompress()
+			img.convert(Image.FORMAT_RGBA8)
+			img.resize(HEART_CELLS.x, HEART_CELLS.y, Image.INTERPOLATE_LANCZOS)
+			for y in img.get_height():
+				for x in img.get_width():
+					var c := img.get_pixel(x, y)
+					c.a = 1.0 if c.a > 0.5 else 0.0
+					img.set_pixel(x, y, c)
+			t = ImageTexture.create_from_image(img)
+		_texs[key] = t
+	return _texs[key]

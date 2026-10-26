@@ -25,8 +25,12 @@ const RAILS := [Vector2(609.17, -0.45827), Vector2(510.90, -0.14397), Vector2(44
 const VANISH_Y := 265.0              ## where the lines meet (the horizon), picture px
 const FAR_Y := 468.0                 ## the road's far end, just in front of the fire, picture px
 const STRETCH_FROM := 460.0          ## the picture is only ever stretched below this row
-const FIRE := Vector2(480.0, 370.0)  ## the fire's heart, picture px
-const LANTERNS := [Vector2(104, 256), Vector2(855, 276), Vector2(320, 382)]
+const FIRE := Vector2(479.0, 372.0)  ## the fire's heart, picture px
+## Where the bonfire's logs stand (FireTiers' origin): on the road's far end, where Daniele's ChatGPT
+## causeway meets the mountains (tools/art/chatgpt/street.py lays it in: horizon at 421).
+const FIRE_BASE := Vector2(479.0, 436.0)
+## The first picture's lanterns (none on the causeway: their light is left out).
+const LANTERNS := []
 ## On the hit line, an outer lane's whole slot and its biggest note (a stomp, StreetSkin.STOMP_R,
 ## with its outline) stay on screen: their edge keeps EDGE_PAD of the width off the screen's edge.
 const CLEAR_R := 0.53                ## lane widths from an outer lane's centre that must show
@@ -40,7 +44,7 @@ const ZOOM := 1.2
 const FRAME_PIXEL := [Vector2(-12, 226), Vector2(300, 276), Vector2(262, 560), Vector2(-12, 636)]
 ## The art row (from the top of a pixel figure's 172) its portrait's lower edge cuts at: just under
 ## the Issohadore's skirt, at the hem of the Mamuthone's fleece.
-const PIXEL_CUT := [124.0, 134.0]
+const PIXEL_CUT := [112.0, 136.0]
 const BEAM := 22.0             ## base px: the depth of the beam along a pixel portrait's lower edge
 const FIGURE_IN := 24.0           ## picture px each figure stands in from its portrait's middle, toward the road (mirrored)
 const ISSO_RIGHT := 16.0          ## picture px the Issohadore (left portrait) then moves further right (Daniele, 2026-10-05)
@@ -76,6 +80,7 @@ var _bake: SubViewport
 var _still: TextureRect              ## the baked street on screen
 var _fire_pic: TextureRect           ## the fire's corner of the street, its shader running every frame
 var _fire_mat: ShaderMaterial
+var _fire: FireTiers                 ## the bonfire, its tier following the multiplier
 var _baked_key := []                 ## what the bake was drawn with (redrawn when it changes)
 var _vp: SubViewport                 ## the pixel look: the street drawn at one texel per lens cell
 var own_cells := true                ## false when the whole play screen is already drawn one px per cell
@@ -172,6 +177,10 @@ func _ready() -> void:
 		_still.set_anchors_preset(Control.PRESET_FULL_RECT)
 		add_child(_still)
 		add_child(_fire_pic)
+	if FireTiers.available():
+		_fire = FireTiers.new()
+		_fire.name = "Bonfire"
+		add_child(_fire)
 	_glow_tex = _radial()
 	for i in 2:
 		var f := _make_frame(i)
@@ -263,6 +272,9 @@ func _solve() -> void:
 	var hl_img := hl / pic_scale
 	stretch = maxf(1.0, (hl_img - STRETCH_FROM) / maxf(need - STRETCH_FROM, 1.0))
 	_place_frames()
+	if _fire != null:
+		_fire.position = PxArt.snap2(to_local_pic(FIRE_BASE))
+		_fire.scale = Vector2(PxArt.PX, PxArt.PX)
 	if _sparks != null:
 		_sparks.position = to_local_pic(FIRE + Vector2(0, -90))
 		_sparks.scale = Vector2.ONE * pic_scale / 0.86
@@ -357,6 +369,8 @@ func set_stop(_n: int) -> void:
 
 func set_unison(level: int) -> void:
 	unison = level
+	if _fire != null:
+		_fire.set_tier(FireTiers.tier_of(Session.UNISON_MULTS[clampi(level, 0, Session.UNISON_MULTS.size() - 1)]))
 
 
 func set_still(on: bool) -> void:
@@ -440,11 +454,18 @@ func _process(delta: float) -> void:
 	_street_layout()
 	var night := 1.0 - 0.35 * dim
 	_still.modulate = Color(night, night, night)
+	if _fire != null:
+		# the drawn bonfire stands in for the first picture's painted one
+		_fire_pic.visible = false
+		_fire.beat = beat
+		_fire.dim = dim
+		_fire.animations = animations
 	if not animations:
 		# the fire's corner shows the still fire (dimmed with the rest), nothing else is drawn
 		_fire_pic.visible = false
 		return
 	# the fire's corner: it sways, flickers, and flares on every beat (most on the bar's first)
+	_fire_pic.visible = _fire == null
 	_fire_mat.set_shader_parameter("t", _clock)
 	_fire_mat.set_shader_parameter("flare", FIRE_BEAT * env + 0.35 * _kick)
 	_fire_mat.set_shader_parameter("dim", dim)

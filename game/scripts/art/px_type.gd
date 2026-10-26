@@ -10,14 +10,19 @@ extends RefCounted
 ##   "big_gold"   the same, cream to gold
 ##   "score"      the score's figures, 7 x 10 with two-pixel stems, cream to gold
 ##   "count"      the same figures doubled twice (40 px tall), for the count-in
+##   "num_gold"   Daniele's ChatGPT figures (tools/art/chatgpt/digits.py): 0-9 , . x in carved gold,
+##   "num_big"    15 px tall; the same 26 px tall; and in bone white, 15 px tall. Their colours are
+##   "num_white"  their own (keep the font colour white); no smooth stand-in.
 ##
 ## PxType.label(l, "caps", PixelPalette.GOLD[4]) styles a Label; PxType.draw(ci, ...) draws a line.
 
 const DIR := "res://art/px/field/font_"
 ## The face's design size (its BMFont size): a Label's font size is this x PX x k.
-const SIZES := {"caps": 10, "caps_gold": 10, "big": 20, "big_gold": 20, "score": 12, "count": 48}
+const SIZES := {"caps": 10, "caps_gold": 10, "big": 20, "big_gold": 20, "score": 12, "count": 48,
+	"num_gold": 15, "num_big": 26, "num_white": 15}
 ## Rows from the top of a line to the baseline, in font px.
-const BASE := {"caps": 9, "caps_gold": 9, "big": 18, "big_gold": 18, "score": 10, "count": 40}
+const BASE := {"caps": 9, "caps_gold": 9, "big": 18, "big_gold": 18, "score": 10, "count": 40,
+	"num_gold": 15, "num_big": 26, "num_white": 15}
 
 static var _fonts := {}
 ## Set while the street play screen is up: the faces become Daniele's-art type (Alegreya, smooth,
@@ -31,7 +36,7 @@ const SMOOTH_OUTLINE := Color("#0a0608")
 
 
 static func font(face: String) -> Font:
-	if smooth:
+	if smooth and not face.begins_with("num_"):
 		var key := "smooth_" + face
 		if not _fonts.has(key):
 			_fonts[key] = load("res://fonts/%s.ttf" % SMOOTH_FONTS.get(face, "AlegreyaSans-ExtraBold"))
@@ -53,7 +58,7 @@ static func font(face: String) -> Font:
 
 ## The font size that sets `face` at k art px per font px.
 static func size(face: String, k := 1) -> int:
-	if smooth:
+	if smooth and not face.begins_with("num_"):
 		return int(SMOOTH_SIZES.get(face, 28)) * k
 	return int(SIZES.get(face, 10) * PxArt.PX) * k
 
@@ -69,7 +74,7 @@ static func label(l: Label, face: String, color := Color.WHITE, k := 1) -> void:
 	l.add_theme_color_override("font_shadow_color", Color(0, 0, 0, 0))
 	l.add_theme_constant_override("line_spacing", 0)
 	l.material = null
-	if smooth:
+	if smooth and not face.begins_with("num_"):
 		l.add_theme_color_override("font_color", color * _ink(face))
 		l.add_theme_color_override("font_outline_color", SMOOTH_OUTLINE)
 		l.add_theme_constant_override("outline_size", 8 if SMOOTH_SIZES.get(face, 28) > 40 else 6)

@@ -1,0 +1,14 @@
+[remap]
+
+importer="image"
+type="Image"
+uid="uid://0cqu6pj7n6yk"
+path="res://.godot/imported/judge_plate.webp-edd6d19e0cbd74eafabf452b2601824b.image"
+
+[deps]
+
+source_file="res://art/ai/judge_plate.webp"
+dest_files=["res://.godot/imported/judge_plate.webp-edd6d19e0cbd74eafabf452b2601824b.image"]
+
+[params]
+

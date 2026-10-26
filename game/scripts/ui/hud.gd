@@ -101,6 +101,7 @@ func setup(p_session: Session, p_ghost: Ghost) -> void:
 	_score.name = "Score"
 	_score.text = "0"
 	pstyle(_score, 42, SCORE_INK)
+	PxType.label(_score, "num_gold")
 	_score.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	_score.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
 	_score.mouse_filter = Control.MOUSE_FILTER_IGNORE
@@ -122,6 +123,7 @@ func setup(p_session: Session, p_ghost: Ghost) -> void:
 	_unison = Label.new()
 	_unison.name = "Unison"
 	pstyle(_unison, 60, GOLD_INK, true, 8)
+	PxType.label(_unison, "num_gold")
 	_unison.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	_unison.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
 	_unison.mouse_filter = Control.MOUSE_FILTER_IGNORE
@@ -142,6 +144,7 @@ func setup(p_session: Session, p_ghost: Ghost) -> void:
 	_combo = Label.new()
 	_combo.name = "Combo"
 	pstyle(_combo, 36, INK, true, 6)
+	PxType.label(_combo, "num_white")
 	_combo.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	_combo.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	_combo.visible = false
@@ -246,7 +249,7 @@ func _to_frames(p: Vector2) -> Vector2:
 ## slices: its two ends kept to their shape at the frame's height, its middle stretched between
 ## them. Made once per size at one texel per cell (the HUD is drawn one px per cell), every texel
 ## wholly in or out, so they stay crisp.
-const SLICE := {"hud_plate": 240, "hud_bar": 90}   ## each picture's end width, its own px
+const SLICE := {"hud_plate": 56, "hud_bar": 48, "judge_plate": 56}   ## each picture's end width, its own px (tools/art/chatgpt/cut_sheets.py)
 static var _sliced := {}
 
 
@@ -469,14 +472,24 @@ func _draw_badge(ci: CanvasItem, b: Array) -> void:
 			var an := TAU * float(i) / n + _clock * 0.6
 			var w := 0.09
 			var col: Color = pal[1] if i % 2 == 0 else pal[0]
-			if lvl >= 5:
-				col = Color.from_hsv(fposmod(float(i) / n + _clock * 0.25, 1.0), 0.75, 1.0)
 			ci.draw_polygon(PackedVector2Array([ctr, ctr + Vector2(cos(an - w), sin(an - w)) * ray_r, ctr + Vector2(cos(an + w), sin(an + w)) * ray_r]),
 				PackedColorArray([Color(col, 0.55), Color(col, 0.0), Color(col, 0.0)]))
 	var hx := PackedVector2Array()
 	for q in [Vector2(0.0, -0.5), Vector2(0.5, -0.24), Vector2(0.5, 0.24), Vector2(0.0, 0.5), Vector2(-0.5, 0.24), Vector2(-0.5, -0.24)]:
 		hx.append(ctr + q * r.size * sc)
-	_shape(ci, hx, 1.0 + 0.8 * float(lvl) + 2.0 * fl + 1.5 * _bounce, pal)
+	var key := "hud_badge_%d" % (FireTiers.tier_of(Session.UNISON_MULTS[clampi(lvl, 0, Session.UNISON_MULTS.size() - 1)]) + 1)
+	if ResourceLoader.exists("res://art/ai/%s.webp" % key):
+		# Daniele's ChatGPT badge for the tier (x1 dark bronze .. x4 gold and fire), its lettering
+		# taken out: the multiplier is written over it. A warm glow round it, swelling on a gain.
+		var bh := r.size.y * 1.12 * sc
+		var bw := bh * 36.0 / 41.0
+		_glow_round(ci, Rect2(ctr - Vector2(bw, bh) * 0.5, Vector2(bw, bh)), 1.0 + 0.8 * float(lvl) + 2.0 * fl + 1.5 * _bounce)
+		_picture(ci, key, Rect2(ctr - Vector2(bw, bh) * 0.5, Vector2(bw, bh)), Color(1.0 + 0.4 * fl, 1.0 + 0.3 * fl, 1.0 + 0.2 * fl))
+		hx = PackedVector2Array()
+		for q in [Vector2(0.0, -0.5), Vector2(0.5, -0.25), Vector2(0.5, 0.25), Vector2(0.0, 0.5), Vector2(-0.5, 0.25), Vector2(-0.5, -0.25)]:
+			hx.append(ctr + q * Vector2(bw, bh) * 0.92)
+	else:
+		_shape(ci, hx, 1.0 + 0.8 * float(lvl) + 2.0 * fl + 1.5 * _bounce, pal)
 	if _streak > 0.0:
 		var p0 := _to_frames(hx[4])
 		var p1 := _to_frames(hx[3])
@@ -486,7 +499,7 @@ func _draw_badge(ci: CanvasItem, b: Array) -> void:
 		ci.draw_line(p0, q, pal[1], 5.0)
 		if k > 1.0:
 			ci.draw_line(p1, p1.lerp(p2, k - 1.0), pal[1], 5.0)
-	for p in [hx[0], hx[3]]:
+	for p in ([] if ResourceLoader.exists("res://art/ai/hud_badge_1.webp") else [hx[0], hx[3]]):
 		_diamond(ci, p, 8.0 * sc, Color.WHITE.lerp(pal[1], 1.0 - fl))
 	# the little spurs at its foot (the pixel look's badge stands on its own: they read as stray marks)
 	for sx: float in []:
@@ -503,17 +516,11 @@ func _tier(level: int) -> Array:
 		[Color("#ff9a32"), Color("#ffd27a"), Color("#7a2e06"), Color("#5a2408"), Color(1.0, 0.5, 0.1), Color("#ffd35a")],
 		[Color("#ffc42a"), Color("#fff0a0"), Color("#8a5200"), Color("#5e3a04"), Color(1.0, 0.75, 0.1), Color("#fff2a8")],
 		[Color("#ff4a24"), Color("#ffb070"), Color("#7a0e06"), Color("#4e0a04"), Color(1.0, 0.3, 0.1), Color("#ffe0b0")],
-		[Color("#d23cff"), Color("#ffa8ff"), Color("#5a0a7a"), Color("#3a0650"), Color(0.8, 0.3, 1.0), Color("#ffe0ff")],
-		[Color("#40c8ff"), Color("#e0ffff"), Color("#0a3a7a"), Color("#062650"), Color(0.3, 0.8, 1.0), Color("#ffffff")],
+		[Color("#ff7018"), Color("#ffd86a"), Color("#7a1c0a"), Color("#4e0a04"), Color(1.0, 0.45, 0.1), Color("#fff4cc")],
+		[Color("#fba832"), Color("#fff4cc"), Color("#c8400c"), Color("#5a0e12"), Color(1.0, 0.65, 0.2), Color("#fff4cc")],
 	]
-	var t: Array = tiers[clampi(level, 0, tiers.size() - 1)].duplicate()
-	if level >= 5:
-		var hue := fposmod(_clock * 0.25, 1.0)
-		t[0] = Color.from_hsv(hue, 0.8, 1.0)
-		t[1] = Color.from_hsv(hue, 0.3, 1.0)
-		t[2] = Color.from_hsv(hue, 0.9, 0.45)
-		t[4] = Color.from_hsv(hue, 0.7, 1.0)
-	return t
+	# violet, blue and the rainbow are the notes' colours: the HUD only burns hotter (Daniele, 2026-10)
+	return tiers[clampi(level, 0, tiers.size() - 1)].duplicate()
 
 
 ## The badge's size now: bigger at each unison level, and a bounce on every beat (smaller with
@@ -568,7 +575,7 @@ func tick(t: float, delta: float) -> void:
 	_unison.pivot_offset = _unison.size * 0.5
 	if not _unison_tweening():
 		_unison.scale = Vector2(bs, bs)
-	_unison.add_theme_color_override("font_color", _tier(session.unison_level)[5])
+	_unison.add_theme_color_override("font_color", Color.WHITE)
 	_meter.fill = _streak
 	_bar.progress = session.progress(t)
 	_progress = _bar.progress

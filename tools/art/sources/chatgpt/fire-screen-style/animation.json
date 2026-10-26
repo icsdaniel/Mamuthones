@@ -1,0 +1,28 @@
+{
+  "canvas": [
+    320,
+    320
+  ],
+  "flame_root": [
+    160,
+    282
+  ],
+  "logs_base": [
+    160,
+    319
+  ],
+  "loop_frame_ms": [
+    200,
+    90,
+    80,
+    130
+  ],
+  "transition_frame_ms": [
+    80,
+    80,
+    80,
+    80
+  ],
+  "placement": "Center fire at x50%, logs baseline approximately y33% of original-layout play screen. Scale entire320px canvas as one unit; never trim frames individually.",
+  "status": "Animation study; strict palette/grid and in-game scale validation pending."
+}

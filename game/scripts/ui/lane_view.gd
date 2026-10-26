@@ -1529,6 +1529,7 @@ func _px(o: Vector2, x: float, y: float, w: float, h: float, col: Color) -> void
 func warm(bells: bool) -> void:
 	if street == null:
 		return
+	_warm_crates()
 	for lane in 3:
 		var cr := _button_cells(lane)
 		for key in ["btn_idle", "btn_pressed"]:
@@ -1565,6 +1566,10 @@ func _draw_pixel_buttons() -> void:
 	_px(panel.position, 0, 0, panel.size.x / p, 1, PX_BRONZE[1].lerp(PX_BRONZE[2], env))
 	_px(panel.position, 0, 1, panel.size.x / p, 1, PX_BRONZE[0])
 	var w := r.size.x / 3.0
+	if StreetSkin.ai_tex("crate_idle_0", Vector2i.ONE) != null:
+		_draw_crates()
+		_draw_street_marks(r, w)
+		return
 	for lane in 3:
 		var br := _button_rect(lane)
 		var st := _button_state(lane)
@@ -1603,6 +1608,40 @@ func _draw_pixel_buttons() -> void:
 				var fo := Vector2(roundf(cx - fw * 0.5), roundf(rows * 0.5 - fh * 0.5))
 				draw_texture_rect(ftex, Rect2(o + fo * p, Vector2(fw, fh) * p), false, fmod)
 	_draw_street_marks(r, w)
+
+
+## The step crates from Daniele's ChatGPT controls sheet (art/ai/crate_{idle,pressed}_<lane>, cut by
+## tools/art/chatgpt/cut_sheets.py): a wooden crate with the lane's bare feet carved in its lid (left,
+## both, right), pressed in with the feet glowing orange while held. A hit lights it hot, a miss dull
+## red, a note about to reach its lane lights its edge.
+func _draw_crates() -> void:
+	var p := PxArt.PX
+	for lane in 3:
+		var br := _button_rect(lane)
+		var st := _button_state(lane)
+		var cells := _button_cells(lane) + Vector2i(0, PX_LIFT)
+		var down_pic := st == "pressed" or st == "hit"
+		var key := "crate_%s_%d" % ["pressed" if down_pic else "idle", lane]
+		var mod := {"idle": Color.WHITE, "cued": Color(1.2, 1.1, 0.92), "pressed": Color.WHITE,
+			"hit": Color(1.35, 1.2, 0.9), "miss": Color(0.95, 0.5, 0.45)}[st] as Color
+		var o := br.position
+		if st == "cued" or st == "hit":
+			var glow := Color("#fff2c0") if st == "hit" else Color("#ffc445")
+			var sil := StreetSkin.ai_tex("crate_idle_%d!white" % lane, cells + Vector2i(2, 2))
+			if sil != null:
+				draw_texture_rect(sil, Rect2(o - Vector2(p, p), Vector2(cells + Vector2i(2, 2)) * p), false, Color(glow, 0.8))
+		var tex := StreetSkin.ai_tex(key, cells)
+		if tex != null:
+			draw_texture_rect(tex, Rect2(o, Vector2(cells) * p), false, mod)
+
+
+## Paints every crate picture at its size before the song (each was a hitch on its first press).
+func _warm_crates() -> void:
+	for lane in 3:
+		var cells := _button_cells(lane) + Vector2i(0, PX_LIFT)
+		for k in ["idle", "pressed"]:
+			StreetSkin.ai_tex("crate_%s_%d" % [k, lane], cells)
+		StreetSkin.ai_tex("crate_idle_%d!white" % lane, cells + Vector2i(2, 2))
 
 
 ## A bare footprint (left foot for -1, right for 1): the sole and five toes.

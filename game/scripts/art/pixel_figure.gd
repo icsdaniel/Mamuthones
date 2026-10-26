@@ -48,6 +48,13 @@ var _upper: Sprite2D
 var _legs: Sprite2D
 var _pieces: Array = []       ## [Sprite2D, kind]
 var _size := Vector2.ONE
+## Daniele's ChatGPT bob (tools/art/chatgpt/outputs.py -> art/ai/fig/<figure>_bob_<i>.png): four
+## drawn poses, 0 up, 1 going down, 2 down, 3 coming back. Where they exist the figure is one
+## picture swapped by the beat instead of pieces moved.
+const BOB_DIR := "res://art/ai/fig/"
+## Seconds after the beat each drawn pose ends (snap down on the beat, a quick return, then up).
+const BOB_FRAMES := [[0.08, 2], [0.12, 1], [0.17, 3]]
+var _bob_tex: Array[Texture2D] = []
 
 
 func _init(p_figure := "mamuthone") -> void:
@@ -57,6 +64,12 @@ func _init(p_figure := "mamuthone") -> void:
 ## The body as two slices of its picture (the legs stay planted, the rest drops over them, so the
 ## seam is always exact), then the pieces over it.
 func _ready() -> void:
+	if ResourceLoader.exists(BOB_DIR + "%s_bob_0.png" % figure):
+		for i in 4:
+			_bob_tex.append(load(BOB_DIR + "%s_bob_%d.png" % [figure, i]))
+		_size = _bob_tex[0].get_size()
+		_upper = _sprite(_bob_tex[0], "Pose", 0.0, _size.y)
+		return
 	var tex: Texture2D = _piece("body")
 	if tex == null:
 		return
@@ -110,6 +123,9 @@ static func ring_swing(age: float) -> float:
 func pose(t: float, _bar: float, still := false, ring := 9.0, ring_up := true) -> void:
 	if _upper == null:
 		return
+	if not _bob_tex.is_empty():
+		_pose_frames(t, still, ring)
+		return
 	var m := 0.35 if reduced_motion else 1.0
 	var bob := 0.0 if still else StreetBackdrop._bob(t)
 	var rung := not still and ring >= 0.0 and ring < 0.5
@@ -136,3 +152,20 @@ func pose(t: float, _bar: float, still := false, ring := 9.0, ring_up := true) -
 				# never further off than the body is filled in behind it
 				y = body + clampf(y - body, -REACH, REACH)
 		s.position = Vector2(x, y)
+
+
+## The drawn bob: the down pose on the beat (and when a bell is rung on time), then the poses back up.
+## Reduced motion keeps the halfway poses only.
+func _pose_frames(t: float, still: bool, ring: float) -> void:
+	var f := 0
+	if not still:
+		var since := t
+		if ring >= 0.0 and ring < since:
+			since = ring
+		for e: Array in BOB_FRAMES:
+			if since >= 0.0 and since < float(e[0]):
+				f = int(e[1])
+				break
+		if reduced_motion and f == 2:
+			f = 1
+	_upper.texture = _bob_tex[f]
