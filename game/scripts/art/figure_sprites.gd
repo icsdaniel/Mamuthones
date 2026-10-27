@@ -78,8 +78,7 @@ static func art_height(name: String) -> float:
 	return (FigureCells.CELLS[name][2] as Rect2).size.y
 
 
-## Draws sprite `name` with its feet at `feet` on canvas item ci. `squash` < 1 flattens it onto its
-## feet (a landing), `rot` leans it about the feet (radians).
+## Draws sprite `name` with its feet at `feet` on canvas item ci. `squash` is ignored (never stretched), `rot` leans it about the feet (radians).
 static func draw(ci: CanvasItem, name: String, feet: Vector2, px: float, flip := false, modulate := Color.WHITE, rot := 0.0, squash := 1.0) -> void:
 	if draw_new(ci, name, feet, px, flip, modulate, rot):
 		return
@@ -89,8 +88,9 @@ static func draw(ci: CanvasItem, name: String, feet: Vector2, px: float, flip :=
 	var cell: Vector2 = FigureCells.CELLS[name][0]
 	var a: Vector2 = FigureCells.CELLS[name][1]
 	RenderingServer.canvas_item_set_default_texture_filter(ci.get_canvas_item(), RenderingServer.CANVAS_ITEM_TEXTURE_FILTER_NEAREST)
-	var sx := px * (-1.0 if flip else 1.0) * (2.0 - squash)
-	ci.draw_set_transform(feet, rot, Vector2(sx, px * squash))
+	# one scale for both axes: the art is never stretched (Daniele, 2026-10-26), so a landing is not
+	# a squash any more (`squash` stays in the signature for the callers and is ignored)
+	ci.draw_set_transform(feet, rot, Vector2(px * (-1.0 if flip else 1.0), px))
 	ci.draw_texture_rect(t, Rect2(-a, cell), false, modulate)
 	ci.draw_set_transform(Vector2.ZERO)
 

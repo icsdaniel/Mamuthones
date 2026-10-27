@@ -263,10 +263,12 @@ static func warm(lv: LaneView, field: Rect2) -> void:
 	if ai_tex("bar_up", Vector2i.ONE) == null:
 		return
 	field.position = Vector2.ZERO
+	for k in ["bar_arrow", "bar_arrow!flip", "bar_bell", "bar_up", "bar_down"]:
+		ai_aspect(k)
 	# from where bars come into view to just past the hit line (a missed bar sweeping on past it,
 	# bigger, can still meet a new size)
 	var y := -field.size.y * 0.1
-	var end := LaneSkin.hit_line_y(field) + field.size.y * 0.03
+	var end := LaneSkin.hit_line_y(field) + field.size.y * 0.1
 	while y < end:
 		var b := _bell_size(lv, field, y)
 		if b.lw >= 2.0:
@@ -276,14 +278,14 @@ static func warm(lv: LaneView, field: Rect2) -> void:
 				ai_tex("bar_bell", b.bell)
 				ai_tex("bar_arrow", b.arrow)
 				ai_tex("bar_arrow!flip", b.arrow)
-		y += 1.0
+		y += 0.5
 	ai_tex("bar_bell", Vector2i.ONE)
 	# a bell rung on time: its cowbells thrown off the strap (bell_strike), at each size a strike has
 	var lw: float = lv.road_scale(LaneSkin.hit_line_y(field)) * _lane(field)
 	for q: float in [1.0, 0.8]:
 		for chain in 6:
 			var bs := lw * 0.42 * q * (1.0 + 0.07 * float(chain))
-			ai_tex("bar_bell", ai_cells(Vector2(-bs * 0.42, -bs * 1.2), Vector2(bs * 0.42, 0.0)))
+			ai_tex("bar_bell", ai_fit_cells("bar_bell", Vector2(-bs * 0.42, -bs * 1.2), Vector2(bs * 0.42, 0.0)))
 	# the hit rings burning gold or red, at the size the grey ones are drawn
 	for k: String in _ai_sized.keys():
 		if k.begins_with("ring_idle_"):
@@ -306,8 +308,8 @@ static func _bell_size(lv: LaneView, field: Rect2, y: float) -> Dictionary:
 	var a := lw * 0.25
 	var hh := lw * 0.23
 	return {"lw": lw, "cells": bar_cells(quad),
-		"bell": ai_cells(Vector2(-s * 0.35, -s), Vector2(s * 0.35, 0.0)),
-		"arrow": ai_cells(Vector2(-a, -hh * 1.4), Vector2(a, hh * 0.4))}
+		"bell": ai_fit_cells("bar_bell", Vector2(-s * 0.35, -s), Vector2(s * 0.35, 0.0)),
+		"arrow": ai_fit_cells("bar_arrow", Vector2(-a, -hh * 1.4), Vector2(a, hh * 0.4))}
 
 
 ## The beam's picture size for its quad on screen: few sizes (a beam slides down every frame), its
@@ -386,6 +388,10 @@ static func warm_notes(lv, field: Rect2) -> void:
 		["note_heal", DISC_R, DISC_H], ["note_six", DISC_R * SIX_SCALE, DISC_H], ["note_hold", DISC_R, DISC_H],
 		["note_stomp", STOMP_R, DISC_H * 1.6], ["knot", ROPE_W * 1.35, ROPE_W * 0.9]]
 	var end := LaneSkin.hit_line_y(field) + lane * 1.2
+	# the hold's rope: its one size (and the probes that read its proportions)
+	var rasp := ai_aspect("rope")
+	if rasp > 0.0:
+		ai_tex("rope", Vector2i(ROPE_PIC_W, roundi(ROPE_PIC_W / rasp)))
 	var done := {}
 	for li in 3:
 		var cx := lane * (float(li) + 0.5)
@@ -397,7 +403,7 @@ static func warm_notes(lv, field: Rect2) -> void:
 					var r: float = k[1]
 					var f := _frame3(lv, field, cx, y, r * lane, 2.0 * r * lw * FORE)
 					var box := _fit(k[0], _disc_box(f, k[2]))
-					var cells := ai_cells(box[0], box[1])
+					var cells := ai_cells_keep(k[0], box[0], box[1])
 					var dk := "%s_%d_%d" % [k[0], cells.x, cells.y]
 					if not done.has(dk):
 						done[dk] = true
@@ -409,18 +415,11 @@ static func warm_notes(lv, field: Rect2) -> void:
 static func ai_draw(ci: CanvasItem, key: String, lo: Vector2, hi: Vector2, mod := Color.WHITE) -> void:
 	# never stretched (Daniele, 2026-10-26): the picture at its own proportions inside the box,
 	# across its middle and standing on its floor
-	var asp := ai_aspect(key)
-	if asp > 0.0 and hi.y > lo.y and hi.x > lo.x:
-		var w := hi.x - lo.x
-		var h := hi.y - lo.y
-		if w / h > asp:
-			var cx := (lo.x + hi.x) * 0.5
-			lo.x = cx - h * asp * 0.5
-			hi.x = cx + h * asp * 0.5
-		else:
-			lo.y = hi.y - w / asp
 	var px := PxArt.PX
-	var cells := ai_cells(lo, hi)
+	var fit := ai_fit(key, lo, hi)
+	lo = fit[0]
+	hi = fit[1]
+	var cells := ai_cells_keep(key, lo, hi)
 	var tex := ai_tex(key, cells)
 	if tex == null:
 		return
@@ -466,6 +465,41 @@ static func pxl_draw(ci: CanvasItem, group: String, key: String, lo: Vector2, hi
 
 
 ## The picture size (cells) ai_draw shows a picture at between lo and hi on screen.
+## The box lo..hi shrunk to picture `key`'s own proportions, centred across and standing on the floor
+## (hi.y); [lo, hi].
+static func ai_fit(key: String, lo: Vector2, hi: Vector2) -> Array:
+	var asp := ai_aspect(key)
+	if asp > 0.0 and hi.y > lo.y and hi.x > lo.x:
+		var w := hi.x - lo.x
+		var h := hi.y - lo.y
+		if w / h > asp:
+			var cx := (lo.x + hi.x) * 0.5
+			lo.x = cx - h * asp * 0.5
+			hi.x = cx + h * asp * 0.5
+		else:
+			lo.y = hi.y - w / asp
+	return [lo, hi]
+
+
+## The cells of picture `key` over the (already fitted) box lo..hi: one side rounded, the other
+## derived from it and the picture's proportions, so a small picture is never squeezed by rounding.
+static func ai_cells_keep(key: String, lo: Vector2, hi: Vector2) -> Vector2i:
+	var asp := ai_aspect(key)
+	var c := ai_cells(lo, hi)
+	if asp <= 0.0:
+		return c
+	if (hi.x - lo.x) / maxf(hi.y - lo.y, 0.001) > asp:
+		c.x = maxi(1, roundi(c.y * asp))
+	else:
+		c.y = maxi(1, roundi(c.x / asp))
+	return c
+
+
+static func ai_fit_cells(key: String, lo: Vector2, hi: Vector2) -> Vector2i:
+	var f := ai_fit(key, lo, hi)
+	return ai_cells_keep(key, f[0], f[1])
+
+
 static func ai_cells(lo: Vector2, hi: Vector2) -> Vector2i:
 	var cells := Vector2i(((hi - lo) / PxArt.PX).round())
 	if cells.x > 40:

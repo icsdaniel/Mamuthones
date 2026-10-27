@@ -309,6 +309,10 @@ static func _aspect(key: String) -> float:
 func _picture(ci: CanvasItem, key: String, r: Rect2, mod := Color.WHITE) -> void:
 	var px := PxArt.PX
 	var cells := Vector2i((r.size / px).round())
+	var asp := _aspect(key)
+	if asp > 0.0:
+		# rounded once: the other side follows from the picture's proportions
+		cells.y = maxi(1, roundi(cells.x / asp))
 	var tex := sliced(key, cells)
 	if tex != null:
 		ci.draw_texture_rect(tex, Rect2(PxArt.snap2(r.position), Vector2(cells) * px), false, mod)
@@ -578,7 +582,8 @@ func warm() -> void:
 		for up in [false, true]:
 			sliced(_badge_key(lvl), _badge_cells(lvl, up))
 	for r in [8.0]:
-		sliced("hud_stud", Vector2i((Vector2(r * 2.5 * 52.0 / 56.0, r * 2.5) / PxArt.PX).round()))
+		var sw := roundi(r * 2.5 * 52.0 / 56.0 / PxArt.PX)
+		sliced("hud_stud", Vector2i(sw, roundi(sw / _aspect("hud_stud"))))
 	HealthPips.warm()
 
 
