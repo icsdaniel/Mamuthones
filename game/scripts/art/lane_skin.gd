@@ -109,6 +109,12 @@ static func draw_hit_line(ci: CanvasItem, field: Rect2, pulse := 0.0) -> void:
 	for r in lanes:
 		xs.append(r.get_center().x)
 	var y := roundf(hit_line_y(field) / PxArt.PX) * PxArt.PX
+	# the play screen's ring pictures (at their own proportions), when there are some
+	if StreetSkin.ai_aspect("ring_idle") > 0.0:
+		FireSkin.draw_hit_line(ci, field.position.x, field.end.x, y, [], 0.33 * lanes[0].size.x, [], pulse)
+		for x: float in xs:
+			_coin(ci, "ring_idle", Vector2(x, y), lanes[0].size.x * 0.94)
+		return
 	FireSkin.draw_hit_line(ci, field.position.x, field.end.x, y, xs, 0.33 * lanes[0].size.x, [], pulse)
 
 
@@ -151,6 +157,10 @@ static func draw_ring(ci: CanvasItem, field: Rect2, lane: Rect2, y: float, up: b
 	var sc := _sc(lane.size.x)
 	var rr := float(FireSkin.note_rx(sc)) + 4.0
 	var p := Vector2(lane.get_center().x, y)
+	# the play screen's ring picture (at its own proportions), a little wider than the coin on it
+	if _coin(ci, "ring_red", p, (rr + 2.0 * PxArt.PX) * 2.0):
+		FireSkin.draw_gem(ci, p, sc)
+		return
 	FireSkin.px_ring(ci, p + Vector2(0, PxArt.PX), rr, rr * 0.46 + 1.0, 2.0, PixelPalette.RED[3])
 	FireSkin.draw_gem(ci, p, sc)
 

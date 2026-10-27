@@ -15,6 +15,7 @@ const COLORS := {
 	"late": UIKit.LATE, "miss": Color("#8a7c6c"), "held": Color.WHITE, "wrong": Color("#e24a32"),
 }
 const HAIR := Color("#c08a2e")      ## the flanking gold rules (GOLD3)
+const MIN_PLATE_W := 56            ## cells: the judgement board's least width
 const CHORD_MS := 80                ## words this close together belong to one chord
 
 var _spots := {}   # int key -> [HBoxContainer, Label, Label, Tween, centre: Vector2, quality: String, shown at: ms]
@@ -196,7 +197,9 @@ func warm(keys: Array) -> void:
 func _plate_cells(w: Label) -> Vector2i:
 	var P := PxArt.PX
 	var asp := Hud._aspect("judge_plate")
-	var cw := maxi(roundi(w.size.x / P) + 14, roundi((roundi(w.size.y / P) + 4) * asp))
+	# never narrower than MIN_PLATE_W: the smaller face two words together drop to (and a short word)
+	# gets the same board as the first word, not a smaller one
+	var cw := maxi(maxi(roundi(w.size.x / P) + 14, roundi((roundi(w.size.y / P) + 4) * asp)), MIN_PLATE_W)
 	return Vector2i(cw, roundi(cw / asp))
 
 

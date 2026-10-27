@@ -512,6 +512,9 @@ func _draw_badge(ci: CanvasItem, b: Array) -> void:
 		var cells := _badge_cells(lvl, _bounce_up())
 		var px := PxArt.PX
 		var at := PxArt.snap2(ctr - Vector2(cells) * px * 0.5)
+		# at 4x the badge is tallest: keep its top one art px inside the screen, never cut at the edge
+		var screen_top := ci.get_global_transform().affine_inverse() * Vector2.ZERO
+		at.y = maxf(at.y, ceilf(screen_top.y / px) * px + px)
 		var br := Rect2(at, Vector2(cells) * px)
 		_glow_round(ci, br, 1.0 + 0.8 * float(lvl) + 2.0 * fl + 1.5 * _bounce)
 		var tex := sliced(key, cells)
