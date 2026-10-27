@@ -125,8 +125,8 @@ static func bob_frame(name: String) -> int:
 
 ## The figure's bob frame `frame` shrunk to h art px tall (its own proportions), every texel wholly
 ## in or out.
-static func new_tex(figure: String, frame: int, h: int) -> Texture2D:
-	var k := "%s_%d_%d" % [figure, frame, h]
+static func new_tex(figure: String, frame: int, h: int, black := false) -> Texture2D:
+	var k := "%s_%d_%d%s" % [figure, frame, h, "_k" if black else ""]
 	if not _new.has(k):
 		var t: Texture2D = null
 		var path := NEW_DIR + "%s_bob_%d.png" % [figure, frame]
@@ -135,6 +135,8 @@ static func new_tex(figure: String, frame: int, h: int) -> Texture2D:
 			var img: Image = (r as Image).duplicate() if r is Image else (r as Texture2D).get_image()
 			img.decompress()
 			img.convert(Image.FORMAT_RGBA8)
+			if black:
+				darken_fleece(img)
 			var w := maxi(1, roundi(float(img.get_width()) * h / img.get_height()))
 			img.resize(w, h, Image.INTERPOLATE_LANCZOS)
 			var d := img.get_data()
@@ -146,6 +148,56 @@ static func new_tex(figure: String, frame: int, h: int) -> Texture2D:
 	return _new[k]
 
 
+## The Workshop's "black" sheepskin: the Mamuthone's orange-brown fleece (hue under about 30 degrees)
+## taken down to near black, keeping its lit tips warm so the shaggy shape still reads; the bells
+## (yellower), the leather, the mask and the skin keep their colours. Edits img in place.
+static func darken_fleece(img: Image) -> void:
+	var d := img.get_data()
+	for i in range(0, d.size(), 4):
+		if d[i + 3] == 0:
+			continue
+		var c := Color(d[i] / 255.0, d[i + 1] / 255.0, d[i + 2] / 255.0)
+		if c.s > 0.3 and (c.h < 0.085 or c.h > 0.97):
+			c.v *= 0.34
+			c.s *= 0.8
+			d[i] = roundi(c.r * 255.0)
+			d[i + 1] = roundi(c.g * 255.0)
+			d[i + 2] = roundi(c.b * 255.0)
+	img.set_data(img.get_width(), img.get_height(), false, Image.FORMAT_RGBA8, d)
+
+
+static var _black := {}
+
+
+## Bob frame i of the Mamuthone in the black fleece at full size (made once).
+static func black_tex(i: int, src: Texture2D) -> Texture2D:
+	if not _black.has(i):
+		var img := src.get_image()
+		img.decompress()
+		img.convert(Image.FORMAT_RGBA8)
+		darken_fleece(img)
+		_black[i] = ImageTexture.create_from_image(img)
+	return _black[i]
+
+
+## True when sprite `name` is a Mamuthone in the black fleece (the dark brown one is the picture as it is).
+static func is_black(name: String) -> bool:
+	return name.trim_prefix("big_").begins_with("mamuthone_black_")
+
+
+## Makes every ChatGPT bob frame at every height the screens draw it (and the half-size far ones),
+## so no screen shrinks a picture on its first frame.
+static func warm_new() -> void:
+	for name: String in FigureCells.CELLS:
+		if not name.ends_with("_stand") or name.begins_with("row_") or new_figure(name) == "":
+			continue
+		var fig := new_figure(name)
+		for k in [1.0, 0.5]:
+			var h := maxi(roundi(art_height(name) * k), 4)
+			for frame in [0, 2, 3]:
+				new_tex(fig, frame, h, is_black(name))
+
+
 ## Draws the ChatGPT figure in place of sprite `name` (size_k: 0.5 for the half-size far figures).
 ## False when the sprite has none.
 static func draw_new(ci: CanvasItem, name: String, feet: Vector2, px: float, flip := false, modulate := Color.WHITE, rot := 0.0, size_k := 1.0) -> bool:
@@ -154,7 +206,7 @@ static func draw_new(ci: CanvasItem, name: String, feet: Vector2, px: float, fli
 		return false
 	var stand := name.substr(0, name.rfind("_") + 1) + "stand"
 	var h := roundi((art_height(stand) if FigureCells.CELLS.has(stand) else art_height(name)) * size_k)
-	var t := new_tex(fig, bob_frame(name), maxi(h, 4))
+	var t := new_tex(fig, bob_frame(name), maxi(h, 4), is_black(name))
 	if t == null:
 		return false
 	var sz := t.get_size()

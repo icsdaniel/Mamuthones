@@ -42,6 +42,7 @@ const RING_DAMP := 6.0
 const RING_DIP := 3.0         ## art px the body dips again when a bell is rung on time
 
 var figure := "mamuthone"
+var black := true             ## the Mamuthone's black fleece (the Workshop's choice); false: the picture's own brown
 var mirror := false           ## the road is to the left (true) or the right (false)
 var reduced_motion := false
 var _upper: Sprite2D
@@ -66,7 +67,10 @@ func _init(p_figure := "mamuthone") -> void:
 func _ready() -> void:
 	if ResourceLoader.exists(BOB_DIR + "%s_bob_0.png" % figure):
 		for i in 4:
-			_bob_tex.append(load(BOB_DIR + "%s_bob_%d.png" % [figure, i]))
+			var src: Texture2D = load(BOB_DIR + "%s_bob_%d.png" % [figure, i])
+			if figure == "mamuthone" and black:
+				src = FigureSprites.black_tex(i, src)
+			_bob_tex.append(src)
 		_size = _bob_tex[0].get_size()
 		_upper = _sprite(_bob_tex[0], "Pose", 0.0, _size.y)
 		return

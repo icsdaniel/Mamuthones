@@ -59,6 +59,9 @@ func _ready() -> void:
 	get_tree().root.set_meta("app", self)
 	get_tree().set_auto_accept_quit(true)
 	get_tree().set_quit_on_go_back(false)
+	# the ChatGPT figures at every size the title, procession, stops and workshop draw them, made
+	# now rather than on a screen's first frame
+	FigureSprites.warm_new()
 	if start_screen != "":
 		open(start_screen, start_args)
 	else:

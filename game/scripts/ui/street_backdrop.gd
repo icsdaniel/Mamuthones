@@ -621,6 +621,7 @@ func _make_frame(i: int) -> Node2D:
 	_cuts.append(cut)
 	var pup := PixelFigure.new("issohadore" if i == 0 else "mamuthone")
 	pup.name = "Figure"
+	pup.black = str(Profile.get_look().get("fleece", "black")) != "dark_brown"
 	pup.mirror = i == 1
 	pup.material = cut
 	stand.add_child(pup)
