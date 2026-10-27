@@ -60,7 +60,7 @@ WORLD = (320, 184)
 # world's proportions (never stretched), its top row in the picture's px; and the card's place in it
 # (the card shows the scene's subject, not the floor).
 PORTRAIT = {
-    1: ("workshop_tall.png", 280, (0, 6)),            # the carver's bench, masks on the wall, the bells
+    1: ("workshop_tall.png", 500, (0, 6)),            # the carver's bench: the mask, the chisels, the shavings (the bells hang above the band)
     3: ("village_well_night.png", 724, (74, 26)),     # Around the Bonfires: the night lane, the well
     4: ("village_banners_dusk.png", 640, (54, 18)),   # Carnival Sunday: red cloths across the street
     5: ("village_tree_dusk.png", 655, (54, 18)),      # The Rope: the lane at dusk, the bare tree
@@ -71,7 +71,7 @@ PORTRAIT = {
 WIDE = {2: ("village_street.png", (100, 30))}         # Sant'Antonio's Fires: the stone fire ring
 # the stops' fires and glows on the new pictures (the drawn worlds' ones fell on blank walls)
 FIRES = {2: [[255, 152, "big"]]}
-GLOWS = {1: [[245, 54, 36, 28]], 2: [[255, 120, 96, 72]]}
+GLOWS = {1: [[293, 14, 36, 28]], 2: [[255, 120, 96, 72]]}
 SMOKE = {2: [[255, 76]]}
 
 

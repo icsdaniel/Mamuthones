@@ -61,9 +61,9 @@ const FIGS := {
 	"onlooker": [Vector2i(26, 32), Vector2i(12, 30)],
 }
 const STOPS := {
-	1: {"name": "The Workshop", "sky": "interior", "ground": 174, "card": Vector2i(0, 6), "top": Color("#07060a"), "sparks": false,
+	1: {"name": "The Workshop", "sky": "interior", "ground": 174, "card": Vector2i(0, 6), "top": Color("#3c2618"), "sparks": false,
 		"layers": ["bg", "front"], "fires": [],
-		"glows": [[245, 54, "glow_36x28"]], "smoke": [],
+		"glows": [[293, 14, "glow_36x28"]], "smoke": [],
 		"cast": [["mamuthone_black_stand", 246, 174, true, ""]],
 		"rope": [], "row": {"x": 0.77, "ground": 174, "front": 1, "back": 0, "isso": 0, "far": false, "flip": true}},
 	2: {"name": "Sant'Antonio's Fires", "sky": "night", "ground": 172, "card": Vector2i(100, 30), "top": Color("#0b1a33"), "sparks": true,
