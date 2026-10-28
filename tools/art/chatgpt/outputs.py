@@ -12,8 +12,9 @@ issohadore-bob-test/   poses of the bob (0 up, 1 going down, 2 down, 3 coming ba
                        like the figures they replace, feet on the canvas's bottom middle
 phone-restart/      -> game/art/px/setup/phone_<i>.png (see setup.py)
 
-Each frame: magenta fringe keyed off, stray specks dropped, put on the art grid, snapped to the style
-palette without the notes' colours, written 1:1 (the game draws them one texel per cell).
+Each frame: magenta fringe keyed off, stray specks dropped, put on the art grid and written 1:1 (the
+game draws them one texel per cell). The fire is snapped to the style palette without the notes'
+colours; the figures keep their own colours.
 """
 import os
 import json
@@ -74,7 +75,6 @@ def seat(g, flame=True):
 
 
 def figures():
-    pal = c.palette(reserved=False)
     out = os.path.join(c.GAME, "art/ai/fig")
     H = 172
     for fig in ("mamuthone", "issohadore"):
@@ -93,7 +93,9 @@ def figures():
             pad = np.zeros((floor - t0, r0 - l0, 4), np.uint8)
             sl, sr = max(l0, 0), min(r0, fr.shape[1])
             pad[:, sl - l0:sr - l0] = fr[t0:floor, sl:sr]
-            g = c.snap(c.grid(pad, f), pal)
+            # their own colours, only shrunk (Daniele, 2026-10-28: snapped to the style palette they came
+            # out recoloured, orange and red specks through the fleece)
+            g = c.grid(pad, f)
             c.save(g, os.path.join(out, "%s_bob_%d.png" % (fig, i)))
 
 

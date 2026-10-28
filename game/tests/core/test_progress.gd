@@ -141,7 +141,8 @@ func test_progression_unlock_order() -> void:
 	var p := _fresh_profile()
 	var lb := _boards()
 	p.leaderboards = lb
-	check_eq(Progression.story_order(), ["s1", "s2", "s3", "s4", "s5", "s6", "s7"] as Array[String], "story order by stop")
+	# the tutorial (s1) is in the Tutorial screen, not the story (2026-10-28)
+	check_eq(Progression.story_order(), ["s2", "s3", "s4", "s5", "s6", "s7"] as Array[String], "story order by stop")
 	check(Progression.is_unlocked("s1", p), "stop 1 open")
 	# Every stop is open from the start; the story still starts at stop 2 (the tutorial is optional).
 	for id in Progression.story_order():
@@ -320,8 +321,9 @@ func test_grades_from_old_saves_and_thresholds() -> void:
 func test_song_library() -> void:
 	SongLibrary.use_directory(STORY)
 	check_eq(SongLibrary.all().size(), 7, "7 stops")
-	check_eq(SongLibrary.story().size(), 7, "story includes the tutorial")
-	check_eq(SongLibrary.story()[0].kind, "tutorial", "the workshop first")
+	check_eq(SongLibrary.story().size(), 6, "the story leaves the tutorial to the Tutorial screen")
+	check_eq(SongLibrary.story()[0].stop, 2, "the story starts at stop 2")
+	check_eq(SongLibrary.tutorial().kind, "tutorial", "the tutorial song is found on its own")
 	check_eq(SongLibrary.get_song("s3_remix"), SongLibrary.get_song("s3"), "remix id gives the base song")
 	check(SongLibrary.is_remix_id("s3_remix") and not SongLibrary.is_remix_id("s3"), "is_remix_id")
 	check_eq(SongLibrary.get_song("nope"), null, "unknown id")

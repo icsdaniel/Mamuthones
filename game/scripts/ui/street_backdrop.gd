@@ -579,6 +579,7 @@ func _bob_figures() -> void:
 		var ring := _clock - _bell_at
 		for p in _puppets:
 			p.reduced_motion = reduced_motion
+			p.spb = spb
 			var r := ring
 			if p.figure == "issohadore" and _clock - _rope_at < ring:
 				r = _clock - _rope_at

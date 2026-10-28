@@ -1,10 +1,11 @@
 {
  "id": "suno_piazza_remix",
  "title": {
-  "en": "The Piazza remix (Suno test)",
-  "it": "La piazza remix (prova Suno)"
+  "en": "The Piazza remix",
+  "it": "La piazza remix"
  },
  "stop": 6,
+ "version": "remix",
  "kind": "story",
  "bpm": 144.17,
  "offset": 1.487,

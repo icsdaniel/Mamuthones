@@ -1460,6 +1460,68 @@ func _draw_street_buttons() -> void:
 const PX_WOOD := [Color("#160c0a")]   ## the shade under a step
 const PX_BRONZE := [Color("#4e2a0a"), Color("#b0701e"), Color("#f2c46a")]
 const PX_LIFT := 3          ## art px a button stands up from the panel (its side shows below it)
+const BTN_CAP := 118        ## source px of the button pictures' carved frame
+const FOOT_ASPECT := 206.0 / 431.0
+## The carved steps (btn_idle / btn_pressed, sinking on a press) instead of the ChatGPT crates: back
+## since Daniele's test of 2026-10-28 ("controls used to be a lot snappier before").
+const STEP_BUTTONS := true
+
+
+## Picture `key` from art/ai at cells, never stretched: the whole picture scaled by one factor (its
+## carved frame cap_src source px, at the cells' height), its four corners laid as they are and its
+## edges and middle repeated (the last copy cropped) to fill the rest. Alpha cut hard at half.
+## "<name>!white": its silhouette in white, for a glow tinted by modulate.
+static var _nine_cache := {}
+
+static func _nine(key: String, cells: Vector2i, cap_src: int) -> Texture2D:
+	cells = cells.max(Vector2i(4, 4))
+	var k := "%s_%d_%d" % [key, cells.x, cells.y]
+	if _nine_cache.has(k):
+		return _nine_cache[k]
+	var tex: Texture2D = null
+	var path := "res://art/ai/%s.webp" % key.trim_suffix("!white")
+	if ResourceLoader.exists(path):
+		var src := StreetSkin.ai_image(path)
+		src.decompress()
+		src.convert(Image.FORMAT_RGBA8)
+		var sw := src.get_width()
+		var sh := src.get_height()
+		# one scale for the whole picture: the frame as thick as it would be at the cells' height
+		var sc := float(cells.y) / sh
+		var big := src.duplicate() as Image
+		big.resize(maxi(4, roundi(sw * sc)), maxi(4, roundi(sh * sc)), Image.INTERPOLATE_LANCZOS)
+		var bw := big.get_width()
+		var bh := big.get_height()
+		var cap := clampi(roundi(cap_src * sc), 1, mini(mini(bw, bh), mini(cells.x, cells.y)) / 2 - 1)
+		var out := Image.create(cells.x, cells.y, false, Image.FORMAT_RGBA8)
+		# source spans [from, to) of the scaled picture and the cells they cover
+		var xs := [[0, cap, 0, cap], [cap, bw - cap, cap, cells.x - cap], [bw - cap, bw, cells.x - cap, cells.x]]
+		var ys := [[0, cap, 0, cap], [cap, bh - cap, cap, cells.y - cap], [bh - cap, bh, cells.y - cap, cells.y]]
+		for py: Array in ys:
+			for px: Array in xs:
+				var tw: int = px[1] - px[0]
+				var th: int = py[1] - py[0]
+				if tw <= 0 or th <= 0:
+					continue
+				var y: int = py[2]
+				while y < py[3]:
+					var hh := mini(th, int(py[3]) - y)
+					var x: int = px[2]
+					while x < px[3]:
+						var ww := mini(tw, int(px[3]) - x)
+						out.blit_rect(big, Rect2i(px[0], py[0], ww, hh), Vector2i(x, y))
+						x += ww
+					y += hh
+		var d := out.get_data()
+		var white := key.ends_with("!white")
+		for i in range(0, d.size(), 4):
+			d[i + 3] = 255 if d[i + 3] > 127 else 0
+			if white:
+				d[i] = 255; d[i + 1] = 255; d[i + 2] = 255
+		out.set_data(cells.x, cells.y, false, Image.FORMAT_RGBA8, d)
+		tex = ImageTexture.create_from_image(out)
+	_nine_cache[k] = tex
+	return tex
 
 
 ## A rect in this control's coordinates snapped to the lens's grid (whole art px on screen).
@@ -1484,7 +1546,14 @@ func _px(o: Vector2, x: float, y: float, w: float, h: float, col: Color) -> void
 func warm(bells: bool) -> void:
 	if street == null:
 		return
-	_warm_crates()
+	if STEP_BUTTONS:
+		for lane in 3:
+			var cr := _button_cells(lane)
+			for key in ["btn_idle", "btn_pressed"]:
+				_nine(key, cr, BTN_CAP)
+			_nine("btn_idle!white", cr + Vector2i(2, 2), BTN_CAP)
+	else:
+		_warm_crates()
 	StreetSkin.warm_notes(self, field_rect())
 	if bells:
 		StreetSkin.warm(self, field_rect())
@@ -1517,10 +1586,57 @@ func _draw_pixel_buttons() -> void:
 	_px(panel.position, 0, 0, panel.size.x / p, 1, PX_BRONZE[1].lerp(PX_BRONZE[2], env))
 	_px(panel.position, 0, 1, panel.size.x / p, 1, PX_BRONZE[0])
 	var w := r.size.x / 3.0
-	# (no picture, no button: the crates are the only buttons now)
-	if StreetSkin.ai_tex("crate_idle_0", Vector2i.ONE) != null:
+	if STEP_BUTTONS:
+		_draw_steps()
+	elif StreetSkin.ai_tex("crate_idle_0", Vector2i.ONE) != null:
 		_draw_crates()
 	_draw_street_marks(r, w)
+
+
+## The carved wooden steps (art/ai/btn_idle, btn_pressed, foot) standing up out of the panel, their
+## side showing below them. A press sinks the step and shows the pressed picture; a hit lights it hot,
+## a miss dull red; a note about to reach its lane lights its edge. A bare foot is carved into each
+## (both in the middle one).
+func _draw_steps() -> void:
+	var p := PxArt.PX
+	for lane in 3:
+		var br := _button_rect(lane)
+		var st := _button_state(lane)
+		var cells := _button_cells(lane)
+		var cols := cells.x
+		var rows := cells.y
+		var down := PX_LIFT if st == "pressed" or st == "hit" else 0
+		var o := br.position + Vector2(0, down * p)
+		# the step's side under it (the part that sinks into the panel when pressed)
+		var side := PX_LIFT - down
+		if side > 0:
+			_px(o, 2, rows - 1, cols - 4, side + 1, PX_BRONZE[0])
+			_px(o, 3, rows + side - 1, cols - 6, 1, PX_WOOD[0])
+		var down_pic := st == "pressed" or st == "hit"
+		var tex := _nine("btn_pressed" if down_pic else "btn_idle", Vector2i(cols, rows), BTN_CAP)
+		var mod := {"idle": Color.WHITE, "cued": Color(1.2, 1.1, 0.92), "pressed": Color.WHITE,
+			"hit": Color(1.45, 1.2, 0.85), "miss": Color(0.95, 0.5, 0.45)}[st] as Color
+		if st == "cued" or st == "hit":
+			# a one-px glow around the step's own outline (its cut corners included)
+			var glow := Color("#fff2c0") if st == "hit" else Color("#ffc445")
+			var sil := _nine("btn_idle!white", Vector2i(cols + 2, rows + 2), BTN_CAP)
+			if sil != null:
+				draw_texture_rect(sil, Rect2(o - Vector2(p, p), Vector2(cols + 2, rows + 2) * p), false, Color(glow, 0.8))
+		if tex != null:
+			draw_texture_rect(tex, Rect2(o, Vector2(cols, rows) * p), false, mod)
+		# the feet carved into it, at the foot picture's own proportions
+		var fmod := {"idle": Color(0.82, 0.78, 0.72), "cued": Color(1, 0.97, 0.9), "pressed": Color.WHITE,
+			"hit": Color(1.15, 1.1, 1.0), "miss": Color(0.55, 0.32, 0.3)}[st] as Color
+		var feet := [-1.0, 1.0] if lane == 1 else ([-1.0] if lane == 0 else [1.0])
+		var fh := clampi(int(rows * 0.5), 16, 40)
+		var fasp := StreetSkin.ai_aspect("foot")
+		var fw := maxi(roundi(fh * (fasp if fasp > 0.0 else FOOT_ASPECT)), 6)
+		for i in feet.size():
+			var cx := cols * 0.5 + (0.0 if feet.size() == 1 else (float(i) - 0.5) * fw * 1.5)
+			var ftex := StreetSkin.ai_tex("foot" if feet[i] > 0.0 else "foot!mirror", Vector2i(fw, fh))
+			if ftex != null:
+				var fo := Vector2(roundf(cx - fw * 0.5), roundf(rows * 0.5 - fh * 0.5))
+				draw_texture_rect(ftex, Rect2(o + fo * p, Vector2(fw, fh) * p), false, fmod)
 
 
 ## The step crates from Daniele's ChatGPT controls sheet (art/ai/crate_{idle,pressed}_<lane>, cut by

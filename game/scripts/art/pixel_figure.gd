@@ -53,8 +53,13 @@ var _size := Vector2.ONE
 ## drawn poses, 0 up, 1 going down, 2 down, 3 coming back (the beat snaps to 2, then 3, then 0). Where they exist the figure is one
 ## picture swapped by the beat instead of pieces moved.
 const BOB_DIR := "res://art/ai/fig/"
-## Seconds after the beat each drawn pose ends (snap down on the beat, a quick return, then up).
-const BOB_FRAMES := [[0.1, 2], [0.17, 3]]   ## (1, the pose going down, is never shown on the way up)
+## How long each drawn pose shows, from the frames' own timing at 120 BPM (README of the bob set:
+## 0 up 200 ms, 1 going down 90 ms, 2 down 80 ms, 3 coming back 130 ms): the down pose lands on the
+## beat, the going-down pose leads into it. A faster song shortens them all alike; a slower one keeps
+## them and holds the up pose longer, so the snap never goes soft.
+const BOB_MS := [200.0, 90.0, 80.0, 130.0]
+const BOB_SPB := 0.5          ## the beat they were drawn for (120 BPM)
+var spb := 0.5                ## the song's seconds a beat (StreetBackdrop sets it)
 var _bob_tex: Array[Texture2D] = []
 
 
@@ -161,15 +166,27 @@ func pose(t: float, _bar: float, still := false, ring := 9.0, ring_up := true) -
 ## The drawn bob: the down pose on the beat (and when a bell is rung on time), then the poses back up.
 ## Reduced motion keeps the halfway poses only.
 func _pose_frames(t: float, still: bool, ring: float) -> void:
+	_upper.texture = _bob_tex[bob_frame(t, spb, still, ring, reduced_motion)]
+
+
+## The drawn pose t seconds after the beat (beats spb apart; ring: seconds since a bell rung on time).
+static func bob_frame(t: float, p_spb: float, still := false, ring := 9.0, calm := false) -> int:
+	if still:
+		return 0
+	var k := clampf(p_spb / BOB_SPB, 0.2, 1.0)
+	var down := BOB_MS[2] * 0.001 * k
+	var back := BOB_MS[3] * 0.001 * k
+	var lead := BOB_MS[1] * 0.001 * k
+	var since := t
+	if ring >= 0.0 and ring < since:
+		since = ring
 	var f := 0
-	if not still:
-		var since := t
-		if ring >= 0.0 and ring < since:
-			since = ring
-		for e: Array in BOB_FRAMES:
-			if since >= 0.0 and since < float(e[0]):
-				f = int(e[1])
-				break
-		if reduced_motion and f == 2:
-			f = 1
-	_upper.texture = _bob_tex[f]
+	if since >= 0.0 and since < down:
+		f = 2
+	elif since >= 0.0 and since < down + back:
+		f = 3
+	elif t >= 0.0 and t < 90.0 and p_spb - t <= lead:
+		f = 1   # going down into the next beat
+	if calm and f == 2:
+		f = 1
+	return f

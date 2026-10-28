@@ -1252,9 +1252,9 @@ static func _hit_line(lv: LaneView, field: Rect2, rects: Array[Rect2], hl: float
 		lv.draw_polyline(ring, rim, 5.0, true)
 
 
-## The pxl rings (tools/art/pxl) over Daniele's: off since his rings and coins came as one set drawn
-## at one angle (2026-10-28, tools/art/chatgpt/kits.py), so a coin lands exactly on its ring.
-const PXL_RINGS := false
+## The pxl rings (tools/art/pxl, drawn by Claude) over the ring pictures: back on with the notes from
+## before the ChatGPT kits (Daniele's test of 2026-10-28: the drawn notes played better).
+const PXL_RINGS := true
 
 
 ## The pixel look's hit slot from Daniele's ring pictures, over the slot's outline sil: the grey ring

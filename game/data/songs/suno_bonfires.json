@@ -1,10 +1,11 @@
 {
  "id": "suno_bonfires",
  "title": {
-  "en": "Around the Bonfires (Suno test)",
-  "it": "Intorno ai falò (prova Suno)"
+  "en": "Around the Bonfires",
+  "it": "Intorno ai falò"
  },
  "stop": 3,
+ "version": "original",
  "kind": "story",
  "bpm": 100.06,
  "offset": 0.65,

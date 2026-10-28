@@ -23,10 +23,7 @@ func build() -> void:
 	if song != null and song.lessons.is_empty():
 		song = null   # a song without lessons (a remix of the workshop's): the tutorial song teaches
 	if song == null:
-		for s in SongLibrary.story():
-			if s.kind == "tutorial":
-				song = s
-				break
+		song = SongLibrary.tutorial()
 	if song == null:
 		push_error("tutorial: no tutorial song")
 		return
@@ -271,10 +268,11 @@ func _finale() -> void:
 	go.name = "PlaySong"
 	box.add_child(go)
 	var story := SongLibrary.story()
-	if story.size() > 1:
-		var on := UIKit.button(tr("tut_next_stop") % UIKit.song_title(story[1]), func() -> void:
+	if not story.is_empty():
+		# the story's first stop (the tutorial is not in the story since 2026-10-28)
+		var on := UIKit.button(tr("tut_next_stop") % UIKit.song_title(story[0]), func() -> void:
 			app.reset("title")
-			app.open("stop_card", {"song_id": story[1].id}))
+			app.open("stop_card", {"song_id": story[0].id}))
 		on.name = "NextStop"
 		box.add_child(on)
 	var later := UIKit.button(tr("tut_later"), func() -> void: app.reset("title"), UIKit.QUIET)

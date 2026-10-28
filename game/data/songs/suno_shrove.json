@@ -1,10 +1,11 @@
 {
  "id": "suno_shrove",
  "title": {
-  "en": "Shrove Tuesday (Suno test)",
-  "it": "Martedì grasso (prova Suno)"
+  "en": "Shrove Tuesday",
+  "it": "Martedì grasso"
  },
  "stop": 7,
+ "version": "original",
  "kind": "story",
  "bpm": 128.48,
  "offset": 0.702,

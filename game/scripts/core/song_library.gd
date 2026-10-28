@@ -40,20 +40,22 @@ static func is_remix_id(id: String) -> bool:
 	return s != null and s.id != id
 
 
-## Story stops in order (the tutorial is stop 1), one song a stop: the tutorial where the stop has
-## one, else its recorded original where it has one, else its own song. A stop with recorded
-## versions shows once; the versions are on its card (versions()), and its synthesized placeholder is
-## left out (graphics review, 2026-10-28).
+## Story stops in order, one song a stop: its recorded original where it has one, else its own song.
+## The first, synthesized versions of the stops are gone from the story and free play where a stop has
+## recordings (Daniele, 2026-10-28: "keep Suno and their remixes only"); the tutorial lives in the
+## Tutorial screen only. The other versions (the remix) are on the stop's card (versions()).
 static func story() -> Array[SongData]:
 	_ensure()
 	var out: Array[SongData] = []
 	for stop in _stops():
-		out.append(_lead(at_stop(stop)))
+		var lead := _lead(at_stop(stop))
+		if lead != null:
+			out.append(lead)
 	return out
 
 
-## The songs a stop's card offers, its lead (story()) first: the tutorial, the recorded original and
-## remix. A stop without recordings has only its own song (whose built-in remix stays a chip).
+## The songs a stop's card offers, its lead (story()) first: the recorded original, then the remix.
+## A stop without recordings has only its own song (whose built-in remix stays a chip).
 static func versions(song: SongData) -> Array[SongData]:
 	_ensure()
 	if song == null:
@@ -61,14 +63,17 @@ static func versions(song: SongData) -> Array[SongData]:
 	var here := at_stop(song.stop)
 	if not here.has(song):
 		return [song]
-	var out: Array[SongData] = [_lead(here)]
+	var lead := _lead(here)
+	if lead == null:
+		return [song]
+	var out: Array[SongData] = [lead]
 	var recorded := here.any(func(x: SongData) -> bool: return x.version != "")
-	for v in ["", "original", "remix"]:
+	for v in ["original", "remix", ""]:
 		for x in here:
-			if x in out or x.version != v:
+			if x in out or x.version != v or x.kind != "story":
 				continue
-			if v == "" and recorded and x.kind != "tutorial":
-				continue   # the synthesized placeholder a recording stands in for
+			if v == "" and recorded:
+				continue   # the synthesized first version a recording replaced
 			out.append(x)
 	return out
 
@@ -81,10 +86,19 @@ static func catalogue() -> Array[SongData]:
 	return out
 
 
+## The Tutorial screen's lessons' song (kind "tutorial"), or null.
+static func tutorial() -> SongData:
+	_ensure()
+	for s in _songs:
+		if s.kind == "tutorial":
+			return s
+	return null
+
+
 static func _stops() -> Array[int]:
 	var stops: Array[int] = []
 	for s in _songs:
-		if (s.kind == "story" or s.kind == "tutorial") and not s.stop in stops:
+		if s.kind == "story" and not s.stop in stops:
 			stops.append(s.stop)
 	stops.sort()
 	return stops
@@ -95,18 +109,18 @@ static func at_stop(stop: int) -> Array[SongData]:
 	_ensure()
 	var out: Array[SongData] = []
 	for s in _songs:
-		if (s.kind == "story" or s.kind == "tutorial") and s.stop == stop:
+		if s.kind == "story" and s.stop == stop:
 			out.append(s)
 	out.sort_custom(func(a: SongData, b: SongData) -> bool: return a.id < b.id)
 	return out
 
 
 static func _lead(here: Array[SongData]) -> SongData:
-	for want in ["tutorial", "original", ""]:
+	for want in ["original", ""]:
 		for x in here:
-			if (want == "tutorial" and x.kind == "tutorial") or (want != "tutorial" and x.kind == "story" and x.version == want):
+			if x.kind == "story" and x.version == want:
 				return x
-	return here[0]
+	return here[0] if not here.is_empty() else null
 
 
 static func _ensure() -> void:

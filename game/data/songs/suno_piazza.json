@@ -1,10 +1,11 @@
 {
  "id": "suno_piazza",
  "title": {
-  "en": "The Piazza (Suno test)",
-  "it": "La piazza (prova Suno)"
+  "en": "The Piazza",
+  "it": "La piazza"
  },
  "stop": 6,
+ "version": "original",
  "kind": "story",
  "bpm": 143.06,
  "offset": 1.437,
