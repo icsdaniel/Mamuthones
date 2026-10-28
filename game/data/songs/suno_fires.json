@@ -1,11 +1,11 @@
 {
  "id": "suno_fires",
  "title": {
-  "en": "Sant'Antonio's Fires (Suno test)",
-  "it": "I fuochi di Sant'Antonio (prova Suno)"
+  "en": "Sant'Antonio's Fires",
+  "it": "I fuochi di Sant'Antonio"
  },
  "stop": 2,
- "kind": "story",
+ "kind": "story", "version": "original",
  "bpm": 66.01,
  "offset": 0.456,
  "audio": "res://audio/music/suno_fires.ogg",

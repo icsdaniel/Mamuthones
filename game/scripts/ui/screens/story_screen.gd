@@ -1,6 +1,7 @@
 extends Screen
-## The story: a plain vertical list of the stops (number, name, day, best grade), the next stop marked
-## and the locked ones dimmed, a goal card on top and a Play button at the foot. No pictures.
+## The story: a plain vertical list of the stops, one row each (number, name, day, best grade over
+## its versions), the next stop marked and the locked ones dimmed, a goal card on top and a Play
+## button at the foot. No pictures.
 
 func build() -> void:
 	var cols := UIKit.column_with_footer(self, 12)
@@ -25,7 +26,13 @@ func build() -> void:
 
 func _row(song: SongData, is_next: bool) -> Control:
 	var open := Progression.is_unlocked(song.id)
-	var grade := GradeBadge.new(UIKit.best_grade(song.id), false, UIKit.any_full_combo(song.id))
+	# the stop's best over all its versions (SongLibrary.versions)
+	var best := -1
+	var fc := false
+	for v in SongLibrary.versions(song):
+		best = maxi(best, UIKit.best_grade(v.id))
+		fc = fc or UIKit.any_full_combo(v.id)
+	var grade := GradeBadge.new(best, false, fc)
 	grade.name = "Grade"
 	grade.visible = open
 	var state := "next" if is_next else ("open" if open else "locked")

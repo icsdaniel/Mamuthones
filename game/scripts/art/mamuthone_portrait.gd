@@ -105,7 +105,9 @@ func _redraw() -> void:
 func _relayout() -> void:
 	if _bg == null:
 		return
-	_px = maxf(1.0, minf(PixelFrame.px_for(self), floorf(size.y / float(ART_H))))
+	# framed, he keeps the scene's pixel size; alone (the workshop) he fills his height, whole pixels
+	var cap := PixelFrame.px_for(self) if framed else INF
+	_px = maxf(1.0, minf(cap, floorf(size.y / float(ART_H))))
 	_bg.px = int(_px)
 	var vh := size.y / _px - float(PixelFrame.DEPTH) * 2.0
 	_bg.focus = Vector2(SPOT.x - 6.0, SPOT.y + 5.0 - vh * 0.5)

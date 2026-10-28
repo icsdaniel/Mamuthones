@@ -67,7 +67,7 @@ static func best_grade(song_key: String, difficulties: Array = [], profile: Vari
 	return most
 
 
-## A stop is finished with a D or better at any level. The Workshop (tutorial) is also finished once
+## A stop is finished with a D or better at any level, on any of its versions. The Workshop (tutorial) is also finished once
 ## the tutorial is done (Profile flag "tutorial_done"), since it is played lesson by lesson.
 static func cleared(song_id: String, profile: Variant = null) -> bool:
 	var s := SongLibrary.get_song(song_id)
@@ -75,7 +75,15 @@ static func cleared(song_id: String, profile: Variant = null) -> bool:
 		var p: Variant = _profile(profile)
 		if p != null and p.has_method("has_flag") and p.has_flag("tutorial_done"):
 			return true
-	return best_grade(song_id, [], profile) >= CLEAR_GRADE
+	if best_grade(song_id, [], profile) >= CLEAR_GRADE:
+		return true
+	# a story stop is finished on any of its versions (SongLibrary.versions: a recording, or the
+	# placeholder it stands in for)
+	if s != null and s.id == song_id and (s.kind == "story" or s.kind == "tutorial"):
+		for o in SongLibrary.at_stop(s.stop):
+			if o != s and best_grade(o.id, [], profile) >= CLEAR_GRADE:
+				return true
+	return false
 
 
 static func is_unlocked(song_id: String, profile: Variant = null) -> bool:

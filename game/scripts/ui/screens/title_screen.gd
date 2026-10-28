@@ -1,7 +1,8 @@
 extends Screen
 ## Title: the logo alone on the calm backdrop, then in the bottom half the red banner that always says
-## what to do next (the next story stop), the framed buttons to every other mode in two columns, a
-## gold rule, and Settings and Quit. No scene art.
+## what to do next (the next story stop), the four modes in two columns, a gold rule and Settings.
+## No scene art. Scores are in free play, the calibration in Settings, and there is no Quit (phones
+## close apps their own way; Android's back leaves from here) (graphics review, 2026-10-28).
 
 
 var _play: Button
@@ -28,12 +29,12 @@ func build() -> void:
 	var logo := Logo.new()
 	logo.name = "Logo"
 	logo.mode = "title"
-	logo.subtitle = tr("app_title")
+	logo.subtitle = ""   # the name stands on its own
 	logo.set_anchors_preset(Control.PRESET_FULL_RECT)
-	logo.offset_top = 40.0 + safe.y
-	logo.offset_bottom = -24.0
-	logo.offset_left = 12.0
-	logo.offset_right = -12.0
+	logo.offset_top = 56.0 + safe.y
+	logo.offset_bottom = -56.0
+	logo.offset_left = 0.0
+	logo.offset_right = 0.0
 	top.add_child(logo)
 	Sound.stop_ambience()   # no background loops (Daniele, 2026-10-15)
 
@@ -70,9 +71,7 @@ func build() -> void:
 		["StoryMap", "title_story", func() -> void: app.open("story")],
 		["FreePlay", "title_free", func() -> void: app.open("free_play")],
 		["Workshop", "title_workshop", func() -> void: app.open("workshop")],
-		["Leaderboards", "title_boards", _boards],
 		["Tutorial", "title_tutorial", func() -> void: app.open("tutorial")],
-		["Calibrate", "title_calibrate", func() -> void: app.open("calibration", {"then_latency": true})],
 	]:
 		var b := UIKit.button(tr(item[1]), item[2])
 		b.name = item[0]
@@ -89,18 +88,11 @@ func build() -> void:
 
 	var row := HBoxContainer.new()
 	row.alignment = BoxContainer.ALIGNMENT_CENTER
-	row.add_theme_constant_override("separation", 24)
 	box.add_child(row)
 	var settings := UIKit.button(tr("title_settings"), func() -> void: app.open("settings"))
 	settings.name = "Settings"
-	settings.custom_minimum_size.x = 270
+	settings.custom_minimum_size.x = 300
 	row.add_child(settings)
-	# iOS and browsers leave apps their own way; Android and desktop get a Quit.
-	if not (OS.has_feature("ios") or OS.has_feature("web")):
-		var quit := UIKit.button(tr("title_quit"), quit_game)
-		quit.name = "Quit"
-		quit.custom_minimum_size.x = 270
-		row.add_child(quit)
 
 
 func _play_next() -> void:
@@ -109,10 +101,6 @@ func _play_next() -> void:
 		app.open("story")
 	else:
 		app.open("stop_card", {"song_id": id})
-
-
-func _boards() -> void:
-	app.open("boards")
 
 
 ## Tests set this to count quits instead of leaving.

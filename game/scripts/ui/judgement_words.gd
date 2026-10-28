@@ -192,15 +192,17 @@ func warm(keys: Array) -> void:
 	w.queue_free()
 
 
-## The banner's size in cells round word w: at its own proportions (never stretched), wide enough
-## for the word and tall enough for it.
+## The banner's size in cells round word w: as tall as the word plus a margin, as wide as the word
+## plus its caps (Daniele's banner kit of 2026-10-28 takes any width: caps and whole tiles at one
+## scale, never stretched).
 func _plate_cells(w: Label) -> Vector2i:
 	var P := PxArt.PX
-	var asp := Hud._aspect("judge_plate")
+	var ch := roundi(w.size.y / P) + 8
+	var cap := Hud.cap_cells("judge_plate", ch)
 	# never narrower than MIN_PLATE_W: the smaller face two words together drop to (and a short word)
 	# gets the same board as the first word, not a smaller one
-	var cw := maxi(maxi(roundi(w.size.x / P) + 14, roundi((roundi(w.size.y / P) + 4) * asp)), MIN_PLATE_W)
-	return Vector2i(cw, roundi(cw / asp))
+	var cw := maxi(roundi(w.size.x / P) + 2 * cap + 4, MIN_PLATE_W)
+	return Vector2i(cw, ch)
 
 
 ## Daniele's ChatGPT judgement banner (art/ai/judge_plate: a carved bronze-framed board with its word

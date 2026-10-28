@@ -3,7 +3,7 @@ ui_back,Back,Indietro
 ui_cancel,Cancel,Annulla
 ui_continue,Continue,Avanti
 ui_done,Done,Fatto
-app_title,The Weight of Bells,Il peso dei campanacci
+app_title,Sonazzos,Sonazzos
 lang_name_en,English,English
 lang_name_it,Italiano,Italiano
 celebrate_title,Unlocked,Sbloccato
@@ -34,7 +34,7 @@ cal_tilt_up,"Tilt the top toward you, sharply, and back","Porta di scatto la par
 cal_tilt_down,"Now away from you, sharply, and back","Ora di scatto lontano da te, e torna"
 cal_hint,"Hold the phone the way you will play: both hands, screen facing you. Three times each way.","Tieni il telefono come quando giochi: due mani, schermo verso di te. Tre volte per verso."
 cal_done,Done: your bells are tuned,Fatto: i tuoi campanacci sono pronti
-cal_check_body,"Try it now: tilt as you would in a song and each ring is marked on the graph. Holding the phone should stay between the gold lines.","Prova ora: inclina come in una canzone e ogni rintocco viene segnato sul grafico. Tenendo il telefono fermo la linea resta tra le righe dorate."
+cal_check_body,Try it now: tilt as you would in a song and each ring is marked on the graph. Holding the phone should stay between the gold lines.,Prova ora: inclina come in una canzone e ogni rintocco viene segnato sul grafico. Tenendo il telefono fermo la linea resta tra le righe dorate.
 cal_done_body,You can redo this any time in Settings.,Puoi rifarlo quando vuoi dalle Impostazioni.
 cal_again,Try again,Riprova
 cal_use_slam,Play with buttons instead,Gioca con i tasti
@@ -170,11 +170,11 @@ cred_check,"Still being checked with the community, such as the Museo delle Masc
 cred_made_h,The game,Il gioco
 cred_made,"An offline game with no ads, no tracking and no purchases.","Un gioco offline, senza pubblicità, senza tracciamento e senza acquisti."
 cred_music_h,Music,Musica
-cred_music,Original music written for the game in the spirit of Sardinian traditional music. Nothing is taken from real recordings or known tunes.,"Musica originale scritta per il gioco, ispirata alla musica tradizionale sarda. Niente è preso da registrazioni vere o da melodie conosciute."
+cred_music,"Music made with Suno from our own prompts, in the spirit of Sardinian traditional music. Nothing is taken from real recordings or known tunes.","Musica fatta con Suno a partire dalle nostre richieste, ispirata alla musica tradizionale sarda. Niente è preso da registrazioni vere o da melodie conosciute."
 cred_sound_h,Bells and sound,Campanacci e suoni
 cred_sound,"The bells are synthesized for now. Before launch they will be replaced by recordings of Mamoiada bells, made with the community's consent.","Per ora i campanacci sono sintetizzati. Prima dell'uscita saranno sostituiti da registrazioni di campanacci di Mamoiada, fatte con il consenso della comunità."
 cred_art_h,Art,Grafica
-cred_art,Woodcut-style art drawn for the game.,Illustrazioni in stile xilografia disegnate per il gioco.
+cred_art,"Art made with image AI from our own designs and prompts, then finished by hand.","Illustrazioni fatte con un'IA per immagini a partire dai nostri disegni e dalle nostre richieste, poi rifinite a mano."
 cred_fonts_h,Fonts,Caratteri
 cred_fonts,"IM Fell English SC by Igino Marini and Alegreya Sans by the Alegreya Sans Project Authors (Huerta Tipográfica), under the SIL Open Font License.","IM Fell English SC di Igino Marini e Alegreya Sans degli autori del progetto Alegreya Sans (Huerta Tipográfica), con licenza SIL Open Font License."
 cred_engine_h,Engine,Motore
@@ -263,7 +263,7 @@ res_timing_few,Too few hits to tell.,Troppo pochi colpi per dirlo.
 res_fix_late,Fix it: show the notes %d ms earlier,Correggi: mostra le note %d ms prima
 res_fix_early,Fix it: show the notes %d ms later,Correggi: mostra le note %d ms dopo
 res_fixed,Done. Your next song uses it.,Fatto. La prossima canzone lo usa.
-res_run_saved,"This run is saved for checking: Downloads/%s (only the last run is kept).","Questa partita è salvata per il controllo: Download/%s (si tiene solo l'ultima)."
+res_run_saved,This run is saved for checking: Downloads/%s (only the last run is kept).,Questa partita è salvata per il controllo: Download/%s (si tiene solo l'ultima).
 res_run_copy,Copy this run for checking,Copia questa partita per il controllo
 res_run_copied,Copied. Paste it in your message.,Copiata. Incollala nel tuo messaggio.
 res_frames,"Smoothness: %d frames a second, %d slow ones (slowest %d ms).","Fluidità: %d fotogrammi al secondo, %d lenti (il più lento %d ms)."
@@ -361,7 +361,7 @@ tut_holds,Press the button when the head reaches the line and keep holding until
 tut_holds_short,Press and hold,Premi e tieni premuto
 tut_fail_holds,Keep your thumb down until the end of the long note reaches the line.,Tieni il pollice giù finché la fine della nota non arriva alla linea.
 tut_still_title,Stand still,Fermi
-tut_still,"Grey bars mean the procession stops dead. Hold the phone still until the grey has passed: even a small tilt shakes the bells.","Le barre grigie vogliono dire che la processione si ferma di colpo. Tieni fermo il telefono finché il grigio non è passato: anche una piccola inclinazione scuote i campanacci."
+tut_still,Grey bars mean the procession stops dead. Hold the phone still until the grey has passed: even a small tilt shakes the bells.,Le barre grigie vogliono dire che la processione si ferma di colpo. Tieni fermo il telefono finché il grigio non è passato: anche una piccola inclinazione scuote i campanacci.
 tut_still_short,Don't move in the grey,Immobili nel grigio
 tut_fail_still,The phone moved during a stand-still. Hold it still while the grey bars pass.,Il telefono si è mosso durante una sosta. Tienilo fermo mentre passano le barre grigie.
 tut_stomps_title,Two thumbs,Due pollici
@@ -375,3 +375,7 @@ tut_full_slam_short,Tap the step on the line,Tocca il passo sulla linea
 tut_fail_full_slam,Tap the step right as it reaches the line: in slam mode that rings its bell too.,Tocca il passo proprio quando arriva sulla linea: in modalità colpo così suona anche il campanaccio.
 tut_full_short,Step and flick together,Passo e colpo insieme
 tut_fail_full,Both halves have to land together: tap and flick in one movement.,Le due parti devono arrivare insieme: tocca e dai il colpo in un solo movimento.
+version_practice,Practice,Esercizio
+version_original,Original,Originale
+version_remix,Remix,Remix
+stop_version,Version,Versione

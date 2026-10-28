@@ -161,7 +161,7 @@ static func build() -> Theme:
 	t.set_color("font_disabled_color", "QuietButton", Palette.BONE_FAINT)
 
 	# ---- panels
-	var board := _box("panel_dark", Vector4i(7, 7, 7, 7), Vector4(36, 30, 36, 30))
+	var board := _box("panel_dark", Vector4i(9, 9, 9, 9), Vector4(36, 30, 36, 30))
 	var card := _box("panel_paper", Vector4i(7, 7, 7, 7), Vector4(40, 34, 40, 34))
 	for type in ["Panel", "PanelContainer", "PopupPanel"]:
 		t.set_stylebox("panel", type, board)

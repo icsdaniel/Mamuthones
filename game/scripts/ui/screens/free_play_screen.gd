@@ -15,14 +15,26 @@ var _remix: CheckButton
 func build() -> void:
 	var cols := UIKit.column_with_footer(self, 14)
 	var box := cols[0]
-	UIKit.header(box, tr("free_title"), on_back)
+	var head := UIKit.header(box, tr("free_title"), on_back)
+	# the scores (this phone's bests and the platform's ladders), off the title since 2026-10-28
+	var scores := UIKit.button(tr("title_boards"), func() -> void: app.open("boards"), UIKit.QUIET)
+	scores.name = "Leaderboards"
+	scores.custom_minimum_size = Vector2(UIKit.TOUCH * 2.4, UIKit.TOUCH)
+	head.add_child(scores)
 	# The difficulties are tabs along the top; the songs below show their best at the open one.
 	var items := []
 	for d in SongData.DIFFICULTIES:
 		items.append([d, tr("diff_" + d)])
 	_tabs = UIKit.tabs(box, items, difficulty, _pick_diff)
-	for s in SongLibrary.story():
-		var b := UIKit.list_row(str(s.stop), UIKit.song_title(s), "", GradeBadge.new(-1), "open", _pick_song.bind(s))
+	var last_stop := -1
+	for s in SongLibrary.catalogue():
+		# a stop's number once, on its first version
+		var lead := str(s.stop) if s.stop != last_stop else " "   # (a blank keeps the titles in line)
+		last_stop = s.stop
+		var title := UIKit.song_title(s)
+		if s.kind == "tutorial" and SongLibrary.versions(s).size() > 1:
+			title += " · " + tr("version_practice")   # beside the stop's recorded song of the same name
+		var b := UIKit.list_row(lead, title, "", GradeBadge.new(-1), "open", _pick_song.bind(s))
 		(b.get_child(0).get_child(b.get_child(0).get_child_count() - 1) as Control).name = "Grade"
 		b.toggle_mode = true
 		b.name = "Song_" + s.id

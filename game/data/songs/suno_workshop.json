@@ -1,11 +1,11 @@
 {
  "id": "suno_workshop",
  "title": {
-  "en": "The Workshop (Suno test)",
-  "it": "La bottega (prova Suno)"
+  "en": "The Workshop",
+  "it": "La bottega"
  },
  "stop": 1,
- "kind": "story",
+ "kind": "story", "version": "original",
  "bpm": 101.0,
  "offset": 0.595,
  "audio": "res://audio/music/suno_workshop.ogg",

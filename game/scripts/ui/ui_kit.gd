@@ -111,6 +111,7 @@ static func column(parent: Control, scroll := true, separation := 20) -> VBoxCon
 		sc.add_child(center)
 		center.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 		center.size_flags_vertical = Control.SIZE_EXPAND_FILL
+		more_below(margin, sc)
 	else:
 		margin.add_child(center)
 	center.add_child(box)
@@ -155,6 +156,28 @@ static func column_with_footer(parent: Control, separation := 16) -> Array[VBoxC
 	sc.get_v_scroll_bar().visibility_changed.connect(foot.queue_redraw)
 	outer.add_child(foot)
 	return [box, foot]
+
+
+## While scroller sc has more below, the bottom of over (a container laid over it) sinks into
+## shadow in stepped bands with a small gold chevron, so a list running off the screen reads as
+## going on, not cut off (graphics review, 2026-10-28: settings looked cut).
+static func more_below(over: Container, sc: ScrollContainer) -> void:
+	var fade := Control.new()
+	fade.name = "MoreBelow"
+	fade.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	over.add_child(fade)
+	var bar := sc.get_v_scroll_bar()
+	fade.draw.connect(func() -> void:
+		if not bar.visible or bar.value + bar.page >= bar.max_value - 4.0:
+			return
+		var h := fade.size.y
+		for i in 4:
+			fade.draw_rect(Rect2(-GUTTER, h - 64.0 + i * 16.0, fade.size.x + 2.0 * GUTTER, 16.0), Color(PixelPalette.K[0], 0.22 * (i + 1)))
+		var c := Vector2(fade.size.x * 0.5, h - 18.0)
+		fade.draw_colored_polygon(PackedVector2Array([c + Vector2(-18, -9), c + Vector2(18, -9), c + Vector2(0, 9)]), PixelPalette.GOLD[4]))
+	bar.value_changed.connect(func(_v: float) -> void: fade.queue_redraw())
+	bar.changed.connect(fade.queue_redraw)
+	bar.visibility_changed.connect(fade.queue_redraw)
 
 
 ## Safe-area insets in canvas units (left, top, right, bottom) for notches and home bars.
@@ -214,12 +237,12 @@ static func list_row(lead: String, title: String, caption: String, right: Contro
 			on_press.call())
 		juice(b)
 	var fill: Color = PixelPalette.NAVY[2] if state != "locked" else PixelPalette.NAVY[0]
-	var edge: Color = PixelPalette.RED[3] if state == "next" else (PixelPalette.GOLD[2] if state == "open" else PixelPalette.NAVY[2])
+	var edge: Color = PixelPalette.RED[3] if state == "next" else (PixelPalette.GOLD[3] if state == "open" else PixelPalette.NAVY[2])
 	for st in ["normal", "hover", "pressed", "disabled", "focus", "hover_pressed"]:
 		var sb := StyleBoxFlat.new()
 		sb.bg_color = fill.lightened(0.12) if st in ["pressed", "hover_pressed"] else fill
 		sb.border_color = edge
-		sb.set_border_width_all(3)
+		sb.set_border_width_all(5)   # a chunky rim like the boards' bronze (2026-10-28)
 		if state == "next":
 			sb.border_width_left = 9
 		sb.anti_aliasing = false

@@ -1,6 +1,7 @@
 extends Screen
 ## The card before a story stop, no pictures: the stop's name, day and best grade, two plain sentences
-## about the moment, the difficulties as rows with their best, the remix chip, and Play at the foot.
+## about the moment, its versions as tabs (a stop with recordings), the difficulties as rows with
+## their best, the remix chip, and Play at the foot.
 ## args: song_id.
 
 static var last_difficulty := "easy"
@@ -40,6 +41,18 @@ func build() -> void:
 		var lessons := UIKit.button(tr("stop_lessons"), func() -> void: app.open("tutorial", {"song_id": song.id}), UIKit.PRIMARY)
 		lessons.name = "Lessons"
 		foot.add_child(lessons)
+
+	# A stop with recorded versions: which one to play, as tabs (each its own song and bests)
+	var vs := SongLibrary.versions(song)
+	if vs.size() > 1:
+		box.add_child(UIKit.label(tr("stop_version"), UIKit.SUB))
+		var items := []
+		for v in vs:
+			items.append([v.id, tr("version_practice") if v.kind == "tutorial" else tr("version_" + (v.version if v.version != "" else "original"))])
+		var tabs := UIKit.tabs(box, items, song.id, func(id: String) -> void:
+			if id != song.id:
+				app.replace("stop_card", {"song_id": id}))
+		tabs.name = "Versions"
 
 	# The difficulty heading carries the Remix chip once it is earned, so the reason to replay is in
 	# view next to the difficulty buttons.

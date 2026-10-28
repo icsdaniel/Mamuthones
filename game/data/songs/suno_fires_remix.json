@@ -1,11 +1,11 @@
 {
  "id": "suno_fires_remix",
  "title": {
-  "en": "Sant'Antonio's Fires remix (Suno test)",
-  "it": "I fuochi di Sant'Antonio remix (prova Suno)"
+  "en": "Sant'Antonio's Fires remix",
+  "it": "I fuochi di Sant'Antonio remix"
  },
  "stop": 2,
- "kind": "story",
+ "kind": "story", "version": "remix",
  "bpm": 137.0,
  "offset": 0.456,
  "audio": "res://audio/music/suno_fires_remix.ogg",

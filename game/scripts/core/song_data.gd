@@ -12,6 +12,9 @@ const DIFFICULTIES: Array[String] = ["easy", "medium", "hard", "expert"]
 var id := ""
 var stop := 0
 var kind := "story"   ## story | tutorial
+## "" a stop's own song; "original" or "remix": a recorded version of the stop's music (Suno), which
+## stands in for the stop's synthesized placeholder (SongLibrary.story(), versions()).
+var version := ""
 var bpm := 120.0
 var offset := 0.0
 var audio := ""
@@ -58,6 +61,7 @@ static func from_dict(d: Dictionary) -> SongData:
 	s.id = str(d.get("id", ""))
 	s.stop = int(d.get("stop", 0))
 	s.kind = str(d.get("kind", "story"))
+	s.version = str(d.get("version", ""))
 	s.bpm = float(d.get("bpm", 120.0))
 	s.offset = float(d.get("offset", 0.0))
 	s.audio = str(d.get("audio", ""))

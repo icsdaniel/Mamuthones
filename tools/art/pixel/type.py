@@ -129,6 +129,9 @@ ACCENTS = {"à": ("a", "grave"), "á": ("a", "acute"), "è": ("e", "grave"), "é
 SPACE = 3
 
 
+SQUARE = set("Dd")   ## glyphs the big face doubles without Scale2x
+
+
 def mask(rows):
     return np.array([[c == "#" for c in r] for r in rows], bool)
 
@@ -324,7 +327,9 @@ def main():
     caps = caps_cells()
     write_font("font_caps", caps, 10, 9, 12)
     write_font("font_caps_gold", caps, 10, 9, 12, GOLD_RAMP, (2, 8))
-    big = {ch: scale2x(c) for ch, c in caps.items()}
+    # D and d doubled plainly: Scale2x rounds their corners into an O ("Held" read "Helo", graphics
+    # review of 2026-10-28)
+    big = {ch: (np.kron(c, np.ones((2, 2), bool)) if ch in SQUARE else scale2x(c)) for ch, c in caps.items()}
     write_font("font_big", big, 20, 18, 22, None, (4, 17), True, space=6, gap=2)
     write_font("font_big_gold", big, 20, 18, 22, GOLD_RAMP, (4, 17), True, space=6, gap=2)
     sc = score_cells()

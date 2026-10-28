@@ -1,11 +1,11 @@
 {
  "id": "suno_workshop_remix",
  "title": {
-  "en": "The Workshop remix (Suno test)",
-  "it": "La bottega remix (prova Suno)"
+  "en": "The Workshop remix",
+  "it": "La bottega remix"
  },
  "stop": 1,
- "kind": "story",
+ "kind": "story", "version": "remix",
  "bpm": 90.0,
  "offset": 0.195,
  "audio": "res://audio/music/suno_workshop_remix.ogg",

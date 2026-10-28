@@ -43,6 +43,8 @@ const SIDES := 24                    ## a disc's facets round its edge
 const ROPE_W := 0.2                  ## the rope's width, in lane widths
 const ROPE_PIC_W := 16                ## cells across the rope's picture is shrunk to (the pixel look)
 const STRAP_D := 0.42                ## the bell strap's depth along the road, in lane widths
+const BAR_ARROW := 0.3               ## a strap's arrow, half its width, in lane widths (the review of 2026-10-28: big enough to read far up the road)
+const BAR_BELL := 0.4                ## a strap's cowbell's height, in lane widths
 ## Bursts and sparks are drawn as opaque pixel shapes (no soft glows or fades, which turn to mud on the
 ## pixel grid): flashes, stamped rings and square embers.
 
@@ -284,8 +286,10 @@ static func warm(lv: LaneView, field: Rect2) -> void:
 	var lw: float = lv.road_scale(LaneSkin.hit_line_y(field)) * _lane(field)
 	for q: float in [1.0, 0.8]:
 		for chain in 6:
-			var bs := lw * 0.42 * q * (1.0 + 0.07 * float(chain))
-			ai_tex("bar_bell", ai_fit_cells("bar_bell", Vector2(-bs * 0.42, -bs * 1.2), Vector2(bs * 0.42, 0.0)))
+			var bs := lw * 0.36 * q * (1.0 + 0.07 * float(chain))
+			for key in ["bar_bell", "bar_bell_l", "bar_bell_r"]:
+				if ai_tex(key, Vector2i.ONE) != null:
+					ai_tex(key, ai_fit_cells(key, Vector2(-bs * 0.42, -bs * 1.2), Vector2(bs * 0.42, 0.0)))
 	# the hit rings burning gold or red, at the size the grey ones are drawn
 	for k: String in _ai_sized.keys():
 		if k.begins_with("ring_idle_"):
@@ -304,9 +308,9 @@ static func _bell_size(lv: LaneView, field: Rect2, y: float) -> Dictionary:
 	var f := _frame3(lv, field, (x0 + x1) * 0.5, y, hw, STRAP_D * lw * FORE)
 	var h := DISC_H * 0.7
 	var quad := PackedVector2Array([f.call(Vector3(-1, h, -1)), f.call(Vector3(1, h, -1)), f.call(Vector3(1, 0, 1)), f.call(Vector3(-1, 0, 1))])
-	var s := lw * 0.34
-	var a := lw * 0.25
-	var hh := lw * 0.23
+	var s := lw * BAR_BELL
+	var a := lw * BAR_ARROW
+	var hh := lw * BAR_ARROW
 	return {"lw": lw, "cells": bar_cells(quad),
 		"bell": ai_fit_cells("bar_bell", Vector2(-s * 0.35, -s), Vector2(s * 0.35, 0.0)),
 		"arrow": ai_fit_cells("bar_arrow", Vector2(-a, -hh * 1.4), Vector2(a, hh * 0.4))}
@@ -793,12 +797,12 @@ static func _bell_pic(lv: LaneView, f: Callable, h: float, lane: float, lw: floa
 	var top := o.y + tall * 0.5
 	for i in (2 if cowbells else 0):
 		var at := Vector2(lv.project(Vector2(lane * float(i + 1), y)).x, top + tall * 0.25)
-		var s := lw * 0.34
+		var s := lw * BAR_BELL
 		ai_draw(lv, "bar_bell", at - Vector2(s * 0.35, s), at + Vector2(s * 0.35, 0.0), mod)
 	for i in 3:
 		var c := Vector2(lv.project(Vector2(lane * (float(i) + 0.5), y)).x, top - lw * 0.02)
-		var a := lw * 0.25
-		var hh := lw * 0.23
+		var a := lw * BAR_ARROW
+		var hh := lw * BAR_ARROW
 		ai_draw(lv, "bar_arrow" if up else "bar_arrow!flip", c - Vector2(a, hh * 1.4), c + Vector2(a, hh * 0.4), mod)
 
 
@@ -1075,6 +1079,9 @@ static func draw_notes(lv: LaneView, field: Rect2) -> void:
 						step(lv, field, cx, y, a, true)
 
 
+const CORD := [Color("#8a5a1c"), Color("#c89030")]   ## a chord's cord: bronze body, lit top
+
+
 ## A chord: two notes on one beat, joined by a bar in the steps' blue lying across the road between their centres, so
 ## the pair reads as one press with both thumbs. Drawn under the notes.
 static func cord(lv: LaneView, field: Rect2, x0: float, x1: float, y: float, alpha: float) -> void:
@@ -1083,16 +1090,17 @@ static func cord(lv: LaneView, field: Rect2, x0: float, x1: float, y: float, alp
 		return
 	var a: Vector2 = lv.project(Vector2(x0, y))
 	var b: Vector2 = lv.project(Vector2(x1, y))
-	# a bone cord, 2 art px thick on the grid with an ink outline and a lit top: a link, not a hold
-	# (a hold is the gold rope; the cord takes no note's colour)
+	# a dim bronze cord on the grid with an ink outline and a lit top: a link, not a hold (a hold is
+	# the gold rope; the cord takes no note's colour) and never as bright as a bell strap, the one bar
+	# across the road that asks for a tilt (graphics review, 2026-10-28)
 	var px := PxArt.PX
-	var th := maxf(1.0, roundf(lw * 0.13 / px)) * px
+	var th := maxf(1.0, roundf(lw * 0.08 / px)) * px
 	var x_a := PxArt.snap(minf(a.x, b.x))
 	var x_b := PxArt.snap(maxf(a.x, b.x))
 	var y0 := PxArt.snap(a.y - th * 0.5)
 	lv.draw_rect(Rect2(x_a, y0 - px, x_b - x_a, th + px * 2.0), _a(PixelPalette.K[0], alpha))
-	lv.draw_rect(Rect2(x_a, y0, x_b - x_a, th), _a(PixelPalette.BONE[2], alpha))
-	lv.draw_rect(Rect2(x_a, y0, x_b - x_a, px), _a(PixelPalette.BONE[4], alpha))
+	lv.draw_rect(Rect2(x_a, y0, x_b - x_a, th), _a(CORD[0], alpha))
+	lv.draw_rect(Rect2(x_a, y0, x_b - x_a, px), _a(CORD[1], alpha))
 
 
 ## Stamps a note from the pixel look's sheet, with its glow drawn live under it. False when the
@@ -1244,6 +1252,11 @@ static func _hit_line(lv: LaneView, field: Rect2, rects: Array[Rect2], hl: float
 		lv.draw_polyline(ring, rim, 5.0, true)
 
 
+## The pxl rings (tools/art/pxl) over Daniele's: off since his rings and coins came as one set drawn
+## at one angle (2026-10-28, tools/art/chatgpt/kits.py), so a coin lands exactly on its ring.
+const PXL_RINGS := false
+
+
 ## The pixel look's hit slot from Daniele's ring pictures, over the slot's outline sil: the grey ring
 ## takes the coming note's colour as it nears, burns gold when the lane is struck, red while the
 ## buttons are locked.
@@ -1263,7 +1276,7 @@ static func _ring_pic(lv: LaneView, sil: PackedVector2Array, k: float, g: float,
 		var near: float = incoming[1]
 		ci_poly(lv, sil, _a(kk[1], 0.35 * near * near))
 		mod = mod.lerp(kk[0] * 1.25, near)
-	if not _pxl_sizes("rings", "ring_idle").is_empty():
+	if PXL_RINGS and not _pxl_sizes("rings", "ring_idle").is_empty():
 		# the pxl rings: every lane the same ring; the coming note's colour lights only its inner lip
 		if locked:
 			pxl_draw(lv, "rings", "ring_red", lo, hi)
@@ -1305,7 +1318,7 @@ static func _chime(ci: CanvasItem, c: Vector2, rad: float, col: Color, wid: floa
 	return true
 
 
-const STRIKE_TIME := 0.5          ## how long a bell strike shows
+const STRIKE_TIME := 0.35         ## how long a bell strike shows (0.5 until the review of 2026-10-28)
 const STRIKE_HOLD := 0.16         ## the struck strap stays on the hit line this long
 const K_WHITE := [Color("#ffffff"), Color("#fff6dc"), Color("#c8b48c"), Color("#ffffff")]
 
@@ -1353,30 +1366,38 @@ static func bell_strike(lv: LaneView, field: Rect2, up: bool, quality: String, c
 		# whole pixels: a bar on the art grid, not a smoothed line
 		var bar := maxf(1.0, roundf(thick / PxArt.PX)) * PxArt.PX
 		lv.draw_rect(Rect2(p0.x, PxArt.snap(p0.y - bar * 0.5), p1.x - p0.x, bar), hot_col if hot else col)
-	# the cowbells thrown off the strap, swinging, ringing
+	# the cowbells swinging under the strap, ringing: below the hit line, so they never cover the
+	# notes coming down to it (graphics review, 2026-10-28: thrown up the lanes, they hid the next
+	# notes for half a second)
 	var hy := lv.project(Vector2(0.0, hl)).y
-	var bs := lw * 0.42 * big
-	var throw := exp(-age * 7.0) * sin(minf(age * 24.0, PI * 0.5)) * bs * 0.9
-	var swing := sin(age * 30.0) * exp(-age * 5.0) * 0.55
-	var fade := clampf((0.42 - age) / 0.14, 0.0, 1.0)   # gone before the next notes need the line
+	var bs := lw * 0.36 * big
+	var drop := exp(-age * 9.0) * sin(minf(age * 30.0, PI * 0.5)) * bs * 0.25
+	var swing := sin(age * 30.0) * exp(-age * 6.0)
+	var fade := clampf((STRIKE_TIME - 0.04 - age) / 0.1, 0.0, 1.0)
 	for i in (2 if fade > 0.0 else 0):
 		var bx := lv.project(Vector2(lane * float(i + 1), hl)).x
-		var at := Vector2(bx, hy - bs * 0.35 - throw)
+		var at := Vector2(bx, hy + bs * 1.15 + drop)
 		var c := at + Vector2(0.0, -bs * 0.5)
-		# the ring arcs, three in a row, each opening out and cooling
+		# the ring arcs, three in a row, each opening out and cooling, kept small
 		for r in 3:
 			var rk := tt * 1.8 - float(r) * 0.18
 			if rk <= 0.0 or rk >= 1.0:
 				continue
-			var rad := bs * (0.6 + 1.1 * rk) * (1.0 + 0.12 * float(r))
+			var rad := bs * (0.55 + 0.55 * rk) * (1.0 + 0.1 * float(r))
 			var rc: Color = ([Color.WHITE, PX_HOT[1], PX_HOT[2], PX_HOT[3]] if hot or perfect else [Color.WHITE, k[0], k[3], k[1]])[mini(int(rk * 4.0), 3)]
 			var wid := maxf(PxArt.PX, bs * 0.09 * (1.0 - rk))
 			if not _chime(lv, c, rad, rc, wid):
 				lv.draw_arc(c, rad, -0.5, 0.5, 6, rc, wid)
 				lv.draw_arc(c, rad, PI - 0.5, PI + 0.5, 6, rc, wid)
-		lv.draw_set_transform(at, swing * (1.0 if i == 0 else -1.0), Vector2.ONE)
-		_cowbell(lv, Vector2(0.0, bs * 0.0), bs, fade)
-		lv.draw_set_transform(Vector2.ZERO, 0.0, Vector2.ONE)
+		# the swing in Daniele's three drawn poses (never a rotated picture: its pixels would break)
+		var sw := swing * (1.0 if i == 0 else -1.0)
+		var key := "bar_bell_l" if sw < -0.3 else ("bar_bell_r" if sw > 0.3 else "bar_bell")
+		if ai_tex(key, Vector2i.ONE) == null:
+			key = "bar_bell"
+		if ai_tex(key, Vector2i.ONE) != null:
+			ai_draw(lv, key, at - Vector2(bs * 0.42, bs * 1.2), at + Vector2(bs * 0.42, 0.0), Color(1.0, 1.0, 1.0, fade))
+		else:
+			_cowbell(lv, at, bs, fade)
 	# embers all along the strap
 	var seed := (7 if up else 13) + chain * 5
 	for i in 6:

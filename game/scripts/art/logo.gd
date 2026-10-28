@@ -21,7 +21,7 @@ extends Control
 			mode = "full"
 		queue_redraw()
 ## Player-facing subtitle (UI may translate it); empty hides it.
-@export var subtitle := "The Weight of Bells":
+@export var subtitle := "":
 	set(v):
 		subtitle = v
 		queue_redraw()

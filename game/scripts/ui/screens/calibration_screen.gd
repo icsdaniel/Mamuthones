@@ -10,7 +10,7 @@ extends Screen
 var reader: MotionReader
 var calibrator: Calibrator
 var _t := 0.0
-var _phone: SetupArtView         ## Art's phone in two hands, following the real tilt
+var _phone: TiltDiagram          ## the phone from its side, following the real tilt
 var _angle := 0.0                ## radians, > 0 = top edge toward the player
 var _flash := 0.0
 var _nod := 0.0                  ## a slow demonstration nod while waiting for the first move
@@ -43,13 +43,11 @@ func build() -> void:
 	box.add_child(UIKit.label(tr("cal_title"), UIKit.HEADER, true, HORIZONTAL_ALIGNMENT_CENTER))
 	_instruction = UIKit.label("", UIKit.LEAD, true, HORIZONTAL_ALIGNMENT_CENTER)
 	box.add_child(_instruction)
-	_phone = SetupArtView.new()
+	_phone = TiltDiagram.new()
 	_phone.name = "Phone"
-	_phone.kind = "phone"
-	_phone.custom_minimum_size = Vector2(0, 340)
-	_phone.visible = false   # no phone-in-hands art: the tilt graph and bells show the same
+	_phone.custom_minimum_size = Vector2(0, 360)
+	_phone.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	box.add_child(_phone)
-	UIKit.spacer(box, 0, true)
 	# Three bells for the tilts toward you, three for away: each counted tilt rings one in.
 	var marks := HBoxContainer.new()
 	marks.alignment = BoxContainer.ALIGNMENT_CENTER
@@ -162,6 +160,8 @@ func _feed_phone(pitch_dps: float, delta: float) -> void:
 		shown = (0.35 if _expect_up else -0.35) * maxf(sin(_nod * 3.0), 0.0)
 	if absf(shown - _phone.tilt) > 0.01:
 		_phone.tilt = shown
+	if _phone.expect_up != _expect_up:
+		_phone.expect_up = _expect_up
 	if absf(_flash - _phone.flash) > 0.02 or (_flash == 0.0 and _phone.flash != 0.0):
 		_phone.flash = _flash
 
@@ -198,7 +198,6 @@ func _update_instruction() -> void:
 	var up := calibrator.expecting_up()
 	_instruction.text = tr("cal_tilt_up") if up else tr("cal_tilt_down")
 	_expect_up = up
-	_phone.arrow = 1 if up else -1
 
 
 func _on_finished(result: Dictionary) -> void:

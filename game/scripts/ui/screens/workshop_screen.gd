@@ -20,7 +20,7 @@ func build() -> void:
 	portrait.name = "Portrait"
 	portrait.animate = not UIKit.reduced_motion()
 	portrait.framed = false   # the figure alone: no scene behind it
-	portrait.custom_minimum_size = Vector2(0, MamuthonePortrait.ART_H * 3 + 6)
+	portrait.custom_minimum_size = Vector2(0, MamuthonePortrait.ART_H * 4 + 6)   # bigger since 2026-10-28: the page has the room
 	var stage := PanelContainer.new()
 	stage.theme_type_variation = UIKit.BOARD
 	box.add_child(stage)

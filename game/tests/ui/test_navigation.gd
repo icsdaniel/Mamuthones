@@ -22,7 +22,7 @@ func test_first_launch_leads_to_the_menu() -> void:
 	await UIHarness.frames(tree, 2)
 	check_eq(app.current().screen_name(), "title_screen", "then the menu: the tutorial is optional")
 	check_eq(app.stack.size(), 1, "the title is the bottom of the stack")
-	for b in ["Tutorial", "Calibrate"]:
+	for b in ["Tutorial", "Settings"]:
 		check(app.current().find_child(b, true, false) != null, "the menu offers %s" % b)
 	var next := Progression.next_stop()
 	check(next != "" and SongLibrary.get_song(next).kind != "tutorial", "Continue leads to the first song, not the tutorial (%s)" % next)
@@ -55,21 +55,27 @@ func test_uncalibrated_phone_starts_at_calibration() -> void:
 	UIHarness.restore_profile()
 
 
+## The calibration is redone from Settings (off the title since 2026-10-28).
 func test_calibrate_from_the_menu() -> void:
 	UIHarness.fresh_profile()
 	var app := UIHarness.make_app(tree)
 	await UIHarness.frames(tree, 2)
-	check(UIHarness.press(app, "Calibrate"), "title: Calibrate")
+	check(UIHarness.press(app, "Settings"), "title: Settings")
+	await UIHarness.frames(tree, 2)
+	check(UIHarness.press(app.current(), "Calibrate"), "settings: Calibrate")
 	await UIHarness.frames(tree, 2)
 	check_eq(app.current().screen_name(), "calibration_screen", "the tilt calibration first")
 	check(UIHarness.press(app.current(), "UseSlam"), "no sensor here: play with buttons")
+	await UIHarness.frames(tree, 2)
+	check_eq(app.current().screen_name(), "settings_screen", "back to the settings")
+	check(UIHarness.press(app.current(), "Latency"), "settings: the delay test")
 	await UIHarness.frames(tree, 2)
 	check_eq(app.current().screen_name(), "latency_screen", "then the delay test")
 	check(UIHarness.press(app.current(), "Start"), "the delay test starts")
 	await UIHarness.frames(tree, 2)
 	check(UIHarness.press(app.current(), "Skip"), "Skip stays on screen while the test runs")
 	await UIHarness.frames(tree, 2)
-	check_eq(app.current().screen_name(), "title_screen", "and leads back to the menu")
+	check_eq(app.current().screen_name(), "settings_screen", "and leads back to the settings")
 	UIHarness.free_app(app)
 	UIHarness.restore_profile()
 
@@ -80,8 +86,10 @@ func test_quit_leaves() -> void:
 	await UIHarness.frames(tree, 2)
 	var title: GDScript = load("res://scripts/ui/screens/title_screen.gd")
 	var before: int = title.quit_calls
-	check(UIHarness.press(app, "Quit"), "the title has Quit")
-	check_eq(title.quit_calls, before + 1, "Quit closes the game")
+	# no Quit button since 2026-10-28 (phones leave with back or home): back on the title leaves
+	check(app.current().find_child("Quit", true, false) == null, "the title has no Quit button")
+	app.current().on_back()
+	check_eq(title.quit_calls, before + 1, "back on the title closes the game")
 	# Quit from the pause menu inside a tutorial lesson leaves the tutorial.
 	check(UIHarness.press(app, "Tutorial"), "title: Tutorial")
 	await UIHarness.frames(tree, 2)
@@ -108,8 +116,8 @@ func test_menus_forward_and_back() -> void:
 	check_eq(app.current().screen_name(), "title_screen", "a returning player starts on the title")
 	var routes := [
 		["StoryMap", "story_screen"], ["FreePlay", "free_play_screen"],
-		["Workshop", "workshop_screen"], ["Leaderboards", "boards_screen"],
-		["Settings", "settings_screen"], ["Tutorial", "tutorial_screen"], ["Calibrate", "calibration_screen"],
+		["Workshop", "workshop_screen"],
+		["Settings", "settings_screen"], ["Tutorial", "tutorial_screen"],
 	]
 	for r in routes:
 		check(UIHarness.press(app, r[0]), "title has %s" % r[0])
@@ -118,6 +126,17 @@ func test_menus_forward_and_back() -> void:
 		check(UIHarness.press(app.current(), "Back"), "%s has a back button" % r[1])
 		await UIHarness.frames(tree, 2)
 		check_eq(app.current().screen_name(), "title_screen", "back from %s returns to the title" % r[1])
+	# The scores are in free play (off the title since 2026-10-28).
+	UIHarness.press(app, "FreePlay")
+	await UIHarness.frames(tree, 2)
+	check(UIHarness.press(app.current(), "Leaderboards"), "free play has Leaderboards")
+	await UIHarness.frames(tree, 2)
+	check_eq(app.current().screen_name(), "boards_screen", "Leaderboards opens")
+	check(UIHarness.press(app.current(), "Back"), "boards_screen has a back button")
+	await UIHarness.frames(tree, 2)
+	check_eq(app.current().screen_name(), "free_play_screen", "back from the boards returns to free play")
+	app.back()
+	await UIHarness.frames(tree, 2)
 	# Deeper: title -> story -> stop card -> play -> pause -> quit -> stop card -> back -> story.
 	UIHarness.press(app, "StoryMap")
 	await UIHarness.frames(tree, 2)
