@@ -1,6 +1,6 @@
 extends Screen
 ## The workshop: build your own Mamuthone. Carve the mask (every bell earned is a carving point; finer
-## options open as the story goes on), the fleece shade and the straps. A close-up of your own Mamuthone (Art's portrait) at the top changes as you choose, with
+## options open as the story goes on), the fleece shade and the straps. A small live preview of your own Mamuthone at the top changes as you choose, with
 ## the part being carved outlined.
 ## args: tab (optional: mask or dress).
 
@@ -19,8 +19,12 @@ func build() -> void:
 	portrait = MamuthonePortrait.new()
 	portrait.name = "Portrait"
 	portrait.animate = not UIKit.reduced_motion()
+	portrait.framed = false   # the figure alone: no scene behind it
 	portrait.custom_minimum_size = Vector2(0, MamuthonePortrait.ART_H * 3 + 6)
-	box.add_child(portrait)
+	var stage := PanelContainer.new()
+	stage.theme_type_variation = UIKit.BOARD
+	box.add_child(stage)
+	stage.add_child(portrait)
 	_refresh_look()
 	Profile.changed.connect(_refresh_look)
 	var row := HBoxContainer.new()
@@ -106,6 +110,7 @@ func _build_mask() -> void:
 	mask.show_halo = true
 	mask.spec = _spec()
 	mask.highlight_part = part
+	mask.visible = false   # the portrait above is the one live preview
 	_body.add_child(mask)
 	var parts := GridContainer.new()
 	parts.columns = 4
@@ -168,7 +173,6 @@ func _build_dress() -> void:
 	_body.add_child(UIKit.label(tr("ws_straps"), UIKit.SUB))
 	_choice_row("straps", MaskSpec.STRAPS)
 	_body.add_child(UIKit.label(tr("ws_dress_note"), UIKit.CAPTION))
-	_walking_row()
 
 
 func _choice_row(key: String, ids: Array) -> void:

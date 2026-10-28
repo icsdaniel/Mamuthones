@@ -53,6 +53,7 @@ func build() -> void:
 	_drum.set_anchors_preset(Control.PRESET_FULL_RECT)
 	_drum.offset_top = 12.0
 	_drum.offset_bottom = -52.0
+	_drum.visible = false   # no drum art: the pad is a plain big target
 	_pad.add_child(_drum)
 	_pad.text = ""
 	var tap := UIKit.label(tr("lat_pad"), UIKit.SUB, false, HORIZONTAL_ALIGNMENT_CENTER)

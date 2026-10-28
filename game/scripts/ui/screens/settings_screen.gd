@@ -8,40 +8,40 @@ func build() -> void:
 	var box := UIKit.column(self, true, 14)
 	UIKit.header(box, tr("set_title"), on_back)
 
-	box.add_child(UIKit.label(tr("set_timing"), UIKit.SUB))
+	var tim := _section(box, tr("set_timing"))
 	var cal := UIKit.button(tr("set_calibrate"), func() -> void: app.open("calibration"))
 	cal.name = "Calibrate"
-	box.add_child(cal)
+	tim.add_child(cal)
 	_sensor = UIKit.label(tr("motion_waiting"), UIKit.CAPTION)
 	_sensor.name = "Sensor"
-	box.add_child(_sensor)
+	tim.add_child(_sensor)
 	var lat := UIKit.button(tr("set_latency"), func() -> void: app.open("latency"))
 	lat.name = "Latency"
-	box.add_child(lat)
-	_slider(box, "audio_offset", tr("set_offset"), Profile.RANGES["audio_offset"].x, Profile.RANGES["audio_offset"].y, 0.005,
+	tim.add_child(lat)
+	_slider(tim, "audio_offset", tr("set_offset"), Profile.RANGES["audio_offset"].x, Profile.RANGES["audio_offset"].y, 0.005,
 		func(v: float) -> String: return tr("ms_signed") % roundi(v * 1000.0))
 	var vis := UIKit.button(tr("set_visual_test"), func() -> void: app.open("screen_delay"))
 	vis.name = "ScreenDelay"
-	box.add_child(vis)
-	_slider(box, "visual_offset", tr("set_visual"), Profile.RANGES["visual_offset"].x, Profile.RANGES["visual_offset"].y, 0.005,
+	tim.add_child(vis)
+	_slider(tim, "visual_offset", tr("set_visual"), Profile.RANGES["visual_offset"].x, Profile.RANGES["visual_offset"].y, 0.005,
 		func(v: float) -> String: return tr("ms_signed") % roundi(v * 1000.0))
-	box.add_child(UIKit.label(tr("set_visual_note"), UIKit.CAPTION))
+	tim.add_child(UIKit.label(tr("set_visual_note"), UIKit.CAPTION))
 
-	box.add_child(UIKit.label(tr("set_play"), UIKit.SUB))
-	var speed := _slider(box, "note_speed", tr("set_note_speed"), 0.5, 3.0, 0.1,
+	var pl := _section(box, tr("set_play"))
+	var speed := _slider(pl, "note_speed", tr("set_note_speed"), 0.5, 3.0, 0.1,
 		func(v: float) -> String: return "×" + UIKit.fmt_dec(v, 1) + " · " + tr("set_note_warning") % UIKit.fmt_dec(LaneView.LOOKAHEAD / maxf(v, 0.1), 2))
 	var preview := SpeedPreview.new()
 	preview.name = "SpeedPreview"
-	preview.custom_minimum_size = Vector2(0, 260)
+	preview.custom_minimum_size = Vector2(0, 220)
 	preview.note_speed = speed.value
-	box.add_child(preview)
+	pl.add_child(preview)
 	speed.value_changed.connect(func(v: float) -> void: preview.note_speed = v)
-	_toggle(box, "bell_cue", tr("set_bell_cue"), tr("set_bell_cue_note"))
-	_toggle(box, "vibration", tr("set_vibration"))
-	_toggle(box, "step_knocks", tr("set_step_knocks"), tr("set_step_knocks_note"))
-	_toggle(box, "slam", tr("set_slam"), tr("set_slam_note"))
+	_toggle(pl, "bell_cue", tr("set_bell_cue"), tr("set_bell_cue_note"))
+	_toggle(pl, "vibration", tr("set_vibration"))
+	_toggle(pl, "step_knocks", tr("set_step_knocks"), tr("set_step_knocks_note"))
+	_toggle(pl, "slam", tr("set_slam"), tr("set_slam_note"))
 	# animations: full, calm (less movement), or off (the smoothest play: only the notes move)
-	box.add_child(UIKit.label(tr("set_animations"), UIKit.CAPTION))
+	pl.add_child(UIKit.label(tr("set_animations"), UIKit.CAPTION))
 	var anims := HBoxContainer.new()
 	anims.name = "Animations"
 	anims.add_theme_constant_override("separation", 12)
@@ -52,16 +52,16 @@ func build() -> void:
 		ab.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 		ab.name = "Anim_" + a
 		anims.add_child(ab)
-	box.add_child(anims)
-	box.add_child(UIKit.label(tr("set_animations_note"), UIKit.CAPTION))
+	pl.add_child(anims)
+	pl.add_child(UIKit.label(tr("set_animations_note"), UIKit.CAPTION))
 
-	box.add_child(UIKit.label(tr("set_sound"), UIKit.SUB))
-	_slider(box, "music_volume", tr("set_music"), 0.0, 1.0, 0.05,
+	var snd := _section(box, tr("set_sound"))
+	_slider(snd, "music_volume", tr("set_music"), 0.0, 1.0, 0.05,
 		func(v: float) -> String: return "%d%%" % roundi(v * 100.0), "music")
-	_slider(box, "sfx_volume", tr("set_sfx"), 0.0, 1.0, 0.05,
+	_slider(snd, "sfx_volume", tr("set_sfx"), 0.0, 1.0, 0.05,
 		func(v: float) -> String: return "%d%%" % roundi(v * 100.0), "sfx")
 
-	box.add_child(UIKit.label(tr("set_language"), UIKit.SUB))
+	var lg := _section(box, tr("set_language"))
 	var langs := HBoxContainer.new()
 	langs.add_theme_constant_override("separation", 12)
 	for code in ["en", "it"]:
@@ -71,11 +71,18 @@ func build() -> void:
 		b.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 		b.name = "Lang_" + code
 		langs.add_child(b)
-	box.add_child(langs)
+	lg.add_child(langs)
 
 	var credits := UIKit.button(tr("set_credits"), func() -> void: app.open("credits"), UIKit.QUIET)
 	credits.name = "Credits"
 	box.add_child(credits)
+
+
+func _section(box: Container, title: String) -> VBoxContainer:
+	var c := UIKit.card(box)
+	c.add_theme_constant_override("separation", 14)
+	c.add_child(UIKit.label(title, UIKit.SUB))
+	return c
 
 
 var _sensor: Label

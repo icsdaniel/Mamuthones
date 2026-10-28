@@ -72,7 +72,7 @@ func _intro(after_fail := false, after_demo := false) -> void:
 	pic.name = "Picture"
 	box.add_child(pic)
 	var body := tr("tut_%s_slam" % t) if slam and t in ["bells", "full"] else tr("tut_%s" % t)
-	var text := UIKit.label(body, UIKit.SUB)
+	var text := UIKit.label(body, UIKit.LEAD)
 	text.name = "Instruction"
 	box.add_child(text)
 	if after_fail:

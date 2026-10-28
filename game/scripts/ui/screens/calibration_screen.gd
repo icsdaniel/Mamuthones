@@ -47,8 +47,9 @@ func build() -> void:
 	_phone.name = "Phone"
 	_phone.kind = "phone"
 	_phone.custom_minimum_size = Vector2(0, 340)
-	_phone.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	_phone.visible = false   # no phone-in-hands art: the tilt graph and bells show the same
 	box.add_child(_phone)
+	UIKit.spacer(box, 0, true)
 	# Three bells for the tilts toward you, three for away: each counted tilt rings one in.
 	var marks := HBoxContainer.new()
 	marks.alignment = BoxContainer.ALIGNMENT_CENTER
@@ -68,6 +69,7 @@ func build() -> void:
 	graph = TiltGraph.new()
 	graph.name = "TiltGraph"
 	graph.threshold = Calibrator.ROT_TRIGGER
+	graph.custom_minimum_size.y = 260
 	box.add_child(graph)
 	_sensor = UIKit.label("", UIKit.CAPTION, true, HORIZONTAL_ALIGNMENT_CENTER)
 	_sensor.name = "Sensor"
