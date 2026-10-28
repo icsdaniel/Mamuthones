@@ -385,6 +385,12 @@ static func _disc_box(f: Callable, h: float) -> Array:
 ## Shrinks, before the song, every note picture at every size it takes sliding down each lane to a
 ## little past the hit line (each size was otherwise made the first time a note reached it, mid-song).
 static func warm_notes(lv, field: Rect2) -> void:
+	# the drawn rings and bursts at every size (a hit's pop asks for a bigger ring mid-song)
+	for g: String in ["rings", "bursts", "chimes"]:
+		var dir := "res://art/pxl/%s/" % g
+		for f in ResourceLoader.list_directory(dir):
+			if f.ends_with(".png"):
+				PxArt.tex(dir + f)
 	if ai_tex("note_step", Vector2i.ONE) == null:
 		return
 	var lane := _lane(field)
@@ -1238,7 +1244,7 @@ static func _hit_line(lv: LaneView, field: Rect2, rects: Array[Rect2], hl: float
 		if g > 0.01:
 			ci_poly(lv, sil, Color(1.0, 0.97, 0.9, 0.7 * g))
 		if ai_tex("ring_idle", Vector2i.ONE) != null:
-			_ring_pic(lv, sil, k, g, incoming[lane], lv.get("_lock_on") == true)
+			_ring_pic(lv, sil, k, g, incoming[lane], lv.get("_lock_on") == true, lv.ring_punch(lane))
 			continue
 		lv.draw_polyline(ring, Color(OUTLINE, 0.9), 12.0, true)
 		var rim := Color(CREAM, 0.75 + 0.25 * k)
@@ -1260,7 +1266,7 @@ const PXL_RINGS := true
 ## The pixel look's hit slot from Daniele's ring pictures, over the slot's outline sil: the grey ring
 ## takes the coming note's colour as it nears, burns gold when the lane is struck, red while the
 ## buttons are locked.
-static func _ring_pic(lv: LaneView, sil: PackedVector2Array, k: float, g: float, incoming, locked: bool) -> void:
+static func _ring_pic(lv: LaneView, sil: PackedVector2Array, k: float, g: float, incoming, locked: bool, punch := 0.0) -> void:
 	var lo := Vector2(INF, INF)
 	var hi := -lo
 	for q in sil:
@@ -1270,6 +1276,12 @@ static func _ring_pic(lv: LaneView, sil: PackedVector2Array, k: float, g: float,
 	var grow := Vector2(1.0, 0.75) * PxArt.PX * 1.5
 	lo -= grow
 	hi += grow
+	if punch > 0.0:
+		# a hit pops the ring out and lets it settle (LaneView.ring_punch)
+		var c := (lo + hi) * 0.5
+		var half := (hi - lo) * 0.5 * (1.0 + punch)
+		lo = c - half
+		hi = c + half
 	var mod := Color(1.0, 1.0, 1.0).lerp(Color(1.15, 1.1, 1.0), k - 0.6)
 	if incoming != null:
 		var kk: Array = incoming[0]

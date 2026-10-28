@@ -638,6 +638,7 @@ func _on_stepped(lane: int) -> void:
 		_tap_hit = false
 		_tap_quality = ""
 		return
+	tap_buzz(j)
 	# A stomp's second thumb already sounded the stomp (_on_stomp); a wrong or stray tap sounds the
 	# miss; every other touch knocks its step.
 	if j == "wrong" or j == "stray":
@@ -649,6 +650,18 @@ func _on_stepped(lane: int) -> void:
 	_stomp_sounded = false
 	_tap_hit = false
 	_tap_quality = ""
+
+
+## Every press buzzes at once, in the same frame as its touch, and the buzz says how it went: a
+## Perfect a full, crisp knock, a Good a little lighter, an Ok (early or late) short and soft, and a
+## press that hit nothing (stray, wrong, or an empty button) just a tick, so every touch is felt
+## (Daniele, 2026-10-28: "more tactile feedback"). One buzz a press: _on_judged leaves steps to this.
+const TAP_BUZZ := {"perfect": [22, 1.0], "good": [16, 0.7], "early": [11, 0.45], "late": [11, 0.45],
+	"wrong": [8, 0.25], "stray": [8, 0.25], "": [6, 0.2]}
+
+static func tap_buzz(judgement: String) -> void:
+	var b: Array = TAP_BUZZ.get(judgement, TAP_BUZZ[""])
+	UIKit.vibrate(int(b[0]), float(b[1]))
 
 
 ## The step's knock at the hit's quality (Sound: "good" a little softer, "ok" dull and short), in the
@@ -763,7 +776,7 @@ func _on_judged(note: Note, judgement: String, offset: float) -> void:
 	var pos: Vector2
 	if lane >= 0:
 		pos = lanes.lane_center(lane)
-		lanes.flash(lane, good or soft)
+		lanes.flash(lane, good or soft, judgement)
 	else:
 		pos = Vector2(lanes.size.x * 0.5, lanes.lane_center(1).y)
 	# Early/late is shown only off Perfect (like FAST/SLOW): on Good by the offset, and on the Ok band,
@@ -791,7 +804,12 @@ func _on_judged(note: Note, judgement: String, offset: float) -> void:
 			scene.jolt("ring")
 		elif note != null and not note.is_bell():
 			scene.jolt("step")
-		UIKit.vibrate(30 if note != null and note.is_bell() else 14)
+		# a step's press already buzzed in _on_stepped (tap_buzz); a bell, a ring and a kept hold
+		# buzz here
+		if note != null and (note.is_bell() or note.kind == Note.Kind.RING):
+			UIKit.vibrate(30, 1.0)
+		elif judgement == "held":
+			UIKit.vibrate(14, 0.6)
 	elif judgement in ["miss", "silence"]:
 		scene.jolt("miss")
 		if note != null and note.is_bell():

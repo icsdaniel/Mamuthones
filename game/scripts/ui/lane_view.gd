@@ -127,12 +127,29 @@ func press(lane: int) -> void:
 	queue_redraw()
 
 
-func flash(lane: int, good: bool) -> void:
+func flash(lane: int, good: bool, quality := "") -> void:
 	if lane < 0 or lane > 2:
 		return
 	_flash[lane] = _clock
 	_flash_kind[lane] = "hit" if good else "miss"
+	_punch_k[lane] = PUNCH.get(quality, 0.0) if good else 0.0
 	queue_redraw()
+
+
+## A hit ring's pop on a hit (share it grows by, by the hit's quality), gone in PUNCH_TIME: the ring
+## jumps out and settles back, so a hit lands with a knock you can see.
+const PUNCH := {"perfect": 0.2, "good": 0.13, "early": 0.07, "late": 0.07, "held": 0.13}
+const PUNCH_TIME := 0.12
+var _punch_k := [0.0, 0.0, 0.0]
+
+
+## How far lane's ring is popped out now (0: at rest).
+func ring_punch(lane: int) -> float:
+	var age := _clock - _flash[lane]
+	if age < 0.0 or age >= PUNCH_TIME:
+		return 0.0
+	var x := 1.0 - age / PUNCH_TIME
+	return _punch_k[lane] * x * x
 
 
 ## A hit burst at pos. side ("early"/"late") adds a chevron in the early/late pair: up and cool for

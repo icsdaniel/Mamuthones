@@ -10,7 +10,7 @@ keys({ H: "WOOD1", I: "STONE3", W: "BONE4", k: "K0", K: "K1", a: "BONE0", b: "BO
        A: "GOLD1", B: "GOLD2", C: "GOLD3", D: "GOLD4", E: "GOLD5",
        S: "GOLD4", T: "GOLD2", r: "RED0", s: "RED1", t: "RED2", u: "RED3", v: "RED4" })
 
-const SIZES = [[60, 24], [64, 24], [56, 22], [68, 26]]   // 60x24 at every phone size measured
+const SIZES = [[60, 24], [64, 24], [56, 22], [68, 26], [72, 28]]   // 60x24 at every phone size measured; the larger ones for a hit's pop (LaneView.ring_punch)
 const WALL = 3      // how far the rim stands up, in art px
 
 // part: "rim" the ring itself with its hollow plate; "lip" only the 1-px inner edge of its top,

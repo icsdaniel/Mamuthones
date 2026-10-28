@@ -82,10 +82,11 @@ static func first_screen() -> String:
 static var vibrations := 0
 
 
-static func vibrate(ms: int) -> void:
+## amplitude 0..1 (-1: the phone's default); phones without amplitude control just buzz for ms.
+static func vibrate(ms: int, amplitude := -1.0) -> void:
 	if bool(Profile.get_setting("vibration")):
 		vibrations += 1
-		Input.vibrate_handheld(ms)
+		Input.vibrate_handheld(ms, amplitude)
 
 
 ## A centred column inside safe-area margins, optionally scrolling. Returns the VBox to fill.

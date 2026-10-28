@@ -15,6 +15,8 @@ var _n := 300
 var _last := 0
 var _times: Array[float] = []
 var _script := 0.0
+var _calls := 0.0   ## draw calls, summed over the measured frames
+var _prims := 0.0
 var _t0 := 0
 var _warm_ms := 5000     ## real time before measuring: the count-in is over and notes are coming
 
@@ -78,6 +80,8 @@ func _tick() -> void:
 				print("HITCH %.1f ms (lanes drawing %.1f ms) at frame %d, beat %.2f" % [_times[-1],
 					float(load("res://scripts/ui/lane_view.gd").get("last_draw_usec")) / 1000.0, _times.size() - 1, float(lv.get("beat"))])
 		_script += Performance.get_monitor(Performance.TIME_PROCESS) * 1000.0
+		_calls += Performance.get_monitor(Performance.RENDER_TOTAL_DRAW_CALLS_IN_FRAME)
+		_prims += Performance.get_monitor(Performance.RENDER_TOTAL_PRIMITIVES_IN_FRAME)
 	_last = now
 	if _times.size() == 1:
 		# reset the lanes' draw timing to the measured window
@@ -100,6 +104,7 @@ func _tick() -> void:
 		print("BENCH frames=%d avg=%.2fms p95=%.2fms worst=%.2fms script=%.2fms objects=%d" % [_times.size(), avg,
 			sorted[int(sorted.size() * 0.95)], sorted[-1], _script / _times.size(),
 			Performance.get_monitor(Performance.OBJECT_COUNT)])
+		print("DRAW calls=%.0f primitives=%.0f per frame" % [_calls / _times.size(), _prims / _times.size()])
 		var slow: Array[String] = []
 		for i in _times.size():
 			if _times[i] > avg * 3.0:
