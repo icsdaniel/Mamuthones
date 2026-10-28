@@ -22,12 +22,10 @@ func build() -> void:
 		items.append([d, tr("diff_" + d)])
 	_tabs = UIKit.tabs(box, items, difficulty, _pick_diff)
 	for s in SongLibrary.story():
-		var b := UIKit.button("%d · %s" % [s.stop, UIKit.song_title(s)], _pick_song.bind(s))
+		var b := UIKit.list_row(str(s.stop), UIKit.song_title(s), "", GradeBadge.new(-1), "open", _pick_song.bind(s))
+		(b.get_child(0).get_child(b.get_child(0).get_child_count() - 1) as Control).name = "Grade"
 		b.toggle_mode = true
-		b.alignment = HORIZONTAL_ALIGNMENT_LEFT
-		b.text_overrun_behavior = TextServer.OVERRUN_TRIM_ELLIPSIS
 		b.name = "Song_" + s.id
-		b.custom_minimum_size.y = UIKit.TOUCH + 16
 		box.add_child(b)
 		_song_buttons[s.id] = b
 	_remix = CheckButton.new()
@@ -54,7 +52,7 @@ func build() -> void:
 func _pick_song(s: SongData) -> void:
 	song = s
 	for id in _song_buttons:
-		(_song_buttons[id] as Button).set_pressed_no_signal(id == s.id)
+		UIKit.row_select(_song_buttons[id], id == s.id)
 	var remix_open := s.has_remix() and Progression.remix_unlocked(s.id)
 	_remix.visible = s.has_remix()
 	_remix.disabled = not remix_open
@@ -83,31 +81,27 @@ func _show_bests() -> void:
 		_badge(b, UIKit.grade_of(best), UIKit.fmt_score(int(best.get("score", 0))) if not best.is_empty() else "", bool(best.get("full_combo", false)))
 
 
-## The best score and grade at the right end of a song row.
+## The best score (caption) and grade (right end) of a song row.
 func _badge(b: Button, grade: int, score: String, fc := false) -> void:
-	var old := b.get_node_or_null("Best")
+	var row := b.get_child(0) as HBoxContainer
+	var old := row.get_node_or_null("Grade")
 	if old != null:
-		b.remove_child(old)
+		row.remove_child(old)
 		old.queue_free()
-	var row := HBoxContainer.new()
-	row.name = "Best"
-	row.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	row.alignment = BoxContainer.ALIGNMENT_END
-	row.add_theme_constant_override("separation", 14)
-	row.set_anchors_and_offsets_preset(Control.PRESET_RIGHT_WIDE)
-	row.offset_right = -46.0   # clear of the frame's right-hand diamond
-	row.grow_horizontal = Control.GROW_DIRECTION_BEGIN
-	if score != "":
-		var l := UIKit.label(score, UIKit.CAPTION, false)
-		l.name = "Score"
-		l.size_flags_vertical = Control.SIZE_SHRINK_CENTER
-		l.add_theme_color_override("font_color", PixelPalette.GOLD[5])
-		row.add_child(l)
 	var badge := GradeBadge.new(grade, false, fc)
 	badge.name = "Grade"
 	badge.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+	badge.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	row.add_child(badge)
-	b.add_child(row)
+	var text := row.get_child(1) as VBoxContainer
+	if text.get_child_count() > 1:
+		text.remove_child(text.get_child(1))
+	if score != "":
+		var l := UIKit.label(score, UIKit.CAPTION, false)
+		l.name = "Score"
+		l.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		l.add_theme_color_override("font_color", PixelPalette.GOLD[5])
+		text.add_child(l)
 
 
 func _refresh() -> void:

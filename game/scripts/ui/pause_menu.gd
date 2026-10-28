@@ -18,6 +18,7 @@ func _ready() -> void:
 	add_child(dim)
 	var center := CenterContainer.new()
 	center.set_anchors_preset(Control.PRESET_FULL_RECT)
+	center.offset_top = 260.0   # the choices sit in the lower half, in thumb reach
 	add_child(center)
 	var panel := PanelContainer.new()
 	panel.theme_type_variation = UIKit.BOARD

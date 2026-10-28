@@ -19,6 +19,7 @@ func _ready() -> void:
 	add_child(dim)
 	var center := CenterContainer.new()
 	center.set_anchors_preset(Control.PRESET_FULL_RECT)
+	center.offset_top = 260.0   # the choices sit in the lower half, in thumb reach
 	add_child(center)
 	# the same board as the pause menu, so the two read as one family
 	var panel := PanelContainer.new()

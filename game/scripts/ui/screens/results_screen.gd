@@ -61,6 +61,7 @@ func build() -> void:
 	_glow.offset_top = -36
 	_glow.offset_bottom = 36
 	_glow.modulate.a = 0.0
+	_glow.visible = false   # no halo art behind the grade
 	holder.add_child(_glow)
 	var top := HBoxContainer.new()
 	top.alignment = BoxContainer.ALIGNMENT_CENTER
