@@ -1,6 +1,6 @@
 extends Screen
-## The card before a story stop: the stop's living pixel picture, the stop's name and day, two plain sentences
-## about the moment, then the difficulty (with the best bells for each), the bell set and the remix.
+## The card before a story stop, no pictures: the stop's name, day and best grade, two plain sentences
+## about the moment, the difficulties as rows with their best, the remix chip, and Play at the foot.
 ## args: song_id.
 
 static var last_difficulty := "easy"
@@ -9,7 +9,6 @@ var song: SongData
 var difficulty := "easy"
 var use_remix := false
 var _diff_buttons := {}
-var _best: Label
 
 
 func build() -> void:
@@ -22,23 +21,20 @@ func build() -> void:
 	var box := cols[0]
 	var foot := cols[1]
 	UIKit.header(box, tr("stop_n") % song.stop, on_back)
-	# The stop's picture, alive, in its gold frame at the art scale (3 screen px to the art px).
-	var pic := StopPicture.new()
-	pic.name = "Picture"
-	pic.stop = song.stop
-	pic.px = int(PixelFrame.px_for(self))
-	pic.frame_style = "gold"
-	pic.bpm = song.bpm * 0.5
-	pic.animate = not UIKit.reduced_motion()
-	var card := Rect2(Vector2(StopBackdrops.data(song.stop).card), Vector2(StopCells.CARD))
-	pic.focus = card.get_center() + Vector2(0, 8)  # when cropped, keep the feet, lose a little sky
-	pic.custom_minimum_size = Vector2(0, (StopCells.CARD.y - 10 + PixelFrame.DEPTH * 2) * pic.px)
-	box.add_child(pic)
-	var facts := UIKit.card(box, true)
-	facts.add_child(UIKit.label(UIKit.song_title(song), UIKit.PAPER_HEADER))
+	var facts := UIKit.card(box)
+	var head := HBoxContainer.new()
+	head.add_theme_constant_override("separation", 16)
+	facts.add_child(head)
+	var tit := UIKit.label(UIKit.song_title(song), UIKit.HEADER)
+	tit.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	head.add_child(tit)
+	var grade := GradeBadge.new(UIKit.best_grade(song.id), false, UIKit.any_full_combo(song.id))
+	grade.name = "Grade"
+	grade.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+	head.add_child(grade)
 	if UIKit.stop_date(song) != "":
-		facts.add_child(UIKit.label(UIKit.stop_date(song), UIKit.PAPER))
-	facts.add_child(UIKit.label(tr("stop_fact_%d" % song.stop), UIKit.PAPER))
+		facts.add_child(UIKit.label(UIKit.stop_date(song), UIKit.SUB))
+	facts.add_child(UIKit.label(tr("stop_fact_%d" % song.stop)))
 
 	if song.kind == "tutorial":
 		var lessons := UIKit.button(tr("stop_lessons"), func() -> void: app.open("tutorial", {"song_id": song.id}), UIKit.PRIMARY)
@@ -61,20 +57,15 @@ func build() -> void:
 		chip.custom_minimum_size.x = 200
 		chip.toggled.connect(func(on: bool) -> void: use_remix = on)
 		dh.add_child(chip)
-	var grid := GridContainer.new()
-	grid.columns = 2
-	grid.add_theme_constant_override("h_separation", 12)
-	grid.add_theme_constant_override("v_separation", 12)
-	box.add_child(grid)
 	for d in song.difficulties():
-		var b := UIKit.button(tr("diff_" + d), _pick.bind(d))
+		var best: Dictionary = Profile.best(song.id, d)
+		var badge := GradeBadge.new(UIKit.grade_of(best), false, bool(best.get("full_combo", false)))
+		var cap := tr("stop_no_best") if best.is_empty() else UIKit.fmt_score(int(best.get("score", 0)))
+		var b := UIKit.list_row("", tr("diff_" + d), cap, badge, "open", _pick.bind(d))
 		b.toggle_mode = true
-		b.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 		b.name = "Diff_" + d
-		grid.add_child(b)
+		box.add_child(b)
 		_diff_buttons[d] = b
-	_best = UIKit.label("", UIKit.CAPTION)
-	box.add_child(_best)
 	if song.has_remix() and not Progression.remix_unlocked(song.id):
 		var r := UIKit.label(tr("stop_remix_locked"), UIKit.CAPTION)
 		r.name = "RemixLocked"
@@ -89,12 +80,7 @@ func _pick(d: String) -> void:
 	difficulty = d
 	last_difficulty = d
 	for k in _diff_buttons:
-		(_diff_buttons[k] as Button).set_pressed_no_signal(k == d)
-	var best: Dictionary = Profile.best(song.id, d)
-	if best.is_empty():
-		_best.text = tr("stop_no_best")
-	else:
-		_best.text = tr("stop_best") % [UIKit.fmt_score(int(best.get("score", 0))), Session.grade_name(UIKit.grade_of(best))]
+		UIKit.row_select(_diff_buttons[k], k == d)
 
 
 func _play() -> void:
