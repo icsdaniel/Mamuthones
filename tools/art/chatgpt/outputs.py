@@ -65,7 +65,9 @@ def seat(g, flame=True):
     out[TOP:] = g
     if flame:
         rows = (out[..., 3] > 0).sum(1)
-        body = np.nonzero(rows >= 4)[0]
+        # the flame's body, not its embers: a few stray specks under a floating flame (loop_3x frame
+        # 2) counted as its root and left it hanging over the logs (Daniele, 2026-10-29)
+        body = np.nonzero(rows >= max(4, 0.25 * rows.max()))[0]
         if body.size:
             d = BASE + TOP - (body.max())
             if d > 0:
