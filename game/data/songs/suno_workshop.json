@@ -5,7 +5,8 @@
   "it": "La bottega"
  },
  "stop": 1,
- "kind": "story", "version": "original",
+ "kind": "story",
+ "version": "original",
  "bpm": 101.0,
  "offset": 0.595,
  "audio": "res://audio/music/suno_workshop.ogg",
@@ -76,45 +77,6 @@
  ],
  "charts": {
   "easy": [
-   {
-    "b": 0.0,
-    "k": "hold",
-    "lane": 0,
-    "len": 1.5
-   },
-   {
-    "b": 1.0,
-    "k": "step",
-    "lane": 1
-   },
-   {
-    "b": 2.0,
-    "k": "hold",
-    "lane": 2,
-    "len": 1.5
-   },
-   {
-    "b": 4.0,
-    "k": "hold",
-    "lane": 0,
-    "len": 1.5
-   },
-   {
-    "b": 5.0,
-    "k": "step",
-    "lane": 2
-   },
-   {
-    "b": 6.0,
-    "k": "hold",
-    "lane": 2,
-    "len": 1.5
-   },
-   {
-    "b": 7.0,
-    "k": "step",
-    "lane": 1
-   },
    {
     "b": 8.0,
     "k": "hold",
@@ -1609,70 +1571,6 @@
    }
   ],
   "medium": [
-   {
-    "b": 0.0,
-    "k": "hold",
-    "lane": 0,
-    "len": 1.5
-   },
-   {
-    "b": 0.5,
-    "k": "step",
-    "lane": 1
-   },
-   {
-    "b": 1.0,
-    "k": "step",
-    "lane": 1
-   },
-   {
-    "b": 2.0,
-    "k": "hold",
-    "lane": 2,
-    "len": 1.5
-   },
-   {
-    "b": 2.5,
-    "k": "step",
-    "lane": 1
-   },
-   {
-    "b": 3.5,
-    "k": "step",
-    "lane": 1
-   },
-   {
-    "b": 4.0,
-    "k": "hold",
-    "lane": 0,
-    "len": 1.5
-   },
-   {
-    "b": 4.5,
-    "k": "step",
-    "lane": 2
-   },
-   {
-    "b": 5.0,
-    "k": "step",
-    "lane": 1
-   },
-   {
-    "b": 6.0,
-    "k": "hold",
-    "lane": 2,
-    "len": 1.5
-   },
-   {
-    "b": 7.0,
-    "k": "step",
-    "lane": 1
-   },
-   {
-    "b": 7.5,
-    "k": "step",
-    "lane": 1
-   },
    {
     "b": 8.0,
     "k": "hold",
@@ -3588,80 +3486,6 @@
    }
   ],
   "hard": [
-   {
-    "b": 0.0,
-    "k": "hold",
-    "lane": 0,
-    "len": 1.5
-   },
-   {
-    "b": 0.5,
-    "k": "step",
-    "lane": 1
-   },
-   {
-    "b": 1.0,
-    "k": "step",
-    "lane": 1
-   },
-   {
-    "b": 2.0,
-    "k": "hold",
-    "lane": 2,
-    "len": 1.5
-   },
-   {
-    "b": 2.5,
-    "k": "step",
-    "lane": 1
-   },
-   {
-    "b": 3.5,
-    "k": "step",
-    "lane": 1
-   },
-   {
-    "b": 4.0,
-    "k": "hold",
-    "lane": 0,
-    "len": 1.5
-   },
-   {
-    "b": 4.5,
-    "k": "step",
-    "lane": 2
-   },
-   {
-    "b": 5.0,
-    "k": "step",
-    "lane": 1
-   },
-   {
-    "b": 5.5,
-    "k": "step",
-    "lane": 1
-   },
-   {
-    "b": 6.0,
-    "k": "hold",
-    "lane": 2,
-    "len": 1.5
-   },
-   {
-    "b": 6.5,
-    "k": "step",
-    "lane": 1
-   },
-   {
-    "b": 7.0,
-    "k": "step",
-    "lane": 0
-   },
-   {
-    "b": 7.5,
-    "k": "step",
-    "lane": 1
-   },
    {
     "b": 8.0,
     "k": "hold",
@@ -5990,80 +5814,6 @@
    }
   ],
   "expert": [
-   {
-    "b": 0.0,
-    "k": "hold",
-    "lane": 0,
-    "len": 1.5
-   },
-   {
-    "b": 0.5,
-    "k": "step",
-    "lane": 1
-   },
-   {
-    "b": 1.0,
-    "k": "step",
-    "lane": 1
-   },
-   {
-    "b": 2.0,
-    "k": "hold",
-    "lane": 2,
-    "len": 1.5
-   },
-   {
-    "b": 2.5,
-    "k": "step",
-    "lane": 1
-   },
-   {
-    "b": 3.5,
-    "k": "step",
-    "lane": 1
-   },
-   {
-    "b": 4.0,
-    "k": "hold",
-    "lane": 0,
-    "len": 1.5
-   },
-   {
-    "b": 4.5,
-    "k": "step",
-    "lane": 2
-   },
-   {
-    "b": 5.0,
-    "k": "step",
-    "lane": 1
-   },
-   {
-    "b": 5.5,
-    "k": "step",
-    "lane": 1
-   },
-   {
-    "b": 6.0,
-    "k": "hold",
-    "lane": 2,
-    "len": 1.5
-   },
-   {
-    "b": 6.5,
-    "k": "step",
-    "lane": 1
-   },
-   {
-    "b": 7.0,
-    "k": "step",
-    "lane": 0
-   },
-   {
-    "b": 7.5,
-    "k": "step",
-    "lane": 1
-   },
    {
     "b": 8.0,
     "k": "hold",

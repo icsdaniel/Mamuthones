@@ -180,12 +180,13 @@ func test_real_songs() -> void:
 				var r := Session.new(song, diff, {"remix": true})
 				_play_all(r)
 				check_near(r.accuracy(), 1.0, 1e-9, "%s/%s remix: autoplay 100 %%" % [song.id, diff])
-	# Stillness is worth chasing: about 7-12 % of a perfect run on a typical story song at Hard (7, not
-	# 8, since Hard sits at the difficult threshold from the first stop: more notes share the score).
+	# Stillness, where a chart still has it, is never more than about 12 % of a perfect run at Hard. The
+	# stand-stills are out of the played songs since Daniele's test of 2026-10-15 ("ruining the game"),
+	# so a typical run now has none.
 	if not shares.is_empty():
 		shares.sort()
 		var med := shares[shares.size() >> 1]
-		check(med >= 0.07 and med <= 0.12, "stillness is %.1f %% of a typical Hard run (median of %d songs, %.1f..%.1f %%)" % [med * 100.0, shares.size(), shares[0] * 100.0, shares[-1] * 100.0])
+		check(med <= 0.12, "stillness is %.1f %% of a typical Hard run (median of %d songs, %.1f..%.1f %%)" % [med * 100.0, shares.size(), shares[0] * 100.0, shares[-1] * 100.0])
 		print("  stillness share at Hard: " + ", ".join(shares.map(func(x): return "%.1f%%" % (x * 100.0))))
 	var story := SongLibrary.story()
 	for i in story.size():

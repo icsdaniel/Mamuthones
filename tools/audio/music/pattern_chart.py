@@ -35,6 +35,7 @@ How a chart is made, per difficulty (rules settled with three outside reviewers,
 from __future__ import annotations
 
 import json
+import math
 import os
 import re
 import sys
@@ -1586,16 +1587,26 @@ def harden(song, chart):
     return ch
 
 
+LEAD_MIN = 4.5   # seconds of music before the first note (PlayScreen.LEAD_MIN): the player hears the groove first
+
+
+def first_beat(bpm, offset):
+    """The first bar line at least LEAD_MIN seconds into the audio: no note comes before it."""
+    spb = 60.0 / bpm
+    return max(0.0, math.ceil((LEAD_MIN - offset) / spb / 4.0 - 1e-6) * 4.0)
+
+
 def finish(song, chart, level):
-    """The last safety net: nothing may end within 0.35 s of the audio's end, and an input no hand can
-    play (a rare clash the other passes could not see) is dropped, or softened: a ring to a bell,
-    a stomp to a step."""
+    """The last safety net: nothing before the lead-in (first_beat) or within 0.35 s of the audio's
+    end, and an input no hand can play (a rare clash the other passes could not see) is dropped, or
+    softened: a ring to a bell, a stomp to a step."""
     spb = song.spb
     limit = (song.cfg["length"] - 0.35 - song.cfg["offset"]) / spb
+    start = first_beat(song.cfg["bpm"], song.cfg["offset"])
     ch = []
     for n in chart:
         n = dict(n)
-        if n["b"] >= limit - 1e-6:
+        if n["b"] >= limit - 1e-6 or n["b"] < start - 1e-6:
             continue
         if n["k"] in ("hold", "rest") and n["b"] + n["len"] > limit:
             n["len"] = round(limit - n["b"] - 0.01, 3)

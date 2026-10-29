@@ -5,7 +5,8 @@
   "it": "I fuochi di Sant'Antonio"
  },
  "stop": 2,
- "kind": "story", "version": "original",
+ "kind": "story",
+ "version": "original",
  "bpm": 66.01,
  "offset": 0.456,
  "audio": "res://audio/music/suno_fires.ogg",
@@ -61,60 +62,6 @@
  ],
  "charts": {
   "easy": [
-   {
-    "b": 0.0,
-    "k": "step",
-    "lane": 0
-   },
-   {
-    "b": 1.0,
-    "k": "step",
-    "lane": 2
-   },
-   {
-    "b": 2.0,
-    "k": "step",
-    "lane": 0
-   },
-   {
-    "b": 3.0,
-    "k": "step",
-    "lane": 2
-   },
-   {
-    "b": 4.0,
-    "k": "bell"
-   },
-   {
-    "b": 4.5,
-    "k": "step",
-    "lane": 0
-   },
-   {
-    "b": 5.0,
-    "k": "step",
-    "lane": 2
-   },
-   {
-    "b": 5.5,
-    "k": "step",
-    "lane": 1
-   },
-   {
-    "b": 6.0,
-    "k": "step",
-    "lane": 2
-   },
-   {
-    "b": 7.0,
-    "k": "step",
-    "lane": 0
-   },
-   {
-    "b": 7.5,
-    "k": "step",
-    "lane": 0
-   },
    {
     "b": 8.0,
     "k": "bell"
@@ -1576,76 +1523,6 @@
    }
   ],
   "medium": [
-   {
-    "b": 0.0,
-    "k": "step",
-    "lane": 0
-   },
-   {
-    "b": 1.0,
-    "k": "step",
-    "lane": 2
-   },
-   {
-    "b": 1.5,
-    "k": "step",
-    "lane": 0
-   },
-   {
-    "b": 2.0,
-    "k": "step",
-    "lane": 2
-   },
-   {
-    "b": 3.0,
-    "k": "step",
-    "lane": 0
-   },
-   {
-    "b": 4.0,
-    "k": "ring",
-    "lane": 2
-   },
-   {
-    "b": 4.5,
-    "k": "step",
-    "lane": 1
-   },
-   {
-    "b": 5.0,
-    "k": "step",
-    "lane": 0
-   },
-   {
-    "b": 5.5,
-    "k": "step",
-    "lane": 1
-   },
-   {
-    "b": 5.5,
-    "k": "step",
-    "lane": 2
-   },
-   {
-    "b": 6.0,
-    "k": "ring",
-    "lane": 2
-   },
-   {
-    "b": 6.5,
-    "k": "step",
-    "lane": 0
-   },
-   {
-    "b": 7.0,
-    "k": "step",
-    "lane": 1
-   },
-   {
-    "b": 7.5,
-    "k": "step",
-    "lane": 1
-   },
    {
     "b": 8.0,
     "k": "ring",
@@ -3531,86 +3408,6 @@
    }
   ],
   "hard": [
-   {
-    "b": 0.0,
-    "k": "step",
-    "lane": 0
-   },
-   {
-    "b": 1.0,
-    "k": "step",
-    "lane": 2
-   },
-   {
-    "b": 1.5,
-    "k": "step",
-    "lane": 0
-   },
-   {
-    "b": 2.0,
-    "k": "bell"
-   },
-   {
-    "b": 3.0,
-    "k": "step",
-    "lane": 0
-   },
-   {
-    "b": 4.0,
-    "k": "ring",
-    "lane": 2
-   },
-   {
-    "b": 4.5,
-    "k": "hold",
-    "lane": 1,
-    "len": 0.5
-   },
-   {
-    "b": 5.0,
-    "k": "step",
-    "lane": 0
-   },
-   {
-    "b": 5.25,
-    "k": "step",
-    "lane": 0
-   },
-   {
-    "b": 5.5,
-    "k": "step",
-    "lane": 2
-   },
-   {
-    "b": 5.5,
-    "k": "step",
-    "lane": 1
-   },
-   {
-    "b": 6.0,
-    "k": "ring",
-    "lane": 2
-   },
-   {
-    "b": 6.25,
-    "k": "step",
-    "lane": 1
-   },
-   {
-    "b": 6.5,
-    "k": "step",
-    "lane": 0
-   },
-   {
-    "b": 7.0,
-    "k": "step",
-    "lane": 1
-   },
-   {
-    "b": 7.5,
-    "k": "step",
-    "lane": 1
-   },
    {
     "b": 8.0,
     "k": "ring",
@@ -6252,101 +6049,6 @@
    }
   ],
   "expert": [
-   {
-    "b": 0.0,
-    "k": "step",
-    "lane": 0
-   },
-   {
-    "b": 0.0,
-    "k": "step",
-    "lane": 2
-   },
-   {
-    "b": 1.0,
-    "k": "ring",
-    "lane": 2
-   },
-   {
-    "b": 1.5,
-    "k": "step",
-    "lane": 0
-   },
-   {
-    "b": 2.0,
-    "k": "bell"
-   },
-   {
-    "b": 3.0,
-    "k": "step",
-    "lane": 0
-   },
-   {
-    "b": 3.0,
-    "k": "step",
-    "lane": 2
-   },
-   {
-    "b": 4.0,
-    "k": "ring",
-    "lane": 2
-   },
-   {
-    "b": 4.5,
-    "k": "hold",
-    "lane": 1,
-    "len": 0.5
-   },
-   {
-    "b": 5.0,
-    "k": "step",
-    "lane": 0
-   },
-   {
-    "b": 5.25,
-    "k": "step",
-    "lane": 0
-   },
-   {
-    "b": 5.5,
-    "k": "step",
-    "lane": 1
-   },
-   {
-    "b": 5.5,
-    "k": "step",
-    "lane": 2
-   },
-   {
-    "b": 6.0,
-    "k": "ring",
-    "lane": 2
-   },
-   {
-    "b": 6.25,
-    "k": "step",
-    "lane": 1
-   },
-   {
-    "b": 6.5,
-    "k": "step",
-    "lane": 0
-   },
-   {
-    "b": 7.0,
-    "k": "ring",
-    "lane": 1
-   },
-   {
-    "b": 7.25,
-    "k": "step",
-    "lane": 2
-   },
-   {
-    "b": 7.5,
-    "k": "step",
-    "lane": 1
-   },
    {
     "b": 8.0,
     "k": "ring",

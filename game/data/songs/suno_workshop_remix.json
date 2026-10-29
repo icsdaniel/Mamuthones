@@ -5,7 +5,8 @@
   "it": "La bottega remix"
  },
  "stop": 1,
- "kind": "story", "version": "remix",
+ "kind": "story",
+ "version": "remix",
  "bpm": 90.0,
  "offset": 0.195,
  "audio": "res://audio/music/suno_workshop_remix.ogg",
@@ -71,38 +72,6 @@
  ],
  "charts": {
   "easy": [
-   {
-    "b": 0.0,
-    "k": "hold",
-    "lane": 1,
-    "len": 0.5
-   },
-   {
-    "b": 1.0,
-    "k": "step",
-    "lane": 0
-   },
-   {
-    "b": 3.0,
-    "k": "step",
-    "lane": 2
-   },
-   {
-    "b": 5.0,
-    "k": "step",
-    "lane": 2
-   },
-   {
-    "b": 6.0,
-    "k": "hold",
-    "lane": 0,
-    "len": 0.5
-   },
-   {
-    "b": 7.0,
-    "k": "step",
-    "lane": 2
-   },
    {
     "b": 8.0,
     "k": "step",
@@ -1501,59 +1470,6 @@
    }
   ],
   "medium": [
-   {
-    "b": 0.0,
-    "k": "hold",
-    "lane": 1,
-    "len": 0.5
-   },
-   {
-    "b": 1.0,
-    "k": "hold",
-    "lane": 0,
-    "len": 0.5
-   },
-   {
-    "b": 2.0,
-    "k": "step",
-    "lane": 1
-   },
-   {
-    "b": 3.0,
-    "k": "step",
-    "lane": 2
-   },
-   {
-    "b": 3.5,
-    "k": "step",
-    "lane": 2
-   },
-   {
-    "b": 4.5,
-    "k": "step",
-    "lane": 2
-   },
-   {
-    "b": 5.0,
-    "k": "step",
-    "lane": 2
-   },
-   {
-    "b": 6.0,
-    "k": "hold",
-    "lane": 0,
-    "len": 0.5
-   },
-   {
-    "b": 7.0,
-    "k": "step",
-    "lane": 2
-   },
-   {
-    "b": 7.5,
-    "k": "step",
-    "lane": 2
-   },
    {
     "b": 8.0,
     "k": "ring",
@@ -3463,79 +3379,6 @@
    }
   ],
   "hard": [
-   {
-    "b": 0.0,
-    "k": "hold",
-    "lane": 1,
-    "len": 0.5
-   },
-   {
-    "b": 1.0,
-    "k": "hold",
-    "lane": 0,
-    "len": 0.5
-   },
-   {
-    "b": 1.5,
-    "k": "step",
-    "lane": 1
-   },
-   {
-    "b": 2.0,
-    "k": "step",
-    "lane": 1
-   },
-   {
-    "b": 2.5,
-    "k": "step",
-    "lane": 2
-   },
-   {
-    "b": 3.0,
-    "k": "step",
-    "lane": 2
-   },
-   {
-    "b": 3.5,
-    "k": "step",
-    "lane": 2
-   },
-   {
-    "b": 4.5,
-    "k": "step",
-    "lane": 2
-   },
-   {
-    "b": 5.0,
-    "k": "step",
-    "lane": 2
-   },
-   {
-    "b": 5.5,
-    "k": "hold",
-    "lane": 2,
-    "len": 1.0
-   },
-   {
-    "b": 6.0,
-    "k": "step",
-    "lane": 0
-   },
-   {
-    "b": 6.5,
-    "k": "step",
-    "lane": 1
-   },
-   {
-    "b": 7.0,
-    "k": "step",
-    "lane": 2
-   },
-   {
-    "b": 7.5,
-    "k": "step",
-    "lane": 2
-   },
    {
     "b": 8.0,
     "k": "ring",
@@ -6213,113 +6056,6 @@
    }
   ],
   "expert": [
-   {
-    "b": 0.0,
-    "k": "hold",
-    "lane": 1,
-    "len": 0.5
-   },
-   {
-    "b": 1.0,
-    "k": "hold",
-    "lane": 0,
-    "len": 0.5
-   },
-   {
-    "b": 1.5,
-    "k": "step",
-    "lane": 1
-   },
-   {
-    "b": 1.8175,
-    "k": "step",
-    "lane": 2
-   },
-   {
-    "b": 2.0,
-    "k": "step",
-    "lane": 1
-   },
-   {
-    "b": 2.3175,
-    "k": "step",
-    "lane": 1
-   },
-   {
-    "b": 2.5,
-    "k": "step",
-    "lane": 2
-   },
-   {
-    "b": 2.8175,
-    "k": "step",
-    "lane": 0
-   },
-   {
-    "b": 3.0,
-    "k": "step",
-    "lane": 2
-   },
-   {
-    "b": 3.3175,
-    "k": "step",
-    "lane": 0
-   },
-   {
-    "b": 3.5,
-    "k": "step",
-    "lane": 2
-   },
-   {
-    "b": 4.0,
-    "k": "bell"
-   },
-   {
-    "b": 4.5,
-    "k": "step",
-    "lane": 2
-   },
-   {
-    "b": 5.0,
-    "k": "step",
-    "lane": 2
-   },
-   {
-    "b": 5.5,
-    "k": "hold",
-    "lane": 2,
-    "len": 1.0
-   },
-   {
-    "b": 6.0,
-    "k": "step",
-    "lane": 0
-   },
-   {
-    "b": 6.5,
-    "k": "step",
-    "lane": 1
-   },
-   {
-    "b": 6.8175,
-    "k": "step",
-    "lane": 1
-   },
-   {
-    "b": 7.0,
-    "k": "step",
-    "lane": 2
-   },
-   {
-    "b": 7.3175,
-    "k": "step",
-    "lane": 0
-   },
-   {
-    "b": 7.5,
-    "k": "step",
-    "lane": 2
-   },
    {
     "b": 8.0,
     "k": "ring",

@@ -5,7 +5,8 @@
   "it": "La fune remix"
  },
  "stop": 5,
- "kind": "story", "version": "remix",
+ "kind": "story",
+ "version": "remix",
  "bpm": 116.0,
  "offset": 0.502,
  "audio": "res://audio/music/suno_rope_remix.ogg",
@@ -137,38 +138,6 @@
  ],
  "charts": {
   "easy": [
-   {
-    "b": 0.0,
-    "k": "hold",
-    "lane": 2,
-    "len": 0.5
-   },
-   {
-    "b": 2.0,
-    "k": "step",
-    "lane": 2
-   },
-   {
-    "b": 3.0,
-    "k": "step",
-    "lane": 0
-   },
-   {
-    "b": 4.0,
-    "k": "step",
-    "lane": 2
-   },
-   {
-    "b": 6.0,
-    "k": "step",
-    "lane": 2
-   },
-   {
-    "b": 7.0,
-    "k": "hold",
-    "lane": 0,
-    "len": 0.5
-   },
    {
     "b": 8.0,
     "k": "step",
@@ -1719,49 +1688,6 @@
    }
   ],
   "medium": [
-   {
-    "b": 0.0,
-    "k": "hold",
-    "lane": 2,
-    "len": 0.5
-   },
-   {
-    "b": 1.0,
-    "k": "step",
-    "lane": 1
-   },
-   {
-    "b": 2.0,
-    "k": "step",
-    "lane": 2
-   },
-   {
-    "b": 3.0,
-    "k": "hold",
-    "lane": 1,
-    "len": 0.5
-   },
-   {
-    "b": 4.0,
-    "k": "step",
-    "lane": 2
-   },
-   {
-    "b": 5.0,
-    "k": "step",
-    "lane": 2
-   },
-   {
-    "b": 6.0,
-    "k": "step",
-    "lane": 2
-   },
-   {
-    "b": 7.0,
-    "k": "hold",
-    "lane": 1,
-    "len": 0.5
-   },
    {
     "b": 8.0,
     "k": "ring",
@@ -3871,73 +3797,6 @@
    }
   ],
   "hard": [
-   {
-    "b": 0.0,
-    "k": "hold",
-    "lane": 2,
-    "len": 0.5
-   },
-   {
-    "b": 0.5,
-    "k": "step",
-    "lane": 0
-   },
-   {
-    "b": 1.0,
-    "k": "step",
-    "lane": 1
-   },
-   {
-    "b": 1.5,
-    "k": "step",
-    "lane": 1
-   },
-   {
-    "b": 2.0,
-    "k": "step",
-    "lane": 2
-   },
-   {
-    "b": 3.0,
-    "k": "step",
-    "lane": 1
-   },
-   {
-    "b": 3.5,
-    "k": "step",
-    "lane": 2
-   },
-   {
-    "b": 4.0,
-    "k": "step",
-    "lane": 1
-   },
-   {
-    "b": 5.0,
-    "k": "step",
-    "lane": 2
-   },
-   {
-    "b": 5.5,
-    "k": "step",
-    "lane": 1
-   },
-   {
-    "b": 6.0,
-    "k": "step",
-    "lane": 2
-   },
-   {
-    "b": 7.0,
-    "k": "hold",
-    "lane": 1,
-    "len": 0.5
-   },
-   {
-    "b": 7.5,
-    "k": "step",
-    "lane": 2
-   },
    {
     "b": 8.0,
     "k": "ring",
@@ -6690,123 +6549,6 @@
    }
   ],
   "expert": [
-   {
-    "b": 0.0,
-    "k": "hold",
-    "lane": 2,
-    "len": 0.5
-   },
-   {
-    "b": 0.5,
-    "k": "step",
-    "lane": 1
-   },
-   {
-    "b": 0.78,
-    "k": "step",
-    "lane": 0
-   },
-   {
-    "b": 1.0,
-    "k": "step",
-    "lane": 1
-   },
-   {
-    "b": 1.5,
-    "k": "step",
-    "lane": 0
-   },
-   {
-    "b": 1.78,
-    "k": "step",
-    "lane": 1
-   },
-   {
-    "b": 2.0,
-    "k": "step",
-    "lane": 2
-   },
-   {
-    "b": 2.5,
-    "k": "step",
-    "lane": 1
-   },
-   {
-    "b": 2.78,
-    "k": "step",
-    "lane": 2
-   },
-   {
-    "b": 3.0,
-    "k": "step",
-    "lane": 0
-   },
-   {
-    "b": 3.5,
-    "k": "step",
-    "lane": 2
-   },
-   {
-    "b": 3.78,
-    "k": "step",
-    "lane": 0
-   },
-   {
-    "b": 4.0,
-    "k": "step",
-    "lane": 1
-   },
-   {
-    "b": 4.5,
-    "k": "step",
-    "lane": 2
-   },
-   {
-    "b": 4.78,
-    "k": "step",
-    "lane": 0
-   },
-   {
-    "b": 5.0,
-    "k": "step",
-    "lane": 1
-   },
-   {
-    "b": 5.5,
-    "k": "step",
-    "lane": 2
-   },
-   {
-    "b": 5.78,
-    "k": "step",
-    "lane": 1
-   },
-   {
-    "b": 6.0,
-    "k": "step",
-    "lane": 2
-   },
-   {
-    "b": 6.5,
-    "k": "step",
-    "lane": 1
-   },
-   {
-    "b": 6.78,
-    "k": "step",
-    "lane": 2
-   },
-   {
-    "b": 7.0,
-    "k": "hold",
-    "lane": 0,
-    "len": 0.5
-   },
-   {
-    "b": 7.5,
-    "k": "step",
-    "lane": 2
-   },
    {
     "b": 8.0,
     "k": "ring",

@@ -5,7 +5,8 @@
   "it": "Domenica di Carnevale"
  },
  "stop": 4,
- "kind": "story", "version": "original",
+ "kind": "story",
+ "version": "original",
  "bpm": 110.0,
  "offset": 0.376,
  "audio": "res://audio/music/suno_carnival.ogg",
@@ -86,37 +87,6 @@
  ],
  "charts": {
   "easy": [
-   {
-    "b": 0.0,
-    "k": "step",
-    "lane": 1
-   },
-   {
-    "b": 2.0,
-    "k": "step",
-    "lane": 0
-   },
-   {
-    "b": 3.0,
-    "k": "step",
-    "lane": 2
-   },
-   {
-    "b": 4.0,
-    "k": "step",
-    "lane": 0
-   },
-   {
-    "b": 5.0,
-    "k": "hold",
-    "lane": 0,
-    "len": 2.0
-   },
-   {
-    "b": 6.0,
-    "k": "step",
-    "lane": 1
-   },
    {
     "b": 8.0,
     "k": "bell"
@@ -1794,52 +1764,6 @@
    }
   ],
   "medium": [
-   {
-    "b": 0.0,
-    "k": "step",
-    "lane": 1
-   },
-   {
-    "b": 2.0,
-    "k": "step",
-    "lane": 0
-   },
-   {
-    "b": 2.5,
-    "k": "step",
-    "lane": 2
-   },
-   {
-    "b": 3.0,
-    "k": "step",
-    "lane": 2
-   },
-   {
-    "b": 4.0,
-    "k": "step",
-    "lane": 1
-   },
-   {
-    "b": 5.0,
-    "k": "hold",
-    "lane": 0,
-    "len": 1.5
-   },
-   {
-    "b": 6.0,
-    "k": "step",
-    "lane": 1
-   },
-   {
-    "b": 7.0,
-    "k": "step",
-    "lane": 1
-   },
-   {
-    "b": 7.5,
-    "k": "step",
-    "lane": 2
-   },
    {
     "b": 8.0,
     "k": "bell"
@@ -4351,57 +4275,6 @@
    }
   ],
   "hard": [
-   {
-    "b": 0.0,
-    "k": "step",
-    "lane": 1
-   },
-   {
-    "b": 0.25,
-    "k": "step",
-    "lane": 2
-   },
-   {
-    "b": 2.0,
-    "k": "step",
-    "lane": 0
-   },
-   {
-    "b": 2.0,
-    "k": "step",
-    "lane": 2
-   },
-   {
-    "b": 3.0,
-    "k": "step",
-    "lane": 2
-   },
-   {
-    "b": 4.0,
-    "k": "ring",
-    "lane": 2
-   },
-   {
-    "b": 5.0,
-    "k": "hold",
-    "lane": 0,
-    "len": 1.0
-   },
-   {
-    "b": 6.0,
-    "k": "step",
-    "lane": 2
-   },
-   {
-    "b": 6.25,
-    "k": "step",
-    "lane": 1
-   },
-   {
-    "b": 6.75,
-    "k": "step",
-    "lane": 1
-   },
    {
     "b": 8.0,
     "k": "bell"
@@ -7602,66 +7475,6 @@
    }
   ],
   "expert": [
-   {
-    "b": 0.0,
-    "k": "step",
-    "lane": 1
-   },
-   {
-    "b": 0.25,
-    "k": "step",
-    "lane": 2
-   },
-   {
-    "b": 1.0,
-    "k": "bell"
-   },
-   {
-    "b": 2.0,
-    "k": "step",
-    "lane": 0
-   },
-   {
-    "b": 2.0,
-    "k": "step",
-    "lane": 2
-   },
-   {
-    "b": 3.0,
-    "k": "step",
-    "lane": 2
-   },
-   {
-    "b": 4.0,
-    "k": "ring",
-    "lane": 2
-   },
-   {
-    "b": 5.0,
-    "k": "hold",
-    "lane": 0,
-    "len": 1.0
-   },
-   {
-    "b": 6.0,
-    "k": "step",
-    "lane": 2
-   },
-   {
-    "b": 6.25,
-    "k": "step",
-    "lane": 1
-   },
-   {
-    "b": 6.75,
-    "k": "step",
-    "lane": 1
-   },
-   {
-    "b": 7.25,
-    "k": "step",
-    "lane": 1
-   },
    {
     "b": 8.0,
     "k": "bell"

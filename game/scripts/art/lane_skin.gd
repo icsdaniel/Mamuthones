@@ -174,6 +174,9 @@ static func draw_rest(ci: CanvasItem, field: Rect2, y_top: float, y_bottom: floa
 
 
 static func draw_button(ci: CanvasItem, rect: Rect2, lane: int, state: String) -> void:
+	if LaneView.STEP_BUTTONS and ResourceLoader.exists("res://art/ai/btn_idle.webp"):
+		_draw_step(ci, rect, lane, state)
+		return
 	# the play screen's step crates, at their own proportions, standing on the rect's floor
 	var key := "crate_%s_%d" % ["pressed" if state == "pressed" or state == "hit" else "idle", clampi(lane, 0, 2)]
 	var asp := StreetSkin.ai_aspect(key)
@@ -187,6 +190,32 @@ static func draw_button(ci: CanvasItem, rect: Rect2, lane: int, state: String) -
 		ci.draw_texture_rect(StreetSkin.ai_tex(key, cells), Rect2(at, sz), false)
 		return
 	FireSkin.draw_button(ci, rect, lane, state)
+
+
+## The play screen's carved step (LaneView._draw_steps) in rect: the pressed picture sunk a little
+## when down, the lane's bare feet carved in it.
+static func _draw_step(ci: CanvasItem, rect: Rect2, lane: int, state: String) -> void:
+	var P := PxArt.PX
+	var down := state == "pressed" or state == "hit"
+	var cells := Vector2i(floori(rect.size.x / P), floori(rect.size.y / P) - LaneView.PX_LIFT)
+	if cells.x < 8 or cells.y < 8:
+		return
+	var o := PxArt.snap2(rect.position + Vector2(0.0, (LaneView.PX_LIFT if down else 0) * P))
+	var tex := LaneView._nine("btn_pressed" if down else "btn_idle", cells, LaneView.BTN_CAP)
+	if tex == null:
+		return
+	var mod := Color(1.45, 1.2, 0.85) if state == "hit" else Color.WHITE
+	ci.draw_texture_rect(tex, Rect2(o, Vector2(cells) * P), false, mod)
+	var feet := [-1.0, 1.0] if lane == 1 else ([-1.0] if lane == 0 else [1.0])
+	var fh := clampi(int(cells.y * 0.5), 8, 40)
+	var fasp := StreetSkin.ai_aspect("foot")
+	var fw := maxi(roundi(fh * (fasp if fasp > 0.0 else LaneView.FOOT_ASPECT)), 4)
+	for i in feet.size():
+		var cx := cells.x * 0.5 + (0.0 if feet.size() == 1 else (float(i) - 0.5) * fw * 1.5)
+		var ftex := StreetSkin.ai_tex("foot" if feet[i] > 0.0 else "foot!mirror", Vector2i(fw, fh))
+		if ftex != null:
+			var fo := Vector2(roundf(cx - fw * 0.5), roundf(cells.y * 0.5 - fh * 0.5))
+			ci.draw_texture_rect(ftex, Rect2(o + fo * P, Vector2(fw, fh) * P), false, Color.WHITE if down else Color(0.82, 0.78, 0.72))
 
 
 static func draw_hit_burst(ci: CanvasItem, pos: Vector2, quality: String, age: float, size := 1.0) -> bool:
