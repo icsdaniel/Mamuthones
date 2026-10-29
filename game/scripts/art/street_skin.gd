@@ -1380,14 +1380,15 @@ static func bell_strike(lv: LaneView, field: Rect2, up: bool, quality: String, c
 		lv.draw_rect(Rect2(p0.x, PxArt.snap(p0.y - bar * 0.5), p1.x - p0.x, bar), hot_col if hot else col)
 	# the cowbells swinging under the strap, ringing: below the hit line, so they never cover the
 	# notes coming down to it (graphics review, 2026-10-28: thrown up the lanes, they hid the next
-	# notes for half a second)
+	# notes for half a second), and at the road's two edges, clear of the judgement words in the
+	# lanes' middles (2026-10-29: between the lanes they sat on the words' boards)
 	var hy := lv.project(Vector2(0.0, hl)).y
 	var bs := lw * 0.36 * big
 	var drop := exp(-age * 9.0) * sin(minf(age * 30.0, PI * 0.5)) * bs * 0.25
 	var swing := sin(age * 30.0) * exp(-age * 6.0)
 	var fade := clampf((STRIKE_TIME - 0.04 - age) / 0.1, 0.0, 1.0)
 	for i in (2 if fade > 0.0 else 0):
-		var bx := lv.project(Vector2(lane * float(i + 1), hl)).x
+		var bx := lv.project(Vector2(lane * 3.0 * float(i), hl)).x
 		var at := Vector2(bx, hy + bs * 1.15 + drop)
 		var c := at + Vector2(0.0, -bs * 0.5)
 		# the ring arcs, three in a row, each opening out and cooling, kept small

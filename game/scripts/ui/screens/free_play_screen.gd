@@ -10,6 +10,8 @@ var _song_buttons := {}
 var _tabs: HBoxContainer
 var _info: Label
 var _remix: CheckButton
+var _versions: VBoxContainer
+var _lead: SongData   ## the picked stop's row (song is the picked version of it)
 
 
 func build() -> void:
@@ -26,20 +28,18 @@ func build() -> void:
 	for d in SongData.DIFFICULTIES:
 		items.append([d, tr("diff_" + d)])
 	_tabs = UIKit.tabs(box, items, difficulty, _pick_diff)
-	var last_stop := -1
-	for s in SongLibrary.catalogue():
-		# a stop's number once, on its first version
-		var lead := str(s.stop) if s.stop != last_stop else " "   # (a blank keeps the titles in line)
-		last_stop = s.stop
-		var title := UIKit.song_title(s)
-		if s.kind == "tutorial" and SongLibrary.versions(s).size() > 1:
-			title += " · " + tr("version_practice")   # beside the stop's recorded song of the same name
-		var b := UIKit.list_row(lead, title, "", GradeBadge.new(-1), "open", _pick_song.bind(s))
+	# one row per stop (its lead, like the story); the stop's other versions are tabs under the list
+	for s in SongLibrary.story():
+		var b := UIKit.list_row(str(s.stop), UIKit.song_title(s), "", GradeBadge.new(-1), "open", _pick_stop.bind(s))
 		(b.get_child(0).get_child(b.get_child(0).get_child_count() - 1) as Control).name = "Grade"
 		b.toggle_mode = true
 		b.name = "Song_" + s.id
 		box.add_child(b)
 		_song_buttons[s.id] = b
+	_versions = VBoxContainer.new()
+	_versions.name = "VersionBox"
+	_versions.add_theme_constant_override("separation", 8)
+	box.add_child(_versions)
 	_remix = CheckButton.new()
 	_remix.custom_minimum_size.y = UIKit.TOUCH
 	_remix.focus_mode = Control.FOCUS_NONE
@@ -58,13 +58,32 @@ func build() -> void:
 		first = SongLibrary.story()[0]
 	_pick_diff(difficulty)
 	if first != null:
-		_pick_song(first)
+		_pick_stop(first)
+
+
+## A stop's row: its lead version, and the stop's versions as tabs under the list (when it has more).
+func _pick_stop(lead: SongData) -> void:
+	_lead = lead
+	for id in _song_buttons:
+		UIKit.row_select(_song_buttons[id], id == lead.id)
+	for c in _versions.get_children():
+		_versions.remove_child(c)
+		c.queue_free()
+	var vs := SongLibrary.versions(lead)
+	if vs.size() > 1:
+		_versions.add_child(UIKit.label(tr("stop_version"), UIKit.SUB))
+		var items := []
+		for v in vs:
+			items.append([v.id, tr("version_" + (v.version if v.version != "" else "original"))])
+		var tabs := UIKit.tabs(_versions, items, lead.id, func(id: String) -> void:
+			UIKit.select_tab(_versions.get_node("Tabs"), id)
+			_pick_song(SongLibrary.get_song(id)))
+		tabs.name = "Tabs"
+	_pick_song(lead)
 
 
 func _pick_song(s: SongData) -> void:
 	song = s
-	for id in _song_buttons:
-		UIKit.row_select(_song_buttons[id], id == s.id)
 	var remix_open := s.has_remix() and Progression.remix_unlocked(s.id)
 	_remix.visible = s.has_remix()
 	_remix.disabled = not remix_open
@@ -83,12 +102,14 @@ func _pick_diff(d: String) -> void:
 	_refresh()
 
 
-## Every song row shows its best at the chosen difficulty: score and grade (the remix's when the
-## remix is on for the chosen song).
+## Every stop row shows its best at the chosen difficulty: score and grade (the picked version's on the
+## picked stop, the remix's when the remix is on).
 func _show_bests() -> void:
 	for id in _song_buttons:
 		var b: Button = _song_buttons[id]
 		var sd := SongLibrary.get_song(id)
+		if sd == _lead and song != null:
+			sd = song
 		var best: Dictionary = Profile.best(UIKit.board_song_id(sd, use_remix and sd == song), difficulty)
 		_badge(b, UIKit.grade_of(best), UIKit.fmt_score(int(best.get("score", 0))) if not best.is_empty() else "", bool(best.get("full_combo", false)))
 

@@ -132,6 +132,24 @@ SPACE = 3
 SQUARE = set("Dd")   ## glyphs the big face doubles without Scale2x
 
 
+def d_bowl(m):
+    """A doubled D with a clear bowl: the stem square, the right corners cut on a diagonal, so it
+    never reads as an O beside the letters Scale2x rounds."""
+    m = m.copy()
+    ys = np.where(m.any(1))[0]
+    xs = np.where(m.any(0))[0]
+    t, b, r = ys[0], ys[-1], xs[-1]
+    for k, cut in ((0, 3), (1, 2)):
+        for y in (t + k, b - k):
+            m[y, r - cut + 1:r + 1] = False
+    # the diagonal's inner step, so the stroke stays two pixels thick round the corner
+    for y in (t + 2, b - 2):
+        m[y, r - 2] = True
+    for y in (t + 1, b - 1):
+        m[y, r - 3] = True
+    return m
+
+
 def mask(rows):
     return np.array([[c == "#" for c in r] for r in rows], bool)
 
@@ -329,7 +347,7 @@ def main():
     write_font("font_caps_gold", caps, 10, 9, 12, GOLD_RAMP, (2, 8))
     # D and d doubled plainly: Scale2x rounds their corners into an O ("Held" read "Helo", graphics
     # review of 2026-10-28)
-    big = {ch: (np.kron(c, np.ones((2, 2), bool)) if ch in SQUARE else scale2x(c)) for ch, c in caps.items()}
+    big = {ch: (d_bowl(np.kron(c, np.ones((2, 2), bool))) if ch in SQUARE else scale2x(c)) for ch, c in caps.items()}
     write_font("font_big", big, 20, 18, 22, None, (4, 17), True, space=6, gap=2)
     write_font("font_big_gold", big, 20, 18, 22, GOLD_RAMP, (4, 17), True, space=6, gap=2)
     sc = score_cells()
