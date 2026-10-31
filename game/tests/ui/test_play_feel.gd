@@ -284,3 +284,20 @@ func test_half_beats_in_sixteenth_runs_are_silver() -> void:
 	check(not lv._sixteenth(n[5]), "a lone eighth stays violet")
 	check(not lv._sixteenth(n[0]) and not lv._sixteenth(n[4]), "on-beat notes are neither")
 	lv.free()
+
+
+## A swung song's sixteenths sit late (.295, not .25: outside review, 2026-10-31). They are silver
+## too, not violet like a half beat, and the half beat between two of them joins the run.
+func test_swung_sixteenths_are_silver() -> void:
+	var song := SongData.from_dict({"id": "t", "bpm": 120, "offset": 1.0, "length": 0.0, "swing": 0.045, "charts": {"easy": [
+		{"b": 0, "k": "step", "lane": 1}, {"b": 0.295, "k": "step", "lane": 0}, {"b": 0.5, "k": "step", "lane": 1},
+		{"b": 0.795, "k": "step", "lane": 2}, {"b": 2, "k": "step", "lane": 1}, {"b": 2.5, "k": "step", "lane": 0},
+		{"b": 3, "k": "step", "lane": 1}]}})
+	var lv := LaneView.new()
+	lv.session = Session.new(song, "easy")
+	var n := lv.session.notes
+	check(lv._sixteenth(n[1]) and lv._sixteenth(n[3]), "swung sixteenths are silver")
+	check(lv._sixteenth(n[2]), "the half beat between swung sixteenths is silver too")
+	check(not lv._sixteenth(n[5]), "a lone eighth in a swung song stays violet")
+	check(not lv._sixteenth(n[0]) and not lv._sixteenth(n[4]), "on-beat notes are neither")
+	lv.free()

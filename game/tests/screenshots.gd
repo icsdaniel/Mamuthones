@@ -116,6 +116,7 @@ func _shots() -> Array:
 		{"file": "play_chord_hard", "screen": "play", "args": {"song_id": "carnival", "difficulty": "hard", "autoplay": true}, "setup": "moment:chord", "wait": 0.05},
 		{"file": "play_chord_expert", "screen": "play", "args": {"song_id": "shrove", "difficulty": "expert", "autoplay": true}, "setup": "moment:chord", "wait": 0.05},
 		{"file": "play_sixteenths", "screen": "play", "args": {"song_id": "shrove", "difficulty": "expert", "autoplay": true}, "setup": "moment:six", "wait": 0.05},
+		{"file": "play_sixteenths_swung", "screen": "play", "args": {"song_id": "suno_rope", "difficulty": "expert", "autoplay": true}, "setup": "moment:six", "wait": 0.05},
 		{"file": "play_break_coming", "screen": "play", "args": {"song_id": "rope", "difficulty": "hard", "autoplay": true}, "setup": "moment:break_coming", "wait": 0.05},
 		{"file": "play_break", "screen": "play", "args": {"song_id": "rope", "difficulty": "hard", "autoplay": true}, "setup": "moment:break", "wait": 0.05},
 		{"file": "play_break_moved", "screen": "play", "args": {"song_id": "rope", "difficulty": "hard", "autoplay": true}, "setup": "moment:moved", "wait": 0.1},
@@ -275,7 +276,8 @@ func _moment(screen: Node, what: String) -> void:
 			var sixes: Array[float] = []
 			for n in s.notes:
 				var fr := fposmod(n.beat, 0.5)
-				if n.kind == Note.Kind.STEP and not n.call and absf(fr - 0.25) < 0.02 and n.t > c.song_time() + 1.0:
+				var on_six: bool = s.sixteenth_beat(n.beat) if s.has_method("sixteenth_beat") else absf(fr - 0.25) < 0.02
+				if n.kind == Note.Kind.STEP and not n.call and on_six and n.t > c.song_time() + 1.0:
 					sixes.append(n.t)
 			var most_six := -1
 			for t0 in sixes:

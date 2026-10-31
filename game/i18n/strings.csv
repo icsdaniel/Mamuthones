@@ -57,7 +57,7 @@ motion_waiting,Checking the motion sensors…,Controllo dei sensori di movimento
 motion_uncalibrated,Not calibrated yet.,Taratura non ancora fatta.
 lat_step,Setup 2 of 2,Preparazione 2 di 2
 lat_title,Sound delay,Ritardo dell'audio
-lat_intro,Tap the drum along with the clicks you hear. This measures how late the sound reaches you.,Batti sul tamburo insieme ai clic che senti. Così misuriamo quanto arriva in ritardo il suono.
+lat_intro,Tap the big pad along with the clicks you hear. This measures how late the sound reaches you.,Batti sul riquadro grande insieme ai clic che senti. Così misuriamo quanto arriva in ritardo il suono.
 lat_pad,Tap here,Batti qui
 lat_start,Start,Inizia
 lat_skip,Skip for now,Salta per ora
@@ -75,6 +75,7 @@ lat_sounds_off,"That is a long delay, as with Bluetooth headphones: every button
 lat_sounds_on,Button knocks are back on.,I colpi dei pulsanti sono di nuovo accesi.
 title_continue,Play: %s,Gioca: %s
 title_procession,The procession,La processione
+title_learn,Start here: learn to play,Inizia qui: impara a giocare
 title_story,Story,Storia
 title_free,Free play,Gioco libero
 title_workshop,Workshop,Laboratorio
@@ -107,15 +108,15 @@ stop_remix,Play the remix,Suona il remix
 stop_remix_chip,Remix,Remix
 stop_remix_locked,Remix: get a B or better at Hard to open it,Remix: serve almeno una B a Difficile
 stop_play,Play,Gioca
-stop_date_1,The night before,La vigilia
+stop_date_1,The dressing,La vestizione
 stop_date_2,16 January,16 gennaio
 stop_date_3,17 January,17 gennaio
 stop_date_4,Carnival Sunday,Domenica di Carnevale
 stop_date_5,"Carnival, in the streets","Carnevale, per le strade"
 stop_date_6,"Carnival, in the square","Carnevale, in piazza"
 stop_date_7,Shrove Tuesday,Martedì grasso
-stop_fact_1,"Before the procession, the masks are made ready and the bells are tied on. A Mamuthone carries his load of bells on his back.",Prima della processione si preparano le maschere e si legano i campanacci. Il Mamuthone porta il suo carico di campanacci sulla schiena.
-stop_fact_2,"In mid-January, for the feast of Sant'Antonio, bonfires are lit across Mamoiada. It is the first time in the year that the Mamuthones come out.","A metà gennaio, per la festa di Sant'Antonio, a Mamoiada si accendono i fuochi. È la prima volta nell'anno che escono i Mamuthones."
+stop_fact_1,"Before every outing the Mamuthones are dressed. The dark sheepskin goes on, then the wooden mask, and the load of bells is strapped on the back.","Prima di ogni uscita i Mamuthones vengono vestiti. Si indossano la pelliccia scura e la maschera di legno, e il carico di campanacci si lega sulla schiena."
+stop_fact_2,"On the evening of 16 January, for the feast of Sant'Antonio, bonfires are lit across Mamoiada. The Mamuthones' first outing of the year belongs to these fires.","La sera del 16 gennaio, per la festa di Sant'Antonio, a Mamoiada si accendono i fuochi. La prima uscita dell'anno dei Mamuthones è legata a questi fuochi."
 stop_fact_3,The procession moves from one bonfire to the next. People gather by the fires to watch it pass.,La processione va da un fuoco all'altro. La gente si raccoglie intorno ai fuochi per vederla passare.
 stop_fact_4,"On Carnival Sunday the Mamuthones walk through the streets of Mamoiada again. They move in two rows, with the Issohadores around them.","La domenica di Carnevale i Mamuthones tornano a sfilare per le strade di Mamoiada. Avanzano in due file, con gli Issohadores intorno."
 stop_fact_5,"The Issohadores wear red jackets and white masks. With a rope, the soha, they catch people from the crowd.","Gli Issohadores portano la giacca rossa e la maschera bianca. Con una fune, la soha, catturano le persone tra la folla."
@@ -176,7 +177,7 @@ cred_sound,"The bells are synthesized for now. Before launch they will be replac
 cred_art_h,Art,Grafica
 cred_art,"Art made with image AI from our own designs and prompts, then finished by hand.","Illustrazioni fatte con un'IA per immagini a partire dai nostri disegni e dalle nostre richieste, poi rifinite a mano."
 cred_fonts_h,Fonts,Caratteri
-cred_fonts,"IM Fell English SC by Igino Marini and Alegreya Sans by the Alegreya Sans Project Authors (Huerta Tipográfica), under the SIL Open Font License.","IM Fell English SC di Igino Marini e Alegreya Sans degli autori del progetto Alegreya Sans (Huerta Tipográfica), con licenza SIL Open Font License."
+cred_fonts,"IM Fell English SC by Igino Marini, and Alegreya, Alegreya SC and Alegreya Sans by Juan Pablo del Peral (Huerta Tipográfica), under the SIL Open Font License.","IM Fell English SC di Igino Marini, e Alegreya, Alegreya SC e Alegreya Sans di Juan Pablo del Peral (Huerta Tipográfica), con licenza SIL Open Font License."
 cred_engine_h,Engine,Motore
 cred_engine,Made with Godot Engine (MIT licence).,Realizzato con Godot Engine (licenza MIT).
 cred_privacy,No data is collected. Scores and settings stay on this phone.,Nessun dato viene raccolto. Punteggi e impostazioni restano su questo telefono.
@@ -284,15 +285,16 @@ tut_why_silence,Bells rung in the grey: %d,Campanacci suonati nel grigio: %d
 tut_why_one_thumb,Played with one thumb: %d,Suonati con un pollice solo: %d
 tut_why_holds,Long notes held to the end: %d of %d,Note lunghe tenute fino in fondo: %d su %d
 res_closest,Closest unlock,Sblocco più vicino
-res_unison_head,Unison peak %s,Unisono massimo %s
-res_unison_head_top,Unison peak %s · %s s at %s,Unisono massimo %s · %s s a %s
+res_unison_head,Top unison %s,Unisono massimo %s
+res_unison_head_top,"Top unison %s, held for %s","Unisono massimo %s, tenuto per %s"
 res_top_time,Time at %s,Tempo a %s
 set_note_warning,%s s to read,%s s per leggere
 set_bell_cue,Bell cue on Easy and Medium,Avviso dei campanacci in Facile e Media
 set_bell_cue_note,A soft tick half a beat before each bell.,Un tocco leggero mezzo battito prima di ogni campanaccio.
+set_bell_cue_all,Bell cue on Hard and Expert too,Avviso anche in Difficile ed Esperto
 res_again,Play again,Rigioca
 res_next,Next stop: %s,Prossima tappa: %s
-res_done,Back,Indietro
+res_done,Back to the stop,Torna alla tappa
 res_new_best_by,New best: +%s over your best,Nuovo record: +%s sul tuo record
 res_first_best,Your first best on this song,Il tuo primo record su questo brano
 res_best,Best: %s (%s to go),Record: %s (ne mancano %s)
@@ -324,7 +326,7 @@ ws_fleece_dark_brown,Dark brown,Marrone scuro
 ws_straps_natural,Natural leather,Cuoio naturale
 ws_straps_dark,Dark leather,Cuoio scuro
 ws_dress_note,Only the real colours. The black sheepskin comes once it is drawn.,Solo i colori veri. La pelle nera arriva quando sarà disegnata.
-tut_title,The Workshop,Il laboratorio
+tut_title,Lessons,Lezioni
 tut_lesson_n,Lesson %d of %d,Lezione %d di %d
 tut_try,Try it,Prova
 tut_try_again,Try again,Riprova

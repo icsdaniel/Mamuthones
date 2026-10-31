@@ -1144,7 +1144,7 @@ func _off_beat(n: Note) -> bool:
 ## note inside a run of sixteenths is played at the same speed, so it is silver too: violet between
 ## two silver notes read as a slower note (Daniele, 2026-10-10; Note.quick marks the pairs).
 func _sixteenth(n: Note) -> bool:
-	if n.quick or absf(fposmod(n.beat, 0.5) - 0.25) < 0.02:
+	if n.quick or (session != null and session.sixteenth_beat(n.beat)) or (session == null and absf(fposmod(n.beat, 0.5) - 0.25) < 0.02):
 		return true
 	if absf(fposmod(n.beat, 1.0) - 0.5) >= 0.02 or session == null:
 		return false
@@ -1164,10 +1164,9 @@ func _in_sixteenth_run(n: Note) -> bool:
 	var ns := session.notes
 	for dir: int in [-1, 1]:
 		var i: int = n.index + dir
-		while i >= 0 and i < ns.size() and absf(ns[i].beat - n.beat) <= 0.27:
+		while i >= 0 and i < ns.size() and absf(ns[i].beat - n.beat) <= 0.27 + session.swing():
 			var m: Note = ns[i]
-			var gap := absf(m.beat - n.beat)
-			if m.uses_lane() and gap > 0.02 and absf(gap - 0.25) < 0.02:
+			if m.uses_lane() and session.quarter_gap(absf(m.beat - n.beat)):
 				return true
 			i += dir
 	return false

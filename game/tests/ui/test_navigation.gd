@@ -242,8 +242,9 @@ func test_first_note_within_a_minute() -> void:
 	var app := UIHarness.make_app(tree)
 	await UIHarness.frames(tree, 2)
 	var t0 := Time.get_ticks_msec()
-	# Language, headphones, calibration, delay test, then the first song from the menu (tutorial optional).
-	for b in ["Lang_en", "Continue", "UseSlam", "Skip", "PlayNext", "Play"]:
+	# Language, headphones, calibration, delay test, then the red banner: a new player's leads to the
+	# first lesson (outside review, 2026-10-31), whose Try starts it.
+	for b in ["Lang_en", "Continue", "UseSlam", "Skip", "PlayNext", "Try"]:
 		check(UIHarness.press(app.current(), b), "first run: %s" % b)
 		await UIHarness.settle(tree)
 	var play: Node = null

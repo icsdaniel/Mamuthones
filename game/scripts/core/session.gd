@@ -593,6 +593,23 @@ func ring(t: float, tilt: bool = true, strength: float = 0.5) -> Dictionary:
 ## True when a bell (or the tilt half of a full ring) can still be rung at t.
 func bell_due(t: float, tilt: bool = true) -> bool:
 	return _find_bell(t, (win_tilt if tilt and not slam else win_touch).z) != null
+## How late this song's off-beat sixteenths sit, in beats (0: straight; see SongData.swing).
+func swing() -> float:
+	return song.swing if song != null else 0.0
+
+
+## Whether a note at beat b is an off-beat sixteenth (a quarter beat past an eighth, plus the swing:
+## a swung song's sixteenths sit at .295 or .795, not .25 or .75).
+func sixteenth_beat(b: float) -> bool:
+	return absf(fposmod(b, 0.5) - 0.25 - swing()) < 0.02
+
+
+## Whether two notes this far apart (in beats) are a sixteenth apart. Swing stretches the gap after
+## the eighth (0.25 + swing) and shrinks the one before the next (0.25 - swing).
+func quarter_gap(gap: float) -> bool:
+	return gap > 0.02 and absf(gap - 0.25) < 0.02 + swing()
+
+
 # Half-beat steps next to a sixteenth (a lane note a quarter beat away) read as part of it.
 func _mark_quick() -> void:
 	var laned: Array[Note] = []
@@ -604,7 +621,7 @@ func _mark_quick() -> void:
 		if n.kind != Note.Kind.STEP or absf(fposmod(n.beat, 1.0) - 0.5) > 0.02:
 			continue
 		for j in [i - 1, i + 1]:
-			if j >= 0 and j < laned.size() and absf(absf(laned[j].beat - n.beat) - 0.25) < 0.02:
+			if j >= 0 and j < laned.size() and quarter_gap(absf(laned[j].beat - n.beat)):
 				n.quick = true
 
 

@@ -58,6 +58,8 @@ func build() -> void:
 	_play = UIKit.button("", _play_next, UIKit.PRIMARY)
 	_play.name = "PlayNext"
 	_play.text = tr("title_continue") % UIKit.song_title(next_song) if next_song != null else tr("title_procession")
+	if lessons_first():
+		_play.text = tr("title_learn")
 	_play.text_overrun_behavior = TextServer.OVERRUN_TRIM_ELLIPSIS
 	_play.set_anchors_preset(Control.PRESET_FULL_RECT)
 	holder.add_child(_play)
@@ -79,7 +81,21 @@ func build() -> void:
 		grid.add_child(b)
 
 
+## A new player's red banner leads to the lessons, not straight into a song with hearts (outside
+## review, 2026-10-31). Once the lessons are done, or any stop is cleared, it names the next stop.
+static func lessons_first() -> bool:
+	if Profile.has_flag("tutorial_done"):
+		return false
+	for id in Progression.story_order():
+		if Progression.cleared(id):
+			return false
+	return true
+
+
 func _play_next() -> void:
+	if lessons_first():
+		app.open("tutorial")
+		return
 	var id := Progression.next_stop()
 	if id == "" or SongLibrary.get_song(id) == null:
 		app.open("story")

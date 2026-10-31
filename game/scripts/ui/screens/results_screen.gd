@@ -159,7 +159,8 @@ func build() -> void:
 			Sound.juice("new_best")
 			var r := bl2.get_global_rect()
 			for k in 3:
-				_sparks.burst(Vector2(r.position.x + r.size.x * (0.2 + 0.3 * k), r.position.y), 12, Sparks.FIRE,
+				# From the line's ends and above it, so no ember lands on the words.
+				_sparks.burst(Vector2(r.position.x + r.size.x * [0.04, 0.5, 0.96][k], r.position.y - (40.0 if k == 1 else 0.0)), 12, Sparks.FIRE,
 					380.0, 1.0, Vector2.UP, 0.9, 700.0))
 
 	var again := UIKit.button(tr("res_again"), func() -> void: app.replace("play", play_args), UIKit.PRIMARY)
@@ -176,10 +177,13 @@ func build() -> void:
 	foot.add_child(row)
 	again.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	row.add_child(again)
-	var leave := UIKit.button(tr("res_done"), _leave, UIKit.QUIET)
-	leave.name = "Done"
-	leave.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	row.add_child(leave)
+	# The top bar already has Back: the bottom row's way out only shows when there is no next stop,
+	# and then it says where it goes (two "Back" buttons read as a mistake; outside review).
+	if next == null:
+		var leave := UIKit.button(tr("res_done"), _leave, UIKit.QUIET)
+		leave.name = "Done"
+		leave.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		row.add_child(leave)
 	if session.grade_rank() < 0:
 		Sound.ui("result")   # no grade to stamp (its sound is the stamp's)
 
@@ -249,10 +253,11 @@ static func still_share(net: float, score: int) -> int:
 	return maxi(1, roundi(net / float(score) * 100.0))
 
 
-## "Unison peak ×4 · 38 s at ×4", or just the peak when the top was never reached.
+## "Top unison 4x, held for 0:38", or just the peak when the top was never reached.
 static func unison_headline(peak: float, secs_at_top: float, top: float) -> String:
 	if peak >= top and secs_at_top >= 0.5:
-		return UIKit.tr_("res_unison_head_top") % [Hud._mult_text(peak), UIKit.fmt_dec(secs_at_top, 0), Hud._mult_text(top)]
+		var secs := int(round(secs_at_top))
+		return UIKit.tr_("res_unison_head_top") % [Hud._mult_text(peak), "%d:%02d" % [secs / 60, secs % 60]]
 	return UIKit.tr_("res_unison_head") % Hud._mult_text(peak)
 
 

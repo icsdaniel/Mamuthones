@@ -56,12 +56,13 @@ func build() -> void:
 	_drum.visible = false   # no drum art: the pad is a plain big target
 	_pad.add_child(_drum)
 	_pad.text = ""
-	var tap := UIKit.label(tr("lat_pad"), UIKit.SUB, false, HORIZONTAL_ALIGNMENT_CENTER)
+	# With no drum drawn, "Tap here" sits in the middle of the pad, big, not on its bottom rim
+	# (outside review, 2026-10-31).
+	var tap := UIKit.label(tr("lat_pad"), UIKit.TITLE, false, HORIZONTAL_ALIGNMENT_CENTER)
 	tap.name = "PadLabel"
 	tap.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	tap.set_anchors_and_offsets_preset(Control.PRESET_BOTTOM_WIDE)
-	tap.offset_top = -50.0
-	tap.offset_bottom = -10.0
+	tap.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	tap.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 	_pad.add_child(tap)
 	_meter = TendencyMeter.new()
 	_meter.custom_minimum_size.y = 150

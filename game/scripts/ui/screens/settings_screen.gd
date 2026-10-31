@@ -12,8 +12,9 @@ func build() -> void:
 	var cal := UIKit.button(tr("set_calibrate"), func() -> void: app.open("calibration"))
 	cal.name = "Calibrate"
 	tim.add_child(cal)
-	_sensor = UIKit.label(tr("motion_waiting"), UIKit.CAPTION)
+	_sensor = UIKit.label("", UIKit.CAPTION)   # filled in once the sensors answer: a waiting line read as stuck
 	_sensor.name = "Sensor"
+	_sensor.visible = false
 	tim.add_child(_sensor)
 	var lat := UIKit.button(tr("set_latency"), func() -> void: app.open("latency"))
 	lat.name = "Latency"
@@ -37,6 +38,7 @@ func build() -> void:
 	pl.add_child(preview)
 	speed.value_changed.connect(func(v: float) -> void: preview.note_speed = v)
 	_toggle(pl, "bell_cue", tr("set_bell_cue"), tr("set_bell_cue_note"))
+	_toggle(pl, "bell_cue_all", tr("set_bell_cue_all"))
 	_toggle(pl, "vibration", tr("set_vibration"))
 	_toggle(pl, "step_knocks", tr("set_step_knocks"), tr("set_step_knocks_note"))
 	_toggle(pl, "slam", tr("set_slam"), tr("set_slam_note"))
@@ -103,6 +105,7 @@ func _process(delta: float) -> void:
 	if st != "no_sensor" and st != "permission" and Profile.calibration().is_empty() and not bool(Profile.get_setting("slam")):
 		text += " " + tr("motion_uncalibrated")
 	_sensor.text = text
+	_sensor.visible = text != ""
 
 
 func _slider(box: Container, key: String, title: String, lo: float, hi: float, step: float,

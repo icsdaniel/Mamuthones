@@ -371,10 +371,14 @@ func _settle() -> void:
 			return
 
 
-## Whether the soft bell cue plays: the "bell_cue" setting (on unless turned off), Easy and Medium only.
+## Whether the soft bell cue plays: the "bell_cue" setting (on unless turned off) at Easy and Medium,
+## and at Hard and Expert too when "bell_cue_all" is on (players who lean on the sound most need it
+## there as well).
 static func bell_cue_on(difficulty: String) -> bool:
 	var v: Variant = Profile.get_setting("bell_cue")
-	return (v == null or bool(v)) and difficulty in ["easy", "medium"]
+	if not (v == null or bool(v)):
+		return false
+	return difficulty in ["easy", "medium"] or bool(Profile.get_setting("bell_cue_all"))
 
 
 ## Song time the music starts from: the latest bar line that leaves at least two bars and LEAD_MIN

@@ -28,7 +28,7 @@ func build() -> void:
 	for d in SongData.DIFFICULTIES:
 		items.append([d, tr("diff_" + d)])
 	_tabs = UIKit.tabs(box, items, difficulty, _pick_diff)
-	# one row per stop (its lead, like the story); the stop's other versions are tabs under the list
+	# one row per stop (its lead, like the story); the stop's other versions are tabs above Play
 	for s in SongLibrary.story():
 		var b := UIKit.list_row(str(s.stop), UIKit.song_title(s), "", GradeBadge.new(-1), "open", _pick_stop.bind(s))
 		(b.get_child(0).get_child(b.get_child(0).get_child_count() - 1) as Control).name = "Grade"
@@ -36,10 +36,6 @@ func build() -> void:
 		b.name = "Song_" + s.id
 		box.add_child(b)
 		_song_buttons[s.id] = b
-	_versions = VBoxContainer.new()
-	_versions.name = "VersionBox"
-	_versions.add_theme_constant_override("separation", 8)
-	box.add_child(_versions)
 	_remix = CheckButton.new()
 	_remix.custom_minimum_size.y = UIKit.TOUCH
 	_remix.focus_mode = Control.FOCUS_NONE
@@ -50,6 +46,12 @@ func build() -> void:
 	box.add_child(_remix)
 	_info = UIKit.label("", UIKit.CAPTION)
 	box.add_child(_info)
+	# The versions sit in the footer just above Play: under the list they fell behind it (outside
+	# review, 2026-10-31). The tabs name themselves (Original, Remix), so no heading.
+	_versions = VBoxContainer.new()
+	_versions.name = "VersionBox"
+	_versions.add_theme_constant_override("separation", 8)
+	cols[1].add_child(_versions)
 	var play := UIKit.button(tr("stop_play"), _play, UIKit.PRIMARY)
 	play.name = "Play"
 	cols[1].add_child(play)
@@ -61,7 +63,7 @@ func build() -> void:
 		_pick_stop(first)
 
 
-## A stop's row: its lead version, and the stop's versions as tabs under the list (when it has more).
+## A stop's row: its lead version, and the stop's versions as tabs above Play (when it has more).
 func _pick_stop(lead: SongData) -> void:
 	_lead = lead
 	for id in _song_buttons:
@@ -71,7 +73,6 @@ func _pick_stop(lead: SongData) -> void:
 		c.queue_free()
 	var vs := SongLibrary.versions(lead)
 	if vs.size() > 1:
-		_versions.add_child(UIKit.label(tr("stop_version"), UIKit.SUB))
 		var items := []
 		for v in vs:
 			items.append([v.id, tr("version_" + (v.version if v.version != "" else "original"))])
