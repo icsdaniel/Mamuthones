@@ -460,6 +460,7 @@ func _process(delta: float) -> void:
 	lanes.beat_pulse = 1.0 - fposmod(beat, 1.0) if beat >= 0.0 else 0.0
 	_set_beat(beat)
 	hud.tick(t, delta)
+	_tick_combo()
 	_tick_health(delta)
 	if backdrop != null:
 		var hb := hud.get_global_transform() * Vector2(0.0, hud.frames_bottom())
@@ -948,10 +949,60 @@ func _on_still_kept(_note: Note, points: float) -> void:
 	UIKit.vibrate(20)
 
 
+# ---------------------------------------------------------------- juice: combo milestones and breaks
+
+const COMBO_MILESTONES: Array[int] = [25, 50, 100]   ## then every 100
+const BREAK_SHOWN := 10          ## a combo this long falls away in red when it is lost
+const BREAK_SOUND := 20          ## ... and from this long the chimes tumble with it
+var _combo_seen := 0
+
+
+## The combo milestone crossed going from combo `prev` to `now` (one hit), as a tier: 1 at 25, 2 at
+## 50, 3 at 100 and every 100 after; 0 for none.
+static func milestone_tier(prev: int, now: int) -> int:
+	if now <= prev:
+		return 0
+	for i in COMBO_MILESTONES.size():
+		if prev < COMBO_MILESTONES[i] and now >= COMBO_MILESTONES[i]:
+			return i + 1
+	if now >= 200 and prev / 100 < now / 100:
+		return 3
+	return 0
+
+
+## Watches the combo each frame (it moves on hits, misses, wrong and stray taps alike): a milestone
+## gets its chime run, the number's gold and sparks, the fire's roar and, from 50, a gold light up
+## every lane; a long combo lost falls away in red with the chimes tumbling.
+func _tick_combo() -> void:
+	var now := session.combo
+	if now == _combo_seen:
+		return
+	var prev := _combo_seen
+	_combo_seen = now
+	var tier := milestone_tier(prev, now)
+	if tier > 0:
+		Sound.juice("combo_%d" % tier)
+		hud.milestone(tier)
+		if backdrop != null:
+			backdrop.kick(0.5 + 0.2 * float(tier))
+		if tier >= 2:
+			for lane in 3:
+				lanes.lane_pulse(lane, StreetSkin.K_HOLD[3], 0.6 + 0.3 * float(tier - 2))
+		UIKit.vibrate(18, 0.6)
+	elif now < prev and prev >= BREAK_SHOWN:
+		hud.combo_broken(prev)
+		if prev >= BREAK_SOUND:
+			Sound.juice("combo_break")
+
+
 func _on_unison(level: int) -> void:
-	if level > _last_unison and backdrop != null:
-		backdrop.surge()
-		shake(4.0)
+	if level > _last_unison:
+		var top := level >= Session.UNISON_MULTS.size() - 1
+		Sound.juice("unison_top" if top else "unison_up")
+		hud.unison_rose(top)
+		if backdrop != null:
+			backdrop.surge()
+		shake(4.0 if not top else 6.0)
 	_last_unison = level
 	Sound.row_bells(level)
 	hud.set_unison(level)
@@ -984,6 +1035,7 @@ func _on_failed() -> void:
 		run_log.event(_song_t, "failed")
 	failed = true
 	done = true
+	Sound.juice("fail")
 	if _pause_panel != null:
 		_pause_panel.queue_free()
 		_pause_panel = null

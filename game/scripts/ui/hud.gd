@@ -53,6 +53,10 @@ var _combo: Label
 var _combo_word: Label
 var _combo_shown := 0
 var _combo_pop := 0.0
+var _sparks: Sparks          ## juice: milestone rings, the multiplier's sparks, a lost combo's ash
+var _gold_at := -9.0         ## _clock of the last combo milestone: the number burns gold a moment
+var _ember_t := 0.0          ## at the top multiplier the badge sheds embers; time to the next
+const MILESTONE_GLOW := 0.9  ## seconds a milestone's gold lasts on the combo number
 
 
 func _init() -> void:
@@ -173,6 +177,11 @@ func setup(p_session: Session, p_ghost: Ghost) -> void:
 	# are still kept up to date (tests read them).
 	_section.visible = false
 	_ghost.visible = false
+	_sparks = Sparks.new()
+	_sparks.name = "Sparks"
+	_sparks.px = PxArt.PX * 2.0   # two art pixels: one reads as dust at phone size
+	_sparks.set_anchors_preset(Control.PRESET_FULL_RECT)
+	add_child(_sparks)
 	resized.connect(_layout)
 	_layout()
 	set_unison(session.unison_level, false)
@@ -648,9 +657,21 @@ func tick(t: float, delta: float) -> void:
 		_combo.text = str(_combo_shown)
 	_combo.visible = _combo_shown > 0
 	_combo_word.visible = _combo.visible
-	_combo_pop = move_toward(_combo_pop, 0.0, delta * 1.5)
+	_combo_pop = move_toward(_combo_pop, 0.0, delta * (1.5 if _combo_pop < 0.3 else 3.0))
 	_combo.pivot_offset = _combo.size * 0.5
 	_combo.scale = Vector2.ONE * (1.0 + _combo_pop)
+	# a milestone burns the number gold, cooling back to white
+	var g := clampf(1.0 - (_clock - _gold_at) / MILESTONE_GLOW, 0.0, 1.0)
+	_combo.modulate = Color.WHITE.lerp(Color(1.0, 0.82, 0.3), g)
+	_combo_word.modulate = Color.WHITE.lerp(Color(1.3, 1.1, 0.6), g)
+	# the top multiplier: the badge sheds embers that float up off it
+	if session.unison_level >= Session.UNISON_MULTS.size() - 1 and not UIKit.reduced_motion():
+		_ember_t -= delta
+		if _ember_t <= 0.0:
+			_ember_t = randf_range(0.05, 0.12)
+			var b: Rect2 = _boxes()[1]
+			var at := b.get_center() + Vector2(randf_range(-0.4, 0.4) * b.size.x, b.size.y * randf_range(-0.1, 0.3))
+			_sparks.burst(at, 1, Sparks.FIRE, 40.0, 0.9, Vector2.UP, 0.8, -60.0)
 	_streak = float(session.unison_streak) / float(Session.UNISON_STEP) if session.unison_level < 5 else 1.0
 	# the badge bounces on the beat: a quick swell, easing back before the next one
 	_bounce = 0.0 if beat < 0.0 else pow(1.0 - fposmod(beat, 1.0), 3.0) * (0.35 if UIKit.reduced_motion() else 1.0)
@@ -688,6 +709,52 @@ func set_unison(level: int, animate := true) -> void:
 			tw.tween_property(_unison, "scale", Vector2.ONE * badge_scale(), 0.22).set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT)
 		tw.parallel().tween_property(_unison, "modulate", Color.WHITE, 0.3)
 		_meter.flare()
+
+
+## A combo milestone (25, 50, 100, ...): the number jumps and burns gold, and a ring of gold sparks
+## runs out from it with a spray thrown up and falling away. tier 1..3 makes it bigger. It all
+## happens under the HUD's frames, over the far end of the road, where no note is yet.
+func milestone(tier: int) -> void:
+	_gold_at = _clock
+	if UIKit.reduced_motion():
+		return
+	_combo_pop = 0.55 + 0.2 * float(tier)
+	var at := _combo.position + _combo.size * 0.5
+	_sparks.ring(at, 12 + 6 * tier, 220.0 + 80.0 * float(tier))
+	_sparks.burst(at, 10 + 8 * tier, Sparks.GOLD, 260.0 + 60.0 * float(tier), 0.7, Vector2.UP, PI * 1.2, 700.0)
+
+
+## A combo of `n` lost: the number drops out of its place in red and falls away as ash.
+func combo_broken(n: int) -> void:
+	if UIKit.animations_off() or _combo == null:
+		return
+	var ghost_l := _combo.duplicate() as Label
+	ghost_l.text = str(n)
+	ghost_l.visible = true
+	ghost_l.modulate = Color(1.0, 0.35, 0.3)
+	ghost_l.scale = Vector2.ONE
+	add_child(ghost_l)
+	move_child(ghost_l, _sparks.get_index())
+	var at := _combo.position + _combo.size * 0.5
+	_sparks.burst(at, 14, Sparks.ASH, 160.0, 0.6, Vector2.DOWN, PI, 500.0)
+	var tw := ghost_l.create_tween()
+	tw.set_parallel(true)
+	tw.tween_property(ghost_l, "position:y", ghost_l.position.y + 46.0, 0.45).set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_IN)
+	tw.tween_property(ghost_l, "rotation", deg_to_rad(randf_range(-14.0, 14.0)), 0.45)
+	tw.tween_property(ghost_l, "modulate:a", 0.0, 0.45).set_delay(0.1)
+	tw.chain().tween_callback(ghost_l.queue_free)
+
+
+## The multiplier rose (top: it reached the highest): sparks fly off the badge, a fountain at the top.
+func unison_rose(top: bool) -> void:
+	var b: Rect2 = _boxes()[1]
+	var at := b.get_center()
+	_sparks.ring(at, 14 if top else 10, 260.0 if top else 200.0, Sparks.FIRE, 0.4)
+	_sparks.burst(at, 30 if top else 12, Sparks.FIRE, 300.0 if top else 220.0, 0.8, Vector2.UP, PI * 1.4, 600.0)
+
+
+func sparks_alive() -> int:
+	return _sparks.alive() if _sparks != null else 0
 
 
 func _unison_tweening() -> bool:

@@ -74,6 +74,24 @@ func build() -> void:
 	grade.stamped.connect(func() -> void:
 		grade_stamped.emit(grade.rank)
 		_flare(0.5 + 0.1 * maxi(grade.rank - Session.RANK_B, 0)))
+	# Juice (2026-10-31): the stamp is heard (heavier and ringing for better grades), throws sparks
+	# and knocks the row it lands in; the count ticks climb; a new best gets its fanfare.
+	_sparks = Sparks.new()
+	_sparks.name = "Sparks"
+	_sparks.top_level = true
+	_sparks.px = 9.0
+	_sparks.z_index = 50
+	_sparks.set_anchors_preset(Control.PRESET_FULL_RECT)
+	add_child(_sparks)
+	grade_stamped.connect(func(rank: int) -> void:
+		Sound.juice("stamp_%d" % stamp_tier(rank))
+		var at := grade.get_global_rect().get_center()
+		var tier := stamp_tier(rank)
+		_sparks.ring(at, 10 + 6 * tier, 260.0 + 60.0 * tier, Sparks.GOLD if tier >= 2 else Sparks.ASH)
+		_sparks.burst(at, 6 + 10 * tier, Sparks.GOLD if tier >= 2 else Sparks.ASH, 300.0 + 80.0 * tier, 0.8, Vector2.UP, PI * 1.5, 900.0)
+		_knock(stage, 4.0 + 3.0 * tier))
+	count_tick.connect(func(v: int) -> void:
+		Sound.juice("count_tick", 0.85 + 0.55 * float(v) / maxf(float(session.score), 1.0)))
 	grade.animate(0.35)
 	var score := UIKit.label(UIKit.fmt_score(session.score), "BigNumberLabel", false, HORIZONTAL_ALIGNMENT_CENTER)
 	score.name = "Score"
@@ -133,6 +151,16 @@ func build() -> void:
 	if session.slam:
 		box.add_child(UIKit.label(tr("res_slam_note"), UIKit.CAPTION, true, HORIZONTAL_ALIGNMENT_CENTER))
 	box.add_child(UIKit.label(tr("res_formula"), UIKit.CAPTION))
+	if box.has_node("BestLine"):
+		var bl2: Control = box.get_node("BestLine")
+		best_revealed.connect(func(new_best: bool) -> void:
+			if not new_best:
+				return
+			Sound.juice("new_best")
+			var r := bl2.get_global_rect()
+			for k in 3:
+				_sparks.burst(Vector2(r.position.x + r.size.x * (0.2 + 0.3 * k), r.position.y), 12, Sparks.FIRE,
+					380.0, 1.0, Vector2.UP, 0.9, 700.0))
 
 	var again := UIKit.button(tr("res_again"), func() -> void: app.replace("play", play_args), UIKit.PRIMARY)
 	again.name = "Again"
@@ -152,7 +180,8 @@ func build() -> void:
 	leave.name = "Done"
 	leave.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	row.add_child(leave)
-	Sound.ui("result")
+	if session.grade_rank() < 0:
+		Sound.ui("result")   # no grade to stamp (its sound is the stamp's)
 
 
 static func grade_key(acc: float) -> String:
@@ -411,6 +440,25 @@ static func tip_text(s: Session) -> String:
 
 var _glow: TextureRect
 var _ticks := 0
+var _sparks: Sparks
+
+
+## The stamp's weight for a grade rank: 1 up to C, 2 for B and A, 3 for S and S+.
+static func stamp_tier(rank: int) -> int:
+	if rank >= Session.RANK_S:
+		return 3
+	if rank >= Session.RANK_B:
+		return 2
+	return 1
+
+
+## Knocks a row down by `px` and springs it back (none with reduced motion).
+func _knock(c: Control, px: float) -> void:
+	if UIKit.reduced_motion() or c == null:
+		return
+	var tw := c.create_tween()
+	tw.tween_property(c, "position:y", c.position.y + px, 0.04)
+	tw.tween_property(c, "position:y", c.position.y, 0.22).set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT)
 
 
 ## The score counts up in about 24 audible ticks, then lands with a flare of the glow.

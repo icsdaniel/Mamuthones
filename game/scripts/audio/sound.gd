@@ -33,6 +33,18 @@ const QUALITY_TAKES: Array[int] = [3, 3, 3, 3, 2, 2]
 const TAKES := 3
 const LANES := 3
 const UI_NAMES: Array[String] = ["tap", "back", "unlock", "carve", "result", "cue"]
+## Juice stings (tools/audio/sfx/juice.py): combo milestones, a long combo lost, the multiplier
+## rising and topping out, health running out, and the results screen's count, stamp and new best.
+const JUICE_NAMES: Array[String] = ["combo_1", "combo_2", "combo_3", "combo_break", "unison_up", "unison_top",
+	"fail", "count_tick", "stamp_1", "stamp_2", "stamp_3", "new_best"]
+## Each sting's level, dB: the in-play ones sit under the music and the bells, so they flavour a
+## run without covering the beat; the results ones can speak up.
+## (On the Bells bus, which has no trim: a bell's on-time chime is -8 dB.)
+const JUICE_DB := {"combo_1": -12.0, "combo_2": -11.0, "combo_3": -10.0, "combo_break": -11.0, "unison_up": -12.0,
+	"unison_top": -9.0, "fail": -5.0, "count_tick": -15.0, "stamp_1": -5.0, "stamp_2": -4.5, "stamp_3": -3.5,
+	"new_best": -5.0}
+## Stings tuned to the song's key (resampled like the chimes); the rest play as written.
+const JUICE_TUNED: Array[String] = ["combo_1", "combo_2", "combo_3", "unison_up", "unison_top"]
 const AMBIENCES: Array[String] = ["fire", "crowd", "wind"]
 
 ## A suggested ambience for each story stop (index = stop number, 1..7), for
@@ -103,11 +115,13 @@ var _tone_pool: Array[AudioStreamPlayer] = []
 var _sfx_pool: Array[AudioStreamPlayer] = []
 var _miss_pool: Array[AudioStreamPlayer] = []
 var _accent_pool: Array[AudioStreamPlayer] = []
+var _juice_pool: Array[AudioStreamPlayer] = []
+var _juice := {}        # name -> AudioStream (juice/<name>.wav)
 var _last_miss := -1.0
 var _hold_players: Array[AudioStreamPlayer] = []
 var _amb_players: Array[AudioStreamPlayer] = []
 var _jangle_player: AudioStreamPlayer
-var _next := PackedInt32Array([0, 0, 0, 0, 0, 0, 0])  # the player after the last one used, per pool
+var _next := PackedInt32Array([0, 0, 0, 0, 0, 0, 0, 0])  # the player after the last one used, per pool
 
 var _key_pc := 2
 var _tone_pitch := 1.0  # odd keys play the tone a semitone below, resampled up
@@ -397,6 +411,18 @@ func ui(name: String) -> void:
 	_play(_sfx_pool, 4, _pick(takes, 400 + UI_NAMES.find(name)), randf_range(-0.8, 0.0))
 
 
+## A juice sting (JUICE_NAMES). pitch scales it on top (the results' count climbs with it); the
+## in-play ones are tuned to the song's key.
+func juice(name: String, pitch := 1.0) -> void:
+	var st: AudioStream = _juice.get(name)
+	if st == null:
+		return
+	var p := pitch
+	if name in JUICE_TUNED:
+		p *= chime_pitch(_key_pc, false)
+	_play(_juice_pool, 7, st, float(JUICE_DB.get(name, -6.0)) + randf_range(-0.4, 0.0), p)
+
+
 ## Crossfades to a looping ambience: fire, crowd or wind. Several can be layered with
 ## "+", for example "fire+crowd".
 func ambience(name: String) -> void:
@@ -463,7 +489,7 @@ func stop_count_in() -> void:
 ## Not part of the play API: stops every sound at once (quitting, tests). The audio
 ## server needs a moment afterwards to release the streams.
 func stop_all() -> void:
-	for pool in [_bell_pool, _accent_pool, _row_pool, _foot_pool, _tone_pool, _sfx_pool, _miss_pool, _hold_players, _amb_players]:
+	for pool in [_bell_pool, _accent_pool, _juice_pool, _row_pool, _foot_pool, _tone_pool, _sfx_pool, _miss_pool, _hold_players, _amb_players]:
 		for p: AudioStreamPlayer in pool:
 			p.stop()
 	_set_distort(false)
@@ -757,6 +783,8 @@ func _load_all() -> void:
 	_ui["carve"] = _load_takes("ui/carve_%d.wav", TAKES)
 	_ui["unlock"] = [_load("ui/unlock.ogg")]
 	_ui["result"] = [_load("ui/result.ogg")]
+	for j in JUICE_NAMES:
+		_juice[j] = _load("juice/%s.wav" % j)
 	for a in AMBIENCES:
 		var s := _load("ambience/%s.ogg" % a)
 		_set_loop(s)
@@ -801,6 +829,7 @@ func _make_players() -> void:
 	_fill(_sfx_pool, 6, "Sfx")
 	_fill(_miss_pool, 3, "Bells")
 	_fill(_accent_pool, 8, "Bells")
+	_fill(_juice_pool, 4, "Bells")
 	_fill(_hold_players, LANES, "Sfx")
 	_fill(_amb_players, AMBIENCES.size(), "Ambience")
 	for i in AMBIENCES.size():
