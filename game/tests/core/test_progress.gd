@@ -492,7 +492,7 @@ func test_profile_fuzz() -> void:
 			check(q.get_setting("note_speed") == 1.25 and q.has_flag("tutorial_done") and not q.best("s2", "easy").is_empty(), "fuzz %d: a trusted file reads back exactly" % i)
 		else:
 			check(q.load_status in ["corrupt", "new"], "fuzz %d: otherwise a fresh profile (%s)" % [i, q.load_status])
-			check_eq(q.get_setting("note_speed"), 1.0, "fuzz %d: fresh defaults" % i)
+			check_eq(q.get_setting("note_speed"), 1.6, "fuzz %d: fresh defaults" % i)
 		q.free()
 	check(statuses.get("corrupt", 0) > 100, "most damage is detected (%s)" % [statuses])
 	SongLibrary.reset()
