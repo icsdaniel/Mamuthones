@@ -53,7 +53,8 @@ func test_played_run_is_recorded_and_moves_the_story_on() -> void:
 	check_eq(app.current().screen_name(), "results_screen", "results after a played run")
 	check(Profile.best(story[0].id, "easy").get("score", 0) > 0, "the best is saved")
 	check_eq(Progression.highest_stop(), story[1].stop, "the story moves on to the next stop")
-	check(app.current().find_child("Unlocked", true, false) != null, "the unlock is shown on the results")
+	# (every stop is open from the start and there is no mask carving any more, so a first run unlocks
+	# nothing; the remix unlock is checked by its own test)
 	check(app.current().find_child("Next", true, false) != null, "results offer the next stop")
 	UIHarness.free_app(app)
 	UIHarness.restore_profile()

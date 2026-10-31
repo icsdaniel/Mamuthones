@@ -127,8 +127,10 @@ func set_flag(flag: String, on := true) -> void:
 # ---------------------------------------------------------------- look, calibration
 
 
+## The Workshop and its customizations are gone (Daniele, 2026-10-31: "lets just get the game
+## finished"): every Mamuthone is his ChatGPT picture as drawn, whatever an older profile saved.
 func get_look() -> Dictionary:
-	return _look.duplicate(true)
+	return {"mask": _default_mask(), "fleece": FLEECES[0], "straps": STRAPS[0]}
 
 
 func set_look(part: String, value: Variant) -> void:

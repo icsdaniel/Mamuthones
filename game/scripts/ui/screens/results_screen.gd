@@ -360,7 +360,7 @@ const TIMING_FIX_MIN := 0.015
 
 func _unlocks(box: Container) -> void:
 	var list: Array = record.get("unlocked", [])
-	var carving := int(record.get("carving_gained", 0))
+	var carving := 0   # (no carving points to show: the Workshop is gone)
 	var closest := closest_unlock(session)
 	if list.is_empty() and carving <= 0:
 		if closest != "":
