@@ -70,29 +70,13 @@ func build() -> void:
 	for item in [
 		["StoryMap", "title_story", func() -> void: app.open("story")],
 		["FreePlay", "title_free", func() -> void: app.open("free_play")],
-		["Workshop", "title_workshop", func() -> void: app.open("workshop")],
 		["Tutorial", "title_tutorial", func() -> void: app.open("tutorial")],
+		["Settings", "title_settings", func() -> void: app.open("settings")],
 	]:
 		var b := UIKit.button(tr(item[1]), item[2])
 		b.name = item[0]
 		b.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 		grid.add_child(b)
-
-	var rule_box := MarginContainer.new()
-	rule_box.add_theme_constant_override("margin_left", 72)
-	rule_box.add_theme_constant_override("margin_right", 72)
-	box.add_child(rule_box)
-	var rule := HSeparator.new()
-	rule.name = "Divider"
-	rule_box.add_child(rule)
-
-	var row := HBoxContainer.new()
-	row.alignment = BoxContainer.ALIGNMENT_CENTER
-	box.add_child(row)
-	var settings := UIKit.button(tr("title_settings"), func() -> void: app.open("settings"))
-	settings.name = "Settings"
-	settings.custom_minimum_size.x = 300
-	row.add_child(settings)
 
 
 func _play_next() -> void:

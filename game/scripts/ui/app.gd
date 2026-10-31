@@ -18,7 +18,6 @@ const SCREENS := {
 	"free_play": "res://scripts/ui/screens/free_play_screen.gd",
 	"settings": "res://scripts/ui/screens/settings_screen.gd",
 	"credits": "res://scripts/ui/screens/credits_screen.gd",
-	"workshop": "res://scripts/ui/screens/workshop_screen.gd",
 	"play": "res://scripts/ui/screens/play_screen.gd",
 	"tutorial": "res://scripts/ui/screens/tutorial_screen.gd",
 	"results": "res://scripts/ui/screens/results_screen.gd",

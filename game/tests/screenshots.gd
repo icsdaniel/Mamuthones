@@ -95,8 +95,6 @@ func _shots() -> Array:
 		{"file": "boards", "screen": "boards"},
 		{"file": "settings", "screen": "settings"},
 		{"file": "credits", "screen": "credits"},
-		{"file": "workshop", "screen": "workshop", "setup": "tab_mask", "wait": 0.8},
-		{"file": "workshop_dress", "screen": "workshop", "setup": "tab_dress", "wait": 0.8},
 		{"file": "tutorial", "screen": "tutorial", "args": {"song_id": tut_id, "first_run": true}, "wait": 1.2},
 		{"file": "play_fires", "screen": "play", "args": {"song_id": fires_id, "difficulty": "hard", "autoplay": true, "human": true}, "setup": "advance:0.42"},
 		{"file": "play_showcase", "screen": "play", "args": {"song_id": fires_id, "difficulty": "hard", "autoplay": true}, "setup": "moment:showcase", "wait": 0.1},

@@ -165,7 +165,6 @@ static func next_stop(profile: Variant = null) -> String:
 static func next_goals(profile: Variant = null) -> Array:
 	var out := []
 	var story := story_order()
-	var stop := highest_stop(profile)
 	var remixes := []
 	for id in story:
 		var s := SongLibrary.get_song(id)
@@ -173,13 +172,7 @@ static func next_goals(profile: Variant = null) -> Array:
 			remixes.append({"kind": "remix", "id": s.remix_id(), "need": {"song_id": id, "difficulty": "hard", "grade": REMIX_GRADE}, "have": {"grade": best_grade(id, REMIX_LEVELS, profile)}})
 	remixes.sort_custom(func(a, b): return a.have.grade > b.have.grade)
 	out.append_array(remixes)
-	var spec: Variant = _spec()
-	if spec != null and _has_func(spec, "unlock_order"):
-		var points := carving_points(profile)
-		for e in spec.unlock_order():
-			if not mask_option_unlocked(str(e.part), str(e.option), profile):
-				out.append({"kind": "mask", "id": str(e.option), "part": str(e.part), "need": {"stop": int(e.get("stop", 1)), "points": int(e.get("cost", 0))}, "have": {"stop": stop, "points": points}})
-				break
+	# (no mask carving goals: the Workshop is gone, 2026-10-31)
 	return out
 
 
@@ -192,12 +185,6 @@ static func snapshot(profile: Variant = null) -> Dictionary:
 			out["song:" + s.id] = true
 		if s.has_remix() and remix_unlocked(s.id, profile):
 			out["remix:" + s.remix_id()] = true
-	var spec: Variant = _spec()
-	if spec != null and (spec as Script).get_script_constant_map().has("PARTS"):
-		for part in (spec as Script).get_script_constant_map()["PARTS"]:
-			for opt in spec.options(part):
-				if mask_option_unlocked(part, opt, profile):
-					out["mask:%s/%s" % [part, opt]] = true
 	return out
 
 

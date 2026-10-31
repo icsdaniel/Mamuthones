@@ -116,9 +116,9 @@ func test_menus_forward_and_back() -> void:
 	check_eq(app.current().screen_name(), "title_screen", "a returning player starts on the title")
 	var routes := [
 		["StoryMap", "story_screen"], ["FreePlay", "free_play_screen"],
-		["Workshop", "workshop_screen"],
 		["Settings", "settings_screen"], ["Tutorial", "tutorial_screen"],
 	]
+	check(app.current().find_child("Workshop", true, false) == null, "no Workshop on the title (removed 2026-10-31)")
 	for r in routes:
 		check(UIHarness.press(app, r[0]), "title has %s" % r[0])
 		await UIHarness.frames(tree, 2)
