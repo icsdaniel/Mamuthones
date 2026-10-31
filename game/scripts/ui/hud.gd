@@ -245,13 +245,11 @@ func _to_frames(p: Vector2) -> Vector2:
 	return p
 
 
-## The pixel look's frames are Daniele's pictures (art/ai/hud_bar, hud_plate, judge_plate: his kits of
-## 2026-10-28, tools/art/chatgpt/kits.py), each laid out as [left cap | one middle tile | right cap].
-## The whole picture is scaled by one factor to the frame's height; the caps go at the ends and the
-## tile is repeated between them, the last one cropped: never stretched (Daniele, 2026-10-26), so a
-## frame takes any width. Made once per size at one texel per cell (the HUD is drawn one px per cell),
-## every texel wholly in or out, so they stay crisp.
-const SLICE := {"hud_plate": 128, "hud_bar": 68, "judge_plate": 68}   ## each picture's cap width, its own px
+## The pixel look's frames are Daniele's pictures (art/ai/hud_*.png, 2026-10-08), each in three
+## slices: its two ends kept to their shape at the frame's height, its middle stretched between
+## them. Made once per size at one texel per cell (the HUD is drawn one px per cell), every texel
+## wholly in or out, so they stay crisp.
+const SLICE := {"hud_plate": 56, "hud_bar": 48, "judge_plate": 56}   ## each picture's end width, its own px (tools/art/chatgpt/cut_sheets.py)
 static var _sliced := {}
 
 
@@ -269,46 +267,26 @@ static func sliced(key: String, cells: Vector2i) -> Texture2D:
 		var w := src.get_width()
 		var h := src.get_height()
 		var cap_src := int(SLICE.get(key, 0))
-		var s := float(cells.y) / h
+		var cap := clampi(roundi(cap_src * float(cells.y) / h), 0, cells.x / 2)
 		var out := Image.create(cells.x, cells.y, false, Image.FORMAT_RGBA8)
+		var parts := [[0, cap_src, 0, cap], [cap_src, w - cap_src, cap, cells.x - cap], [w - cap_src, w, cells.x - cap, cells.x]]
 		if cap_src == 0:
-			var all := src.duplicate() as Image
-			all.resize(cells.x, cells.y, Image.INTERPOLATE_LANCZOS)
-			out.blit_rect(all, Rect2i(0, 0, cells.x, cells.y), Vector2i.ZERO)
-		else:
-			var cap := maxi(1, roundi(cap_src * s))
-			var tile_w := maxi(1, roundi((w - 2 * cap_src) * s))
-			var parts := {}
-			for part: Array in [["l", 0, cap_src, cap], ["m", cap_src, w - 2 * cap_src, tile_w], ["r", w - cap_src, cap_src, cap]]:
-				var piece := src.get_region(Rect2i(part[1], 0, part[2], h))
-				piece.resize(part[3], cells.y, Image.INTERPOLATE_LANCZOS)
-				parts[part[0]] = piece
-			# a frame narrower than its two caps shows each cap's outer part
-			var c := mini(cap, cells.x / 2)
-			out.blit_rect(parts["l"], Rect2i(0, 0, c, cells.y), Vector2i.ZERO)
-			out.blit_rect(parts["r"], Rect2i(cap - c, 0, c, cells.y), Vector2i(cells.x - c, 0))
-			var x := c
-			while x < cells.x - c:
-				var dw := mini(tile_w, cells.x - c - x)
-				out.blit_rect(parts["m"], Rect2i(0, 0, dw, cells.y), Vector2i(x, 0))
-				x += dw
+			parts = [[0, w, 0, cells.x]]
+		for part: Array in parts:
+			var dw: int = part[3] - part[2]
+			if dw <= 0:
+				continue
+			var piece := src.get_region(Rect2i(part[0], 0, part[1] - part[0], h))
+			piece.resize(dw, cells.y, Image.INTERPOLATE_LANCZOS)
+			out.blit_rect(piece, Rect2i(0, 0, dw, cells.y), Vector2i(part[2], 0))
 		for y in cells.y:
 			for x in cells.x:
-				var col := out.get_pixel(x, y)
-				col.a = 1.0 if col.a > 0.5 else 0.0
-				out.set_pixel(x, y, col)
+				var c := out.get_pixel(x, y)
+				c.a = 1.0 if c.a > 0.5 else 0.0
+				out.set_pixel(x, y, c)
 		tex = ImageTexture.create_from_image(out)
 	_sliced[k] = tex
 	return tex
-
-
-## A sliced frame's cap width in cells at a height of `cells_h` cells.
-static func cap_cells(key: String, cells_h: int) -> int:
-	var path := "res://art/ai/%s.webp" % key
-	if not SLICE.has(key) or not ResourceLoader.exists(path):
-		return 0
-	var img := StreetSkin.ai_image(path)
-	return roundi(int(SLICE[key]) * float(cells_h) / img.get_height())
 
 
 static var _aspects := {}
@@ -332,9 +310,8 @@ func _picture(ci: CanvasItem, key: String, r: Rect2, mod := Color.WHITE) -> void
 	var px := PxArt.PX
 	var cells := Vector2i((r.size / px).round())
 	var asp := _aspect(key)
-	if asp > 0.0 and not SLICE.has(key):
-		# rounded once: the other side follows from the picture's proportions (a sliced frame takes
-		# any width at its own scale)
+	if asp > 0.0:
+		# rounded once: the other side follows from the picture's proportions
 		cells.y = maxi(1, roundi(cells.x / asp))
 	var tex := sliced(key, cells)
 	if tex != null:
@@ -347,7 +324,9 @@ func _panel(ci: CanvasItem, r: Rect2, glow := 1.0) -> void:
 	# the plate's diamonds stand out past the frame's points, as the drawn ones did
 	var grow := r.size.y * 0.16
 	var rr := r.grow_individual(grow, grow * 0.35, grow, grow * 0.35)
-	# the plate fills its box: caps and whole tiles at one scale (never stretched)
+	# the plate at its own proportions (never stretched: Daniele, 2026-10-26), as wide as its box
+	var ph := rr.size.x / _aspect("hud_plate")
+	rr = Rect2(rr.position.x, rr.get_center().y - ph * 0.5, rr.size.x, ph)
 	_glow_round(ci, rr, glow)
 	_picture(ci, "hud_plate", rr)
 
@@ -468,15 +447,13 @@ func _draw_frames() -> void:
 	var e := _to_frames(Vector2(line.y - 14.0, line.z))
 	# Daniele's bar, its groove filling with a glowing rod as the song goes on
 	# at its own proportions (never stretched): as long as it is for this height, centred on the line
-	# along the whole line: caps and whole tiles at one scale (never stretched)
 	var bh := 24.0
-	var bl := line.y - line.x
+	var bl := minf(line.y - line.x, bh * _aspect("hud_bar"))
 	var bar := Rect2(Vector2((line.x + line.y - bl) * 0.5, line.z - bh * 0.5), Vector2(bl, bh))
 	_picture(ci, "hud_bar", bar)
 	var px := PxArt.PX
-	var capw := float(cap_cells("hud_bar", roundi(bh / px))) * px
-	var g0 := PxArt.snap2(Vector2(bar.position.x + capw, line.z - px))
-	var gx1 := bar.end.x - capw
+	var g0 := PxArt.snap2(Vector2(bar.position.x + bh * 0.9, line.z - px))
+	var gx1 := bar.end.x - bh * 0.9
 	var fw := roundf((lerpf(g0.x, gx1, clampf(_progress, 0.0, 1.0)) - g0.x) / px) * px
 	if fw >= px:
 		ci.draw_rect(Rect2(g0, Vector2(fw, px)), EDGE_HOT)
