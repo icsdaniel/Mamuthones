@@ -64,7 +64,6 @@ func _prepare_profile() -> void:
 		for d in ["easy", "hard"]:
 			if d in s.difficulties():
 				profile.record_result(_played(s, d, i != 2))
-	profile.set_look("fleece", "dark_brown")
 
 
 static func _played(song: SongData, diff: String, good: bool, until := INF) -> Session:
@@ -103,6 +102,7 @@ func _shots() -> Array:
 		{"file": "play_showcase", "screen": "play", "args": {"song_id": fires_id, "difficulty": "hard", "autoplay": true}, "setup": "moment:showcase", "wait": 0.1},
 		{"file": "play_dense", "screen": "play", "args": {"song_id": fires_id, "difficulty": "hard", "autoplay": true}, "setup": "moment:dense", "wait": 0.1},
 		{"file": "play_hold", "screen": "play", "args": {"song_id": "bonfires", "difficulty": "medium", "autoplay": true}, "setup": "moment:hold", "wait": 0.1},
+		{"file": "play_bell_frames", "screen": "play", "args": {"song_id": fires_id, "difficulty": "hard", "autoplay": true}, "setup": "moment:bell_far", "frames": 150},
 		{"file": "play_bell", "screen": "play", "args": {"song_id": fires_id, "difficulty": "hard", "autoplay": true}, "setup": "moment:bell", "wait": 0.1},
 		{"file": "play_still", "screen": "play", "args": {"song_id": fires_id, "difficulty": "hard", "autoplay": true}, "setup": "moment:still", "wait": 0.1},
 		{"file": "play_miss", "screen": "play", "args": {"song_id": fires_id, "difficulty": "hard", "autoplay": true}, "setup": "moment:miss", "wait": 0.05},
@@ -194,6 +194,18 @@ func _render(shot: Dictionary, size: Vector2i, locale: String, dir: String) -> v
 		hs.health = int(shot.health)
 		if hs.health <= HealthPips.LOW:
 			screen.set("_dim", 1.0)
+	if shot.has("frames") and screen != null:
+		# a run of frames on the manual clock, one 60th of a second apart (<file>_000.png ...), to
+		# catch what flickers from one frame to the next
+		var fc: Conductor = screen.get("conductor")
+		for i in int(shot.frames):
+			fc.advance(1.0 / 60.0)
+			await process_frame
+			await RenderingServer.frame_post_draw
+			vp.get_texture().get_image().save_png(dir.path_join("%s_%03d.png" % [shot.file, i]))
+		vp.queue_free()
+		await process_frame
+		return
 	var wait := float(shot.get("wait", 0.5))
 	var frames := int(wait * 60.0)
 	for i in frames:
@@ -337,8 +349,8 @@ func _moment(screen: Node, what: String) -> void:
 				if n.t >= from and n.kind == Note.Kind.REST:
 					target = n.end_t + 0.45
 					break
-		"hold", "bell", "still", "miss", "rang", "stomp", "stomped":
-			var kinds := {"hold": [Note.Kind.HOLD], "bell": [Note.Kind.BELL, Note.Kind.RING], "rang": [Note.Kind.BELL, Note.Kind.RING],
+		"hold", "bell", "bell_far", "still", "miss", "rang", "stomp", "stomped":
+			var kinds := {"hold": [Note.Kind.HOLD], "bell": [Note.Kind.BELL, Note.Kind.RING], "bell_far": [Note.Kind.BELL, Note.Kind.RING], "rang": [Note.Kind.BELL, Note.Kind.RING],
 				"still": [Note.Kind.REST], "miss": [Note.Kind.STEP], "stomp": [Note.Kind.STOMP], "stomped": [Note.Kind.STOMP]}
 			for i in s.notes.size():
 				var n: Note = s.notes[i]
@@ -349,6 +361,8 @@ func _moment(screen: Node, what: String) -> void:
 						target = lerpf(n.t, n.end_t, 0.45)
 					"bell":
 						target = n.t - 0.45
+					"bell_far":
+						target = n.t - 2.2
 					"rang":
 						target = n.t + 0.08
 					"stomp":
