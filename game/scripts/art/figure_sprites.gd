@@ -135,7 +135,7 @@ static func new_tex(figure: String, frame: int, h: int, black := false) -> Textu
 			var img: Image = (r as Image).duplicate() if r is Image else (r as Texture2D).get_image()
 			img.decompress()
 			img.convert(Image.FORMAT_RGBA8)
-			if black:
+			if black and BLACK_DRAWN:
 				darken_fleece(img)
 			var w := maxi(1, roundi(float(img.get_width()) * h / img.get_height()))
 			img.resize(w, h, Image.INTERPOLATE_LANCZOS)
@@ -151,6 +151,12 @@ static func new_tex(figure: String, frame: int, h: int, black := false) -> Textu
 ## The Workshop's "black" sheepskin: the Mamuthone's orange-brown fleece (hue under about 30 degrees)
 ## taken down to near black, keeping its lit tips warm so the shaggy shape still reads; the bells
 ## (yellower), the leather, the mask and the skin keep their colours. Edits img in place.
+## Whether there is a drawn black-fleece Mamuthone. Until there is, every Mamuthone is Daniele's
+## ChatGPT picture as drawn (2026-10-31: darkening the fleece in code turned the mask, hood, boots and
+## bells near black with orange specks, so the figure no longer looked like his picture).
+const BLACK_DRAWN := false
+
+
 static func darken_fleece(img: Image) -> void:
 	var d := img.get_data()
 	for i in range(0, d.size(), 4):
@@ -171,6 +177,8 @@ static var _black := {}
 
 ## Bob frame i of the Mamuthone in the black fleece at full size (made once).
 static func black_tex(i: int, src: Texture2D) -> Texture2D:
+	if not BLACK_DRAWN:
+		return src
 	if not _black.has(i):
 		var img := src.get_image()
 		img.decompress()

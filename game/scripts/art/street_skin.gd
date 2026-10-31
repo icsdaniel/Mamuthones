@@ -316,11 +316,12 @@ static func _bell_size(lv: LaneView, field: Rect2, y: float) -> Dictionary:
 		"arrow": ai_fit_cells("bar_arrow", Vector2(-a, -hh * 1.4), Vector2(a, hh * 0.4))}
 
 
-## The beam's picture size for its quad on screen: few sizes (a beam slides down every frame), its
-## width in steps of 8 cells.
+## The beam's picture size for its quad on screen: its width in steps of 2 cells, one a side (2026-10-31: in steps of 8
+## cells it jumped 24 px wider at a time as it came down, off its bells and arrows, which read as a
+## glitch; every size is made before the song by warm()).
 static func bar_cells(quad: PackedVector2Array) -> Vector2i:
 	var w := quad[1].x - quad[0].x
-	var cw := maxi(8, roundi(w / PxArt.PX / 8.0) * 8)
+	var cw := maxi(8, roundi(w / PxArt.PX / 2.0) * 2)
 	var asp := ai_aspect("bar_up")
 	return Vector2i(cw, maxi(2, roundi(cw / asp))) if asp > 0.0 else Vector2i(cw, maxi(3, roundi((quad[2].y - quad[1].y) / PxArt.PX)))
 
@@ -737,7 +738,8 @@ static func _rope_pic(lv: LaneView, f: Callable, ya: float, yb: float, lane: flo
 
 ## A bell note: the Mamuthone's leather bell strap across the whole road at flat depth y, a bronze
 ## cowbell standing on it at each lane divider, and a big arrow in each lane the way to tilt.
-static func bell(lv: LaneView, field: Rect2, y: float, up: bool, alpha := 1.0, pal: Array = [], cowbells := true) -> void:
+## skip: a lane whose arrow is left out (a ring: its coin stands there, and the arrow peeked out behind it).
+static func bell(lv: LaneView, field: Rect2, y: float, up: bool, alpha := 1.0, pal: Array = [], cowbells := true, skip := -1) -> void:
 	var lane := _lane(field)
 	var lw: float = lv.road_scale(y) * lane
 	var k: Array = pal if not pal.is_empty() else (K_UP if up else K_DOWN)
@@ -755,7 +757,7 @@ static func bell(lv: LaneView, field: Rect2, y: float, up: bool, alpha := 1.0, p
 		return
 	_glow(lv, f.call(Vector3.ZERO), Vector2(hw * 1.1, lw * 0.35), _a(k[3], 0.3 * alpha))
 	if ai_tex("bar_up", Vector2i.ONE) != null:
-		_bell_pic(lv, f, h, lane, lw, y, up, alpha, not pal.is_empty(), cowbells)
+		_bell_pic(lv, f, h, lane, lw, y, up, alpha, not pal.is_empty(), cowbells, skip)
 		return
 	solid(lv, f, verts, faces, Vector3(hw / lane, 1.0, STRAP_D * 0.5), k, alpha, maxf(2.0, lw * 0.02), -0.4)
 	if lw < 6.0:
@@ -787,7 +789,7 @@ static func bell(lv: LaneView, field: Rect2, y: float, up: bool, alpha := 1.0, p
 ## The pixel look's bell note from Daniele's pictures: the red (up) or blue (down) beam across the
 ## road through the strap's frame f, his bells at the lane dividers, his arrow in each lane (upside
 ## down for a tilt down). hot: lit up by a strike.
-static func _bell_pic(lv: LaneView, f: Callable, h: float, lane: float, lw: float, y: float, up: bool, alpha: float, hot: bool, cowbells: bool) -> void:
+static func _bell_pic(lv: LaneView, f: Callable, h: float, lane: float, lw: float, y: float, up: bool, alpha: float, hot: bool, cowbells: bool, skip := -1) -> void:
 	var mod := Color(1.45, 1.4, 1.3, alpha) if hot else Color(1.0, 1.0, 1.0, alpha)
 	var quad := PackedVector2Array([f.call(Vector3(-1, h, -1)), f.call(Vector3(1, h, -1)), f.call(Vector3(1, 0, 1)), f.call(Vector3(-1, 0, 1))])
 	# the beam at its own proportions (never stretched), as wide as the road, standing on the strap's
@@ -806,6 +808,8 @@ static func _bell_pic(lv: LaneView, f: Callable, h: float, lane: float, lw: floa
 		var s := lw * BAR_BELL
 		ai_draw(lv, "bar_bell", at - Vector2(s * 0.35, s), at + Vector2(s * 0.35, 0.0), mod)
 	for i in 3:
+		if i == skip:
+			continue
 		var c := Vector2(lv.project(Vector2(lane * (float(i) + 0.5), y)).x, top - lw * 0.02)
 		var a := lw * BAR_ARROW
 		var hh := lw * BAR_ARROW
@@ -1081,7 +1085,7 @@ static func draw_notes(lv: LaneView, field: Rect2) -> void:
 					Note.Kind.BELL:
 						bell(lv, field, y, n.up, a)
 					Note.Kind.RING:
-						bell(lv, field, y, n.up, a)
+						bell(lv, field, y, n.up, a, [], true, n.lane)
 						step(lv, field, cx, y, a, true)
 
 
@@ -1149,7 +1153,7 @@ static func _stamp(lv: LaneView, field: Rect2, what: String, n: Note, cx: float,
 	if not atlas.covers(lw):
 		return false
 	if n.kind == Note.Kind.RING and what != "hold" and what != "knot":
-		bell(lv, field, y, n.up, a)
+		bell(lv, field, y, n.up, a, [], true, n.lane)
 	var c: Vector2 = lv.project(Vector2(cx, y))
 	disc_glow(lv, c, r * lw, k, a, glow)
 	atlas.stamp(lv, key, c, lw, a)

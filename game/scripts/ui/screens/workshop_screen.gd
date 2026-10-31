@@ -169,7 +169,8 @@ func _carve(option: String) -> void:
 
 func _build_dress() -> void:
 	_body.add_child(UIKit.label(tr("ws_fleece"), UIKit.SUB))
-	_choice_row("fleece", MaskSpec.FLEECES)
+	# the black sheepskin only once it is drawn (FigureSprites.BLACK_DRAWN), never a colour shift
+	_choice_row("fleece", MaskSpec.FLEECES if FigureSprites.BLACK_DRAWN else ["dark_brown"])
 	_body.add_child(UIKit.label(tr("ws_straps"), UIKit.SUB))
 	_choice_row("straps", MaskSpec.STRAPS)
 	_body.add_child(UIKit.label(tr("ws_dress_note"), UIKit.CAPTION))
@@ -181,6 +182,8 @@ func _choice_row(key: String, ids: Array) -> void:
 	row.name = "Row_" + key
 	_body.add_child(row)
 	var current := str(Profile.get_look().get(key, ids[0]))
+	if not current in ids:
+		current = ids[0]   # (a saved choice not offered now: the black sheepskin until it is drawn)
 	for id in ids:
 		var b := UIKit.button(tr("ws_%s_%s" % [key, id]), func() -> void:
 			Profile.set_look(key, id)
