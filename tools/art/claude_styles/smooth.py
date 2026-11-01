@@ -624,7 +624,7 @@ HI_PX = 1          # round 30: screen pixels per note pixel (2 = a touch chunkie
 def stamp_hi(kind, W):
     """lino.stamp's design (same colours and marks) drawn in screen pixels, with outlines that scale."""
     W = max(12, int(W))
-    key = ('shi', kind, W, PLAIN)
+    key = ('shi', kind, W, PLAIN, RED_EDGE)
     if key not in _sprites:
         t = max(2, W // 30)
         rx = W / 2; ry = rx * 0.36; th = max(2, round(W * 0.08))
@@ -634,10 +634,12 @@ def stamp_hi(kind, W):
         cx, cy = (W + 2 * pad) / 2, pad + ry
         E = lambda a, b, yy=cy: (((m.X - cx) / max(a, 0.5)) ** 2 + ((m.Y - yy) / max(b, 0.5)) ** 2) <= 1
         body = E(rx, ry, cy + th) | E(rx, ry)
-        m.fill(_ring_of(body, t) & ~body, INK if kind != 'o' else CREAM)
+        m.fill(_ring_of(body, t) & ~body, CREAM if kind == 'o' or (RED_EDGE and kind in 'eh') else INK)
         side, top = E(rx, ry, cy + th) & ~E(rx, ry), E(rx, ry)
         if PLAIN and kind in 'qeoh':                 # round 33: plain faces, colour alone tells them apart
             fc, sc = {'q': (CREAM, RED), 'e': (RED, INK), 'o': (INK, CREAM), 'h': (RED, INK)}[kind]
+            if RED_EDGE and kind in 'eh':
+                sc = RED                             # round 34: no black on the red notes at all
             m.fill(side, sc); m.fill(top, fc)
             if kind == 'o':                          # black on black: a thick cream border round the face
                 bw = max(2, int(round(W * 0.09)))
@@ -720,6 +722,9 @@ HEART_BOLD = False
 
 
 PLAIN = False
+
+
+RED_EDGE = False
 
 
 class _Flat:
@@ -832,6 +837,8 @@ def frame(cfg, t, S, nframes_fire=240, fire_i=0):
     ROPE_FLAT = cfg.get('rope_flat', False)
     global HEART_BOLD, PLAIN
     PLAIN = cfg.get('plain', False)
+    global RED_EDGE
+    RED_EDGE = cfg.get('red_edge', False)
     HEART_BOLD = cfg.get('heart_bold', False)
     notes_now = visible_notes(t)
     flash = set()
@@ -1611,3 +1618,6 @@ R32 = dict(R31, name='r32_rope', rope_flat=True, heart_bold=True)
 
 # round 33: no decorative marks on plain step notes (rosette, ring, stripes, knot)
 R33 = dict(R32, name='r33_plain', plain=True)
+
+# round 34: red notes outlined in cream, not black, so their edge doesn't sink into the road
+R34 = dict(R33, name='r34_red_edge', red_edge=True)
