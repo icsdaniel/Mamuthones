@@ -631,10 +631,12 @@ HI_PX = 1          # round 30: screen pixels per note pixel (2 = a touch chunkie
 def stamp_hi(kind, W):
     """lino.stamp's design (same colours and marks) drawn in screen pixels, with outlines that scale."""
     W = max(4 if HI_PX >= 4 else 12, int(W))
-    key = ('shi', kind, W, PLAIN, RED_EDGE)
+    key = ('shi', kind, W, PLAIN, RED_EDGE, FLATN)
     if key not in _sprites:
         t = max(1 if HI_PX >= 4 else 2, W // 30)
         rx = W / 2; ry = rx * 0.36; th = max(1 if HI_PX >= 4 else 2, round(W * 0.08))
+        if FLATN:
+            th = 0                                  # round 36: flat on the road, no thickness
         pad = t + 2
         m = Mini(W + 2 * pad, int(2 * ry + th) + 2 * pad + 1)
         m.img[...] = 0
@@ -686,6 +688,8 @@ def sign_hi(kind, W):
     if key not in _sprites:
         t = max(1 if HI_PX >= 4 else 2, W // 30)
         rx = W / 2; ry = rx * 0.36; th = max(1 if HI_PX >= 4 else 2, round(W * 0.08))
+        if FLATN:
+            th = 0                                  # round 36: flat on the road, no thickness
         hh = int(round(W * (0.62 if kind == 'heart' else 0.66)))
         pad = t + 2
         top_room = hh + 2 * t + 2
@@ -734,6 +738,9 @@ PLAIN = False
 RED_EDGE = False
 
 
+FLATN = False
+
+
 class _Flat:
     """A view of a canvas squashed onto a stamp face, so scene drawers print flat on it."""
     def __init__(self, m, cx, cy, k):
@@ -746,10 +753,12 @@ class _Flat:
 def flat_hi(kind, W):
     """Round 31: the heart and the two feet printed flat on the stamp face, like the rosette."""
     W = max(4 if HI_PX >= 4 else 12, int(W))
-    key = ('flhi', kind, W, HEART_BOLD, PLAIN)
+    key = ('flhi', kind, W, HEART_BOLD, PLAIN, FLATN)
     if key not in _sprites:
         t = max(1 if HI_PX >= 4 else 2, W // 30)
         rx = W / 2; ry = rx * 0.36; th = max(1 if HI_PX >= 4 else 2, round(W * 0.08))
+        if FLATN:
+            th = 0                                  # round 36: flat on the road, no thickness
         pad = t + 2
         m = Mini(W + 2 * pad, int(2 * ry + th) + 2 * pad + 1)
         m.img[...] = 0
@@ -846,6 +855,8 @@ def frame(cfg, t, S, nframes_fire=240, fire_i=0):
     PLAIN = cfg.get('plain', False)
     global RED_EDGE
     RED_EDGE = cfg.get('red_edge', False)
+    global FLATN
+    FLATN = cfg.get('flat_notes', False)
     HEART_BOLD = cfg.get('heart_bold', False)
     notes_now = visible_notes(t)
     flash = set()
@@ -1631,3 +1642,6 @@ R34 = dict(R33, name='r34_red_edge', red_edge=True)
 
 # round 35: round 34's notes back on the world's pixel grid (4 screen px per pixel, like the street)
 R35 = dict(R34, name='r35_lowres', hi_px=4)
+
+# round 36: the notes lie flat on the road - no disc thickness
+R36 = dict(R35, name='r36_flat', flat_notes=True)
