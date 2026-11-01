@@ -399,6 +399,112 @@ def clean_bar(up_, w):
     return _sprites[key]
 
 
+# --- round 27: three readability options ----------------------------------------------
+def _outline(m, mask, col, n=1):
+    g = mask.copy()
+    for _ in range(n):
+        h = g.copy(); h[1:] |= g[:-1]; h[:-1] |= g[1:]; h[:, 1:] |= g[:, :-1]; h[:, :-1] |= g[:, 1:]
+        g = h
+    m.fill(g & ~mask, col)
+
+
+def flat_bold(kind, w):
+    """A: flat stamps, rounder and bigger, each ringed in cream so it pops off the black road."""
+    w = max(6, int(round(w)))
+    key = ('fa', kind, w)
+    if key not in _sprites:
+        rx = w / 2; ry = max(2, rx * 0.5); th = max(1, round(w * 0.1))
+        m = Mini(w + 8, int(2 * ry + th) + 8)
+        m.img[...] = 0
+        cx, cy = (w + 8) / 2, ry + 4
+        E = lambda a, b, yy=cy: lino.ellipse_mask(m, cx, yy, a, b)
+        body = E(rx, ry, cy + th) | E(rx, ry)
+        _outline(m, body, INK, 1)
+        ring = np.zeros_like(body); g = body.copy()
+        g2 = g.copy(); g2[1:] |= g[:-1]; g2[:-1] |= g[1:]; g2[:, 1:] |= g[:, :-1]; g2[:, :-1] |= g[:, 1:]
+        g3 = g2.copy(); g3[1:] |= g2[:-1]; g3[:-1] |= g2[1:]; g3[:, 1:] |= g2[:, :-1]; g3[:, :-1] |= g2[:, 1:]
+        m.fill(g3 & ~g2, CREAM if kind != 'q' else RED)
+        side, top = E(rx, ry, cy + th), E(rx, ry)
+        face, edge, mark = {'q': (CREAM, RED, RED), 'e': (RED, INK, CREAM), 'o': (INK, CREAM, CREAM), 'h': (RED, INK, CREAM)}[kind]
+        m.fill(side, edge); m.fill(top, face)
+        if kind == 'q':
+            m.fill(E(rx * 0.38, ry * 0.42), mark)
+        elif kind == 'e':
+            m.fill(E(rx * 0.55, ry * 0.58) & ~E(max(0.5, rx * 0.55 - max(1.5, rx * 0.2)), max(0.4, ry * 0.58 - max(1.2, ry * 0.25))), mark)
+        elif kind == 'o':
+            m.fill(top & (np.abs(m.X - cx) < max(1, rx * 0.5)) & (np.abs(m.Y - cy) < max(0.6, ry * 0.22)), mark)
+        else:
+            m.fill(E(rx * 0.42, ry * 0.5), mark)
+        _sprites[key] = (m.img.copy(), cx, cy)
+    return _sprites[key]
+
+
+def token(kind, w, shaped=False):
+    """B/C: notes as upright tokens standing on the lane, facing the player.
+    B: round medallions with one bold mark. C: a different silhouette for each kind."""
+    w = max(6, int(round(w)))
+    key = ('tk', kind, w, shaped)
+    if key not in _sprites:
+        D = w
+        m = Mini(D + 6, D + 6 + max(2, D // 6))
+        m.img[...] = 0
+        cx, cy = (D + 6) / 2, D / 2 + 3
+        r = D / 2
+        dx, dy = m.X - cx, m.Y - cy
+        if not shaped or kind in ('q', 'h'):
+            shape = np.hypot(dx, dy) <= r
+        elif kind == 'e':
+            shape = (np.abs(dx) + np.abs(dy)) <= r * 1.15
+        else:                                    # off-beat: a smaller square
+            shape = (np.abs(dx) <= r * 0.68) & (np.abs(dy) <= r * 0.68)
+        sh = lino.ellipse_mask(m, cx, D + 3 + max(1, D // 12), r * 0.75, max(1, D * 0.08))
+        m.fill(sh & ~shape, INK)                 # a shadow on the road
+        _outline(m, shape, INK, 1)
+        inner = shape.copy()
+        for _ in range(max(1, D // 12)):
+            g = inner; h = g.copy(); h[1:] &= g[:-1]; h[:-1] &= g[1:]; h[:, 1:] &= g[:, :-1]; h[:, :-1] &= g[:, 1:]; inner = h
+        face, rim, mark = {'q': (CREAM, RED, RED), 'e': (RED, CREAM, CREAM), 'o': (INK, CREAM, CREAM), 'h': (RED, CREAM, CREAM)}[kind]
+        if shaped and kind == 'o':
+            face, rim = CREAM, INK               # a solid cream square reads on the black road
+        m.fill(shape, rim); m.fill(inner, face)
+        if shaped and kind == 'o':
+            m.fill((np.abs(dx) <= r * 0.25) & (np.abs(dy) <= r * 0.25), RED)
+        if kind == 'q':
+            m.fill(np.hypot(dx, dy) <= r * 0.3, mark)
+        elif kind == 'e' and not shaped:
+            m.fill((np.hypot(dx, dy) <= r * 0.48) & (np.hypot(dx, dy) > r * 0.48 - max(1.5, r * 0.18)), mark)
+        elif kind == 'o' and not shaped:
+            m.fill((np.abs(dx) <= r * 0.42) & (np.abs(dy) <= max(0.7, r * 0.13)), mark)
+        elif kind == 'h':
+            m.fill(np.hypot(dx, dy) <= r * 0.36, mark); m.fill(np.hypot(dx, dy) <= r * 0.14, RED)
+        _sprites[key] = (m.img.copy(), cx, D + 3)
+    return _sprites[key]
+
+
+def plank(up_, w, upright=False):
+    """Bell bars. Flat (A): a thick bar with big filled arrows. Upright (B/C): a plank standing across
+    the road, its arrows big enough to read far away."""
+    w = max(10, int(round(w)))
+    th = max(5, int(round(w * (0.12 if upright else 0.11))))
+    key = ('pl', up_, w, upright)
+    if key not in _sprites:
+        m = Mini(w + 4, th + 4)
+        m.img[...] = 0
+        body = (m.X >= 2) & (m.X < w + 2) & (m.Y >= 2) & (m.Y < th + 2)
+        _outline(m, body, INK, 1)
+        m.fill(body, RED if up_ else CREAM)
+        col = CREAM if up_ else INK
+        a = th * 0.42
+        for lane in range(3):
+            cx = 2 + (lane + 0.5) * w / 3
+            cy = 2 + th / 2
+            v = (m.Y - cy) * (1 if up_ else -1)
+            tri = (v >= -a) & (v <= a) & (np.abs(m.X - cx) <= (v + a) * 0.9)
+            m.fill(tri & body, col)
+        _sprites[key] = (m.img.copy(), (w + 4) / 2, (th + 4) / 2 if not upright else th + 2)
+    return _sprites[key]
+
+
 # --- round 26: each note drawn clean at a few fixed sizes, then scaled smoothly ----------
 NOTE_MIPS = [7, 9, 12, 16, 21, 28, 37, 48]
 BAR_MIPS = [24, 32, 43, 57, 76, 101, 134]
@@ -496,7 +602,8 @@ def frame(cfg, t, S, nframes_fire=240, fire_i=0):
                 continue
             y = s.y_of_depth(max(0, d))
             if cfg.get('mip'):
-                place(nl, lambda w_, u_=(lane == 'up'): clean_bar(u_, w_),
+                place(nl, (lambda w_, u_=(lane == 'up'): clean_bar(u_, w_)) if not cfg.get('look') else
+                      (lambda w_, u_=(lane == 'up'), up2=cfg['look'] != 'a': plank(u_, w_, up2)),
                       BAR_MIPS, 2 * s.halfw(y) - 2, s.vpx, y, S)
                 continue
             spr, ox, oy = bar_sprite(lane == 'up', 2 * s.halfw(y) - 2, max(3, lw(y) * 0.2))
@@ -511,7 +618,10 @@ def frame(cfg, t, S, nframes_fire=240, fire_i=0):
                 paste(nl, up(spr, S), (s.lane_x(lane, yt) - ox) * S, (yt - oy) * S)
             y0 = s.y_of_depth(max(0, d))
             if cfg.get('mip'):
-                place(nl, lambda w_: clean_note('h', w_), NOTE_MIPS, lw(y0) * NK, s.lane_x(lane, y0), y0, S)
+                fh_ = (lambda w_: clean_note('h', w_)) if not cfg.get('look') else \
+                      (lambda w_: flat_bold('h', w_)) if cfg['look'] == 'a' else (lambda w_: token('h', w_))
+                kk = {'a': 1.0, 'b': 0.62, 'c': 0.62}.get(cfg.get('look'), NK)
+                place(nl, fh_, NOTE_MIPS, max(lw(y0) * kk, cfg.get('note_floor', 0)), s.lane_x(lane, y0), y0, S)
                 continue
             spr, ox, oy = note_sprite('h', lw(y0) * 0.8)
             paste(nl, up(spr, S), (s.lane_x(lane, y0) - ox) * S, (y0 - oy) * S)
@@ -535,7 +645,11 @@ def frame(cfg, t, S, nframes_fire=240, fire_i=0):
             paste(nl, up(spr, S), (s.lane_x(lane, y) - ox) * S, (y - oy) * S)
             continue
         if cfg.get('mip'):
-            place(nl, lambda w_, k_=k: clean_note(k_, w_), NOTE_MIPS, lw(y) * NK, s.lane_x(lane, y), y, S)
+            fn = (lambda w_, k_=k: clean_note(k_, w_)) if not cfg.get('look') else \
+                 (lambda w_, k_=k: flat_bold(k_, w_)) if cfg['look'] == 'a' else \
+                 (lambda w_, k_=k, sh_=cfg['look'] == 'c': token(k_, w_, sh_))
+            kk = {'a': 1.0, 'b': 0.62, 'c': 0.62}.get(cfg.get('look'), NK)
+            place(nl, fn, NOTE_MIPS, max(lw(y) * kk, cfg.get('note_floor', 0)), s.lane_x(lane, y), y, S)
             continue
         spr, ox, oy = note_sprite(k, lw(y) * 0.8)
         paste(nl, up(spr, S), (s.lane_x(lane, y) - ox) * S, (y - oy) * S)
@@ -1136,3 +1250,8 @@ R25 = dict(R24, name='r25_stomp', stomp_beats=(7.0,), misses=(2.0, 4.5, 6.0, 10.
 
 # round 26: notes and bars drawn clean at fixed sizes and scaled smoothly, a little bigger
 R26 = dict(R25, name='r26_mip', mip=True)
+
+# round 27: three readability options
+R27 = {'a': dict(R26, name='r27_a', look='a', note_floor=9),
+       'b': dict(R26, name='r27_b', look='b', note_floor=10),
+       'c': dict(R26, name='r27_c', look='c', note_floor=10)}
