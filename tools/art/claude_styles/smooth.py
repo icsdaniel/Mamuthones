@@ -85,8 +85,10 @@ def procession(s, cfg):
             h = int(round(k * t))
             w = h * 0.86
             x = s.vpx + side * (s.halfw(y) * cfg['rows'].get('out', 1.05) + w * 0.36)
+            if cfg['rows'].get('fit'):          # keep the whole figure on screen
+                x = s.vpx + side * min(abs(x - s.vpx), s.vpx - w * 0.5 - 1)
             seed = i * 7 + (side > 0) * 3
-            out.append(dict(x=x, y=y, h=h, flip=side < 0, seed=seed, side=side,
+            out.append(dict(x=x, y=y, h=h, flip=side < 0, seed=seed, side=side, z=z,
                             bulk=0.94 + 0.1 * ((seed * 37) % 10) / 10, amp=0.9 + 0.2 * ((seed * 53) % 10) / 10))
     return sorted(out, key=lambda f: f['y'])
 
@@ -286,6 +288,9 @@ def frame(cfg, t, S, nframes_fire=240, fire_i=0):
         if fg['flip']:
             layer = layer[:, ::-1]
         a = layer[..., 3] > 0
+        sil = cfg['rows'].get('sil_z') if cfg.get('rows') else None
+        if sil and fg.get('z', 0) >= sil:   # far files as flat black shapes
+            layer[a] = C(INK)
         nb = np.zeros_like(a)
         for k in range(1, S + 1):
             nb[k:] |= a[:-k]; nb[:-k] |= a[k:]; nb[:, k:] |= a[:, :-k]; nb[:, :-k] |= a[:, k:]
@@ -477,3 +482,22 @@ def closeup(path, H=96, S=5, fps=60, beats=4, slow=1.0, bpm=120):
                     '-c:v', 'libx264', '-pix_fmt', 'yuv420p', '-crf', '14', path], check=True)
     for f_ in os.listdir(tmp):
         os.remove(os.path.join(tmp, f_))
+
+
+# round 11: same log pile at every level; options for the Mamuthones and the buildings
+R10b = dict(R10, name='r11_base')
+_rows_a = dict(scale=90, z=[2.4, 3.4, 5.0, 8.0], out=1.1, fit=True)
+R11_M = {
+    'm_a': dict(R10b, rows=_rows_a),
+    'm_b': dict(R10b, rows=dict(scale=84, z=[2.3, 2.9, 3.7, 4.8, 6.3, 8.5], out=1.12, fit=True)),
+    'm_c': dict(R10b, rows=dict(_rows_a, sil_z=4.0)),
+}
+_night = dict(R10b['pal'], wall=['#141014'] * 3, wall_line='#3a2c2c', seam='#c9bba0', roof='#c9bba0',
+              win_lit='#c8352a', win_dark='#3a2c2c', door='#3a2c2c')
+_stone = dict(R10b['pal'], wall=['#c9bba0', '#efe6d2', '#efe6d2'], roof='#c8352a', roof_line='#141014',
+              shutter='#c8352a', win_dark='#141014', win_lit='#141014', door='#141014')
+R11_B = {
+    'b_a': R11_M['m_a'],
+    'b_b': dict(R11_M['m_a'], pal=_night),
+    'b_c': dict(R11_M['m_a'], pal=_stone, house_h=(0.45, 0.25), roof_k=1.7, roof_tiles=True),
+}

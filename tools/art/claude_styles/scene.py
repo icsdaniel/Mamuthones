@@ -135,7 +135,8 @@ def draw(cfg, frame=0, nframes=1, beat_phase=0.0, fig_frame=0, cache={}):
         hz = z * 1.25 + (0.4 if side > 0 else 0.0)
         house = np.floor(hz)
         w = hz - house
-        hh = 0.62 + 0.38 * (np.sin(house * 3.7 + side) * 0.5 + 0.5)
+        h0_, h1_ = cfg.get('house_h', (0.62, 0.38))
+        hh = h0_ + h1_ * (np.sin(house * 3.7 + side) * 0.5 + 0.5)
         wall = valid & (v >= 0) & (v <= hh)
         lit = (np.sin(house * 5.3 + side * 2) > -0.2)
         # wall tone: lit by the fire toward the centre
@@ -151,8 +152,12 @@ def draw(cfg, frame=0, nframes=1, beat_phase=0.0, fig_frame=0, cache={}):
         seam = wall & ((w < 0.035) | (w > 0.965))
         s.fill(seam, P['seam'])
         # roof edge
-        roof = valid & (v > hh) & (v <= hh + 0.05 + 0.02 / uu)
+        rk = cfg.get('roof_k', 1.0)
+        roof = valid & (v > hh) & (v <= hh + (0.05 + 0.02 / uu) * rk)
         s.fill(roof, P['roof'])
+        if cfg.get('roof_tiles'):          # curved Sardinian tiles: dark gaps in the red
+            tiles = roof & ((s.Yi % 3 == 0) | ((s.Xi % 4 == 0) & (s.Yi % 3 == 1)))
+            s.fill(tiles, P['roof_line'])
         if 'roof2' in P:
             s.fill(valid & (v > hh) & (v <= hh + 0.02), P['roof2'])
         # windows and doors

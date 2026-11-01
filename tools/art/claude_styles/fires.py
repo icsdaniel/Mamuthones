@@ -147,8 +147,8 @@ def pile(s, lv, beat_sec, since_up, tt, box, beat_no=0):
         h0, leap = H * 0.145, 0.24        # tips lick up behind the combo on the beat
     cx = s.vpx
     hole = _hole(s, box)
-    ph_ = h0 * 0.42                       # height of the log cone
-    pw = W * (0.07 + 0.008 * lv)
+    ph_ = H * 0.045                       # the log cone is the same at every level
+    pw = W * 0.095
     p = bob(beat_sec)
     # flames behind the logs, then the logs, then flames in the gaps
     n = {1: 3, 2: 3, 3: 5, 4: 7}[lv]
