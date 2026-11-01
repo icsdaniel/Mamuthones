@@ -339,6 +339,88 @@ def bar_sprite(up_, w, th):
     return _sprites[key]
 
 
+def clean_note(kind, w):
+    """Round 26 notes: the same stamps, with bold, simple marks that read at any size."""
+    w = max(4, int(round(w)))
+    key = ('cn', kind, w)
+    if key not in _sprites:
+        h = int(w * 0.36 + w * 0.08) + 6
+        m = Mini(w + 6, h)
+        m.img[...] = 0
+        cx, cy = (w + 6) / 2, w * 0.18 + 2.5
+        rx = w / 2
+        ry = max(1.5, rx * 0.36)
+        th = max(1, round(w * 0.08))
+        E = lambda a, b, yy=cy: lino.ellipse_mask(m, cx, yy, a, b)
+        outer = E(rx + 1, ry + 1, cy + th) | E(rx + 1, ry + 1)
+        m.fill(outer, INK if kind != 'o' else CREAM)
+        side, top = E(rx, ry, cy + th), E(rx, ry)
+        if kind == 'q':                     # on the beat: cream face, one bold red dot
+            m.fill(side, RED); m.fill(top, CREAM)
+            m.fill(E(max(1.2, rx * 0.34), max(0.9, ry * 0.4)), RED)
+        elif kind == 'e':                   # half beat: red face, one cream ring
+            m.fill(side, INK); m.fill(top, RED)
+            r_o, r_i = rx * 0.6, max(0.5, rx * 0.6 - max(1.3, rx * 0.16))
+            m.fill(E(r_o, r_o * 0.36 + 0.3) & ~E(r_i, r_i * 0.36), CREAM)
+        elif kind == 'o':                   # off-beat: black face, three bold cream bars
+            m.fill(side, CREAM); m.fill(top, INK)
+            bw_ = max(1, round(rx * 0.16))
+            for k in (-1, 0, 1):
+                m.fill(top & (np.abs(m.X - (cx + k * rx * 0.45)) < bw_ * 0.5 + 0.01) & E(rx - 1, ry - 0.6), CREAM)
+        elif kind == 'h':                   # hold: red face, cream knot
+            m.fill(side, INK); m.fill(top, RED)
+            m.fill(E(rx * 0.42, ry * 0.5), CREAM)
+            m.fill(E(max(0.8, rx * 0.16), max(0.6, ry * 0.2)), RED)
+        _sprites[key] = (m.img.copy(), cx, cy)
+    return _sprites[key]
+
+
+def clean_bar(up_, w):
+    """Round 26 bell bars: thicker, with one bold chevron per lane."""
+    w = max(8, int(round(w)))
+    th = max(4, int(round(w * 0.1)))
+    key = ('cb', up_, w)
+    if key not in _sprites:
+        m = Mini(w + 2, th + 2)
+        m.img[...] = 0
+        m.fill(np.ones((th + 2, w + 2), bool), INK)
+        m.fill((m.X >= 1) & (m.X < w + 1) & (m.Y >= 1) & (m.Y < th + 1), RED if up_ else CREAM)
+        col = CREAM if up_ else INK
+        a = max(1, int(th * 0.75))
+        cy = (th + 2) / 2
+        sw = 2 if th >= 6 else 1
+        for lane in range(3):
+            cx = 1 + (lane + 0.5) * w / 3
+            for k in range(-a, a + 1):
+                for q in range(sw):
+                    yy = cy + (abs(k) * 0.55 - a * 0.28) * (1 if up_ else -1) + q * (1 if up_ else -1)
+                    m.put(cx + k, yy, col)
+        _sprites[key] = (m.img.copy(), (w + 2) / 2, (th + 2) / 2)
+    return _sprites[key]
+
+
+# --- round 26: each note drawn clean at a few fixed sizes, then scaled smoothly ----------
+NOTE_MIPS = [7, 9, 12, 16, 21, 28, 37, 48]
+BAR_MIPS = [24, 32, 43, 57, 76, 101, 134]
+NK = 0.92                                  # notes a little bigger: 0.92 of the lane instead of 0.8
+_scaled = {}
+
+
+def place(dst, fn, mips, w, x, y, S):
+    """Draw the clean icon of the next size up, scaled down (at most ~25%) to the exact width in
+    screen pixels. Its shape only ever changes at a few fixed sizes, never pixel by pixel."""
+    w = max(mips[0], w)
+    m = next((v for v in mips if v >= w), mips[-1])
+    spr, ox, oy = fn(m)
+    k = w / m
+    big = up(spr, S)
+    nw, nh = max(1, int(round(big.shape[1] * k))), max(1, int(round(big.shape[0] * k)))
+    key = (hash(spr.tobytes()), spr.shape, nw)
+    if key not in _scaled:
+        _scaled[key] = np.array(Image.fromarray(big).resize((nw, nh), Image.NEAREST))
+    paste(dst, _scaled[key], x * S - ox * S * k, y * S - oy * S * k)
+
+
 # --- one frame -----------------------------------------------------------------------
 def frame(cfg, t, S, nframes_fire=240, fire_i=0):
     """t = time in beats."""
@@ -413,6 +495,10 @@ def frame(cfg, t, S, nframes_fire=240, fire_i=0):
             if d < -0.01:
                 continue
             y = s.y_of_depth(max(0, d))
+            if cfg.get('mip'):
+                place(nl, lambda w_, u_=(lane == 'up'): clean_bar(u_, w_),
+                      BAR_MIPS, 2 * s.halfw(y) - 2, s.vpx, y, S)
+                continue
             spr, ox, oy = bar_sprite(lane == 'up', 2 * s.halfw(y) - 2, max(3, lw(y) * 0.2))
             sc = (2 * s.halfw(y) - 2) / max(1, spr.shape[1] - 2)
             paste(nl, up(spr, S), (s.vpx - ox) * S, (y - oy) * S)
@@ -424,6 +510,9 @@ def frame(cfg, t, S, nframes_fire=240, fire_i=0):
                 spr, ox, oy = note_sprite('h', lw(yt) * 0.45)
                 paste(nl, up(spr, S), (s.lane_x(lane, yt) - ox) * S, (yt - oy) * S)
             y0 = s.y_of_depth(max(0, d))
+            if cfg.get('mip'):
+                place(nl, lambda w_: clean_note('h', w_), NOTE_MIPS, lw(y0) * NK, s.lane_x(lane, y0), y0, S)
+                continue
             spr, ox, oy = note_sprite('h', lw(y0) * 0.8)
             paste(nl, up(spr, S), (s.lane_x(lane, y0) - ox) * S, (y0 - oy) * S)
             continue
@@ -432,12 +521,21 @@ def frame(cfg, t, S, nframes_fire=240, fire_i=0):
         y = s.y_of_depth(max(-0.01, d))
         k = {'note_q': 'q', 'note_e': 'e', 'note_o': 'o'}[kind]
         if any(abs((t + d / scene.SP) % scene.LOOP - sb) < 0.01 for sb in cfg.get('stomp_beats', ())):
+            if cfg.get('mip'):
+                place(nl, stomp_sprite, NOTE_MIPS, lw(y) * NK, s.lane_x(lane, y), y, S)
+                continue
             spr, ox, oy = stomp_sprite(lw(y) * 0.8)      # both thumbs: a pair of feet on a black stamp
             paste(nl, up(spr, S), (s.lane_x(lane, y) - ox) * S, (y - oy) * S)
             continue
         if any(abs(t + d / scene.SP - hb) < 0.01 for hb in cfg.get('heal_beats', ())):
+            if cfg.get('mip'):
+                place(nl, heart_sprite, NOTE_MIPS, lw(y) * NK, s.lane_x(lane, y), y, S)
+                continue
             spr, ox, oy = heart_sprite(lw(y) * 0.8)       # a healing step: a heart on a step stamp
             paste(nl, up(spr, S), (s.lane_x(lane, y) - ox) * S, (y - oy) * S)
+            continue
+        if cfg.get('mip'):
+            place(nl, lambda w_, k_=k: clean_note(k_, w_), NOTE_MIPS, lw(y) * NK, s.lane_x(lane, y), y, S)
             continue
         spr, ox, oy = note_sprite(k, lw(y) * 0.8)
         paste(nl, up(spr, S), (s.lane_x(lane, y) - ox) * S, (y - oy) * S)
@@ -1035,3 +1133,6 @@ R24 = dict(R23, name='r24_dark', window_flash=False, pal=dict(R23['pal'], win_li
 # round 25: a stomp note with a pair of feet standing on it (the middle lane, beat 7 of each bar)
 R25 = dict(R24, name='r25_stomp', stomp_beats=(7.0,), misses=(2.0, 4.5, 6.0, 10.0),
            health_demo=[(0, 5), (2.0, 4), (4.5, 3), (6.0, 2), (10.0, 1), (13.0, 5)])
+
+# round 26: notes and bars drawn clean at fixed sizes and scaled smoothly, a little bigger
+R26 = dict(R25, name='r26_mip', mip=True)
