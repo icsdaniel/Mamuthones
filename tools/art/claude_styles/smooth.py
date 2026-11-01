@@ -432,7 +432,7 @@ def frame(cfg, t, S, nframes_fire=240, fire_i=0):
         y = s.y_of_depth(max(-0.01, d))
         k = {'note_q': 'q', 'note_e': 'e', 'note_o': 'o'}[kind]
         if any(abs(t + d / scene.SP - hb) < 0.01 for hb in cfg.get('heal_beats', ())):
-            spr, ox, oy = heart_sprite(lw(y) * 0.8)       # a healing step is a heart
+            spr, ox, oy = heart_sprite(lw(y) * 0.8)       # a healing step: a heart on a step stamp
             paste(nl, up(spr, S), (s.lane_x(lane, y) - ox) * S, (y - oy) * S)
             continue
         spr, ox, oy = note_sprite(k, lw(y) * 0.8)
@@ -658,32 +658,30 @@ HEART = ['.##.##.', '#######', '#######', '.#####.', '..###..', '...#...']
 
 
 def heart_sprite(w):
-    """A healing step: a red heart inside a cream ring, keylined in black, at a whole art width."""
-    w = max(8, int(round(w * 0.78)))
-    key = ('heart', w)
+    """A healing step: the same flat stamp as a step note, with a red heart carved on its face."""
+    w = max(4, int(round(w)))
+    key = ('heart_stamp', w)
     if key not in _sprites:
-        R = w / 2
-        ry = R * 0.86
-        m = Mini(w + 4, int(2 * ry) + 4)
+        h = int(w * 0.36 + w * 0.08) + 6
+        m = Mini(w + 6, h)
         m.img[...] = 0
-        cx, cy = (w + 4) / 2, ry + 2
-        e = ((m.X - cx) / R) ** 2 + ((m.Y - cy) / ry) ** 2
-        ring_w = max(1.6, R * 0.2)
-        e_in = ((m.X - cx) / (R - ring_w)) ** 2 + ((m.Y - cy) / (ry - ring_w)) ** 2
-        e_out = ((m.X - cx) / (R + 1)) ** 2 + ((m.Y - cy) / (ry + 1)) ** 2
-        m.fill(e_out <= 1, INK)
-        m.fill((e <= 1) & (e_in > 1), CREAM)
-        m.fill(e_in <= 1, INK)
-        hs = (R - ring_w) * 0.78                 # the heart, inside
-        x = (m.X - cx) / hs * 1.15
-        y = -((m.Y - cy + hs * 0.12) / hs) * 1.15
-        core = (x * x + y * y - 1) ** 3 - x * x * y ** 3 <= 0
+        cx, cy = (w + 6) / 2, w * 0.18 + 2.5
+        rx = w / 2
+        ry = max(1.5, rx * 0.36)
+        th = max(1, round(w * 0.08))
+        outer = lino.ellipse_mask(m, cx, cy + th, rx + 1, ry + 1) | lino.ellipse_mask(m, cx, cy, rx + 1, ry + 1)
+        m.fill(outer, INK)
+        m.fill(lino.ellipse_mask(m, cx, cy + th, rx, ry), RED)
+        top = lino.ellipse_mask(m, cx, cy, rx, ry)
+        m.fill(top, CREAM)
+        # the heart, lying on the stamp's face (a little taller than true perspective, so it reads)
+        hx, hy = rx * 0.62, ry * 0.95
+        x = (m.X - cx) / hx * 1.15
+        y = -((m.Y - cy + hy * 0.1) / hy) * 1.15
+        core = top & ((x * x + y * y - 1) ** 3 - x * x * y ** 3 <= 0)
         m.fill(core, RED)
-        m.fill(core & (np.hypot(x + 0.45, y - 0.45) < 0.24), CREAM)   # shine
-        # carved notches round the ring, like the hit rings
-        ang = np.arctan2((m.Y - cy) / ry, (m.X - cx) / R)
-        notch = (e <= 1) & (e_in > 1) & (np.floor(ang / (2 * math.pi) * 16) % 2 == 0) & (np.abs(np.sin(ang * 8)) < 0.3)
-        m.fill(notch, INK)
+        if w >= 14:
+            m.fill(core & (np.hypot(x + 0.45, y - 0.4) < 0.25), CREAM)
         _sprites[key] = (m.img.copy(), cx, cy)
     return _sprites[key]
 
@@ -978,3 +976,6 @@ R20 = dict(R19, name='r20_health', levels=100,
 
 # round 21: a heart heals 4 (two hearts), the heart sits in a ring, the dark starts at 3
 R21 = dict(R20, name='r21_health', health_demo=[(0, 5), (2.0, 4), (4.5, 3), (7.0, 2), (10.0, 1), (13.0, 5)])
+
+# round 22: the heart is carved on a step note's stamp
+R22 = dict(R21, name='r22_heart_stamp')
