@@ -658,24 +658,33 @@ HEART = ['.##.##.', '#######', '#######', '.#####.', '..###..', '...#...']
 
 
 def heart_sprite(w):
-    """A healing step: a red heart stamp, keylined in cream and black, at a whole art width."""
-    w = max(6, int(round(w * 0.62)))
+    """A healing step: a red heart inside a cream ring, keylined in black, at a whole art width."""
+    w = max(8, int(round(w * 0.78)))
     key = ('heart', w)
     if key not in _sprites:
-        h = int(round(w * 0.9))
-        m = Mini(w + 6, h + 6)
+        R = w / 2
+        ry = R * 0.86
+        m = Mini(w + 4, int(2 * ry) + 4)
         m.img[...] = 0
-        x = (m.X - (w + 6) / 2) / (w / 2) * 1.15
-        y = -((m.Y - 3 - h * 0.42) / (h / 2)) * 1.15
+        cx, cy = (w + 4) / 2, ry + 2
+        e = ((m.X - cx) / R) ** 2 + ((m.Y - cy) / ry) ** 2
+        ring_w = max(1.6, R * 0.2)
+        e_in = ((m.X - cx) / (R - ring_w)) ** 2 + ((m.Y - cy) / (ry - ring_w)) ** 2
+        e_out = ((m.X - cx) / (R + 1)) ** 2 + ((m.Y - cy) / (ry + 1)) ** 2
+        m.fill(e_out <= 1, INK)
+        m.fill((e <= 1) & (e_in > 1), CREAM)
+        m.fill(e_in <= 1, INK)
+        hs = (R - ring_w) * 0.78                 # the heart, inside
+        x = (m.X - cx) / hs * 1.15
+        y = -((m.Y - cy + hs * 0.12) / hs) * 1.15
         core = (x * x + y * y - 1) ** 3 - x * x * y ** 3 <= 0
-        def grow(mm):
-            n = mm.copy(); n[1:] |= mm[:-1]; n[:-1] |= mm[1:]; n[:, 1:] |= mm[:, :-1]; n[:, :-1] |= mm[:, 1:]
-            return n
-        k1 = grow(core); k2 = grow(k1)
-        m.fill(k2, INK); m.fill(k1, CREAM); m.fill(core, RED)
-        m.fill(core & (np.hypot(x + 0.45, y - 0.45) < 0.22), CREAM)   # shine
-        m.fill(core & (np.abs(x) < 0.07) & (y > -0.2) & (y < 0.45), INK)  # a carved line
-        _sprites[key] = (m.img.copy(), (w + 6) / 2, h * 0.6 + 3)
+        m.fill(core, RED)
+        m.fill(core & (np.hypot(x + 0.45, y - 0.45) < 0.24), CREAM)   # shine
+        # carved notches round the ring, like the hit rings
+        ang = np.arctan2((m.Y - cy) / ry, (m.X - cx) / R)
+        notch = (e <= 1) & (e_in > 1) & (np.floor(ang / (2 * math.pi) * 16) % 2 == 0) & (np.abs(np.sin(ang * 8)) < 0.3)
+        m.fill(notch, INK)
+        _sprites[key] = (m.img.copy(), cx, cy)
     return _sprites[key]
 
 
@@ -693,7 +702,7 @@ def health_at(cfg, t):
 def danger(out, s, cfg, t, S, hp):
     """At 4 health and below the street darkens toward its edges, step by step, in lino
     dither. The notes and the hit rings stay lit, so the eye goes where it has to."""
-    D = min(1.0, max(0.0, (4.6 - hp) / 3.6))
+    D = min(1.0, max(0.0, (3.6 - hp) / 2.6))      # starts at 3 health, darkest at 1
     if D <= 0:
         return
     tb = ((t - math.floor(t)) * 0.5)
@@ -727,7 +736,7 @@ def hearts_hud(out, s, t, S, hp):
     for i in range(5):
         x0, y0 = 3 + i * 9, 9
         fill = max(0, min(2, hpi - 2 * i))
-        big = hpi <= 4 and fill > 0 and (2 * (i + 1) >= hpi) and beat_p > 0.5
+        big = hpi <= 3 and fill > 0 and (2 * (i + 1) >= hpi) and beat_p > 0.5
         for yy, row in enumerate(HEART):
             for xx, c in enumerate(row):
                 if c != '#':
@@ -966,3 +975,6 @@ R19 = dict(R18, name='r19_juice', moon_beat=False, world_juice=True)
 R20 = dict(R19, name='r20_health', levels=100,
            health_demo=[(0, 5), (2.0, 4), (4.5, 3), (7.0, 2), (10.0, 1), (13.0, 3)],
            misses=(2.0, 4.5, 7.0, 10.0), heal_beats=(13.0,))
+
+# round 21: a heart heals 4 (two hearts), the heart sits in a ring, the dark starts at 3
+R21 = dict(R20, name='r21_health', health_demo=[(0, 5), (2.0, 4), (4.5, 3), (7.0, 2), (10.0, 1), (13.0, 5)])
