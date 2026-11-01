@@ -345,6 +345,8 @@ def frame(cfg, t, S, nframes_fire=240, fire_i=0):
     notes_now = visible_notes(t)
     flash = set()
     for (d, kind, lane, dt) in notes_now:
+        if any(abs(t + d / scene.SP - m) < 0.01 for m in cfg.get('misses', ())):
+            continue
         if kind == 'bell' and abs(d) < 0.03:
             flash.update((0, 1, 2))
         elif kind == 'note_h' and d <= 0 < dt:
@@ -403,7 +405,8 @@ def frame(cfg, t, S, nframes_fire=240, fire_i=0):
         if cfg.get('heavy'):
             ring_marks(out, fg, tsec, S)
 
-    # notes, bars and ropes, far to near
+    # notes, bars and ropes, far to near, on their own layer (they never darken)
+    nl = np.zeros_like(out)
     lw = lambda y: 2 * s.halfw(y) / 3
     for (d, kind, lane, dt) in sorted(notes_now, key=lambda n: -n[0]):
         if kind == 'bell':
@@ -412,24 +415,28 @@ def frame(cfg, t, S, nframes_fire=240, fire_i=0):
             y = s.y_of_depth(max(0, d))
             spr, ox, oy = bar_sprite(lane == 'up', 2 * s.halfw(y) - 2, max(3, lw(y) * 0.2))
             sc = (2 * s.halfw(y) - 2) / max(1, spr.shape[1] - 2)
-            paste(out, up(spr, S), (s.vpx - ox) * S, (y - oy) * S)
+            paste(nl, up(spr, S), (s.vpx - ox) * S, (y - oy) * S)
             continue
         if kind == 'note_h':
-            draw_rope(out, s, lane, d, dt, S)
+            draw_rope(nl, s, lane, d, dt, S)
             if dt <= 0.8:
                 yt = s.y_of_depth(min(0.8, dt))
                 spr, ox, oy = note_sprite('h', lw(yt) * 0.45)
-                paste(out, up(spr, S), (s.lane_x(lane, yt) - ox) * S, (yt - oy) * S)
+                paste(nl, up(spr, S), (s.lane_x(lane, yt) - ox) * S, (yt - oy) * S)
             y0 = s.y_of_depth(max(0, d))
             spr, ox, oy = note_sprite('h', lw(y0) * 0.8)
-            paste(out, up(spr, S), (s.lane_x(lane, y0) - ox) * S, (y0 - oy) * S)
+            paste(nl, up(spr, S), (s.lane_x(lane, y0) - ox) * S, (y0 - oy) * S)
             continue
         if d < -0.015:
             continue
         y = s.y_of_depth(max(-0.01, d))
         k = {'note_q': 'q', 'note_e': 'e', 'note_o': 'o'}[kind]
+        if any(abs(t + d / scene.SP - hb) < 0.01 for hb in cfg.get('heal_beats', ())):
+            spr, ox, oy = heart_sprite(lw(y) * 0.8)       # a healing step is a heart
+            paste(nl, up(spr, S), (s.lane_x(lane, y) - ox) * S, (y - oy) * S)
+            continue
         spr, ox, oy = note_sprite(k, lw(y) * 0.8)
-        paste(out, up(spr, S), (s.lane_x(lane, y) - ox) * S, (y - oy) * S)
+        paste(nl, up(spr, S), (s.lane_x(lane, y) - ox) * S, (y - oy) * S)
 
     if cfg.get('sky_beat'):
         sky_beat(out, s, cfg, t, S)
@@ -440,8 +447,14 @@ def frame(cfg, t, S, nframes_fire=240, fire_i=0):
     out[:hud_rows] = np.where(top_keep[..., 3:4] > 0, top_keep, out[:hud_rows]) if False else out[:hud_rows]
     # the judgement plate and buttons always sit above the notes
     out[btn_rows:] = bot_keep
+    hp = health_at(cfg, t) if cfg.get('health_demo') else None
+    if hp is not None:
+        danger(out, s, cfg, t, S, hp)
+    over(out[:btn_rows], nl[:btn_rows], 0, 0)            # the notes, never darkened
     if cfg.get('juice'):
-        juice(out, s, t, S)
+        juice(out, s, t, S, cfg.get('misses', ()))
+    if hp is not None:
+        hearts_hud(out, s, t, S, hp)
     return out
 
 
@@ -640,6 +653,101 @@ def world_juice(out, s, cfg, t, S, lv, since_up):
                 out[Y:Y + n, X:X + n] = cream if k % 3 else red
 
 
+# --- round 20: health - heart notes, hearts in the HUD, the screen darkens in danger ---
+HEART = ['.##.##.', '#######', '#######', '.#####.', '..###..', '...#...']
+
+
+def heart_sprite(w):
+    """A healing step: a red heart stamp, keylined in cream and black, at a whole art width."""
+    w = max(6, int(round(w * 0.62)))
+    key = ('heart', w)
+    if key not in _sprites:
+        h = int(round(w * 0.9))
+        m = Mini(w + 6, h + 6)
+        m.img[...] = 0
+        x = (m.X - (w + 6) / 2) / (w / 2) * 1.15
+        y = -((m.Y - 3 - h * 0.42) / (h / 2)) * 1.15
+        core = (x * x + y * y - 1) ** 3 - x * x * y ** 3 <= 0
+        def grow(mm):
+            n = mm.copy(); n[1:] |= mm[:-1]; n[:-1] |= mm[1:]; n[:, 1:] |= mm[:, :-1]; n[:, :-1] |= mm[:, 1:]
+            return n
+        k1 = grow(core); k2 = grow(k1)
+        m.fill(k2, INK); m.fill(k1, CREAM); m.fill(core, RED)
+        m.fill(core & (np.hypot(x + 0.45, y - 0.45) < 0.22), CREAM)   # shine
+        m.fill(core & (np.abs(x) < 0.07) & (y > -0.2) & (y < 0.45), INK)  # a carved line
+        _sprites[key] = (m.img.copy(), (w + 6) / 2, h * 0.6 + 3)
+    return _sprites[key]
+
+
+def health_at(cfg, t):
+    """Health (0-10) at beat t in the demo, eased over 0.3 s after each change."""
+    tl = cfg['health_demo']
+    v = tl[0][1]
+    for (b, hp) in tl[1:]:
+        if t >= b:
+            u = _ss((t - b) * 0.5 / 0.3)
+            v = v + (hp - v) * u
+    return v
+
+
+def danger(out, s, cfg, t, S, hp):
+    """At 4 health and below the street darkens toward its edges, step by step, in lino
+    dither. The notes and the hit rings stay lit, so the eye goes where it has to."""
+    D = min(1.0, max(0.0, (4.6 - hp) / 3.6))
+    if D <= 0:
+        return
+    tb = ((t - math.floor(t)) * 0.5)
+    D *= 0.92 + 0.08 * rift(tb)                 # a heartbeat in the dark
+    H, W = s.H, s.W
+    ex = (s.X - s.vpx) / (W * 0.5)
+    ey = (s.Y - H * 0.6) / (H * 0.55)
+    edge = np.clip(np.hypot(ex, ey), 0, 1.2) / 1.2
+    L = D * (0.35 + 0.65 * edge)
+    th = BAYER[s.Yi % 4, s.Xi % 4]
+    for ln in range(3):                         # the hit rings stay lit
+        rx = lino.lane_w(s, s.hity) * 0.43 + 3
+        e = ((s.X - s.lane_x(ln, s.hity)) / rx) ** 2 + ((s.Y - s.hity) / (rx * 0.36 + 2)) ** 2
+        L = np.where(e <= 1, 0, L)
+    L = np.where(s.Y >= s.btn_top - 1, np.minimum(L, 0.4), L)   # the buttons stay easy to find
+    to_ink = th < L * 0.95
+    to_mid = (th < L * 1.6) & ~to_ink
+    ink, mid = C(INK), C('#4a3c38')
+    ink_s, mid_s = up(to_ink, S), up(to_mid, S)
+    o = out[..., :3]
+    is_ink = np.all(o == ink[:3], axis=-1)
+    out[ink_s] = ink
+    out[mid_s & ~is_ink] = mid
+
+
+def hearts_hud(out, s, t, S, hp):
+    """Five hearts under the progress bar; each holds 2 health. The last one beats when low."""
+    ink, cream, red, dim = C(INK), C(CREAM), C(RED), C('#4a3c38')
+    hpi = int(round(hp))
+    beat_p = rift(((t - math.floor(t)) * 0.5))
+    for i in range(5):
+        x0, y0 = 3 + i * 9, 9
+        fill = max(0, min(2, hpi - 2 * i))
+        big = hpi <= 4 and fill > 0 and (2 * (i + 1) >= hpi) and beat_p > 0.5
+        for yy, row in enumerate(HEART):
+            for xx, c in enumerate(row):
+                if c != '#':
+                    continue
+                for (ddx, ddy) in ((-1, 0), (1, 0), (0, -1), (0, 1)):
+                    X, Y = (x0 + xx + ddx) * S, (y0 + yy + ddy) * S
+                    if not (0 <= yy + ddy < 6 and 0 <= xx + ddx < 7 and HEART[yy + ddy][xx + ddx] == '#'):
+                        out[Y:Y + S, X:X + S] = cream if big else ink
+        for yy, row in enumerate(HEART):
+            for xx, c in enumerate(row):
+                if c != '#':
+                    continue
+                on = fill == 2 or (fill == 1 and xx < 4)
+                col = red if on else dim
+                if on and (xx, yy) == (1, 1):
+                    col = cream
+                X, Y = (x0 + xx) * S, (y0 + yy) * S
+                out[Y:Y + S, X:X + S] = col
+
+
 # --- round 17: hit juice, kept to the hit line and the buttons ---------------------------
 def _hits(t, window=0.35):
     """(seconds since hit, kind, lane) for every hit, hold end and bell in the last window."""
@@ -661,13 +769,22 @@ def _px(out, x, y, col, S, size=1):
         out[yi:yi + n, xi:xi + n] = col
 
 
-def juice(out, s, t, S):
+def juice(out, s, t, S, misses=()):
     ink, cream, red = C(INK), C(CREAM), C(RED)
     H, W = s.H, s.W
     gap = max(1, round(W * 0.02)); bw = (W - 4 * gap) / 3
     top = int(s.btn_top)
     for (th, kind, lane) in _hits(t):
         lanes = (0, 1, 2) if kind == 'bell' else (lane,)
+        if any(abs((t - th * 2) - m) < 0.01 for m in misses):
+            if th < 0.25:                      # a miss: the ring cracks in black and red
+                for ln in lanes:
+                    cx, cy = s.lane_x(ln, s.hity) * S, s.hity * S
+                    rx = lino.lane_w(s, s.hity) * 0.43 * S
+                    for q in np.linspace(-1, 1, 15):
+                        for sg in (1, -1):
+                            _px(out, cx + q * rx * 0.5, cy + sg * q * rx * 0.2, red if abs(q) > 0.6 else ink, S, 2)
+            continue
         for ln in lanes:
             cx, cy = s.lane_x(ln, s.hity) * S, s.hity * S
             rx = lino.lane_w(s, s.hity) * 0.43 * S
@@ -844,3 +961,8 @@ R18 = dict(R17, name='r18_sky', sky_beat=True)
 
 # round 19: no moon pulse, stars only on open sky, embers, window flares, level-up sparks
 R19 = dict(R18, name='r19_juice', moon_beat=False, world_juice=True)
+
+# round 20: a heart for the healing step, hearts in the HUD, the street darkens at 4 health and below
+R20 = dict(R19, name='r20_health', levels=100,
+           health_demo=[(0, 5), (2.0, 4), (4.5, 3), (7.0, 2), (10.0, 1), (13.0, 3)],
+           misses=(2.0, 4.5, 7.0, 10.0), heal_beats=(13.0,))
