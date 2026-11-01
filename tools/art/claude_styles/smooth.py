@@ -505,6 +505,116 @@ def plank(up_, w, upright=False):
     return _sprites[key]
 
 
+# --- round 28 (option D): notes and bars drawn at screen resolution -----------------------
+HI_MIPS = [int(round(14 * 1.16 ** i)) for i in range(20)]
+
+
+def _ring_of(mask, n):
+    g = mask.copy()
+    for _ in range(n):
+        h = g.copy(); h[1:] |= g[:-1]; h[:-1] |= g[1:]; h[:, 1:] |= g[:, :-1]; h[:, :-1] |= g[:, 1:]
+        g = h
+    return g
+
+
+def _shrink(mask, n):
+    g = mask.copy()
+    for _ in range(n):
+        h = g.copy(); h[1:] &= g[:-1]; h[:-1] &= g[1:]; h[:, 1:] &= g[:, :-1]; h[:, :-1] &= g[:, 1:]
+        g = h
+    return g
+
+
+def token_hi(kind, D):
+    """An upright token drawn in screen pixels: a shape per kind, a carved rim, a bold mark."""
+    D = max(10, int(D))
+    key = ('thi', kind, D)
+    if key not in _sprites:
+        t = max(2, D // 14)                       # black outline
+        rim = max(2, D // 9)
+        pad = 2 * t + 2
+        sh_h = max(2, D // 8)
+        m = Mini(D + 2 * pad, D + 2 * pad + sh_h)
+        m.img[...] = 0
+        cx, cy = (D + 2 * pad) / 2, pad + D / 2
+        r = D / 2
+        dx, dy = m.X - cx, m.Y - cy
+        if kind in ('q', 'h'):
+            shape = np.hypot(dx, dy) <= r
+        elif kind == 'e':
+            shape = (np.abs(dx) + np.abs(dy)) <= r * 1.12
+        else:
+            shape = (np.abs(dx) <= r * 0.7) & (np.abs(dy) <= r * 0.7)
+        base = pad + D
+        sh = (((m.X - cx) / (r * 0.8)) ** 2 + ((m.Y - (base + sh_h * 0.3)) / (sh_h * 0.7)) ** 2) <= 1
+        m.fill(sh & ~shape, INK)
+        m.fill(_ring_of(shape, t) & ~shape, INK)
+        inner = _shrink(shape, rim)
+        face, rimc, mark = {'q': (CREAM, RED, RED), 'e': (RED, CREAM, CREAM), 'o': (CREAM, INK, RED), 'h': (RED, CREAM, CREAM)}[kind]
+        m.fill(shape, rimc)
+        m.fill(inner, face)
+        ang = np.arctan2(dy, dx)
+        if D >= 22:                               # carved notches round the rim, like the hit rings
+            notch = shape & ~inner & (np.abs(np.sin(ang * 8)) < 0.16)
+            m.fill(notch, INK)
+        if kind == 'q':
+            m.fill(np.hypot(dx, dy) <= r * 0.28, mark)
+            if D >= 30:
+                m.fill((np.hypot(dx, dy) <= r * 0.5) & (np.hypot(dx, dy) > r * 0.5 - max(1, D // 22)), mark)
+        elif kind == 'e':
+            m.fill(_shrink(inner, max(2, D // 8)) & ~_shrink(inner, max(2, D // 8) + max(2, D // 14)), mark)
+        elif kind == 'o':
+            m.fill((np.abs(dx) <= r * 0.22) & (np.abs(dy) <= r * 0.22), mark)
+        else:
+            m.fill(np.hypot(dx, dy) <= r * 0.36, mark); m.fill(np.hypot(dx, dy) <= r * 0.15, RED)
+        if D >= 26:                               # a cut highlight, top left
+            hl = inner & (np.hypot(dx + r * 0.42, dy + r * 0.42) <= r * 0.12)
+            m.fill(hl, CREAM if face != CREAM else '#c9bba0')
+        _sprites[key] = (m.img.copy(), cx, base)
+    return _sprites[key]
+
+
+def plank_hi(up_, w):
+    """A bell plank in screen pixels: standing across the road, big outlined arrows."""
+    w = max(30, int(w))
+    th = max(12, int(round(w * 0.12)))
+    key = ('phi', up_, w)
+    if key not in _sprites:
+        t = max(2, w // 120)
+        pad = t + 2
+        m = Mini(w + 2 * pad, th + 2 * pad)
+        m.img[...] = 0
+        body = (m.X >= pad) & (m.X < w + pad) & (m.Y >= pad) & (m.Y < th + pad)
+        m.fill(_ring_of(body, t) & ~body, INK)
+        m.fill(body, RED if up_ else CREAM)
+        edge = body & ~_shrink(body, max(2, th // 8))
+        m.fill(edge, CREAM if up_ else RED)
+        col = CREAM if up_ else INK
+        a = th * 0.36
+        for lane in range(3):
+            cx = pad + (lane + 0.5) * w / 3
+            cy = pad + th / 2
+            v = (m.Y - cy) * (1 if up_ else -1)
+            tri = (v >= -a) & (v <= a) & (np.abs(m.X - cx) <= (v + a) * 1.0)
+            m.fill(_ring_of(tri, max(1, t)) & ~tri & body & ~edge, INK if up_ else CREAM)
+            m.fill(tri, col)
+        _sprites[key] = (m.img.copy(), (w + 2 * pad) / 2, th + pad)
+    return _sprites[key]
+
+
+def place_hi(dst, fn, wpx, x, y):
+    """Screen-pixel placement: the next drawn size up, scaled down by at most ~14%."""
+    wpx = max(HI_MIPS[0], wpx)
+    m = next((v for v in HI_MIPS if v >= wpx), HI_MIPS[-1])
+    spr, ox, oy = fn(m)
+    k = wpx / m
+    nw, nh = max(1, int(round(spr.shape[1] * k))), max(1, int(round(spr.shape[0] * k)))
+    key = (hash(spr.tobytes()), spr.shape, nw)
+    if key not in _scaled:
+        _scaled[key] = np.array(Image.fromarray(spr).resize((nw, nh), Image.NEAREST))
+    paste(dst, _scaled[key], x - ox * k, y - oy * k)
+
+
 # --- round 26: each note drawn clean at a few fixed sizes, then scaled smoothly ----------
 NOTE_MIPS = [7, 9, 12, 16, 21, 28, 37, 48]
 BAR_MIPS = [24, 32, 43, 57, 76, 101, 134]
@@ -601,6 +711,9 @@ def frame(cfg, t, S, nframes_fire=240, fire_i=0):
             if d < -0.01:
                 continue
             y = s.y_of_depth(max(0, d))
+            if cfg.get('look') == 'd':
+                place_hi(nl, lambda w_, u_=(lane == 'up'): plank_hi(u_, w_), (2 * s.halfw(y) - 2) * S, s.vpx * S, y * S)
+                continue
             if cfg.get('mip'):
                 place(nl, (lambda w_, u_=(lane == 'up'): clean_bar(u_, w_)) if not cfg.get('look') else
                       (lambda w_, u_=(lane == 'up'), up2=cfg['look'] != 'a': plank(u_, w_, up2)),
@@ -618,6 +731,10 @@ def frame(cfg, t, S, nframes_fire=240, fire_i=0):
                 paste(nl, up(spr, S), (s.lane_x(lane, yt) - ox) * S, (yt - oy) * S)
             y0 = s.y_of_depth(max(0, d))
             if cfg.get('mip'):
+                if cfg.get('look') == 'd':
+                    place_hi(nl, lambda w_: token_hi('h', w_), max(lw(y0) * 0.62, cfg.get('note_floor', 0)) * S,
+                             s.lane_x(lane, y0) * S, y0 * S)
+                    continue
                 fh_ = (lambda w_: clean_note('h', w_)) if not cfg.get('look') else \
                       (lambda w_: flat_bold('h', w_)) if cfg['look'] == 'a' else (lambda w_: token('h', w_))
                 kk = {'a': 1.0, 'b': 0.62, 'c': 0.62}.get(cfg.get('look'), NK)
@@ -645,6 +762,10 @@ def frame(cfg, t, S, nframes_fire=240, fire_i=0):
             paste(nl, up(spr, S), (s.lane_x(lane, y) - ox) * S, (y - oy) * S)
             continue
         if cfg.get('mip'):
+            if cfg.get('look') == 'd':
+                place_hi(nl, lambda w_, k_=k: token_hi(k_, w_), max(lw(y) * 0.62, cfg.get('note_floor', 0)) * S,
+                         s.lane_x(lane, y) * S, y * S)
+                continue
             fn = (lambda w_, k_=k: clean_note(k_, w_)) if not cfg.get('look') else \
                  (lambda w_, k_=k: flat_bold(k_, w_)) if cfg['look'] == 'a' else \
                  (lambda w_, k_=k, sh_=cfg['look'] == 'c': token(k_, w_, sh_))
@@ -1255,3 +1376,6 @@ R26 = dict(R25, name='r26_mip', mip=True)
 R27 = {'a': dict(R26, name='r27_a', look='a', note_floor=9),
        'b': dict(R26, name='r27_b', look='b', note_floor=10),
        'c': dict(R26, name='r27_c', look='c', note_floor=10)}
+
+# round 28: option D - notes and bars at screen resolution, the world stays chunky lino
+R28 = dict(R26, name='r28_d', look='d', note_floor=10)
