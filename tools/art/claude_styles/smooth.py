@@ -431,6 +431,8 @@ def frame(cfg, t, S, nframes_fire=240, fire_i=0):
         spr, ox, oy = note_sprite(k, lw(y) * 0.8)
         paste(out, up(spr, S), (s.lane_x(lane, y) - ox) * S, (y - oy) * S)
 
+    if cfg.get('sky_beat'):
+        sky_beat(out, s, cfg, t, S)
     if cfg.get('levels'):
         draw_combo(out, s, lv, since_up, beat_sec, fire_i, S)
     out[:hud_rows] = np.where(top_keep[..., 3:4] > 0, top_keep, out[:hud_rows]) if False else out[:hud_rows]
@@ -499,6 +501,54 @@ def draw_combo(out, s, lv, since_up, beat_sec, frame_i, S):
     cx, cy = s.W / 2 * S, (24 + 10.5) * S       # pulse round the number's centre
     ny = (6 + 10.5) / h                          # the number's centre within the sprite
     paste(out, big, cx - nw / 2, cy - nh * ny)
+
+
+# --- round 18: the sky keeps time -----------------------------------------------------
+def _stars(s, cfg):
+    """The scene's own stars, found by replaying its random draws."""
+    W, H = s.W, s.H
+    rng = np.random.default_rng(7)
+    out = []
+    for _ in range(int(W * H * cfg.get('stars', 0.0))):
+        x, y = rng.integers(0, W), rng.integers(int(H * 0.08), int(s.vpy * 0.85))
+        rng.random()
+        big = bool(cfg.get('cross_stars') and rng.random() < 0.3)
+        out.append((int(x), int(y), big))
+    return out
+
+
+def sky_beat(out, s, cfg, t, S):
+    ink, cream, red = C(INK), C(CREAM), C(RED)
+    beat = math.floor(t)
+    tb = (t - beat) * 0.5                      # seconds since the beat
+    p = rift(tb * 0.6)                         # Rift shape, a touch longer so it reads
+    sky = lambda x, y: 0 <= y < out.shape[0] and 0 <= x < out.shape[1] and np.all(out[y, x, :3] == ink[:3])
+    if p > 0:
+        # a quarter of the stars twinkle on each beat, taking turns
+        for i, (x, y, big) in enumerate(_stars(s, cfg)):
+            if (i * 7 + beat) % 4:
+                continue
+            arm = 1 + (2 if big else 1) * p
+            for (dx, dy) in ((1, 0), (-1, 0), (0, 1), (0, -1)):
+                for k in range(1, int(round(arm)) + 1):
+                    X, Y = int((x + dx * k) * S), int((y + dy * k) * S)
+                    if sky(X, Y):
+                        out[Y:Y + S, X:X + S] = cream if k == 1 else red
+            X, Y = x * S, y * S
+            out[Y:Y + S, X:X + S] = cream
+        # the moon: a dotted halo of light opens round it and fades
+        mx, my, mr = s.W * 0.22, s.H * 0.15, s.W * 0.06
+        for (rr, col, keep) in ((mr + 1.5 + 2 * (1 - p), cream, 0.45), (mr + 3.5 + 3 * (1 - p), red, 0.8)):
+            if p < keep:
+                continue
+            n = int(2 * math.pi * rr * 1.2)
+            for a in range(n):
+                if a % 2:
+                    continue
+                ang = a / n * 2 * math.pi
+                X, Y = int((mx + math.cos(ang) * rr) * S), int((my + math.sin(ang) * rr) * S)
+                if sky(X, Y):
+                    out[Y:Y + S, X:X + S] = col
 
 
 # --- round 17: hit juice, kept to the hit line and the buttons ---------------------------
@@ -699,3 +749,6 @@ R16 = dict(R15, name='r16_houses', wall_flat=True)
 
 # round 17: juice on hits
 R17 = dict(R16, name='r17_juice', juice=True)
+
+# round 18: stars and the moon keep time
+R18 = dict(R17, name='r18_sky', sky_beat=True)
