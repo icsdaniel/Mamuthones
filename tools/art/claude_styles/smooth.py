@@ -431,6 +431,10 @@ def frame(cfg, t, S, nframes_fire=240, fire_i=0):
             continue
         y = s.y_of_depth(max(-0.01, d))
         k = {'note_q': 'q', 'note_e': 'e', 'note_o': 'o'}[kind]
+        if any(abs((t + d / scene.SP) % scene.LOOP - sb) < 0.01 for sb in cfg.get('stomp_beats', ())):
+            spr, ox, oy = stomp_sprite(lw(y) * 0.8)      # both thumbs: a pair of feet on a black stamp
+            paste(nl, up(spr, S), (s.lane_x(lane, y) - ox) * S, (y - oy) * S)
+            continue
         if any(abs(t + d / scene.SP - hb) < 0.01 for hb in cfg.get('heal_beats', ())):
             spr, ox, oy = heart_sprite(lw(y) * 0.8)       # a healing step: a heart on a step stamp
             paste(nl, up(spr, S), (s.lane_x(lane, y) - ox) * S, (y - oy) * S)
@@ -452,7 +456,7 @@ def frame(cfg, t, S, nframes_fire=240, fire_i=0):
         danger(out, s, cfg, t, S, hp)
     over(out[:btn_rows], nl[:btn_rows], 0, 0)            # the notes, never darkened
     if cfg.get('juice'):
-        juice(out, s, t, S, cfg.get('misses', ()))
+        juice(out, s, t, S, cfg.get('misses', ()), cfg.get('stomp_beats', ()))
     if hp is not None:
         hearts_hud(out, s, t, S, hp)
     return out
@@ -690,6 +694,42 @@ def heart_sprite(w):
     return _sprites[key]
 
 
+def stomp_sprite(w):
+    """A stomp (both thumbs on one button): a black stamp with a pair of bare feet standing on it,
+    soles to the player, so it reads from far up the road like the heart."""
+    w = max(4, int(round(w)))
+    key = ('stomp_up', w)
+    if key not in _sprites:
+        hh = max(5, int(round(w * 0.66)))       # the feet's height
+        h = int(w * 0.36 + w * 0.08) + 6 + hh + 2
+        m = Mini(w + 6, h)
+        m.img[...] = 0
+        cx, cy = (w + 6) / 2, hh + 2 + w * 0.18 + 2.5
+        rx = w / 2
+        ry = max(1.5, rx * 0.36)
+        th = max(1, round(w * 0.08))
+        outer = lino.ellipse_mask(m, cx, cy + th, rx + 1, ry + 1) | lino.ellipse_mask(m, cx, cy, rx + 1, ry + 1)
+        m.fill(outer, CREAM)
+        m.fill(lino.ellipse_mask(m, cx, cy + th, rx, ry), RED)
+        m.fill(lino.ellipse_mask(m, cx, cy, rx, ry), INK)
+        # an upright cream tablet with the middle button's two feet on it, standing on the stamp
+        tw, tb = hh * 1.0, cy + ry * 0.2
+        tab = (np.abs(m.X - cx) <= tw / 2) & (m.Y >= tb - hh) & (m.Y <= tb)
+        corner = (np.abs(m.X - cx) > tw / 2 - 1.5) & (m.Y < tb - hh + 1.5)
+        tab &= ~corner
+        k1 = tab.copy(); k1[1:] |= tab[:-1]; k1[:-1] |= tab[1:]; k1[:, 1:] |= tab[:, :-1]; k1[:, :-1] |= tab[:, 1:]
+        m.fill(k1 & ~tab, INK)
+        m.fill(tab, CREAM)
+        pal = dict(lino3.W2['pal'], foot=INK, btn_face=[CREAM, CREAM])
+        fs = hh * 0.82
+        scene.draw_foot(m, {'pal': pal}, cx - fs * 0.24, tb - hh * 0.52, fs, mirror=True)
+        scene.draw_foot(m, {'pal': pal}, cx + fs * 0.24, tb - hh * 0.52, fs, mirror=False)
+        if hh >= 9:
+            m.fill(tab & (m.Y > tb - 1.5), RED)      # a red foot of the tablet
+        _sprites[key] = (m.img.copy(), cx, cy)
+    return _sprites[key]
+
+
 def health_at(cfg, t):
     """Health (0-10) at beat t in the demo, eased over 0.3 s after each change."""
     tl = cfg['health_demo']
@@ -780,12 +820,14 @@ def _px(out, x, y, col, S, size=1):
         out[yi:yi + n, xi:xi + n] = col
 
 
-def juice(out, s, t, S, misses=()):
+def juice(out, s, t, S, misses=(), stomps=()):
     ink, cream, red = C(INK), C(CREAM), C(RED)
     H, W = s.H, s.W
     gap = max(1, round(W * 0.02)); bw = (W - 4 * gap) / 3
     top = int(s.btn_top)
     for (th, kind, lane) in _hits(t):
+        if any(abs(((t - th * 2) % scene.LOOP) - sb) < 0.01 for sb in stomps) and kind != 'hold_end':
+            kind = 'stomp'
         lanes = (0, 1, 2) if kind == 'bell' else (lane,)
         if any(abs((t - th * 2) - m) < 0.01 for m in misses):
             if th < 0.25:                      # a miss: the ring cracks in black and red
@@ -819,7 +861,7 @@ def juice(out, s, t, S, misses=()):
                 for a in np.linspace(0, 2 * math.pi, 64, endpoint=False):
                     if k > 0.5 and int(a * 10) % 2:
                         continue
-                    _px(out, cx + math.cos(a) * rx * e, cy + math.sin(a) * ry * e, red if kind == 'bell' else cream, S)
+                    _px(out, cx + math.cos(a) * rx * e, cy + math.sin(a) * ry * e, red if kind in ('bell', 'stomp') else cream, S, 2 if kind == 'stomp' else 1)
             # 3. wood chips: a few red and cream flecks thrown out and falling, 0.35 s
             r = np.random.default_rng((int(round((t - th * 2) * 2)) + 1000) * 31 + ln * 7 + (kind == 'bell'))
             for c in range(6 if kind != 'hold_end' else 3):
@@ -840,7 +882,7 @@ def juice(out, s, t, S, misses=()):
                 out[y0:y1, x0:x1][bdr] = cream
     # 5. a bell lands with a one-pixel thump of the whole street, 0.06 s
     for (th, kind, lane) in _hits(t, 0.06):
-        if kind == 'bell':
+        if kind == 'bell' or any(abs(((t - th * 2) % scene.LOOP) - sb) < 0.01 for sb in stomps):
             out[S:] = out[:-S].copy()
             break
 
@@ -989,3 +1031,7 @@ R23 = dict(R22, name='r23_heart_up')
 
 # round 24: deeper danger dark, windows dark and still
 R24 = dict(R23, name='r24_dark', window_flash=False, pal=dict(R23['pal'], win_lit='#141014'))
+
+# round 25: a stomp note with a pair of feet standing on it (the middle lane, beat 7 of each bar)
+R25 = dict(R24, name='r25_stomp', stomp_beats=(7.0,), misses=(2.0, 4.5, 6.0, 10.0),
+           health_demo=[(0, 5), (2.0, 4), (4.5, 3), (6.0, 2), (10.0, 1), (13.0, 5)])
