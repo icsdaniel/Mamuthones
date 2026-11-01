@@ -2,7 +2,8 @@
 import os, sys, numpy as np
 from PIL import Image
 from pxkit import to_img, hexc
-import figure, render, woodcut
+import figure, render, woodcut, lino3
+woodcut.R3 = lino3.R3
 
 rnd = sys.argv[1]                     # e.g. R1
 OUT = sys.argv[2]

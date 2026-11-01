@@ -213,6 +213,9 @@ def draw(cfg, frame=0, nframes=1, beat_phase=0.0, fig_frame=0, cache={}):
                 if edge and cfg.get('wide_edge') and tt_ > 0.4:
                     s.put(x + (1 if i == 0 else -1) * 2, y, P['lane_glow2'])
 
+    if cfg.get('extra_fn'):
+        cfg['extra_fn'](s, frame, nframes)
+
     # ---- the Mamuthones: two rows, as in the procession -----------------------------
     figs = cfg['figures']
     for (fx, fy, fh, flip) in figs:
@@ -227,31 +230,35 @@ def draw(cfg, frame=0, nframes=1, beat_phase=0.0, fig_frame=0, cache={}):
         s.sprite(arr, fx * W - f.W / 2, fy * H - f.CH)
 
     # ---- notes ---------------------------------------------------------------------
-    draw_notes(s, cfg, beat_phase)
+    if cfg.get('notes_fn'):
+        cfg['notes_fn'](s, beat_phase)
+        cfg['rings_fn'](s)
+    else:
+        draw_notes(s, cfg, beat_phase)
 
-    # ---- hit rings -----------------------------------------------------------------
-    for lane in range(3):
-        cx = s.lane_x(lane, s.hity)
-        rx = (2 * s.hw1 / 3) * 0.42
-        ry = rx * cfg.get('note_flat', 0.36)
-        d = ((s.X - cx) / rx) ** 2 + ((s.Y - s.hity) / ry) ** 2
-        d2 = ((s.X - cx) / (rx - cfg['ring_w'])) ** 2 + ((s.Y - s.hity) / (ry - cfg['ring_w'] * 0.6)) ** 2
-        ring = (d <= 1) & (d2 > 1)
-        if lane in getattr(s, 'flash', ()):
-            s.fill((d <= 1.5) & (d2 > 1) & ((s.Xi + s.Yi) % 2 == 0), P['ring_hi'])
-            s.fill(ring, P['ring_hi'])
-        s.fill(ring & (s.Y < s.hity), P['ring_hi'])
-        s.fill(ring & (s.Y >= s.hity), P['ring'])
-        if 'ring_in' in P:
-            s.fill((d2 <= 1) & ((s.Xi + s.Yi) % 2 == 0), P['ring_in'])
-    if cfg.get('ring_cord'):
-        y = int(s.hity)
-        for x in range(0, W):
-            if not any(abs(x - s.lane_x(l, s.hity)) < (2 * s.hw1 / 3) * 0.42 for l in range(3)):
-                s.put(x, y, P['ring'])
+        # ---- hit rings -----------------------------------------------------------------
+        for lane in range(3):
+            cx = s.lane_x(lane, s.hity)
+            rx = (2 * s.hw1 / 3) * 0.42
+            ry = rx * cfg.get('note_flat', 0.36)
+            d = ((s.X - cx) / rx) ** 2 + ((s.Y - s.hity) / ry) ** 2
+            d2 = ((s.X - cx) / (rx - cfg['ring_w'])) ** 2 + ((s.Y - s.hity) / (ry - cfg['ring_w'] * 0.6)) ** 2
+            ring = (d <= 1) & (d2 > 1)
+            if lane in getattr(s, 'flash', ()):
+                s.fill((d <= 1.5) & (d2 > 1) & ((s.Xi + s.Yi) % 2 == 0), P['ring_hi'])
+                s.fill(ring, P['ring_hi'])
+            s.fill(ring & (s.Y < s.hity), P['ring_hi'])
+            s.fill(ring & (s.Y >= s.hity), P['ring'])
+            if 'ring_in' in P:
+                s.fill((d2 <= 1) & ((s.Xi + s.Yi) % 2 == 0), P['ring_in'])
+        if cfg.get('ring_cord'):
+            y = int(s.hity)
+            for x in range(0, W):
+                if not any(abs(x - s.lane_x(l, s.hity)) < (2 * s.hw1 / 3) * 0.42 for l in range(3)):
+                    s.put(x, y, P['ring'])
 
     # ---- step buttons -----------------------------------------------------------------
-    draw_buttons(s, cfg)
+    (cfg.get('buttons_fn') or (lambda s_: draw_buttons(s_, cfg)))(s)
 
     # ---- print grain: a few specks so flat ink and paper look printed --------------------
     if cfg.get('grain'):
@@ -262,7 +269,7 @@ def draw(cfg, frame=0, nframes=1, beat_phase=0.0, fig_frame=0, cache={}):
             s.img[hit] = cb
 
     # ---- HUD ------------------------------------------------------------------------------
-    draw_hud(s, cfg)
+    (cfg.get('hud_fn') or (lambda s_: draw_hud(s_, cfg)))(s)
     return s.img
 
 
