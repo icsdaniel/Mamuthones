@@ -14,7 +14,7 @@ def bob_frame(t_in_beat_ms):
 
 
 def still(cfg, phase=0.6, fig_frame=0):
-    return scene.draw(cfg, 0, 1, phase, fig_frame)
+    return cfg.get('draw', scene.draw)(cfg, 0, 1, phase, fig_frame)
 
 
 def gif(cfg, path, scale, fps=20, bpm=120, beats=8):
@@ -24,7 +24,7 @@ def gif(cfg, path, scale, fps=20, bpm=120, beats=8):
     for i in range(n):
         phase = i / per_beat
         ms = (i % per_beat) / per_beat * 60000 / bpm
-        img = scene.draw(cfg, i, n, phase, bob_frame(ms))
+        img = cfg.get('draw', scene.draw)(cfg, i, n, phase, bob_frame(ms))
         frames.append(to_img(img, scale).convert('RGB').quantize(colors=128, dither=Image.NONE))
     frames[0].save(path, save_all=True, append_images=frames[1:], duration=int(1000 / fps), loop=0, optimize=True)
 
