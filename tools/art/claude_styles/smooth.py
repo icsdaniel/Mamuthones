@@ -606,13 +606,18 @@ def place_hi(dst, fn, wpx, x, y):
     """Screen-pixel placement: the next drawn size up, scaled down by at most ~14%."""
     wpx = max(HI_MIPS[0], wpx)
     m = next((v for v in HI_MIPS if v >= wpx), HI_MIPS[-1])
-    spr, ox, oy = fn(m)
+    px = HI_PX
+    spr, ox, oy = fn(max(6, int(round(m / px))))
+    spr, ox, oy = up(spr, px) if px > 1 else spr, ox * px, oy * px
     k = wpx / m
     nw, nh = max(1, int(round(spr.shape[1] * k))), max(1, int(round(spr.shape[0] * k)))
     key = (hash(spr.tobytes()), spr.shape, nw)
     if key not in _scaled:
         _scaled[key] = np.array(Image.fromarray(spr).resize((nw, nh), Image.NEAREST))
     paste(dst, _scaled[key], x - ox * k, y - oy * k)
+
+
+HI_PX = 1          # round 30: screen pixels per note pixel (2 = a touch chunkier than full res)
 
 
 # --- round 29: the standard stamps and bars, redrawn at screen resolution -------------------
@@ -651,6 +656,53 @@ def stamp_hi(kind, W):
             m.fill(side, INK); m.fill(top, RED)
             m.fill(E(rx * 0.4, ry * 0.45), CREAM)
             m.fill(E(rx * 0.18, ry * 0.2), RED)
+        _sprites[key] = (m.img.copy(), cx, cy)
+    return _sprites[key]
+
+
+def sign_hi(kind, W):
+    """Round 30: the heart and the stomp in the high-res stamp set - stamp_hi's body with the
+    heart or the two feet standing upright on the face, outlines that scale."""
+    W = max(12, int(W))
+    key = ('sghi', kind, W)
+    if key not in _sprites:
+        t = max(2, W // 30)
+        rx = W / 2; ry = rx * 0.36; th = max(2, round(W * 0.08))
+        hh = int(round(W * (0.62 if kind == 'heart' else 0.66)))
+        pad = t + 2
+        top_room = hh + 2 * t + 2
+        m = Mini(W + 2 * pad, int(2 * ry + th) + 2 * pad + 1 + top_room)
+        m.img[...] = 0
+        cx, cy = (W + 2 * pad) / 2, top_room + pad + ry
+        E = lambda a, b, yy=cy: (((m.X - cx) / max(a, 0.5)) ** 2 + ((m.Y - yy) / max(b, 0.5)) ** 2) <= 1
+        body = E(rx, ry, cy + th) | E(rx, ry)
+        side, top = E(rx, ry, cy + th) & ~E(rx, ry), E(rx, ry)
+        if kind == 'heart':
+            m.fill(_ring_of(body, t) & ~body, INK)
+            m.fill(side, RED); m.fill(top, CREAM)
+            m.fill(E(rx * 0.3, ry * 0.32), INK)                      # the heart's shadow
+            hw, hcy = hh * 0.62, cy - hh * 0.55
+            x = (m.X - cx) / hw * 1.15
+            y = -((m.Y - hcy) / (hh * 0.5)) * 1.15
+            core = (x * x + y * y - 1) ** 3 - x * x * y ** 3 <= 0
+            m.fill(_ring_of(core, t) & ~core, INK)
+            m.fill(core, RED)
+            m.fill(core & (np.hypot(x + 0.45, y - 0.4) < 0.22), CREAM)
+        else:
+            m.fill(_ring_of(body, t) & ~body, CREAM)
+            m.fill(side, RED); m.fill(top, INK)
+            tw, tb = hh * 1.0, cy + ry * 0.2
+            r_ = max(2, hh * 0.12)
+            dx_ = np.maximum(np.abs(m.X - cx) - (tw / 2 - r_), 0)
+            dy_ = np.maximum((tb - hh + r_) - m.Y, 0)
+            tab = (np.abs(m.X - cx) <= tw / 2) & (m.Y >= tb - hh) & (m.Y <= tb) & (np.hypot(dx_, dy_) <= r_)
+            m.fill(_ring_of(tab, t) & ~tab, INK)
+            m.fill(tab, CREAM)
+            m.fill(tab & (m.Y > tb - max(2, hh * 0.1)), RED)        # the tablet's red foot
+            pal = dict(lino3.W2['pal'], foot=INK, btn_face=[CREAM, CREAM])
+            fs = hh * 0.82
+            scene.draw_foot(m, {'pal': pal}, cx - fs * 0.24, tb - hh * 0.55, fs, mirror=True)
+            scene.draw_foot(m, {'pal': pal}, cx + fs * 0.24, tb - hh * 0.55, fs, mirror=False)
         _sprites[key] = (m.img.copy(), cx, cy)
     return _sprites[key]
 
@@ -703,6 +755,8 @@ def place(dst, fn, mips, w, x, y, S):
 # --- one frame -----------------------------------------------------------------------
 def frame(cfg, t, S, nframes_fire=240, fire_i=0):
     """t = time in beats."""
+    global HI_PX
+    HI_PX = cfg.get('hi_px', 1)
     notes_now = visible_notes(t)
     flash = set()
     for (d, kind, lane, dt) in notes_now:
@@ -821,6 +875,9 @@ def frame(cfg, t, S, nframes_fire=240, fire_i=0):
         y = s.y_of_depth(max(-0.01, d))
         k = {'note_q': 'q', 'note_e': 'e', 'note_o': 'o'}[kind]
         if any(abs((t + d / scene.SP) % scene.LOOP - sb) < 0.01 for sb in cfg.get('stomp_beats', ())):
+            if cfg.get('sign_hi'):
+                place_hi(nl, lambda w_: sign_hi('stomp', w_), lw(y) * 0.8 * S, s.lane_x(lane, y) * S, y * S)
+                continue
             if cfg.get('mip'):
                 place(nl, stomp_sprite, NOTE_MIPS, lw(y) * NK, s.lane_x(lane, y), y, S)
                 continue
@@ -828,6 +885,9 @@ def frame(cfg, t, S, nframes_fire=240, fire_i=0):
             paste(nl, up(spr, S), (s.lane_x(lane, y) - ox) * S, (y - oy) * S)
             continue
         if any(abs(t + d / scene.SP - hb) < 0.01 for hb in cfg.get('heal_beats', ())):
+            if cfg.get('sign_hi'):
+                place_hi(nl, lambda w_: sign_hi('heart', w_), lw(y) * 0.8 * S, s.lane_x(lane, y) * S, y * S)
+                continue
             if cfg.get('mip'):
                 place(nl, heart_sprite, NOTE_MIPS, lw(y) * NK, s.lane_x(lane, y), y, S)
                 continue
@@ -1458,3 +1518,6 @@ R28 = dict(R26, name='r28_d', look='d', note_floor=10)
 
 # round 29: the standard (round 25) stamps and bars, drawn at screen resolution
 R29 = dict(R26, name='r29_std_hi', look='std_hi')
+
+# round 30: the heart and the two feet join the high-res stamps; all notes drawn 2 screen px per pixel
+R30 = dict(R29, name='r30_signs', sign_hi=True, hi_px=2)
