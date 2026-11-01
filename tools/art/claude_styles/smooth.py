@@ -631,7 +631,7 @@ def world_juice(out, s, cfg, t, S, lv, since_up):
                 out[Y:Y + S, X:X + S] = col
     # 2. windows catch the fire's flare: a few flash cream on each beat
     p = rift(tb * 0.8)
-    if p > 0.35:
+    if p > 0.35 and cfg.get('window_flash', True):
         ys, xs = np.nonzero(winm)
         pick = (winm[ys, xs] * 7 + beat * 3) % 4 == 0
         for (y, x) in zip(ys[pick], xs[pick]):
@@ -713,15 +713,15 @@ def danger(out, s, cfg, t, S, hp):
     ex = (s.X - s.vpx) / (W * 0.5)
     ey = (s.Y - H * 0.6) / (H * 0.55)
     edge = np.clip(np.hypot(ex, ey), 0, 1.2) / 1.2
-    L = D * (0.35 + 0.65 * edge)
+    L = D * (0.6 + 0.4 * edge)
     th = BAYER[s.Yi % 4, s.Xi % 4]
     for ln in range(3):                         # the hit rings stay lit
         rx = lino.lane_w(s, s.hity) * 0.43 + 3
         e = ((s.X - s.lane_x(ln, s.hity)) / rx) ** 2 + ((s.Y - s.hity) / (rx * 0.36 + 2)) ** 2
         L = np.where(e <= 1, 0, L)
-    L = np.where(s.Y >= s.btn_top - 1, np.minimum(L, 0.4), L)   # the buttons stay easy to find
+    L = np.where(s.Y >= s.btn_top - 1, np.minimum(L, 0.32), L)  # the buttons stay easy to find
     to_ink = th < L * 0.95
-    to_mid = (th < L * 1.6) & ~to_ink
+    to_mid = (th < L * 2.5) & ~to_ink               # at full dark nothing but the notes stays bright
     ink, mid = C(INK), C('#4a3c38')
     ink_s, mid_s = up(to_ink, S), up(to_mid, S)
     o = out[..., :3]
@@ -986,3 +986,6 @@ R22 = dict(R21, name='r22_heart_stamp')
 
 # round 23: the heart stands upright on the stamp
 R23 = dict(R22, name='r23_heart_up')
+
+# round 24: deeper danger dark, windows dark and still
+R24 = dict(R23, name='r24_dark', window_flash=False, pal=dict(R23['pal'], win_lit='#141014'))
