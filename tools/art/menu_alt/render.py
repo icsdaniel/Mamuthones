@@ -271,7 +271,7 @@ def draw_bell(cv, cx, cy, ang, L, w0, w1, light=1, tongue=0.0, band=True, clip=N
 
 
 # --------------------------------------------------------------- mamuthone
-FLEECE = [(0, 78), (10, 74), (22, 78), (34, 86), (46, 96), (58, 106), (70, 114),
+FLEECE = [(0, 104), (12, 100), (24, 100), (36, 102), (48, 106), (60, 110), (70, 114),
           (84, 120), (96, 128), (104, 142), (108, 158), (110, SHEET_Y), (0, SHEET_Y)]
 
 # hood of the brown headscarf, behind and above the mask
@@ -428,10 +428,10 @@ def draw_mamuthone(cv, t, env):
     dy = int(round(2 * env))
     # big back bell, mouth up and out over the left shoulder; lags the jump
     ang = math.radians(-116 + 8 * env)
-    draw_bell(cv, 30, 96 + dy + int(round(env)), ang, 50, 8, 16, light=1, tongue=None)
+    draw_bell(cv, 26, 116 + dy + int(round(env)), ang, 42, 7, 14, light=1, tongue=None)
     draw_fleece(cv, dy)
     # two smaller sonazzos hanging on the back, swinging against the landing
-    for bx, by, L, w0, w1, ph in [(8, 104, 16, 4, 8, 1), (26, 112, 14, 3, 7, -1)]:
+    for bx, by, L, w0, w1, ph in [(10, 124, 16, 4, 8, 1), (30, 130, 14, 3, 7, -1)]:
         a = math.radians(90 + ph * 10 * env)
         draw_bell(cv, bx, by + dy, a, L, w0, w1, light=1, tongue=-3 * env * ph)
         cv[by + dy - 3:by + dy + 1, bx] = B  # leather loop
@@ -549,11 +549,27 @@ def render(t, pressed=None):
     draw_ground(cv, t, env)
     draw_embers(cv, t, env)
     draw_mamuthone(cv, t, env)
+    if LOWRES:
+        cv[:SHEET_Y] = chunky(cv[:SHEET_Y])
     draw_logo(cv, t, env)
-    draw_text(cv, "MAMOIADA", 8, 8, G, F3)
-    draw_text(cv, "SU FOGU DE SANT'ANTONI", 8, 15, B, F3)
     draw_sheet(cv, pressed)
     return cv
+
+
+LOWRES = True
+
+
+def chunky(a, k=2):
+    """Redraw the picture on a grid twice as coarse: each 2x2 cell takes its most common ink."""
+    h, w = a.shape
+    hh, ww = h // k * k, w // k * k
+    out = a.copy()
+    blk = a[:hh, :ww].reshape(hh // k, k, ww // k, k).transpose(0, 2, 1, 3).reshape(hh // k, ww // k, k * k)
+    wgt = [1.0, 2.1, 1.6, 2.1, 1.2]        # K C R G B: thin light lines survive, lone specks drop out
+    cnt = np.stack([(blk == i).sum(-1) * wgt[i] for i in range(5)], -1)
+    mode = cnt.argmax(-1).astype(np.uint8)
+    out[:hh, :ww] = np.repeat(np.repeat(mode, k, 0), k, 1)
+    return out
 
 
 def to_image(cv):
