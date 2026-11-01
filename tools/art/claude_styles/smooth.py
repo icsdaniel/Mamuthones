@@ -41,6 +41,56 @@ def bob_offset(part, ms):
     return vals[0]
 
 
+# --- Rift of the NecroDancer bob (the game's reference: StreetBackdrop._bob, PixelFigure.pose) ---
+BOB_HOLD, BOB_BACK = 0.03, 0.10   # s: down at once on the beat, held, back up by 0.1 s
+HEAD_LAG = LOAD_LAG = 0.033       # s: head and bells come back a moment late
+DROP = 0.05                       # of figure height, as in the clip
+NOD = DROP * 3 / 8                # the head drops this much further
+LOAD_OFF = DROP * 2 / 8           # bells can be this far off their straps
+LOAD_OUT = DROP * 1 / 8           # and swing out toward the road this much while low
+
+
+def rift(t):
+    if t < 0:
+        return 0.0
+    x = min(1.0, max(0.0, (t - BOB_HOLD) / (BOB_BACK - BOB_HOLD)))
+    return 1.0 - x * x * (3 - 2 * x)
+
+
+def rift_offsets(part, t, amp=1.0):
+    """(dx, dy) in figure heights, t = seconds since the last beat."""
+    b = rift(t)
+    body = b * DROP * amp
+    if part == 'legs':
+        return 0.0, 0.0                  # feet stay planted
+    if part == 'head':
+        h = max(b, rift(t - HEAD_LAG))
+        return 0.0, max(body, h * (DROP + NOD) * amp)
+    if part in ('back_bells', 'front_bells'):
+        l = rift(t - LOAD_LAG)
+        y = body + min(LOAD_OFF, max(-LOAD_OFF, l * DROP * amp - body))
+        return max(b, l) * LOAD_OUT * amp, y
+    return 0.0, body
+
+
+def procession(s, cfg):
+    """Two files of Mamuthones along the road, far to near, each a little different."""
+    out = []
+    W, H = s.W, s.H
+    k = cfg['rows']['scale']
+    for side in (-1, 1):
+        for i, z in enumerate(cfg['rows']['z']):
+            t = 1.0 / z
+            y = s.vpy + t * (s.hity - s.vpy)
+            h = int(round(k * t))
+            w = h * 0.86
+            x = s.vpx + side * (s.halfw(y) * 1.05 + w * 0.36)
+            seed = i * 7 + (side > 0) * 3
+            out.append(dict(x=x, y=y, h=h, flip=side < 0, seed=seed, side=side,
+                            bulk=0.94 + 0.1 * ((seed * 37) % 10) / 10, amp=0.9 + 0.2 * ((seed * 53) % 10) / 10))
+    return sorted(out, key=lambda f: f['y'])
+
+
 # --- sprites ------------------------------------------------------------------------
 class Mini(Scene):
     def __init__(self, w, h):
@@ -113,26 +163,31 @@ def frame(cfg, t, S, nframes_fire=240, fire_i=0):
     bot_keep = out[btn_rows:].copy()
 
     # Mamuthones, each part moving smoothly in screen pixels, with one keyline
-    ms = (t % 1.0) * 500.0
-    for (fx, fy, fh, flip) in cfg['figures']:
-        key = ('fig', fh)
+    tsec = (t % 1.0) * 0.5                  # seconds since the beat at 120 bpm
+    figs = procession(s, cfg) if cfg.get('rows') else [
+        dict(x=fx * W, y=fy * H, h=fh, flip=flip, seed=0, side=(-1 if flip else 1), bulk=1.0, amp=1.0)
+        for (fx, fy, fh, flip) in cfg['figures']]
+    for fg in figs:
+        fh = fg['h']
+        opts = dict(cfg.get('fig_opts') or {}, seed=fg['seed'], bulk=fg['bulk'])
+        key = ('fig', fh, fg['seed'])
         if key not in _sprites:
-            f, parts = figure.build(cfg['style'], fh, cfg.get('fig_opts'))
+            f, parts = figure.build(cfg['style'], fh, opts)
             _sprites[key] = (f, figure.render_parts(f, parts, cfg['style']))
         f, rp = _sprites[key]
-        layer = np.zeros((f.CH * S + 4 * S, f.W * S, 4), np.uint8)
+        layer = np.zeros((f.CH * S + 4 * S, f.W * S + 2 * S, 4), np.uint8)
+        toward = -fg['side']                # bells swing out toward the road
         for part in figure.PART_ORDER:
-            arr = up(rp[part], S)
-            dy = bob_offset(part, ms) * fh * S
-            paste(layer, arr, 0, dy)
-        if flip:
+            dx, dy = rift_offsets(part, tsec, fg['amp'])
+            paste(layer, up(rp[part], S), S + dx * fh * S * (toward if not fg['flip'] else -toward), dy * fh * S)
+        if fg['flip']:
             layer = layer[:, ::-1]
         a = layer[..., 3] > 0
         nb = np.zeros_like(a)
         for k in range(1, S + 1):
             nb[k:] |= a[:-k]; nb[:-k] |= a[k:]; nb[:, k:] |= a[:, :-k]; nb[:, :-k] |= a[:, k:]
         layer[nb & ~a] = C(cfg.get('keyline') or CREAM)
-        paste(out, layer, (fx * W - f.W / 2) * S, (fy * H - f.CH) * S)
+        paste(out, layer, (fg['x'] - f.W / 2) * S - S, (fg['y'] - f.CH) * S)
 
     # notes, bars and ropes, far to near
     lw = lambda y: 2 * s.halfw(y) / 3
@@ -207,6 +262,44 @@ def render(cfg, path_mp4, path_gif, S=3, fps=60, beats=8, bpm=120):
     os.rmdir(tmp)
 
 
+R5 = dict(lino3.R3['r3a_w2_stamps'], name='r5_rows',
+          rows=dict(scale=100, z=[1.75, 3.0, 5.0, 8.0]))
+
 if __name__ == '__main__':
-    cfg = lino3.R3[sys.argv[1]]
+    cfg = R5 if sys.argv[1] == 'r5' else lino3.R3[sys.argv[1]]
     render(cfg, sys.argv[2], sys.argv[3], int(sys.argv[4]) if len(sys.argv) > 4 else 3)
+
+
+def closeup(path, H=96, S=5, fps=60, beats=4, slow=1.0, bpm=120):
+    """One Mamuthone, big, on the lino night ink, to judge the bob."""
+    cfg = R5
+    f, parts = figure.build(cfg['style'], H, dict(cfg['fig_opts'], seed=0))
+    rp = figure.render_parts(f, parts, cfg['style'])
+    spb = 60.0 / bpm
+    n = int(round(beats * spb * fps * slow))
+    tmp = os.environ.get('FRAMES_DIR', path + '.frames')
+    os.makedirs(tmp, exist_ok=True)
+    for i in range(n):
+        tsec = (i / fps / slow) % spb
+        layer = np.zeros((f.CH * S + 8 * S, f.W * S + 8 * S, 4), np.uint8)
+        layer[...] = C(INK)
+        fig = np.zeros_like(layer)
+        for part in figure.PART_ORDER:
+            dx, dy = rift_offsets(part, tsec)
+            paste(fig, up(rp[part], S), 4 * S + dx * H * S, 4 * S + dy * H * S)
+        a = fig[..., 3] > 0
+        nb = np.zeros_like(a)
+        for k in range(1, S + 1):
+            nb[k:] |= a[:-k]; nb[:-k] |= a[k:]; nb[:, k:] |= a[:, :-k]; nb[:, :-k] |= a[:, k:]
+        fig[nb & ~a] = C(CREAM)
+        out = np.where(fig[..., 3:4] > 0, fig, layer)
+        # a beat light under him: red for the 100 ms the bob lasts
+        if tsec < BOB_BACK:
+            out[-3 * S:, :] = C(RED)
+        h, w = out.shape[:2]
+        out = out[:h - h % 2, :w - w % 2]
+        Image.fromarray(out[..., :3]).save(f'{tmp}/{i:04d}.png')
+    subprocess.run(['ffmpeg', '-y', '-loglevel', 'error', '-framerate', str(fps), '-i', f'{tmp}/%04d.png',
+                    '-c:v', 'libx264', '-pix_fmt', 'yuv420p', '-crf', '14', path], check=True)
+    for f_ in os.listdir(tmp):
+        os.remove(os.path.join(tmp, f_))

@@ -171,6 +171,7 @@ def build(style, H, opts=None):
              back_bells=4, light=(-0.55, -0.6, 0.6))
     o.update(opts or {})
     f = Fig(style, H)
+    bulk = o.get('bulk', 1.0)
     st = style
     M = st.m
     Lv = o['light']
@@ -208,11 +209,11 @@ def build(style, H, opts=None):
     fm = fleece_mod(f, o['tuft_amp'], o['tuft'])
     # main mass: hangs to the knees in long locks
     cx, cy = f.P(0, 0.50)
-    m, nx, ny, nz = shaggy(f, L, cx, cy, f.S(0.285), f.S(0.235), 15, 0.32, seed=3, top_flat=0.3)
-    fleece_fill(f, L, m, shade_n(nx, ny, nz, Lv), M('fleece'), seed=1, amp=o['tuft_amp'], carve=o.get('carve'), clamp=o.get('fleece_clamp', 0.78))
+    m, nx, ny, nz = shaggy(f, L, cx, cy, f.S(0.285 * bulk), f.S(0.235), 15, 0.32, seed=3 + o.get('seed', 0), top_flat=0.3)
+    fleece_fill(f, L, m, shade_n(nx, ny, nz, Lv), M('fleece'), seed=1 + o.get('seed', 0), amp=o['tuft_amp'], carve=o.get('carve'), clamp=o.get('fleece_clamp', 0.78))
     cx, cy = f.P(0, 0.375)
-    m, nx, ny, nz = shaggy(f, L, cx, cy, f.S(0.30), f.S(0.11), 13, 0.35, seed=5, top_flat=0.4)
-    fleece_fill(f, L, m, shade_n(nx, ny, nz, Lv), M('fleece'), seed=2, amp=o['tuft_amp'], carve=o.get('carve'), clamp=o.get('fleece_clamp', 0.78))
+    m, nx, ny, nz = shaggy(f, L, cx, cy, f.S(0.30 * bulk), f.S(0.11), 13, 0.35, seed=5 + o.get('seed', 0), top_flat=0.4)
+    fleece_fill(f, L, m, shade_n(nx, ny, nz, Lv), M('fleece'), seed=2 + o.get('seed', 0), amp=o['tuft_amp'], carve=o.get('carve'), clamp=o.get('fleece_clamp', 0.78))
     # leather straps crossing the chest, buckle at the cross
     w = max(1.6, f.S(0.034))
     a = f.P(-0.20, 0.33); b = f.P(0.17, 0.62)
@@ -231,8 +232,8 @@ def build(style, H, opts=None):
         L.ellipse(hx, hy, f.S(0.038), f.S(0.042), M('hand'), L=Lv)
     for sx in (-1, 1):
         cx, cy = f.P(sx * 0.31, 0.52)
-        m, nx, ny, nz = shaggy(f, L, cx, cy, f.S(0.07), f.S(0.17), 7, 0.45, seed=7 + sx, top_flat=0.2)
-        fleece_fill(f, L, m, shade_n(nx, ny, nz, Lv) - 0.05, M('fleece'), seed=4 + sx, amp=o['tuft_amp'], carve=o.get('carve'), clamp=o.get('fleece_clamp', 0.78))
+        m, nx, ny, nz = shaggy(f, L, cx, cy, f.S(0.07), f.S(0.17), 7, 0.45, seed=7 + sx + o.get('seed', 0), top_flat=0.2)
+        fleece_fill(f, L, m, shade_n(nx, ny, nz, Lv) - 0.05, M('fleece'), seed=4 + sx + o.get('seed', 0), amp=o['tuft_amp'], carve=o.get('carve'), clamp=o.get('fleece_clamp', 0.78))
     parts['arms'] = L
 
     # --- head: scarf (muncadore) wrapped round the wooden mask (visera) ---
