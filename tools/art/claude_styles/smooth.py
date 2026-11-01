@@ -132,6 +132,13 @@ def level_fire(s, cfg, lv, since_up, beat_sec, frame_i, nframes):
         ink, red = C('#141014'), C('#c8352a')
         is_ink = np.all(s.img[..., :3] == ink[:3], axis=-1)
         s.img[is_ink & (val > 0.35 + th * 0.6)] = red
+    if cfg.get('fire_style'):
+        import fires
+        box = (s.vpx, H * 0.115, W * 0.2, H * 0.06) if lv == 4 else None
+        fn = fires.STYLES[cfg['fire_style']]
+        kw = dict(beat_no=int(frame_i // 30)) if cfg['fire_style'] == 'pile' else {}
+        fn(s, lv, beat_sec, since_up, frame_i / 60.0, box, **kw)
+        return
     fcx, fcy = s.vpx, by
     cw = W * fw
     chh = H * fh
@@ -429,6 +436,7 @@ R6 = dict(R5, name='r6_street', street_floor=2.0,
 
 R7 = dict(R6, name='r7_fire', levels=4, combo_scale=3, combo_word=True)
 R8 = dict(R7, name='r8_polish')
+R9 = {k: dict(R8, name='r9_' + k, fire_style=k) for k in ('tongues', 'gouges', 'pile')}
 
 if __name__ == '__main__':
     cfg = {'r5': R5, 'r6': R6, 'r7': R7, 'r8': R8}.get(sys.argv[1]) or lino3.R3[sys.argv[1]]
