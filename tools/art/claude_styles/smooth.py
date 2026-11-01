@@ -607,6 +607,13 @@ def place_hi(dst, fn, wpx, x, y):
     wpx = max(HI_MIPS[0], wpx)
     m = next((v for v in HI_MIPS if v >= wpx), HI_MIPS[-1])
     px = HI_PX
+    if px >= 4:                                   # round 35: on the world grid, drawn at its exact size
+        spr, ox, oy = fn(max(3, int(round(wpx / px))))
+        key = (hash(spr.tobytes()), spr.shape, 'lo')
+        if key not in _scaled:
+            _scaled[key] = up(spr, px)
+        paste(dst, _scaled[key], x - ox * px, y - oy * px)
+        return
     spr, ox, oy = fn(max(6, int(round(m / px))))
     spr, ox, oy = up(spr, px) if px > 1 else spr, ox * px, oy * px
     k = wpx / m
@@ -623,11 +630,11 @@ HI_PX = 1          # round 30: screen pixels per note pixel (2 = a touch chunkie
 # --- round 29: the standard stamps and bars, redrawn at screen resolution -------------------
 def stamp_hi(kind, W):
     """lino.stamp's design (same colours and marks) drawn in screen pixels, with outlines that scale."""
-    W = max(12, int(W))
+    W = max(4 if HI_PX >= 4 else 12, int(W))
     key = ('shi', kind, W, PLAIN, RED_EDGE)
     if key not in _sprites:
-        t = max(2, W // 30)
-        rx = W / 2; ry = rx * 0.36; th = max(2, round(W * 0.08))
+        t = max(1 if HI_PX >= 4 else 2, W // 30)
+        rx = W / 2; ry = rx * 0.36; th = max(1 if HI_PX >= 4 else 2, round(W * 0.08))
         pad = t + 2
         m = Mini(W + 2 * pad, int(2 * ry + th) + 2 * pad + 1)
         m.img[...] = 0
@@ -642,9 +649,9 @@ def stamp_hi(kind, W):
                 sc = RED                             # round 34: no black on the red notes at all
             m.fill(side, sc); m.fill(top, fc)
             if kind == 'o':                          # black on black: a thick cream border round the face
-                bw = max(2, int(round(W * 0.09)))
+                bw = max(1 if HI_PX >= 4 else 2, int(round(W * 0.09)))
                 m.fill(top & ~E(rx - bw, ry - bw * 0.6), CREAM)
-            elif kind in 'eh':                       # red faces get a thin cream border
+            elif kind in 'eh' and not (HI_PX >= 4 and W < 14):   # red faces get a thin cream border
                 bw = max(1, int(round(W * 0.04)))
                 m.fill(top & ~E(rx - bw, ry - bw * 0.6), CREAM)
         elif kind == 'q':
@@ -677,8 +684,8 @@ def sign_hi(kind, W):
     W = max(12, int(W))
     key = ('sghi', kind, W)
     if key not in _sprites:
-        t = max(2, W // 30)
-        rx = W / 2; ry = rx * 0.36; th = max(2, round(W * 0.08))
+        t = max(1 if HI_PX >= 4 else 2, W // 30)
+        rx = W / 2; ry = rx * 0.36; th = max(1 if HI_PX >= 4 else 2, round(W * 0.08))
         hh = int(round(W * (0.62 if kind == 'heart' else 0.66)))
         pad = t + 2
         top_room = hh + 2 * t + 2
@@ -738,11 +745,11 @@ class _Flat:
 
 def flat_hi(kind, W):
     """Round 31: the heart and the two feet printed flat on the stamp face, like the rosette."""
-    W = max(12, int(W))
+    W = max(4 if HI_PX >= 4 else 12, int(W))
     key = ('flhi', kind, W, HEART_BOLD, PLAIN)
     if key not in _sprites:
-        t = max(2, W // 30)
-        rx = W / 2; ry = rx * 0.36; th = max(2, round(W * 0.08))
+        t = max(1 if HI_PX >= 4 else 2, W // 30)
+        rx = W / 2; ry = rx * 0.36; th = max(1 if HI_PX >= 4 else 2, round(W * 0.08))
         pad = t + 2
         m = Mini(W + 2 * pad, int(2 * ry + th) + 2 * pad + 1)
         m.img[...] = 0
@@ -773,11 +780,11 @@ def flat_hi(kind, W):
             m.fill(_ring_of(body, t) & ~body, CREAM)
             m.fill(side, RED); m.fill(top, INK)
             if PLAIN:                                # same thick cream border as the off-beat note
-                bw = max(2, int(round(W * 0.06)))
+                bw = max(1 if HI_PX >= 4 else 2, int(round(W * 0.06)))
                 m.fill(top & ~E(rx - bw, ry - bw * 0.6), CREAM)
-            f = _Flat(m, cx, cy, k)
+            f = _Flat(m, cx, cy, 0.62 if HI_PX >= 4 else k)
             pal = dict(lino3.W2['pal'], foot=CREAM, btn_face=[INK, INK])
-            fs = rx * 1.6
+            fs = rx * (1.25 if HI_PX >= 4 else 1.6)
             scene.draw_foot(f, {"pal": pal}, cx - fs * 0.23, cy - fs * 0.0, fs, mirror=True)
             scene.draw_foot(f, {"pal": pal}, cx + fs * 0.23, cy - fs * 0.0, fs, mirror=False)
         _sprites[key] = (m.img.copy(), cx, cy)
@@ -786,10 +793,10 @@ def flat_hi(kind, W):
 
 def bar_hi(up_, W, TH):
     """bar_sprite's design (one chevron per lane) in screen pixels."""
-    W, TH = max(30, int(W)), max(8, int(TH))
+    W, TH = (max(30, int(W)), max(8, int(TH))) if HI_PX < 4 else (max(8, int(W)), max(3, int(TH)))
     key = ('bhi', up_, W, TH)
     if key not in _sprites:
-        t = max(2, W // 110)
+        t = max(1 if HI_PX >= 4 else 2, W // 110)
         m = Mini(W + 2 * t, TH + 2 * t)
         m.img[...] = 0
         m.fill(np.ones(m.X.shape, bool), INK)
@@ -797,7 +804,7 @@ def bar_hi(up_, W, TH):
         col = CREAM if up_ else INK
         a = TH * 0.32
         cy = (TH + 2 * t) / 2
-        sw = max(2, TH // 6)
+        sw = max(1 if HI_PX >= 4 else 2, TH // 6)
         for lane in range(3):
             cx = t + (lane + 0.5) * W / 3
             d = (m.Y - cy) * (1 if up_ else -1) + a * 0.5
@@ -916,7 +923,7 @@ def frame(cfg, t, S, nframes_fire=240, fire_i=0):
                 continue
             if cfg.get('look') == 'std_hi':
                 bw_ = (2 * s.halfw(y) - 2) * S
-                place_hi(nl, lambda w_, u_=(lane == 'up'): bar_hi(u_, w_, max(12, w_ * 0.075)), bw_, s.vpx * S, y * S)
+                place_hi(nl, lambda w_, u_=(lane == 'up'): bar_hi(u_, w_, max(5, w_ * 0.12) if HI_PX >= 4 else max(12, w_ * 0.075)), bw_, s.vpx * S, y * S)
                 continue
             if cfg.get('mip'):
                 place(nl, (lambda w_, u_=(lane == 'up'): clean_bar(u_, w_)) if not cfg.get('look') else
@@ -1621,3 +1628,6 @@ R33 = dict(R32, name='r33_plain', plain=True)
 
 # round 34: red notes outlined in cream, not black, so their edge doesn't sink into the road
 R34 = dict(R33, name='r34_red_edge', red_edge=True)
+
+# round 35: round 34's notes back on the world's pixel grid (4 screen px per pixel, like the street)
+R35 = dict(R34, name='r35_lowres', hi_px=4)
