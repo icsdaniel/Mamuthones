@@ -658,29 +658,33 @@ HEART = ['.##.##.', '#######', '#######', '.#####.', '..###..', '...#...']
 
 
 def heart_sprite(w):
-    """A healing step: the same flat stamp as a step note, with a red heart carved on its face."""
+    """A healing step: the same flat stamp as a step note, with a heart standing upright on it."""
     w = max(4, int(round(w)))
-    key = ('heart_stamp', w)
+    key = ('heart_up', w)
     if key not in _sprites:
-        h = int(w * 0.36 + w * 0.08) + 6
+        hh = max(4, int(round(w * 0.62)))       # the standing heart's height
+        h = int(w * 0.36 + w * 0.08) + 6 + hh + 2
         m = Mini(w + 6, h)
         m.img[...] = 0
-        cx, cy = (w + 6) / 2, w * 0.18 + 2.5
+        cx, cy = (w + 6) / 2, hh + 2 + w * 0.18 + 2.5
         rx = w / 2
         ry = max(1.5, rx * 0.36)
         th = max(1, round(w * 0.08))
         outer = lino.ellipse_mask(m, cx, cy + th, rx + 1, ry + 1) | lino.ellipse_mask(m, cx, cy, rx + 1, ry + 1)
         m.fill(outer, INK)
         m.fill(lino.ellipse_mask(m, cx, cy + th, rx, ry), RED)
-        top = lino.ellipse_mask(m, cx, cy, rx, ry)
-        m.fill(top, CREAM)
-        # the heart, lying on the stamp's face (a little taller than true perspective, so it reads)
-        hx, hy = rx * 0.62, ry * 0.95
-        x = (m.X - cx) / hx * 1.15
-        y = -((m.Y - cy + hy * 0.1) / hy) * 1.15
-        core = top & ((x * x + y * y - 1) ** 3 - x * x * y ** 3 <= 0)
+        m.fill(lino.ellipse_mask(m, cx, cy, rx, ry), CREAM)
+        m.fill(lino.ellipse_mask(m, cx, cy, max(1, rx * 0.3), max(0.8, ry * 0.32)), INK)   # its shadow
+        # the heart, upright, point resting on the middle of the face
+        hw = hh * 0.62
+        hcy = cy - hh * 0.55
+        x = (m.X - cx) / hw * 1.15
+        y = -((m.Y - hcy) / (hh * 0.5)) * 1.15
+        core = (x * x + y * y - 1) ** 3 - x * x * y ** 3 <= 0
+        k1 = core.copy(); k1[1:] |= core[:-1]; k1[:-1] |= core[1:]; k1[:, 1:] |= core[:, :-1]; k1[:, :-1] |= core[:, 1:]
+        m.fill(k1 & ~core, INK)
         m.fill(core, RED)
-        if w >= 14:
+        if hh >= 7:
             m.fill(core & (np.hypot(x + 0.45, y - 0.4) < 0.25), CREAM)
         _sprites[key] = (m.img.copy(), cx, cy)
     return _sprites[key]
@@ -979,3 +983,6 @@ R21 = dict(R20, name='r21_health', health_demo=[(0, 5), (2.0, 4), (4.5, 3), (7.0
 
 # round 22: the heart is carved on a step note's stamp
 R22 = dict(R21, name='r22_heart_stamp')
+
+# round 23: the heart stands upright on the stamp
+R23 = dict(R22, name='r23_heart_up')
