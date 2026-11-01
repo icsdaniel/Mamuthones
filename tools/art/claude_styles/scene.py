@@ -221,7 +221,7 @@ def draw(cfg, frame=0, nframes=1, beat_phase=0.0, fig_frame=0, cache={}):
             f, parts = figure.build(st, fh, cfg.get('fig_opts'))
             cache[key] = (f, figure.render_parts(f, parts, st))
         f, rp = cache[key]
-        arr = figure.compose(f, rp, fig_frame)
+        arr = figure.compose(f, rp, fig_frame, C(cfg['keyline']) if cfg.get('keyline') else None)
         if flip:
             arr = arr[:, ::-1]
         s.sprite(arr, fx * W - f.W / 2, fy * H - f.CH)
@@ -252,6 +252,14 @@ def draw(cfg, frame=0, nframes=1, beat_phase=0.0, fig_frame=0, cache={}):
 
     # ---- step buttons -----------------------------------------------------------------
     draw_buttons(s, cfg)
+
+    # ---- print grain: a few specks so flat ink and paper look printed --------------------
+    if cfg.get('grain'):
+        g = np.random.default_rng(11).random((H, W))
+        for a, b, amt in cfg['grain']:
+            ca, cb = C(a), C(b)
+            hit = np.all(s.img == ca, axis=-1) & (g < amt)
+            s.img[hit] = cb
 
     # ---- HUD ------------------------------------------------------------------------------
     draw_hud(s, cfg)

@@ -113,7 +113,7 @@ def shaggy(f, L, cx, cy, rx, ry, n, depth, droop=0.6, seed=1, top_flat=0.0):
     return m, np.clip(dx, -1, 1), np.clip(dy, -1, 1), nz
 
 
-def fleece_fill(f, L, m, base, mat, seed=0, amp=0.75):
+def fleece_fill(f, L, m, base, mat, seed=0, amp=0.75, carve=None, clamp=0.78):
     """Fill with a dark base, then stamp hanging locks top to bottom like shingles."""
     H = f.H
     lw = max(2, int(round(H / 20)))      # lock width in px
@@ -128,8 +128,10 @@ def fleece_fill(f, L, m, base, mat, seed=0, amp=0.75):
     n = int(len(yy) / (lw * lh * 0.35)) + 1
     pick = rng.integers(0, len(yy), n)
     cents = sorted(zip(yy[pick] - lh * 0.3, xx[pick]), key=lambda p: p[0])
+    strokes = []
     for (jy, cxp) in cents:
         ln = lh * (0.7 + 0.6 * rng.random())
+        strokes.append((jy, cxp, ln))
         for v in range(int(ln)):
             t = v / ln
             half = (lw / 2) * (1 - t) + 0.25
@@ -137,7 +139,16 @@ def fleece_fill(f, L, m, base, mat, seed=0, amp=0.75):
             for u in range(int(cxp - lw), int(cxp + lw) + 1):
                 if abs(u + 0.5 - cxp) <= half and 0 <= py < L.h and 0 <= u < L.w and m[py, u]:
                     L.light[py, u] = base[py, u] * 0.8 + amp * (0.35 - 0.8 * t) - 0.04 * (u + 0.5 - cxp)
-    L.light[m] = np.clip(L.light[m] * 0.85, 0, 0.78)
+    L.light[m] = np.clip(L.light[m] * 0.85, 0, clamp)
+    if carve is not None:  # woodcut: a gouge line down each lit lock
+        for i_s, (jy, cxp, ln) in enumerate(strokes):
+            if i_s % carve[2] if len(carve) > 2 else False:
+                continue
+            x = int(cxp)
+            for v in range(int(ln * 0.75)):
+                py = int(jy + v)
+                if 0 <= py < L.h and 0 <= x < L.w and m[py, x] and base[py, x] > carve[1]:
+                    L.light[py, x] = carve[0]
 
 
 def rim(L, dirx, diry, amt):
@@ -198,10 +209,10 @@ def build(style, H, opts=None):
     # main mass: hangs to the knees in long locks
     cx, cy = f.P(0, 0.50)
     m, nx, ny, nz = shaggy(f, L, cx, cy, f.S(0.285), f.S(0.235), 15, 0.32, seed=3, top_flat=0.3)
-    fleece_fill(f, L, m, shade_n(nx, ny, nz, Lv), M('fleece'), seed=1, amp=o['tuft_amp'])
+    fleece_fill(f, L, m, shade_n(nx, ny, nz, Lv), M('fleece'), seed=1, amp=o['tuft_amp'], carve=o.get('carve'), clamp=o.get('fleece_clamp', 0.78))
     cx, cy = f.P(0, 0.375)
     m, nx, ny, nz = shaggy(f, L, cx, cy, f.S(0.30), f.S(0.11), 13, 0.35, seed=5, top_flat=0.4)
-    fleece_fill(f, L, m, shade_n(nx, ny, nz, Lv), M('fleece'), seed=2, amp=o['tuft_amp'])
+    fleece_fill(f, L, m, shade_n(nx, ny, nz, Lv), M('fleece'), seed=2, amp=o['tuft_amp'], carve=o.get('carve'), clamp=o.get('fleece_clamp', 0.78))
     # leather straps crossing the chest, buckle at the cross
     w = max(1.6, f.S(0.034))
     a = f.P(-0.20, 0.33); b = f.P(0.17, 0.62)
@@ -221,7 +232,7 @@ def build(style, H, opts=None):
     for sx in (-1, 1):
         cx, cy = f.P(sx * 0.31, 0.52)
         m, nx, ny, nz = shaggy(f, L, cx, cy, f.S(0.07), f.S(0.17), 7, 0.45, seed=7 + sx, top_flat=0.2)
-        fleece_fill(f, L, m, shade_n(nx, ny, nz, Lv) - 0.05, M('fleece'), seed=4 + sx, amp=o['tuft_amp'])
+        fleece_fill(f, L, m, shade_n(nx, ny, nz, Lv) - 0.05, M('fleece'), seed=4 + sx, amp=o['tuft_amp'], carve=o.get('carve'), clamp=o.get('fleece_clamp', 0.78))
     parts['arms'] = L
 
     # --- head: scarf (muncadore) wrapped round the wooden mask (visera) ---
@@ -242,7 +253,7 @@ def build(style, H, opts=None):
     by = my - f.S(0.03)
     for dx in np.arange(-f.S(0.055), f.S(0.055) + 0.01, 1.0):
         for t in range(k):
-            L.px(mx + dx, by - 1 - t + abs(dx) * 0.12, M('mask'), 0.99 if dx <= 0 else 0.72)
+            L.px(mx + dx, by - 1 - t + abs(dx) * 0.12, M('mask'), 0.99 if (dx <= 0 or o.get('sym_face')) else 0.72)
     # eyes: dark holes under the brow
     ey = by + k
     for sx in (-1, 1):
@@ -259,12 +270,34 @@ def build(style, H, opts=None):
     # cheekbones catch the fire
     for sx in (-1, 1):
         for a in range(k):
-            L.px(mx + sx * f.S(0.045), ey + max(2, f.S(0.03)) + a, M('mask'), 0.97 if sx < 0 else 0.7)
+            L.px(mx + sx * f.S(0.045), ey + max(2, f.S(0.03)) + a, M('mask'), 0.97 if (sx < 0 or o.get('sym_face')) else 0.7)
     # mouth: a hard, small slit
     my2 = my + f.S(0.055)
     for dx in range(-max(1, int(f.S(0.02))), max(1, int(f.S(0.02))) + 1):
         for a in range(max(1, k - 1)):
             L.px(mx + dx, my2 + a, M('hole'), 0.0)
+    if o.get('face_lines'):  # woodcut: the face carved as paper lines on black wood
+        rx, ry = f.S(0.074), f.S(0.10)
+        mm = (((L.X - mx) / rx) ** 2 + ((L.Y - my) / ry) ** 2) <= 1
+        inner = (((L.X - mx) / (rx - 1)) ** 2 + ((L.Y - my) / (ry - 1)) ** 2) <= 1
+        L.light[mm] = 0.1
+        L.light[mm & ~inner & (L.X < mx)] = 0.6
+        u = max(1.0, f.S(0.021))  # one face unit in px
+        byy = my - 1.4 * u
+        for dx in range(-int(2.6 * u), int(2.6 * u) + 1):
+            L.px(mx + dx - 0.5, byy - (0 if abs(dx) < u else 1), M('mask'), 0.99)
+        for sx in (-1, 1):
+            L.px(mx + sx * 1.6 * u - 0.5, byy + 1.2 * u, M('hole'), 0.0)
+        for t in range(int(2.4 * u)):
+            L.px(mx - 0.5, byy + 1 + t, M('mask'), 0.99)
+        ny_ = byy + 1 + int(2.4 * u)
+        for dx in (-1, 0, 1):
+            L.px(mx - 0.5 + dx, ny_, M('mask'), 0.99)
+        for dx in range(-int(1.2 * u), int(1.2 * u) + 1):
+            L.px(mx - 0.5 + dx, ny_ + 1.4 * u, M('mask'), 0.99)
+        for sx in (-1, 1):
+            for t in range(int(1.5 * u)):
+                L.px(mx + sx * 2.4 * u - 0.5, byy + 1.6 * u + t, M('mask'), 0.99)
     parts['head'] = L
 
     # --- front bells: small sonaggias in a row on the belt ---
@@ -276,7 +309,8 @@ def build(style, H, opts=None):
         top = 0.585 + 0.025 * (i % 2 == 0)
         x0, y0 = f.P(bx, top)
         cx0, cy0 = f.P(0, 0.48)
-        L.band(cx0, cy0, x0, y0 + 1, max(1.0, f.S(0.016)), M('leather'), light=0.45)
+        if o.get('bell_cords', True):
+            L.band(cx0, cy0, x0, y0 + 1, max(1.0, f.S(0.016)), M('leather'), light=0.45)
         wt, wb, hh = f.S(0.022), f.S(0.042), f.S(0.095)
         pts = [(x0 - wt, y0), (x0 + wt, y0), (x0 + wb * 0.85, y0 + hh * 0.6),
                (x0 + wb, y0 + hh), (x0 - wb, y0 + hh), (x0 - wb * 0.85, y0 + hh * 0.6)]
@@ -309,9 +343,14 @@ def render_parts(fig, parts, style):
     return out
 
 
-def compose(fig, rendered, frame=0, extra=None):
+def compose(fig, rendered, frame=0, keyline=None):
     out = np.zeros((fig.CH, fig.W, 4), np.uint8)
     for k in PART_ORDER:
         dy = int(round(BOB[k][frame] * fig.H))
         over(out, rendered[k], 0, dy)
+    if keyline is not None:  # one outer line round the whole figure, like a printed keyline
+        a = out[..., 3] > 0
+        nb = np.zeros_like(a)
+        nb[1:] |= a[:-1]; nb[:-1] |= a[1:]; nb[:, 1:] |= a[:, :-1]; nb[:, :-1] |= a[:, 1:]
+        out[nb & ~a] = keyline
     return out
