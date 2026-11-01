@@ -433,6 +433,8 @@ def frame(cfg, t, S, nframes_fire=240, fire_i=0):
 
     if cfg.get('sky_beat'):
         sky_beat(out, s, cfg, t, S)
+    if cfg.get('world_juice'):
+        world_juice(out, s, cfg, t, S, lv, since_up)
     if cfg.get('levels'):
         draw_combo(out, s, lv, since_up, beat_sec, fire_i, S)
     out[:hud_rows] = np.where(top_keep[..., 3:4] > 0, top_keep, out[:hud_rows]) if False else out[:hud_rows]
@@ -517,17 +519,49 @@ def _stars(s, cfg):
     return out
 
 
+_masks = {}
+
+
+def masks(cfg):
+    """Art-pixel masks of open night sky and of the lit house windows, from one probe render."""
+    key = cfg['name']
+    if key not in _masks:
+        SKY, WIN = '#010203', '#020304'
+        pal = dict(cfg['pal'], sky=[SKY, SKY], sky_line=SKY, star=SKY, star2=SKY, win_lit=WIN)
+        img = scene.draw(dict(cfg, pal=pal, figures=[], fire=False, extra_fn=None, levels=None,
+                              notes_fn=lambda s_, p_: None, rings_fn=lambda s_: None), 0, 1, 0, 0)
+        sky = np.all(img[..., :3] == C(SKY)[:3], axis=-1)
+        win = np.all(img[..., :3] == C(WIN)[:3], axis=-1)
+        lab = np.zeros(win.shape, int)         # number each window, so whole windows flash
+        n = 0
+        for y0, x0 in zip(*np.nonzero(win)):
+            if lab[y0, x0]:
+                continue
+            n += 1
+            stack = [(y0, x0)]
+            while stack:
+                y, x = stack.pop()
+                if 0 <= y < win.shape[0] and 0 <= x < win.shape[1] and win[y, x] and not lab[y, x]:
+                    lab[y, x] = n
+                    stack += [(y + 1, x), (y - 1, x), (y, x + 1), (y, x - 1)]
+        _masks[key] = (sky, lab)
+    return _masks[key]
+
+
 def sky_beat(out, s, cfg, t, S):
     ink, cream, red = C(INK), C(CREAM), C(RED)
     beat = math.floor(t)
     tb = (t - beat) * 0.5                      # seconds since the beat
     p = rift(tb * 0.6)                         # Rift shape, a touch longer so it reads
-    sky = lambda x, y: 0 <= y < out.shape[0] and 0 <= x < out.shape[1] and np.all(out[y, x, :3] == ink[:3])
+    skym, winm = masks(cfg)
+    def sky(X, Y):
+        x, y = X // S, Y // S
+        return 0 <= y < s.H and 0 <= x < s.W and skym[y, x] and np.all(out[Y, X, :3] == ink[:3])
     if p > 0:
         # a quarter of the stars twinkle on each beat, taking turns
         for i, (x, y, big) in enumerate(_stars(s, cfg)):
-            if (i * 7 + beat) % 4:
-                continue
+            if (i * 7 + beat) % 4 or not skym[y, x]:
+                continue                       # hidden stars (behind a house) stay hidden
             arm = 1 + (2 if big else 1) * p
             for (dx, dy) in ((1, 0), (-1, 0), (0, 1), (0, -1)):
                 for k in range(1, int(round(arm)) + 1):
@@ -537,6 +571,8 @@ def sky_beat(out, s, cfg, t, S):
             X, Y = x * S, y * S
             out[Y:Y + S, X:X + S] = cream
         # the moon: a dotted halo of light opens round it and fades
+        if not cfg.get('moon_beat', True):
+            return
         mx, my, mr = s.W * 0.22, s.H * 0.15, s.W * 0.06
         for (rr, col, keep) in ((mr + 1.5 + 2 * (1 - p), cream, 0.45), (mr + 3.5 + 3 * (1 - p), red, 0.8)):
             if p < keep:
@@ -549,6 +585,59 @@ def sky_beat(out, s, cfg, t, S):
                 X, Y = int((mx + math.cos(ang) * rr) * S), int((my + math.sin(ang) * rr) * S)
                 if sky(X, Y):
                     out[Y:Y + S, X:X + S] = col
+
+
+# --- round 19: more juice in the world ---------------------------------------------------
+def world_juice(out, s, cfg, t, S, lv, since_up):
+    ink, cream, red = C(INK), C(CREAM), C(RED)
+    skym, winm = masks(cfg)
+    beat = math.floor(t)
+    tb = (t - beat) * 0.5
+    # 1. embers: thrown up by the fire on each beat, drifting up and out, more at higher combo
+    by = s.vpy + s.H * 0.012
+    for b in range(beat - 5, beat + 1):
+        age = (t - b) * 0.5                    # seconds since that beat
+        if age < 0:
+            continue
+        r = np.random.default_rng(b * 13 + 5000)
+        for k in range(2 * lv):
+            life = 1.4 + r.random() * 1.2
+            if age > life:
+                continue
+            vx = (r.random() - 0.5) * 30
+            vy = 26 + r.random() * 22
+            x = s.vpx + vx * age + 4 * math.sin(age * 3 + k)
+            y = by - 12 - vy * age + 4 * age * age
+            if y < s.H * 0.05 or y > s.vpy:
+                continue
+            col = cream if age < life * 0.35 else red
+            if age > life * 0.75 and (int(t * 30) + k) % 2:
+                continue                       # flickers out
+            X, Y = int(x * S), int(y * S)
+            if 0 <= X < out.shape[1] - S and 0 <= Y < out.shape[0] - S:
+                out[Y:Y + S, X:X + S] = col
+    # 2. windows catch the fire's flare: a few flash cream on each beat
+    p = rift(tb * 0.8)
+    if p > 0.35:
+        ys, xs = np.nonzero(winm)
+        pick = (winm[ys, xs] * 7 + beat * 3) % 4 == 0
+        for (y, x) in zip(ys[pick], xs[pick]):
+            out[y * S:(y + 1) * S, x * S:(x + 1) * S] = cream
+    # 3. on a level-up, sparks burst out of the combo and fall away
+    if since_up is not None and since_up < 0.5:
+        cx, cy = s.W / 2, 24 + 10.5
+        r = np.random.default_rng(int(t // cfg['levels']) + 77)
+        for k in range(22):
+            ang = k / 22 * 2 * math.pi + r.random() * 0.2
+            sp = 40 + r.random() * 30
+            x = cx + math.cos(ang) * sp * since_up * 1.3
+            y = cy + math.sin(ang) * sp * since_up * 0.8 + 60 * since_up * since_up
+            if since_up > 0.35 and k % 2:
+                continue
+            X, Y = int(x * S), int(y * S)
+            n = 2 * S if since_up < 0.15 else S
+            if 0 <= X < out.shape[1] - n and 0 <= Y < out.shape[0] - n:
+                out[Y:Y + n, X:X + n] = cream if k % 3 else red
 
 
 # --- round 17: hit juice, kept to the hit line and the buttons ---------------------------
@@ -752,3 +841,6 @@ R17 = dict(R16, name='r17_juice', juice=True)
 
 # round 18: stars and the moon keep time
 R18 = dict(R17, name='r18_sky', sky_beat=True)
+
+# round 19: no moon pulse, stars only on open sky, embers, window flares, level-up sparks
+R19 = dict(R18, name='r19_juice', moon_beat=False, world_juice=True)
