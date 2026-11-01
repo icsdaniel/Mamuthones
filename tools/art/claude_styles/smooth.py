@@ -115,25 +115,23 @@ def level_fire(s, cfg, lv, since_up, beat_sec, frame_i, nframes):
     W, H = s.W, s.H
     P = cfg['pal']
     p = pulse(beat_sec)
-    burst = 0.0 if since_up is None else max(0.0, 1.0 - since_up / 0.6)
+    burst = 0.0 if since_up is None else max(0.0, 1.0 - since_up / 0.35)
+    burst = burst * burst                # quick in, soft out
     fw, fh = FIRE[lv]
     by = s.vpy + H * 0.012
     if lv == 4:                          # high into the sky, round the combo
-        fh = (by - H * 0.035) / H
-    fh *= 1.0 + 0.16 * p + 0.35 * burst
-    fw *= 1.0 + 0.08 * p + 0.2 * burst
-    # strong light on a level-up: a ring of light spreading from the fire
+        fh = (by - H * 0.045) / H
+    fh *= 1.0 + 0.16 * p + (0.2 if lv < 4 else 0.04) * burst
+    fw *= 1.0 + 0.08 * p + 0.12 * burst
+    # a level-up warms the street round the fire: a soft red glow, no white flash
     if burst > 0:
-        R = (0.12 + (1 - burst) * 0.9) * H
-        d = np.hypot(s.X - s.vpx, (s.Y - by) * 0.8)
-        val = np.clip(1 - d / R, 0, 1) * burst * 1.6
+        R = (0.1 + (1 - burst) * 0.22) * H
+        d = np.hypot(s.X - s.vpx, (s.Y - by) * 0.9)
+        val = np.clip(1 - d / R, 0, 1) * burst
         th = BAYER[s.Yi % 4, s.Xi % 4]
-        ink, red, cream = C('#141014'), C('#c8352a'), C('#efe6d2')
+        ink, red = C('#141014'), C('#c8352a')
         is_ink = np.all(s.img[..., :3] == ink[:3], axis=-1)
-        is_red = np.all(s.img[..., :3] == red[:3], axis=-1)
-        s.img[is_ink & (val > 0.25 + th * 0.5)] = red
-        s.img[is_ink & (val > 0.75 + th * 0.4)] = cream
-        s.img[is_red & (val > 0.45 + th * 0.4)] = cream
+        s.img[is_ink & (val > 0.35 + th * 0.6)] = red
     fcx, fcy = s.vpx, by
     cw = W * fw
     chh = H * fh
@@ -144,11 +142,14 @@ def level_fire(s, cfg, lv, since_up, beat_sec, frame_i, nframes):
     ph = frame_i / max(1, nframes) * 2 * math.pi * 6
     ramp = P['fire']
     y0, y1 = int(by - chh * 1.15), int(by) + 1
+    if lv == 4:
+        y0 = int(H * 0.025)              # the tip stays under the progress bar
     for y in range(max(0, y0), y1):
         v = (by - (y + 0.5)) / chh
         if v < 0:
             continue
-        for x in range(int(fcx - cw * 1.4), int(fcx + cw * 1.4) + 1):
+        reach = cw * 1.4 + (box[2] * 1.3 if box else 0)
+        for x in range(int(fcx - reach), int(fcx + reach) + 1):
             u = (x + 0.5 - fcx) / cw
             if box is not None:          # the column splits in two and climbs round the text
                 bx, byy, bw, bh = box
@@ -156,7 +157,7 @@ def level_fire(s, cfg, lv, since_up, beat_sec, frame_i, nframes):
                 dd = abs(x + 0.5 - fcx) - sp
                 u = (dd if dd > 0 else -dd * 2.5) / cw
             wob = 0.18 * math.sin(v * 7 - ph * 2 + u * 3) + 0.12 * math.sin(v * 13 + ph * 3)
-            width = max(0.0, 1 - v) ** (0.8 if lv < 4 else 0.3) * (0.85 + 0.25 * math.sin(u * 9 + ph * 2 + v * 5))
+            width = max(0.0, 1 - v) ** (0.8 if lv < 4 else 0.5) * (0.85 + 0.25 * math.sin(u * 9 + ph * 2 + v * 5))
             val = width - abs(u + wob * v)
             val += (0.25 if lv < 4 else 0.42) * math.sin(u * 11 + ph * 4 - v * 3) * v
             if box is not None:
@@ -178,7 +179,7 @@ def level_fire(s, cfg, lv, since_up, beat_sec, frame_i, nframes):
             y = by - 1 + (i - W * 0.09) * 0.21 * k
             s.put(x, y, P['log']); s.put(x, y + 1, P['log2'])
     r = np.random.default_rng(frame_i + 3)
-    for _ in range(4 + 4 * lv + int(20 * burst)):
+    for _ in range(4 + 4 * lv + int(10 * burst)):
         s.put(fcx + r.normal(0, cw * 0.7), by - chh * (0.9 + r.random() * 0.6), ramp[-1] if r.random() < 0.5 else ramp[-2])
 
 
@@ -245,7 +246,7 @@ def frame(cfg, t, S, nframes_fire=240, fire_i=0):
     base_cfg = dict(cfg, figures=[], notes_fn=lambda s, p: None, rings_fn=rings)
     if cfg.get('levels'):
         lv, since_up, beat_sec = level_at(cfg, t)
-        base_cfg.update(fire=False, combo_text=f'{lv}x', no_mult=True,
+        base_cfg.update(fire=False, combo_text='', combo_word=False, no_mult=True,
                         extra_fn=lambda s_, f_, n_: level_fire(s_, cfg, lv, since_up, beat_sec, f_, n_))
     base = scene.draw(base_cfg, fire_i, nframes_fire, t, 0)
     s = Scene(cfg)                       # geometry only
@@ -312,10 +313,72 @@ def frame(cfg, t, S, nframes_fire=240, fire_i=0):
         spr, ox, oy = note_sprite(k, lw(y) * 0.8)
         paste(out, up(spr, S), (s.lane_x(lane, y) - ox) * S, (y - oy) * S)
 
+    if cfg.get('levels'):
+        draw_combo(out, s, lv, since_up, beat_sec, fire_i, S)
     out[:hud_rows] = np.where(top_keep[..., 3:4] > 0, top_keep, out[:hud_rows]) if False else out[:hud_rows]
     # the judgement plate and buttons always sit above the notes
     out[btn_rows:] = bot_keep
     return out
+
+
+def _dilate(m, r):
+    o = m.copy()
+    for _ in range(r):
+        n = o.copy()
+        n[1:] |= o[:-1]; n[:-1] |= o[1:]; n[:, 1:] |= o[:, :-1]; n[:, :-1] |= o[:, 1:]
+        o = n
+    return o
+
+
+def combo_sprite(lv, flick):
+    """The combo number and word, in art pixels. At 4x the number burns:
+    a red rim, a dithered red glow and small tongues licking off its top."""
+    from pxkit import text, text_w
+    num = f'{lv}x'
+    M = 6
+    w = max(text_w(num, 3), text_w('COMBO', 1)) + 2 * M + 3
+    h = 21 + 3 + 2 + 7 + 1 + 2 * M
+    img = np.zeros((h, w, 4), np.uint8)
+    nx = (w - text_w(num, 3)) // 2
+    hot = lv == 4
+    text(img, num, nx, M, CREAM, RED if hot else INK, 3)
+    text(img, 'COMBO', (w - text_w('COMBO', 1)) // 2, M + 21 + 3 + 2, CREAM if hot else '#c9bba0', INK, 1)
+    if hot:
+        a = img[..., 3] > 0
+        num_m = a.copy(); num_m[M + 24:] = False
+        r1 = _dilate(num_m, 1) & ~a
+        r3 = _dilate(num_m, 3) & ~_dilate(num_m, 1) & ~a
+        Y, X = np.mgrid[0:h, 0:w]
+        th = BAYER[Y % 4, X % 4]
+        img[r1] = C(RED)
+        img[r3 & (th > 0.84 + 0.08 * math.sin(flick))] = C(RED)
+        # tongues of flame off the top of each stroke
+        for x in range(w):
+            col = np.nonzero(num_m[:, x])[0]
+            if not len(col):
+                continue
+            top = col[0]
+            L = 1.6 + 2.2 * math.sin(x * 1.37 + flick * 2.1) + 1.2 * math.sin(x * 0.53 - flick * 3.3)
+            for k in range(1, int(max(0, L)) + 1):
+                yy = top - k
+                if 0 <= yy < h and not a[yy, x]:
+                    img[yy, x] = C(CREAM) if (k == 1 and L > 3.2) else C(RED)
+    return img
+
+
+def draw_combo(out, s, lv, since_up, beat_sec, frame_i, S):
+    """The combo pulses on the beat with the Mamuthones' Rift shape, and pops on a level-up."""
+    spr = combo_sprite(lv, frame_i * 0.21)
+    k = 1.0 + 0.12 * rift(beat_sec)
+    if since_up is not None and since_up < 0.3:
+        u = since_up / 0.3
+        k += 0.3 * (1 - u) ** 2
+    h, w = spr.shape[:2]
+    nw, nh = max(1, int(round(w * S * k))), max(1, int(round(h * S * k)))
+    big = np.array(Image.fromarray(spr).resize((nw, nh), Image.NEAREST))
+    cx, cy = s.W / 2 * S, (24 + 10.5) * S       # pulse round the number's centre
+    ny = (6 + 10.5) / h                          # the number's centre within the sprite
+    paste(out, big, cx - nw / 2, cy - nh * ny)
 
 
 def draw_rope(out, s, lane, d, dt, S):
@@ -365,9 +428,10 @@ R6 = dict(R5, name='r6_street', street_floor=2.0,
           rows=dict(scale=100, z=[1.75, 3.0, 5.0, 8.0], out=1.25))
 
 R7 = dict(R6, name='r7_fire', levels=4, combo_scale=3, combo_word=True)
+R8 = dict(R7, name='r8_polish')
 
 if __name__ == '__main__':
-    cfg = {'r5': R5, 'r6': R6, 'r7': R7}.get(sys.argv[1]) or lino3.R3[sys.argv[1]]
+    cfg = {'r5': R5, 'r6': R6, 'r7': R7, 'r8': R8}.get(sys.argv[1]) or lino3.R3[sys.argv[1]]
     render(cfg, sys.argv[2], sys.argv[3], int(sys.argv[4]) if len(sys.argv) > 4 else 3)
 
 
