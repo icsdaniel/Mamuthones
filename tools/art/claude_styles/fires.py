@@ -150,8 +150,6 @@ def pile(s, lv, beat_sec, since_up, tt, box, beat_no=0):
     ph_ = H * 0.045                       # the log cone is the same at every level
     pw = W * 0.095
     p = bob(beat_sec)
-    # a dark hearth under the pile, so the lane lines stop short of the logs
-    s.fill((((s.X - cx) / (pw * 1.9)) ** 2 + ((s.Y - by + 3) / 8.0) ** 2 <= 1) & (s.Y <= by + 3), INK)
     # flames behind the logs, then the logs, then flames in the gaps
     n = {1: 3, 2: 3, 3: 5, 4: 7}[lv]
     for i in sorted(range(n), key=lambda i: -abs(i - (n - 1) / 2)):

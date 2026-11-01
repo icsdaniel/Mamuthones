@@ -615,3 +615,4 @@ R12 = dict(R10b, name='r12_walk', rows=dict(walk=True, scale=90, z0=2.4, ratio=1
 # round 13: a heavy hop that rings the bells on the beat
 R13 = dict(R12, name='r13_hop', heavy=True, rows=dict(R12['rows'], hop=True))
 R14 = dict(R13, name='r14_exit')
+R15 = dict(R14, name='r15_square', wall_u0=0.3)

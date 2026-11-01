@@ -126,7 +126,7 @@ def draw(cfg, frame=0, nframes=1, beat_phase=0.0, fig_frame=0, cache={}):
         base_edge = s.vpy + t_edge * (s.hity - s.vpy)
     for side in (-1, 1):
         u = (s.X - s.vpx) * side / s.vpx  # 0 at VP, 1 at screen edge
-        valid = u > 0.02
+        valid = u > cfg.get('wall_u0', 0.02)   # houses stop short of the square at the end
         uu = np.where(valid, u, 1)
         base_y = s.vpy + (base_edge - s.vpy) * uu
         top_y = (s.vpy - H * 0.02) + (top_edge - (s.vpy - H * 0.02)) * uu
