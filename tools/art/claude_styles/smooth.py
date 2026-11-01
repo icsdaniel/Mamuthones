@@ -73,7 +73,42 @@ def rift_offsets(part, t, amp=1.0):
     return 0.0, body
 
 
-def procession(s, cfg):
+def procession_walk(s, cfg, t):
+    """The files walk toward the fire: one step on each bob, taken in the drop.
+    Rows are evenly spaced in log depth; a new Mamuthone walks in past the
+    screen edge at the front, and the far ones shrink into the dark."""
+    R = cfg['rows']
+    z0, ratio, step = R['z0'], R['ratio'], R['step']        # step = rows per beat
+    beat = math.floor(t)
+    u = min(1.0, max(0.0, ((t - beat) * 0.5) / 0.12))       # the step, inside the drop
+    u = u * u * (3 - 2 * u)
+    pos = (beat + u) * step                                  # rows walked so far
+    out = []
+    W, H = s.W, s.H
+    n = R['n']
+    for side in (-1, 1):
+        for j in range(n + 2):
+            r = j - (pos % 1.0)                              # row index, moving away
+            ident = j + math.floor(pos)                      # who this is
+            z = z0 * ratio ** r
+            if z > R['zmax'] or z < 1.3:
+                continue
+            tt = 1.0 / z
+            y = s.vpy + tt * (s.hity - s.vpy)
+            h = int(round(R['scale'] * tt))
+            w = h * 0.86
+            x = s.vpx + side * (s.halfw(y) * R.get('out', 1.05) + w * 0.36)
+            if z >= z0:                                      # on screen once in place
+                x = s.vpx + side * min(abs(x - s.vpx), s.vpx - w * 0.5 - 1)
+            seed = (ident * 7 + (side > 0) * 3) % 29
+            out.append(dict(x=x, y=y, h=h, flip=side < 0, seed=seed, side=side, z=z,
+                            bulk=0.94 + 0.1 * ((seed * 37) % 10) / 10, amp=0.9 + 0.2 * ((seed * 53) % 10) / 10))
+    return sorted(out, key=lambda f: f['y'])
+
+
+def procession(s, cfg, t=0.0):
+    if cfg['rows'].get('walk'):
+        return procession_walk(s, cfg, t)
     """Two files of Mamuthones along the road, far to near, each a little different."""
     out = []
     W, H = s.W, s.H
@@ -269,7 +304,7 @@ def frame(cfg, t, S, nframes_fire=240, fire_i=0):
 
     # Mamuthones, each part moving smoothly in screen pixels, with one keyline
     tsec = (t % 1.0) * 0.5                  # seconds since the beat at 120 bpm
-    figs = procession(s, cfg) if cfg.get('rows') else [
+    figs = procession(s, cfg, t) if cfg.get('rows') else [
         dict(x=fx * W, y=fy * H, h=fh, flip=flip, seed=0, side=(-1 if flip else 1), bulk=1.0, amp=1.0)
         for (fx, fy, fh, flip) in cfg['figures']]
     for fg in figs:
@@ -501,3 +536,7 @@ R11_B = {
     'b_b': dict(R11_M['m_a'], pal=_night),
     'b_c': dict(R11_M['m_a'], pal=_stone, house_h=(0.45, 0.25), roof_k=1.7, roof_tiles=True),
 }
+
+# round 12: today's houses and four-a-side files, back rows black, walking a step per bob
+R12 = dict(R10b, name='r12_walk', rows=dict(walk=True, scale=90, z0=2.4, ratio=1.42, step=1 / 3,
+                                            n=5, zmax=11.0, out=1.1, sil_z=4.0))
