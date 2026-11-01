@@ -707,6 +707,9 @@ def sign_hi(kind, W):
     return _sprites[key]
 
 
+HEART_BOLD = False
+
+
 class _Flat:
     """A view of a canvas squashed onto a stamp face, so scene drawers print flat on it."""
     def __init__(self, m, cx, cy, k):
@@ -719,7 +722,7 @@ class _Flat:
 def flat_hi(kind, W):
     """Round 31: the heart and the two feet printed flat on the stamp face, like the rosette."""
     W = max(12, int(W))
-    key = ('flhi', kind, W)
+    key = ('flhi', kind, W, HEART_BOLD)
     if key not in _sprites:
         t = max(2, W // 30)
         rx = W / 2; ry = rx * 0.36; th = max(2, round(W * 0.08))
@@ -734,12 +737,21 @@ def flat_hi(kind, W):
         if kind == 'heart':
             m.fill(_ring_of(body, t) & ~body, INK)
             m.fill(side, RED); m.fill(top, CREAM)
-            hs = rx * 0.95                                   # heart size on the face, before squashing
-            x = (m.X - cx) / (hs * 0.62) * 1.15
-            y = -((m.Y - cy) / k + hs * 0.06) / (hs * 0.5) * 1.15
-            core = ((x * x + y * y - 1) ** 3 - x * x * y ** 3 <= 0) & top
-            m.fill(_ring_of(core, max(1, t // 2)) & ~core & top, INK)
-            m.fill(core, RED)
+            if HEART_BOLD:                                   # round 32: less squashed, bigger, bold edge
+                kk = 0.62
+                hs = ry * 2 / kk * 0.84
+                x = (m.X - cx) / (hs * 0.62) * 1.15
+                y = -((m.Y - cy) / kk - hs * 0.04) / (hs * 0.5) * 1.15
+                core = ((x * x + y * y - 1) ** 3 - x * x * y ** 3 <= 0)
+                m.fill(_ring_of(core, t) & ~core, INK)
+                m.fill(core, RED)
+            else:
+                hs = rx * 0.95                               # heart size on the face, before squashing
+                x = (m.X - cx) / (hs * 0.62) * 1.15
+                y = -((m.Y - cy) / k + hs * 0.06) / (hs * 0.5) * 1.15
+                core = ((x * x + y * y - 1) ** 3 - x * x * y ** 3 <= 0) & top
+                m.fill(_ring_of(core, max(1, t // 2)) & ~core & top, INK)
+                m.fill(core, RED)
         else:
             m.fill(_ring_of(body, t) & ~body, CREAM)
             m.fill(side, RED); m.fill(top, INK)
@@ -800,8 +812,11 @@ def place(dst, fn, mips, w, x, y, S):
 # --- one frame -----------------------------------------------------------------------
 def frame(cfg, t, S, nframes_fire=240, fire_i=0):
     """t = time in beats."""
-    global HI_PX
+    global HI_PX, ROPE_FLAT
     HI_PX = cfg.get('hi_px', 1)
+    ROPE_FLAT = cfg.get('rope_flat', False)
+    global HEART_BOLD
+    HEART_BOLD = cfg.get('heart_bold', False)
     notes_now = visible_notes(t)
     flash = set()
     for (d, kind, lane, dt) in notes_now:
@@ -1401,6 +1416,9 @@ def juice(out, s, t, S, misses=(), stomps=()):
             break
 
 
+ROPE_FLAT = False
+
+
 def draw_rope(out, s, lane, d, dt, S):
     """The hold rope, in screen pixels; its twist moves with the rope."""
     y0 = s.y_of_depth(max(0, d)) * S
@@ -1416,6 +1434,8 @@ def draw_rope(out, s, lane, d, dt, S):
             u = (xs - cx) / max(rw, 1)
             if abs(u) > 1:
                 out[ys, xs] = ink
+            elif ROPE_FLAT:
+                out[ys, xs] = cream                  # round 32: one colour, no moving twist
             else:
                 tw = int((xs + ys - (0 if d < 0 else 0)) // (2 * S)) % 2
                 out[ys, xs] = red if tw else cream
@@ -1569,3 +1589,6 @@ R30 = dict(R29, name='r30_signs', sign_hi=True, hi_px=2)
 
 # round 31: the heart and the feet printed flat on the stamps
 R31 = dict(R30, name='r31_flat', sign_hi='flat')
+
+# round 32: a still, one-colour hold rope and a bolder flat heart
+R32 = dict(R31, name='r32_rope', rope_flat=True, heart_bold=True)
