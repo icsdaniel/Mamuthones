@@ -744,6 +744,9 @@ FLATN = False
 SIMPLE = False
 
 
+BALLS = False
+
+
 class _Flat:
     """A view of a canvas squashed onto a stamp face, so scene drawers print flat on it."""
     def __init__(self, m, cx, cy, k):
@@ -756,7 +759,7 @@ class _Flat:
 def flat_hi(kind, W):
     """Round 31: the heart and the two feet printed flat on the stamp face, like the rosette."""
     W = max(4 if HI_PX >= 4 else 12, int(W))
-    key = ('flhi', kind, W, HEART_BOLD, PLAIN, FLATN, SIMPLE)
+    key = ('flhi', kind, W, HEART_BOLD, PLAIN, FLATN, SIMPLE, BALLS)
     if key not in _sprites:
         t = max(1 if HI_PX >= 4 else 2, W // 30)
         rx = W / 2; ry = rx * 0.36; th = max(1 if HI_PX >= 4 else 2, round(W * 0.08))
@@ -773,11 +776,19 @@ def flat_hi(kind, W):
         if SIMPLE and kind == 'heart':               # round 37: one red heart, nothing else
             m.fill(_ring_of(body, t) & ~body, INK)
             m.fill(side, RED); m.fill(top, CREAM)
-            kk = 0.62
-            hs = ry * 2 / kk * 0.86
-            x = (m.X - cx) / (hs * 0.62) * 1.15
-            y = -((m.Y - cy) / kk - hs * 0.04) / (hs * 0.5) * 1.15
-            m.fill(((x * x + y * y - 1) ** 3 - x * x * y ** 3 <= 0), RED)
+            if BALLS:                                # round 38: the classic pixel heart, smaller, whole pixels
+                n = max(1, int(round(W * 0.36 / 7)))
+                x0, y0 = int(round(cx - 3.5 * n)), int(round(cy - 3 * n))
+                for j, row in enumerate(HEART):
+                    for i, ch in enumerate(row):
+                        if ch == '#':
+                            m.img[y0 + j * n:y0 + (j + 1) * n, x0 + i * n:x0 + (i + 1) * n] = C(RED)
+            else:
+                kk = 0.62
+                hs = ry * 2 / kk * 0.86
+                x = (m.X - cx) / (hs * 0.62) * 1.15
+                y = -((m.Y - cy) / kk - hs * 0.04) / (hs * 0.5) * 1.15
+                m.fill(((x * x + y * y - 1) ** 3 - x * x * y ** 3 <= 0), RED)
         elif SIMPLE:                                 # round 37: two plain soles, ball and heel
             m.fill(_ring_of(body, t) & ~body, CREAM)
             m.fill(side, RED); m.fill(top, INK)
@@ -785,7 +796,10 @@ def flat_hi(kind, W):
             m.fill(top & ~E(rx - bw, ry - bw * 0.6), CREAM)
             kk = 0.85
             u, v = (m.X - cx) / rx, (m.Y - cy) / ry * 0.36 / kk     # face units, barely squashed
-            for sx in (-1, 1):
+            if BALLS:                                # round 38: just two small balls
+                for sx in (-1, 1):
+                    m.fill(np.hypot(m.X - (cx + sx * rx * 0.3), (m.Y - cy) / 0.8) <= rx * 0.17, CREAM)
+            for sx in ((-1, 1) if not BALLS else ()):
                 fx = sx * 0.24
                 sole = ((u - fx) / 0.18) ** 2 + ((v - 0.12) / 0.28) ** 2 <= 1        # one long sole
                 m.fill(sole, CREAM)
@@ -883,6 +897,8 @@ def frame(cfg, t, S, nframes_fire=240, fire_i=0):
     FLATN = cfg.get('flat_notes', False)
     global SIMPLE
     SIMPLE = cfg.get('simple_signs', False)
+    global BALLS
+    BALLS = cfg.get('balls', False)
     HEART_BOLD = cfg.get('heart_bold', False)
     notes_now = visible_notes(t)
     flash = set()
@@ -1674,3 +1690,6 @@ R36 = dict(R35, name='r36_flat', flat_notes=True)
 
 # round 37: middle resolution again, the heart and the feet as simple as possible
 R37 = dict(R36, name='r37_simple', hi_px=2, simple_signs=True)
+
+# round 38: the stomp is two small balls; the heart is the classic pixel heart, smaller
+R38 = dict(R37, name='r38_balls', balls=True)
