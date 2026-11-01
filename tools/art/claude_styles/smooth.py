@@ -436,6 +436,8 @@ def frame(cfg, t, S, nframes_fire=240, fire_i=0):
     out[:hud_rows] = np.where(top_keep[..., 3:4] > 0, top_keep, out[:hud_rows]) if False else out[:hud_rows]
     # the judgement plate and buttons always sit above the notes
     out[btn_rows:] = bot_keep
+    if cfg.get('juice'):
+        juice(out, s, t, S)
     return out
 
 
@@ -497,6 +499,83 @@ def draw_combo(out, s, lv, since_up, beat_sec, frame_i, S):
     cx, cy = s.W / 2 * S, (24 + 10.5) * S       # pulse round the number's centre
     ny = (6 + 10.5) / h                          # the number's centre within the sprite
     paste(out, big, cx - nw / 2, cy - nh * ny)
+
+
+# --- round 17: hit juice, kept to the hit line and the buttons ---------------------------
+def _hits(t, window=0.35):
+    """(seconds since hit, kind, lane) for every hit, hold end and bell in the last window."""
+    out = []
+    for rep in range(-1, int(t // scene.LOOP) + 2):
+        for (bt, kind, lane, ln) in scene.PATTERN:
+            for when, what in ((bt, kind), ) + (((bt + ln, 'hold_end'),) if ln else ()):
+                b = when + rep * scene.LOOP
+                th = (t - b) * 0.5
+                if 0 <= th < window:
+                    out.append((th, what, lane))
+    return out
+
+
+def _px(out, x, y, col, S, size=1):
+    xi, yi = int(round(x)), int(round(y))
+    n = S * size
+    if 0 <= yi < out.shape[0] - n and 0 <= xi < out.shape[1] - n:
+        out[yi:yi + n, xi:xi + n] = col
+
+
+def juice(out, s, t, S):
+    ink, cream, red = C(INK), C(CREAM), C(RED)
+    H, W = s.H, s.W
+    gap = max(1, round(W * 0.02)); bw = (W - 4 * gap) / 3
+    top = int(s.btn_top)
+    for (th, kind, lane) in _hits(t):
+        lanes = (0, 1, 2) if kind == 'bell' else (lane,)
+        for ln in lanes:
+            cx, cy = s.lane_x(ln, s.hity) * S, s.hity * S
+            rx = lino.lane_w(s, s.hity) * 0.43 * S
+            ry = rx * 0.36
+            # 1. a carved star: eight short cuts flying out flat from the ring, 0.14 s
+            if th < 0.14:
+                k = th / 0.14
+                for a in range(8):
+                    ang = a * math.pi / 4 + math.pi / 8
+                    ca, sa = math.cos(ang), math.sin(ang)
+                    if sa < -0.3 and kind != 'bell':
+                        sa *= 0.4                       # keep the cuts off the incoming notes
+                    r0 = 1.12 + 0.6 * _ss(k)
+                    ln_ = 0.55 * (1 - k) + 0.12
+                    for q in np.linspace(0, ln_, 10):
+                        _px(out, cx + ca * rx * (r0 + q), cy + sa * ry * (r0 + q) * 1.8, cream if q < ln_ * 0.6 else red, S, 2 if q < ln_ * 0.4 else 1)
+            # 2. a shock ring spreading from the hit ring, dashed as it fades, 0.2 s
+            if th < 0.2:
+                k = th / 0.2
+                e = 1.15 + 0.6 * _ss(k)
+                for a in np.linspace(0, 2 * math.pi, 64, endpoint=False):
+                    if k > 0.5 and int(a * 10) % 2:
+                        continue
+                    _px(out, cx + math.cos(a) * rx * e, cy + math.sin(a) * ry * e, red if kind == 'bell' else cream, S)
+            # 3. wood chips: a few red and cream flecks thrown out and falling, 0.35 s
+            r = np.random.default_rng((int(round((t - th * 2) * 2)) + 1000) * 31 + ln * 7 + (kind == 'bell'))
+            for c in range(6 if kind != 'hold_end' else 3):
+                vx = (r.random() - 0.5) * rx * 5.5
+                vy = -(0.4 + r.random() * 0.8) * ry * 6
+                x = cx + vx * th
+                y = cy + vy * th + 0.5 * (ry * 60) * th * th
+                _px(out, x, y, red if c % 2 else cream, S, 2 if th < 0.2 else 1)
+        # 4. the pressed button sinks a pixel and its border lights, 0.12 s
+        if kind != 'hold_end' and th < 0.12:
+            for ln in lanes:
+                x0 = int((gap + ln * (bw + gap)) * S); x1 = int((gap + ln * (bw + gap) + bw) * S)
+                y0 = int((top + gap) * S); y1 = int(H * 0.985 * S)
+                blk = out[y0:y1, x0:x1].copy()
+                out[y0 + S:y1, x0:x1] = blk[:-S]
+                out[y0:y0 + S, x0:x1] = ink
+                bdr = np.all(out[y0:y1, x0:x1, :3] == red[:3], axis=-1)
+                out[y0:y1, x0:x1][bdr] = cream
+    # 5. a bell lands with a one-pixel thump of the whole street, 0.06 s
+    for (th, kind, lane) in _hits(t, 0.06):
+        if kind == 'bell':
+            out[S:] = out[:-S].copy()
+            break
 
 
 def draw_rope(out, s, lane, d, dt, S):
@@ -617,3 +696,6 @@ R13 = dict(R12, name='r13_hop', heavy=True, rows=dict(R12['rows'], hop=True))
 R14 = dict(R13, name='r14_exit')
 R15 = dict(R14, name='r15_square', wall_u0=0.3)
 R16 = dict(R15, name='r16_houses', wall_flat=True)
+
+# round 17: juice on hits
+R17 = dict(R16, name='r17_juice', juice=True)
