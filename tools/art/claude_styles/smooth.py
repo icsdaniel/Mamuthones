@@ -624,7 +624,7 @@ HI_PX = 1          # round 30: screen pixels per note pixel (2 = a touch chunkie
 def stamp_hi(kind, W):
     """lino.stamp's design (same colours and marks) drawn in screen pixels, with outlines that scale."""
     W = max(12, int(W))
-    key = ('shi', kind, W)
+    key = ('shi', kind, W, PLAIN)
     if key not in _sprites:
         t = max(2, W // 30)
         rx = W / 2; ry = rx * 0.36; th = max(2, round(W * 0.08))
@@ -636,7 +636,16 @@ def stamp_hi(kind, W):
         body = E(rx, ry, cy + th) | E(rx, ry)
         m.fill(_ring_of(body, t) & ~body, INK if kind != 'o' else CREAM)
         side, top = E(rx, ry, cy + th) & ~E(rx, ry), E(rx, ry)
-        if kind == 'q':
+        if PLAIN and kind in 'qeoh':                 # round 33: plain faces, colour alone tells them apart
+            fc, sc = {'q': (CREAM, RED), 'e': (RED, INK), 'o': (INK, CREAM), 'h': (RED, INK)}[kind]
+            m.fill(side, sc); m.fill(top, fc)
+            if kind == 'o':                          # black on black: a thick cream border round the face
+                bw = max(2, int(round(W * 0.09)))
+                m.fill(top & ~E(rx - bw, ry - bw * 0.6), CREAM)
+            elif kind in 'eh':                       # red faces get a thin cream border
+                bw = max(1, int(round(W * 0.04)))
+                m.fill(top & ~E(rx - bw, ry - bw * 0.6), CREAM)
+        elif kind == 'q':
             m.fill(side, RED); m.fill(top, CREAM)
             for k in range(6):
                 a = k * math.pi / 3
@@ -710,6 +719,9 @@ def sign_hi(kind, W):
 HEART_BOLD = False
 
 
+PLAIN = False
+
+
 class _Flat:
     """A view of a canvas squashed onto a stamp face, so scene drawers print flat on it."""
     def __init__(self, m, cx, cy, k):
@@ -722,7 +734,7 @@ class _Flat:
 def flat_hi(kind, W):
     """Round 31: the heart and the two feet printed flat on the stamp face, like the rosette."""
     W = max(12, int(W))
-    key = ('flhi', kind, W, HEART_BOLD)
+    key = ('flhi', kind, W, HEART_BOLD, PLAIN)
     if key not in _sprites:
         t = max(2, W // 30)
         rx = W / 2; ry = rx * 0.36; th = max(2, round(W * 0.08))
@@ -755,6 +767,9 @@ def flat_hi(kind, W):
         else:
             m.fill(_ring_of(body, t) & ~body, CREAM)
             m.fill(side, RED); m.fill(top, INK)
+            if PLAIN:                                # same thick cream border as the off-beat note
+                bw = max(2, int(round(W * 0.06)))
+                m.fill(top & ~E(rx - bw, ry - bw * 0.6), CREAM)
             f = _Flat(m, cx, cy, k)
             pal = dict(lino3.W2['pal'], foot=CREAM, btn_face=[INK, INK])
             fs = rx * 1.6
@@ -815,7 +830,8 @@ def frame(cfg, t, S, nframes_fire=240, fire_i=0):
     global HI_PX, ROPE_FLAT
     HI_PX = cfg.get('hi_px', 1)
     ROPE_FLAT = cfg.get('rope_flat', False)
-    global HEART_BOLD
+    global HEART_BOLD, PLAIN
+    PLAIN = cfg.get('plain', False)
     HEART_BOLD = cfg.get('heart_bold', False)
     notes_now = visible_notes(t)
     flash = set()
@@ -1592,3 +1608,6 @@ R31 = dict(R30, name='r31_flat', sign_hi='flat')
 
 # round 32: a still, one-colour hold rope and a bolder flat heart
 R32 = dict(R31, name='r32_rope', rope_flat=True, heart_bold=True)
+
+# round 33: no decorative marks on plain step notes (rosette, ring, stripes, knot)
+R33 = dict(R32, name='r33_plain', plain=True)
