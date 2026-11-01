@@ -707,6 +707,51 @@ def sign_hi(kind, W):
     return _sprites[key]
 
 
+class _Flat:
+    """A view of a canvas squashed onto a stamp face, so scene drawers print flat on it."""
+    def __init__(self, m, cx, cy, k):
+        self.m, self.X, self.Y = m, m.X, cy + (m.Y - cy) / k
+
+    def fill(self, mask, col):
+        self.m.fill(mask, col)
+
+
+def flat_hi(kind, W):
+    """Round 31: the heart and the two feet printed flat on the stamp face, like the rosette."""
+    W = max(12, int(W))
+    key = ('flhi', kind, W)
+    if key not in _sprites:
+        t = max(2, W // 30)
+        rx = W / 2; ry = rx * 0.36; th = max(2, round(W * 0.08))
+        pad = t + 2
+        m = Mini(W + 2 * pad, int(2 * ry + th) + 2 * pad + 1)
+        m.img[...] = 0
+        cx, cy = (W + 2 * pad) / 2, pad + ry
+        E = lambda a, b, yy=cy: (((m.X - cx) / max(a, 0.5)) ** 2 + ((m.Y - yy) / max(b, 0.5)) ** 2) <= 1
+        body = E(rx, ry, cy + th) | E(rx, ry)
+        side, top = E(rx, ry, cy + th) & ~E(rx, ry), E(rx, ry)
+        k = ry / rx
+        if kind == 'heart':
+            m.fill(_ring_of(body, t) & ~body, INK)
+            m.fill(side, RED); m.fill(top, CREAM)
+            hs = rx * 0.95                                   # heart size on the face, before squashing
+            x = (m.X - cx) / (hs * 0.62) * 1.15
+            y = -((m.Y - cy) / k + hs * 0.06) / (hs * 0.5) * 1.15
+            core = ((x * x + y * y - 1) ** 3 - x * x * y ** 3 <= 0) & top
+            m.fill(_ring_of(core, max(1, t // 2)) & ~core & top, INK)
+            m.fill(core, RED)
+        else:
+            m.fill(_ring_of(body, t) & ~body, CREAM)
+            m.fill(side, RED); m.fill(top, INK)
+            f = _Flat(m, cx, cy, k)
+            pal = dict(lino3.W2['pal'], foot=CREAM, btn_face=[INK, INK])
+            fs = rx * 1.6
+            scene.draw_foot(f, {"pal": pal}, cx - fs * 0.23, cy - fs * 0.0, fs, mirror=True)
+            scene.draw_foot(f, {"pal": pal}, cx + fs * 0.23, cy - fs * 0.0, fs, mirror=False)
+        _sprites[key] = (m.img.copy(), cx, cy)
+    return _sprites[key]
+
+
 def bar_hi(up_, W, TH):
     """bar_sprite's design (one chevron per lane) in screen pixels."""
     W, TH = max(30, int(W)), max(8, int(TH))
@@ -876,7 +921,7 @@ def frame(cfg, t, S, nframes_fire=240, fire_i=0):
         k = {'note_q': 'q', 'note_e': 'e', 'note_o': 'o'}[kind]
         if any(abs((t + d / scene.SP) % scene.LOOP - sb) < 0.01 for sb in cfg.get('stomp_beats', ())):
             if cfg.get('sign_hi'):
-                place_hi(nl, lambda w_: sign_hi('stomp', w_), lw(y) * 0.8 * S, s.lane_x(lane, y) * S, y * S)
+                place_hi(nl, lambda w_: (flat_hi if cfg.get('sign_hi') == 'flat' else sign_hi)('stomp', w_), lw(y) * 0.8 * S, s.lane_x(lane, y) * S, y * S)
                 continue
             if cfg.get('mip'):
                 place(nl, stomp_sprite, NOTE_MIPS, lw(y) * NK, s.lane_x(lane, y), y, S)
@@ -886,7 +931,7 @@ def frame(cfg, t, S, nframes_fire=240, fire_i=0):
             continue
         if any(abs(t + d / scene.SP - hb) < 0.01 for hb in cfg.get('heal_beats', ())):
             if cfg.get('sign_hi'):
-                place_hi(nl, lambda w_: sign_hi('heart', w_), lw(y) * 0.8 * S, s.lane_x(lane, y) * S, y * S)
+                place_hi(nl, lambda w_: (flat_hi if cfg.get('sign_hi') == 'flat' else sign_hi)('heart', w_), lw(y) * 0.8 * S, s.lane_x(lane, y) * S, y * S)
                 continue
             if cfg.get('mip'):
                 place(nl, heart_sprite, NOTE_MIPS, lw(y) * NK, s.lane_x(lane, y), y, S)
@@ -1521,3 +1566,6 @@ R29 = dict(R26, name='r29_std_hi', look='std_hi')
 
 # round 30: the heart and the two feet join the high-res stamps; all notes drawn 2 screen px per pixel
 R30 = dict(R29, name='r30_signs', sign_hi=True, hi_px=2)
+
+# round 31: the heart and the feet printed flat on the stamps
+R31 = dict(R30, name='r31_flat', sign_hi='flat')
