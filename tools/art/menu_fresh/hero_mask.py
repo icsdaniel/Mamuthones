@@ -226,3 +226,146 @@ def draw_mask(cv, dy):
     cv.px(CX - 4, ky + 1, B); cv.px(CX + 4, ky + 1, B)
     for (x, y), c in FACE_PIX.items():
         cv.px(x, y + dy, c)
+
+
+# ---------------------------------------------------------------------------------------------
+# Round 2 (Daniele's photo): a black, glossy carved wooden visera under a brown headscarf.
+# The face is shaded from a carved height field lit from the upper left: black wood, brown planes
+# turned to the light, warm-grey sheen on the ridges, a few cream glints.
+import math as _m
+
+STYLE = 'black'
+
+
+def _height(x, y):
+    u = (x - CX) / 23.0
+    v = (y - FACE_TOP) / float(FACE_BOT - FACE_TOP)
+    g = lambda a, s: _m.exp(-(a / s) ** 2)
+    h = 1.0 - 0.7 * u * u - 0.25 * (v - 0.45) ** 2
+    h += 0.55 * g(v - 0.27, 0.055) * (1 if abs(u) < 0.8 else 0.4)        # heavy brow shelf
+    h -= 0.3 * g(abs(u) - 0.33, 0.12) * g(v - 0.37, 0.05)                 # eye sockets
+    tip = min(1.0, max(0.0, (v - 0.26) / 0.42))
+    if 0.26 < v < 0.72:
+        h += (0.45 + 0.6 * tip) * g(u, 0.07 + 0.05 * tip)                  # long nose, heavy tip
+    h += 0.22 * g(abs(u) - 0.47, 0.13) * g(v - 0.55, 0.09)                 # cheekbones
+    h += 0.38 * g(v - 0.785, 0.035) * g(u, 0.36)                          # upper lip
+    h += 0.42 * g(v - 0.875, 0.04) * g(u, 0.33)                           # thick lower lip
+    h += 0.2 * g(v - 0.97, 0.04) * g(u, 0.3)                              # chin
+    return h
+
+
+def build_black():
+    face = {}
+    L = (-0.62, -0.58, 0.53)
+    for y in range(FACE_TOP, FACE_BOT + 1):
+        hw = face_halfwidth(y)
+        for x in range(CX - hw, CX + hw + 1):
+            dx = (_height(x + 0.5, y) - _height(x - 0.5, y)) * 9
+            dy = (_height(x, y + 0.5) - _height(x, y - 0.5)) * 9
+            n = (-dx, -dy, 1.0)
+            k = 1 / _m.sqrt(n[0] ** 2 + n[1] ** 2 + 1)
+            lit = (n[0] * L[0] + n[1] * L[1] + n[2] * L[2]) * k
+            edge = hw - abs(x - CX)
+            if lit > 0.95 and (x + y) % 2 == 0:
+                c = C                                   # glossy glint
+            elif lit > 0.86:
+                c = GR
+            elif lit > 0.52:
+                c = B
+            else:
+                c = K
+            if edge == 0 and x < CX:
+                c = B if c == K else c                  # lit rim on the left edge
+            face[(x, y)] = c
+    def put(x, y, c):
+        if (x, y) in face:
+            face[(x, y)] = c
+    for (x, y), c in list(face.items()):                # the lit cheek stays brown wood, no black holes
+        if c == K and x < CX - 2 and 74 <= y <= 89 and face_halfwidth(y) - abs(x - CX) > 0:
+            face[(x, y)] = B
+    # brow shelf: a sheen along its top edge, black shadow under it
+    for x in range(CX - 17, CX + 18):
+        put(x, 64, GR if x < CX + 6 else B)
+        put(x, 66, K)
+    # eye holes: cut through, black, ringed by brown wood, a lit lower lid
+    for sx in (-1, 1):
+        ex = CX + sx * 8
+        for i in range(-4, 5):
+            for j in range(67, 74):
+                put(ex + i, j, B)
+        for j, w in enumerate((2, 3, 3, 2)):
+            for i in range(-w, w + 1):
+                put(ex + i, 68 + j, K)
+        for i in range(-3, 4):
+            put(ex + i, 72, GR)
+    # the long nose: a lit ridge, its shadow plane to the right, a heavy tip
+    for y in range(65, 87):
+        t = (y - 65) / 21
+        w = 1 + int(t * 3)
+        put(CX - 1, y, GR); put(CX - 2, y, B)
+        for k in range(w):
+            put(CX + k, y, K if k else B)
+        if y > 78:
+            put(CX - 2 - int(t * 2), y, B)
+    for x in range(CX - 5, CX + 5):
+        put(x, 86, GR if x < CX + 1 else B)
+        put(x, 87, B if x < CX + 2 else K)
+    put(CX - 4, 88, K); put(CX + 3, 88, K)
+    for x in range(CX - 3, CX + 4):
+        put(x, 88, K)                                   # shadow under the nose
+    # lips: thick, slightly open, carved
+    for x in range(CX - 7, CX + 8):
+        put(x, 90, GR if x < CX else B)
+        put(x, 91, K)
+        if abs(x - CX) < 6:
+            put(x, 92, K)
+            put(x, 93, GR if x < CX + 1 else B)
+            put(x, 94, B)
+    put(CX - 8, 91, K); put(CX + 8, 91, K)
+    return face
+
+
+SCARF = None
+
+
+def _scarf():
+    s = dilate(FACE, 6) & ~FACE
+    yy, xx = np.mgrid[0:H, 0:W]
+    s &= (yy < FACE_BOT - 4) | (np.abs(xx - CX) > 14)        # open under the chin, where it ties
+    return s
+
+
+def draw_black(cv, dy):
+    global SCARF
+    if SCARF is None:
+        SCARF = _scarf()
+    for rows, x, y, col in CURLS_FRONT:
+        _bitmap(cv, rows, x, y + dy, B if col == B else B if (x + y) % 3 else GR)
+    # the brown headscarf, with black fold lines sweeping down to the knot
+    ys, xs = np.nonzero(SCARF)
+    for y, x in zip(ys, xs):
+        fold = ((x - CX) * 0.7 + (y - 50) * (1 if x < CX else -1) * 0.6) % 7 < 1
+        top = y < FACE_TOP + 2
+        lit = x < CX - 6 and not fold
+        cv.px(x, y + dy, K if fold and not top else (GR if (top or (lit and (x + y) % 3 == 0)) else B))
+    for y in range(FACE_TOP - 6, FACE_BOT + 4):                   # dark seam between scarf and mask
+        pass
+    edge = dilate(FACE, 1) & ~FACE
+    for y, x in zip(*np.nonzero(edge)):
+        cv.px(x, y + dy, K)
+    # knot and tails under the chin
+    ky = FACE_BOT + 2 + dy
+    cv.rect(CX - 4, ky, 9, 3, B)
+    cv.px(CX - 1, ky + 1, K); cv.px(CX + 1, ky + 1, K)
+    for k in range(5):
+        cv.px(CX - 3 - k // 2, ky + 3 + k, B); cv.px(CX + 3 + k // 2, ky + 3 + k, B)
+    for (x, y), c in BLACK_PIX.items():
+        cv.px(x, y + dy, c)
+
+
+BLACK_PIX = build_black()
+_draw_old = draw_mask
+
+
+def draw_mask(cv, dy):
+    (draw_black if STYLE == 'black' else _draw_old)(cv, dy)
