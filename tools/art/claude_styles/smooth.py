@@ -616,3 +616,4 @@ R12 = dict(R10b, name='r12_walk', rows=dict(walk=True, scale=90, z0=2.4, ratio=1
 R13 = dict(R12, name='r13_hop', heavy=True, rows=dict(R12['rows'], hop=True))
 R14 = dict(R13, name='r14_exit')
 R15 = dict(R14, name='r15_square', wall_u0=0.3)
+R16 = dict(R15, name='r16_houses', wall_flat=True)

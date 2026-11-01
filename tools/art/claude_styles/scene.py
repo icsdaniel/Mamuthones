@@ -137,11 +137,15 @@ def draw(cfg, frame=0, nframes=1, beat_phase=0.0, fig_frame=0, cache={}):
         w = hz - house
         h0_, h1_ = cfg.get('house_h', (0.62, 0.38))
         hh = h0_ + h1_ * (np.sin(house * 3.7 + side) * 0.5 + 0.5)
+        if cfg.get('wall_u0'):              # end on a whole house, never part of one
+            last = np.floor((1.0 / cfg['wall_u0']) * 1.25 + (0.4 if side > 0 else 0.0))
+            valid = valid & (house < last)
         wall = valid & (v >= 0) & (v <= hh)
         lit = (np.sin(house * 5.3 + side * 2) > -0.2)
         # wall tone: lit by the fire toward the centre
         s.gradient(wall, P['wall'], 0, W * 0.5) if False else None
-        shade_idx = np.clip((1 - u) * len(P['wall']) + (BAYER4[s.Yi % 4, s.Xi % 4] - 0.5) * 0.8, 0, len(P['wall']) - 1).astype(int)
+        dith = 0.0 if cfg.get('wall_flat') else (BAYER4[s.Yi % 4, s.Xi % 4] - 0.5) * 0.8
+        shade_idx = np.clip((1 - u) * len(P['wall']) + dith, 0, len(P['wall']) - 1).astype(int)
         for k, c in enumerate(P['wall']):
             s.fill(wall & (shade_idx == k), c)
         # stone courses
