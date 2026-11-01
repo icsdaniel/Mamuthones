@@ -120,6 +120,10 @@ def draw(cfg, frame=0, nframes=1, beat_phase=0.0, fig_frame=0, cache={}):
 
     # ---- house walls on both sides ------------------------------------------------
     base_edge, top_edge = H * 0.70, H * cfg.get('roof_near', 0.14)
+    F = cfg.get('street_floor')
+    if F:  # a wide street: the walls start where the floor meets the screen edge
+        t_edge = (s.vpx / F - s.hw0) / (s.hw1 - s.hw0)
+        base_edge = s.vpy + t_edge * (s.hity - s.vpy)
     for side in (-1, 1):
         u = (s.X - s.vpx) * side / s.vpx  # 0 at VP, 1 at screen edge
         valid = u > 0.02
@@ -172,7 +176,31 @@ def draw(cfg, frame=0, nframes=1, beat_phase=0.0, fig_frame=0, cache={}):
     hw = s.hw0 + (s.hw1 - s.hw0) * t
     road = (s.Y >= s.vpy) & (np.abs(s.X - s.vpx) <= hw + 0.5) & (s.Y < s.btn_top)
     # wider kerb band outside lanes
-    kerb = (s.Y >= s.vpy) & (np.abs(s.X - s.vpx) <= hw * 1.12 + 1) & ~road & (s.Y < s.btn_top)
+    if F:
+        floor = (s.Y >= s.vpy) & (np.abs(s.X - s.vpx) <= hw * F) & ~road & (s.Y < s.btn_top)
+        s.fill(floor, P['floor'])
+        # carved strokes across the street floor, tightening toward the horizon
+        r_ = np.random.default_rng(31)
+        for k in range(1, 40):
+            tt_ = 1.0 / (1.0 + k * 0.45)
+            y = int(s.vpy + tt_ * (s.hity - s.vpy) * 1.15)
+            if y >= s.btn_top or tt_ < 0.12:
+                continue
+            hw_ = s.halfw(y)
+            dash = max(2, int(hw_ * 0.14))
+            for sd in (-1, 1):
+                x = hw_ * 1.1 + (k % 2) * dash * 0.5
+                while x < hw_ * F - 1:
+                    ln = int(dash * (0.5 + 0.6 * r_.random()))
+                    for j in range(ln):
+                        if x + j < hw_ * F - 1:
+                            s.put(s.vpx + sd * (x + j), y, P['floor_line'])
+                    x += ln + max(2, int(dash * 0.7))
+        # the floor's outer edge, where the houses stand
+        for y in range(int(s.vpy), int(s.btn_top)):
+            for sd in (-1, 1):
+                s.put(s.vpx + sd * (s.halfw(y + 0.5) * F), y, P['floor_edge'])
+    kerb = (s.Y >= s.vpy) & (np.abs(s.X - s.vpx) <= hw * (1.05 if F else 1.12) + 1) & ~road & (s.Y < s.btn_top)
     s.fill(kerb, P['kerb'])
     tt = np.maximum(t, 0.02)
     zz = 1.0 / tt

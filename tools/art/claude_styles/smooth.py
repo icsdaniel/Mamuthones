@@ -84,7 +84,7 @@ def procession(s, cfg):
             y = s.vpy + t * (s.hity - s.vpy)
             h = int(round(k * t))
             w = h * 0.86
-            x = s.vpx + side * (s.halfw(y) * 1.05 + w * 0.36)
+            x = s.vpx + side * (s.halfw(y) * cfg['rows'].get('out', 1.05) + w * 0.36)
             seed = i * 7 + (side > 0) * 3
             out.append(dict(x=x, y=y, h=h, flip=side < 0, seed=seed, side=side,
                             bulk=0.94 + 0.1 * ((seed * 37) % 10) / 10, amp=0.9 + 0.2 * ((seed * 53) % 10) / 10))
@@ -264,9 +264,13 @@ def render(cfg, path_mp4, path_gif, S=3, fps=60, beats=8, bpm=120):
 
 R5 = dict(lino3.R3['r3a_w2_stamps'], name='r5_rows',
           rows=dict(scale=100, z=[1.75, 3.0, 5.0, 8.0]))
+# round 6: buildings pushed up and back, a wide street floor for the files to stand on
+R6 = dict(R5, name='r6_street', street_floor=2.0,
+          pal=dict(R5['pal'], floor='#141014', floor_line='#4a3c38', floor_edge='#c9bba0'),
+          rows=dict(scale=100, z=[1.75, 3.0, 5.0, 8.0], out=1.25))
 
 if __name__ == '__main__':
-    cfg = R5 if sys.argv[1] == 'r5' else lino3.R3[sys.argv[1]]
+    cfg = {'r5': R5, 'r6': R6}.get(sys.argv[1]) or lino3.R3[sys.argv[1]]
     render(cfg, sys.argv[2], sys.argv[3], int(sys.argv[4]) if len(sys.argv) > 4 else 3)
 
 
