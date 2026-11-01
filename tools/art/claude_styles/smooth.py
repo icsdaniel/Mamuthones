@@ -154,15 +154,21 @@ def procession_walk(s, cfg, t):
             r = j - (pos % 1.0)                              # row index, moving away
             ident = j + math.floor(pos)                      # who this is
             z = z0 * ratio ** r
-            if z > R['zmax'] or z < 1.3:
+            z_out = z0 / ratio                               # one place in front: off screen
+            if z > R['zmax'] or z < z_out:
                 continue
             tt = 1.0 / z
             y = s.vpy + tt * (s.hity - s.vpy)
             h = int(round(R['scale'] * tt))
             w = h * 0.86
             x = s.vpx + side * (s.halfw(y) * R.get('out', 1.05) + w * 0.36)
-            if z >= z0:                                      # on screen once in place
-                x = s.vpx + side * min(abs(x - s.vpx), s.vpx - w * 0.5 - 1)
+            fit = s.vpx - w * 0.5 - 1                        # whole figure on screen
+            if z >= z0:
+                x = s.vpx + side * min(abs(x - s.vpx), fit)
+            else:                                            # walk out past the side, no jump
+                k = (math.log(z0) - math.log(z)) / math.log(ratio)   # 0 at the front place, 1 gone
+                d0 = min(abs(s.vpx + s.halfw(y) * R.get('out', 1.05) + w * 0.36 - s.vpx), fit)
+                x = s.vpx + side * (d0 + (s.vpx + w * 0.6 - d0) * k)
             seed = (ident * 7 + (side > 0) * 3) % 29
             out.append(dict(x=x, y=y, h=h, flip=side < 0, seed=seed, side=side, z=z,
                             bulk=0.94 + 0.1 * ((seed * 37) % 10) / 10, amp=0.9 + 0.2 * ((seed * 53) % 10) / 10))
@@ -608,3 +614,4 @@ R12 = dict(R10b, name='r12_walk', rows=dict(walk=True, scale=90, z0=2.4, ratio=1
 
 # round 13: a heavy hop that rings the bells on the beat
 R13 = dict(R12, name='r13_hop', heavy=True, rows=dict(R12['rows'], hop=True))
+R14 = dict(R13, name='r14_exit')

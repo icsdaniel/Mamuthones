@@ -150,6 +150,8 @@ def pile(s, lv, beat_sec, since_up, tt, box, beat_no=0):
     ph_ = H * 0.045                       # the log cone is the same at every level
     pw = W * 0.095
     p = bob(beat_sec)
+    # a dark hearth under the pile, so the lane lines stop short of the logs
+    s.fill((((s.X - cx) / (pw * 1.9)) ** 2 + ((s.Y - by + 3) / 8.0) ** 2 <= 1) & (s.Y <= by + 3), INK)
     # flames behind the logs, then the logs, then flames in the gaps
     n = {1: 3, 2: 3, 3: 5, 4: 7}[lv]
     for i in sorted(range(n), key=lambda i: -abs(i - (n - 1) / 2)):
@@ -166,14 +168,21 @@ def pile(s, lv, beat_sec, since_up, tt, box, beat_no=0):
         s.fill(m & (np.abs(s.X - c) <= half * 0.4) & (v < 0.5), CREAM)
     # the cone of logs: leaning poles meeting near the top
     apex = by - ph_
-    for k in (-2, 2, -1, 1, 0):
-        x0 = cx + k * pw / 2.1
+    for k in (-1.5, 1.5, -0.5, 0.5):        # four poles, steep, so they don't read as lane lines
+        x0 = cx + k * pw / 2.8
         for j in range(int(ph_ * 1.05) + 1):
             u = j / ph_
-            x = x0 + (cx + k * 0.8 - x0) * u
-            y = by - j
+            x = x0 + (cx + k * 0.6 - x0) * u
+            y = by - 2 - j
             col = CREAM if (j // 4) % 3 else '#c9bba0'
             s.put(x - 1, y, INK); s.put(x, y, col); s.put(x + 1, y, col); s.put(x + 2, y, INK)
+    # sawn log ends stacked across the foot of the pile
+    for (ex, ey) in ((-0.62, 0), (0.0, 0), (0.62, 0), (-0.31, -3), (0.31, -3)):
+        x_, y_ = cx + ex * pw, by - 2 + ey
+        d = np.hypot(s.X - x_, s.Y - y_)
+        s.fill(d <= 2.7, INK)
+        s.fill(d <= 2.0, CREAM)
+        s.fill(d <= 0.8, '#c9bba0')
     # glowing gaps between the poles, flickering
     r = np.random.default_rng(int(tt * 20))
     for _ in range(6 + 3 * lv):
