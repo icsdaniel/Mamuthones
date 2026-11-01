@@ -552,16 +552,20 @@ def draw_hud(s, cfg):
     text(s.img, score, px0 + 3 * sc, sy + 3 * sc, P['hud_text'], P['hud_text_sh'], sc)
     # multiplier badge on the left
     mult = '2x'
-    tw2 = text_w(mult, sc)
-    plate(s, cfg, max(2, int(W * 0.03)), sy, tw2 + 6 * sc, ph)
-    text(s.img, mult, max(2, int(W * 0.03)) + 3 * sc, sy + 3 * sc, P['hud_mult'], P['hud_text_sh'], sc)
+    if cfg.get('no_mult'):
+        mult = None
+    if mult:
+        tw2 = text_w(mult, sc)
+        plate(s, cfg, max(2, int(W * 0.03)), sy, tw2 + 6 * sc, ph)
+        text(s.img, mult, max(2, int(W * 0.03)) + 3 * sc, sy + 3 * sc, P['hud_mult'], P['hud_text_sh'], sc)
     # combo
-    combo = '32'
+    combo = cfg.get('combo_text', '32')
+    cs = cfg.get('combo_scale', sc)
     cy = sy + ph + max(2, int(H * 0.01))
-    text(s.img, combo, int(W / 2 - text_w(combo, sc) / 2), cy, P.get('combo', P['hud_text']), P.get('combo_sh', P['hud_text_sh']), sc)
+    text(s.img, combo, int(W / 2 - text_w(combo, cs) / 2), cy, P.get('combo', P['hud_text']), P.get('combo_sh', P['hud_text_sh']), cs)
     if cfg.get('combo_word', True) and sc >= 1:
         cw = 'COMBO'
-        text(s.img, cw, int(W / 2 - text_w(cw, 1) / 2), cy + 7 * sc + 2, P['hud_text2'], P.get('combo_sh', P['hud_text_sh']), 1)
+        text(s.img, cw, int(W / 2 - text_w(cw, 1) / 2), cy + 7 * cs + 2, P['hud_text2'], P.get('combo_sh', P['hud_text_sh']), 1)
     # judgement above the hit line
     jw = 'PERFECT'
     js = cfg.get('judge_scale', sc)

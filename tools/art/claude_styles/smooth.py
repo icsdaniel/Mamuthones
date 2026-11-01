@@ -9,7 +9,7 @@ it moves, so nothing crawls or shimmers.
 import math, os, subprocess, sys
 import numpy as np
 from PIL import Image
-from pxkit import hexc, over
+from pxkit import hexc, over, BAYER4 as BAYER
 import scene, figure, lino, lino3
 from scene import Scene, visible_notes
 from lino import INK, CREAM, RED
@@ -91,6 +91,97 @@ def procession(s, cfg):
     return sorted(out, key=lambda f: f['y'])
 
 
+# --- the bonfire grows with the combo: 1x to 4x ----------------------------------------
+FIRE = {1: (0.085, 0.055), 2: (0.115, 0.085), 3: (0.14, 0.13), 4: (0.11, 0.0)}  # (width, height) of W, H
+
+
+def level_at(cfg, t):
+    """Combo level, seconds since it last went up (or None) and seconds since the beat."""
+    spb = 0.5
+    per = cfg['levels']                  # beats per level in the demo
+    cyc = t % (4 * per)
+    lv = int(cyc // per) + 1
+    since = (cyc - (lv - 1) * per) * spb if lv > 1 else None
+    return lv, since, (t % 1.0) * spb
+
+
+def pulse(t):
+    """The fire's beat: up at once, held, settled by 0.2 s (Rift's shape, a little slower)."""
+    x = min(1.0, max(0.0, (t - 0.03) / 0.17))
+    return 1.0 - x * x * (3 - 2 * x)
+
+
+def level_fire(s, cfg, lv, since_up, beat_sec, frame_i, nframes):
+    W, H = s.W, s.H
+    P = cfg['pal']
+    p = pulse(beat_sec)
+    burst = 0.0 if since_up is None else max(0.0, 1.0 - since_up / 0.6)
+    fw, fh = FIRE[lv]
+    by = s.vpy + H * 0.012
+    if lv == 4:                          # high into the sky, round the combo
+        fh = (by - H * 0.035) / H
+    fh *= 1.0 + 0.16 * p + 0.35 * burst
+    fw *= 1.0 + 0.08 * p + 0.2 * burst
+    # strong light on a level-up: a ring of light spreading from the fire
+    if burst > 0:
+        R = (0.12 + (1 - burst) * 0.9) * H
+        d = np.hypot(s.X - s.vpx, (s.Y - by) * 0.8)
+        val = np.clip(1 - d / R, 0, 1) * burst * 1.6
+        th = BAYER[s.Yi % 4, s.Xi % 4]
+        ink, red, cream = C('#141014'), C('#c8352a'), C('#efe6d2')
+        is_ink = np.all(s.img[..., :3] == ink[:3], axis=-1)
+        is_red = np.all(s.img[..., :3] == red[:3], axis=-1)
+        s.img[is_ink & (val > 0.25 + th * 0.5)] = red
+        s.img[is_ink & (val > 0.75 + th * 0.4)] = cream
+        s.img[is_red & (val > 0.45 + th * 0.4)] = cream
+    fcx, fcy = s.vpx, by
+    cw = W * fw
+    chh = H * fh
+    # the combo's box: flames part round it at 4x
+    box = None
+    if lv == 4:
+        box = (s.vpx, H * 0.115, W * 0.2, H * 0.06)
+    ph = frame_i / max(1, nframes) * 2 * math.pi * 6
+    ramp = P['fire']
+    y0, y1 = int(by - chh * 1.15), int(by) + 1
+    for y in range(max(0, y0), y1):
+        v = (by - (y + 0.5)) / chh
+        if v < 0:
+            continue
+        for x in range(int(fcx - cw * 1.4), int(fcx + cw * 1.4) + 1):
+            u = (x + 0.5 - fcx) / cw
+            if box is not None:          # the column splits in two and climbs round the text
+                bx, byy, bw, bh = box
+                sp = bw * 1.05 * max(0.0, 1 - ((y - byy) / (bh * 1.9)) ** 2)
+                dd = abs(x + 0.5 - fcx) - sp
+                u = (dd if dd > 0 else -dd * 2.5) / cw
+            wob = 0.18 * math.sin(v * 7 - ph * 2 + u * 3) + 0.12 * math.sin(v * 13 + ph * 3)
+            width = max(0.0, 1 - v) ** (0.8 if lv < 4 else 0.3) * (0.85 + 0.25 * math.sin(u * 9 + ph * 2 + v * 5))
+            val = width - abs(u + wob * v)
+            val += (0.25 if lv < 4 else 0.42) * math.sin(u * 11 + ph * 4 - v * 3) * v
+            if box is not None:
+                bx, byy, bw, bh = box
+                e = ((x - bx) / bw) ** 2 + ((y - byy) / bh) ** 2
+                if e < 1.0:
+                    continue             # the text sits in a clear hole
+                if e < 2.0:              # flames lick round its edge
+                    val += 0.22 * (2.0 - e)
+            if lv == 4:                  # ragged tongues and black cuts, like the small fire's
+                val += 0.22 * math.sin(x * 0.9 + y * 0.35 - ph * 3) + 0.12 * math.sin(x * 2.3 - y * 0.6 + ph * 5) - 0.1
+            if val <= 0:
+                continue
+            k = min(len(ramp) - 1, int(val * len(ramp) * (1.6 if lv < 4 else 1.15)))
+            s.put(x, y, ramp[k])
+    for k in (-1, 1):                    # logs
+        for i in range(int(W * 0.12 * 1.5)):
+            x = fcx + k * (i - W * 0.09) * 0.9
+            y = by - 1 + (i - W * 0.09) * 0.21 * k
+            s.put(x, y, P['log']); s.put(x, y + 1, P['log2'])
+    r = np.random.default_rng(frame_i + 3)
+    for _ in range(4 + 4 * lv + int(20 * burst)):
+        s.put(fcx + r.normal(0, cw * 0.7), by - chh * (0.9 + r.random() * 0.6), ramp[-1] if r.random() < 0.5 else ramp[-2])
+
+
 # --- sprites ------------------------------------------------------------------------
 class Mini(Scene):
     def __init__(self, w, h):
@@ -152,6 +243,10 @@ def frame(cfg, t, S, nframes_fire=240, fire_i=0):
         lino.rings(s)
 
     base_cfg = dict(cfg, figures=[], notes_fn=lambda s, p: None, rings_fn=rings)
+    if cfg.get('levels'):
+        lv, since_up, beat_sec = level_at(cfg, t)
+        base_cfg.update(fire=False, combo_text=f'{lv}x', no_mult=True,
+                        extra_fn=lambda s_, f_, n_: level_fire(s_, cfg, lv, since_up, beat_sec, f_, n_))
     base = scene.draw(base_cfg, fire_i, nframes_fire, t, 0)
     s = Scene(cfg)                       # geometry only
     W, H = s.W, s.H
@@ -269,8 +364,10 @@ R6 = dict(R5, name='r6_street', street_floor=2.0,
           pal=dict(R5['pal'], floor='#141014', floor_line='#4a3c38', floor_edge='#c9bba0'),
           rows=dict(scale=100, z=[1.75, 3.0, 5.0, 8.0], out=1.25))
 
+R7 = dict(R6, name='r7_fire', levels=4, combo_scale=3, combo_word=True)
+
 if __name__ == '__main__':
-    cfg = {'r5': R5, 'r6': R6}.get(sys.argv[1]) or lino3.R3[sys.argv[1]]
+    cfg = {'r5': R5, 'r6': R6, 'r7': R7}.get(sys.argv[1]) or lino3.R3[sys.argv[1]]
     render(cfg, sys.argv[2], sys.argv[3], int(sys.argv[4]) if len(sys.argv) > 4 else 3)
 
 
