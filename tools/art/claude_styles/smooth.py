@@ -615,6 +615,69 @@ def place_hi(dst, fn, wpx, x, y):
     paste(dst, _scaled[key], x - ox * k, y - oy * k)
 
 
+# --- round 29: the standard stamps and bars, redrawn at screen resolution -------------------
+def stamp_hi(kind, W):
+    """lino.stamp's design (same colours and marks) drawn in screen pixels, with outlines that scale."""
+    W = max(12, int(W))
+    key = ('shi', kind, W)
+    if key not in _sprites:
+        t = max(2, W // 30)
+        rx = W / 2; ry = rx * 0.36; th = max(2, round(W * 0.08))
+        pad = t + 2
+        m = Mini(W + 2 * pad, int(2 * ry + th) + 2 * pad + 1)
+        m.img[...] = 0
+        cx, cy = (W + 2 * pad) / 2, pad + ry
+        E = lambda a, b, yy=cy: (((m.X - cx) / max(a, 0.5)) ** 2 + ((m.Y - yy) / max(b, 0.5)) ** 2) <= 1
+        body = E(rx, ry, cy + th) | E(rx, ry)
+        m.fill(_ring_of(body, t) & ~body, INK if kind != 'o' else CREAM)
+        side, top = E(rx, ry, cy + th) & ~E(rx, ry), E(rx, ry)
+        if kind == 'q':
+            m.fill(side, RED); m.fill(top, CREAM)
+            for k in range(6):
+                a = k * math.pi / 3
+                px_, py_ = cx + math.cos(a) * rx * 0.5, cy + math.sin(a) * ry * 0.5
+                m.fill((((m.X - px_) / (rx * 0.17)) ** 2 + ((m.Y - py_) / (ry * 0.22)) ** 2) <= 1, RED)
+            m.fill(E(rx * 0.2, ry * 0.25), RED)
+        elif kind == 'e':
+            m.fill(side, INK); m.fill(top, RED)
+            rw = max(t, W * 0.06)
+            m.fill(E(rx * 0.62, ry * 0.62) & ~E(rx * 0.62 - rw, ry * 0.62 - rw * 0.6), CREAM)
+        elif kind == 'o':
+            m.fill(side, CREAM); m.fill(top, INK)
+            sw = max(t, W // 20)
+            stripes = (((m.Xi - int(cx)) % (3 * sw)) < sw) & ~E(rx * 0.35, ry * 0.4)
+            m.fill(top & stripes & E(rx - t, ry - t * 0.6), CREAM)
+        elif kind == 'h':
+            m.fill(side, INK); m.fill(top, RED)
+            m.fill(E(rx * 0.4, ry * 0.45), CREAM)
+            m.fill(E(rx * 0.18, ry * 0.2), RED)
+        _sprites[key] = (m.img.copy(), cx, cy)
+    return _sprites[key]
+
+
+def bar_hi(up_, W, TH):
+    """bar_sprite's design (one chevron per lane) in screen pixels."""
+    W, TH = max(30, int(W)), max(8, int(TH))
+    key = ('bhi', up_, W, TH)
+    if key not in _sprites:
+        t = max(2, W // 110)
+        m = Mini(W + 2 * t, TH + 2 * t)
+        m.img[...] = 0
+        m.fill(np.ones(m.X.shape, bool), INK)
+        m.fill((m.X >= t) & (m.X < W + t) & (m.Y >= t) & (m.Y < TH + t), RED if up_ else CREAM)
+        col = CREAM if up_ else INK
+        a = TH * 0.32
+        cy = (TH + 2 * t) / 2
+        sw = max(2, TH // 6)
+        for lane in range(3):
+            cx = t + (lane + 0.5) * W / 3
+            d = (m.Y - cy) * (1 if up_ else -1) + a * 0.5
+            chev = (np.abs(m.X - cx) <= a * 1.6) & (np.abs(d - np.abs(m.X - cx) * 0.62) <= sw * 0.6)
+            m.fill(chev, col)
+        _sprites[key] = (m.img.copy(), (W + 2 * t) / 2, (TH + 2 * t) / 2)
+    return _sprites[key]
+
+
 # --- round 26: each note drawn clean at a few fixed sizes, then scaled smoothly ----------
 NOTE_MIPS = [7, 9, 12, 16, 21, 28, 37, 48]
 BAR_MIPS = [24, 32, 43, 57, 76, 101, 134]
@@ -714,6 +777,10 @@ def frame(cfg, t, S, nframes_fire=240, fire_i=0):
             if cfg.get('look') == 'd':
                 place_hi(nl, lambda w_, u_=(lane == 'up'): plank_hi(u_, w_), (2 * s.halfw(y) - 2) * S, s.vpx * S, y * S)
                 continue
+            if cfg.get('look') == 'std_hi':
+                bw_ = (2 * s.halfw(y) - 2) * S
+                place_hi(nl, lambda w_, u_=(lane == 'up'): bar_hi(u_, w_, max(12, w_ * 0.075)), bw_, s.vpx * S, y * S)
+                continue
             if cfg.get('mip'):
                 place(nl, (lambda w_, u_=(lane == 'up'): clean_bar(u_, w_)) if not cfg.get('look') else
                       (lambda w_, u_=(lane == 'up'), up2=cfg['look'] != 'a': plank(u_, w_, up2)),
@@ -725,12 +792,18 @@ def frame(cfg, t, S, nframes_fire=240, fire_i=0):
             continue
         if kind == 'note_h':
             draw_rope(nl, s, lane, d, dt, S)
-            if dt <= 0.8:
+            if dt <= 0.8 and cfg.get('look') == 'std_hi':
+                yt = s.y_of_depth(min(0.8, dt))
+                place_hi(nl, lambda w_: stamp_hi('h', w_), lw(yt) * 0.45 * S, s.lane_x(lane, yt) * S, yt * S)
+            elif dt <= 0.8:
                 yt = s.y_of_depth(min(0.8, dt))
                 spr, ox, oy = note_sprite('h', lw(yt) * 0.45)
                 paste(nl, up(spr, S), (s.lane_x(lane, yt) - ox) * S, (yt - oy) * S)
             y0 = s.y_of_depth(max(0, d))
             if cfg.get('mip'):
+                if cfg.get('look') == 'std_hi':
+                    place_hi(nl, lambda w_: stamp_hi('h', w_), lw(y0) * 0.8 * S, s.lane_x(lane, y0) * S, y0 * S)
+                    continue
                 if cfg.get('look') == 'd':
                     place_hi(nl, lambda w_: token_hi('h', w_), max(lw(y0) * 0.62, cfg.get('note_floor', 0)) * S,
                              s.lane_x(lane, y0) * S, y0 * S)
@@ -762,6 +835,9 @@ def frame(cfg, t, S, nframes_fire=240, fire_i=0):
             paste(nl, up(spr, S), (s.lane_x(lane, y) - ox) * S, (y - oy) * S)
             continue
         if cfg.get('mip'):
+            if cfg.get('look') == 'std_hi':
+                place_hi(nl, lambda w_, k_=k: stamp_hi(k_, w_), lw(y) * 0.8 * S, s.lane_x(lane, y) * S, y * S)
+                continue
             if cfg.get('look') == 'd':
                 place_hi(nl, lambda w_, k_=k: token_hi(k_, w_), max(lw(y) * 0.62, cfg.get('note_floor', 0)) * S,
                          s.lane_x(lane, y) * S, y * S)
@@ -1379,3 +1455,6 @@ R27 = {'a': dict(R26, name='r27_a', look='a', note_floor=9),
 
 # round 28: option D - notes and bars at screen resolution, the world stays chunky lino
 R28 = dict(R26, name='r28_d', look='d', note_floor=10)
+
+# round 29: the standard (round 25) stamps and bars, drawn at screen resolution
+R29 = dict(R26, name='r29_std_hi', look='std_hi')
