@@ -73,6 +73,67 @@ def rift_offsets(part, t, amp=1.0):
     return 0.0, body
 
 
+# --- heavy hop (round 13): crouch, a short lift while stepping, a hard landing ON the beat ---
+H_DROP, H_JUMP, H_CROUCH = 0.07, 0.035, 0.025
+T_CROUCH, T_OFF, T_BEAT = 0.26, 0.34, 0.5     # s within a 120 bpm beat
+
+
+def _ss(x):
+    x = min(1.0, max(0.0, x))
+    return x * x * (3 - 2 * x)
+
+
+def heavy_parts(t):
+    """Body drop after landing, crouch before take-off, lift while airborne (fractions of height)."""
+    land = 1.0 if t < 0.03 else 1.0 - _ss((t - 0.03) / 0.13)
+    crouch = _ss((t - T_CROUCH) / (T_OFF - T_CROUCH - 0.02)) * (1 - _ss((t - T_OFF + 0.02) / 0.05))
+    s_ = (t - T_OFF) / (T_BEAT - T_OFF)
+    lift = 4 * s_ * (1 - s_) if 0 <= s_ <= 1 else 0.0
+    return land, crouch, lift
+
+
+def heavy_offsets(part, t, amp=1.0):
+    """(dx, dy) in figure heights; dy > 0 is down. t = seconds since the beat (landing)."""
+    t %= T_BEAT
+    land, crouch, lift = heavy_parts(t)
+    body = (land * H_DROP + crouch * H_CROUCH) * amp - lift * H_JUMP * amp
+    if part == 'legs':
+        return 0.0, -lift * H_JUMP * amp           # planted, except in the air
+    if part == 'head':
+        l2, _, _ = heavy_parts((t - 0.033) % T_BEAT)
+        return 0.0, body + l2 * H_DROP * 0.4 * amp + lift * H_JUMP * 0.3 * amp
+    if part in ('back_bells', 'front_bells'):
+        l3, _, _ = heavy_parts((t - 0.05) % T_BEAT)
+        reb = 0.012 * math.sin(max(0.0, t - 0.05) * 40) * math.exp(-max(0.0, t - 0.05) * 14) if t > 0.05 else 0.0
+        dy = body + l3 * H_DROP * 0.35 * amp + lift * H_JUMP * 0.5 * amp + reb * amp
+        return (max(land, l3) * LOAD_OUT * 2) * amp, dy
+    if part == 'arms':
+        l4, _, _ = heavy_parts((t - 0.02) % T_BEAT)
+        return 0.0, body + l4 * H_DROP * 0.15 * amp
+    return 0.0, body
+
+
+def ring_marks(out, fg, tsec, S):
+    """Short cream strokes flying off the bells for a moment after each landing."""
+    if tsec > 0.14 or fg.get('z', 9) > 4.5:
+        return
+    k = 1 - tsec / 0.14
+    h = fg['h']
+    cream = C(CREAM)
+    by = fg['y'] - h * 0.42
+    for side in (-1, 1):
+        bx = fg['x'] + side * h * 0.43
+        for j, ang in enumerate((-0.5, 0.0, 0.5)):
+            r0 = h * (0.06 + 0.1 * (1 - k))
+            ln = max(2.0, h * 0.07 * k)
+            for q in np.arange(0, ln, 1.0 / S):
+                x = (bx + side * (r0 + q) * math.cos(ang)) * S
+                y = (by + (r0 + q) * math.sin(ang)) * S
+                xi, yi = int(x), int(y)
+                if 0 <= yi < out.shape[0] - S and 0 <= xi < out.shape[1] - S:
+                    out[yi:yi + S, xi:xi + S] = cream
+
+
 def procession_walk(s, cfg, t):
     """The files walk toward the fire: one step on each bob, taken in the drop.
     Rows are evenly spaced in log depth; a new Mamuthone walks in past the
@@ -80,8 +141,10 @@ def procession_walk(s, cfg, t):
     R = cfg['rows']
     z0, ratio, step = R['z0'], R['ratio'], R['step']        # step = rows per beat
     beat = math.floor(t)
-    u = min(1.0, max(0.0, ((t - beat) * 0.5) / 0.12))       # the step, inside the drop
-    u = u * u * (3 - 2 * u)
+    if R.get('hop'):                                         # the step is taken in the air
+        u = _ss(((t - beat) * 0.5 - T_OFF) / (T_BEAT - T_OFF))
+    else:
+        u = _ss(((t - beat) * 0.5) / 0.12)                   # the step, inside the drop
     pos = (beat + u) * step                                  # rows walked so far
     out = []
     W, H = s.W, s.H
@@ -318,7 +381,7 @@ def frame(cfg, t, S, nframes_fire=240, fire_i=0):
         layer = np.zeros((f.CH * S + 4 * S, f.W * S + 2 * S, 4), np.uint8)
         toward = -fg['side']                # bells swing out toward the road
         for part in figure.PART_ORDER:
-            dx, dy = rift_offsets(part, tsec, fg['amp'])
+            dx, dy = (heavy_offsets if cfg.get('heavy') else rift_offsets)(part, tsec, fg['amp'])
             paste(layer, up(rp[part], S), S + dx * fh * S * (toward if not fg['flip'] else -toward), dy * fh * S)
         if fg['flip']:
             layer = layer[:, ::-1]
@@ -331,6 +394,8 @@ def frame(cfg, t, S, nframes_fire=240, fire_i=0):
             nb[k:] |= a[:-k]; nb[:-k] |= a[k:]; nb[:, k:] |= a[:, :-k]; nb[:, :-k] |= a[:, k:]
         layer[nb & ~a] = C(cfg.get('keyline') or CREAM)
         paste(out, layer, (fg['x'] - f.W / 2) * S - S, (fg['y'] - f.CH) * S)
+        if cfg.get('heavy'):
+            ring_marks(out, fg, tsec, S)
 
     # notes, bars and ropes, far to near
     lw = lambda y: 2 * s.halfw(y) / 3
@@ -484,7 +549,7 @@ if __name__ == '__main__':
     render(cfg, sys.argv[2], sys.argv[3], int(sys.argv[4]) if len(sys.argv) > 4 else 3)
 
 
-def closeup(path, H=96, S=5, fps=60, beats=4, slow=1.0, bpm=120):
+def closeup(path, H=96, S=5, fps=60, beats=4, slow=1.0, bpm=120, heavy=False):
     """One Mamuthone, big, on the lino night ink, to judge the bob."""
     cfg = R5
     f, parts = figure.build(cfg['style'], H, dict(cfg['fig_opts'], seed=0))
@@ -499,7 +564,7 @@ def closeup(path, H=96, S=5, fps=60, beats=4, slow=1.0, bpm=120):
         layer[...] = C(INK)
         fig = np.zeros_like(layer)
         for part in figure.PART_ORDER:
-            dx, dy = rift_offsets(part, tsec)
+            dx, dy = (heavy_offsets if heavy else rift_offsets)(part, tsec)
             paste(fig, up(rp[part], S), 4 * S + dx * H * S, 4 * S + dy * H * S)
         a = fig[..., 3] > 0
         nb = np.zeros_like(a)
@@ -540,3 +605,6 @@ R11_B = {
 # round 12: today's houses and four-a-side files, back rows black, walking a step per bob
 R12 = dict(R10b, name='r12_walk', rows=dict(walk=True, scale=90, z0=2.4, ratio=1.42, step=1 / 3,
                                             n=5, zmax=11.0, out=1.1, sil_z=4.0))
+
+# round 13: a heavy hop that rings the bells on the beat
+R13 = dict(R12, name='r13_hop', heavy=True, rows=dict(R12['rows'], hop=True))
