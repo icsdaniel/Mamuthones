@@ -437,6 +437,7 @@ R6 = dict(R5, name='r6_street', street_floor=2.0,
 R7 = dict(R6, name='r7_fire', levels=4, combo_scale=3, combo_word=True)
 R8 = dict(R7, name='r8_polish')
 R9 = {k: dict(R8, name='r9_' + k, fire_style=k) for k in ('tongues', 'gouges', 'pile')}
+R10 = dict(R8, name='r10_pile', fire_style='pile')
 
 if __name__ == '__main__':
     cfg = {'r5': R5, 'r6': R6, 'r7': R7, 'r8': R8}.get(sys.argv[1]) or lino3.R3[sys.argv[1]]

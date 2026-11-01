@@ -140,22 +140,26 @@ def pile(s, lv, beat_sec, since_up, tt, box, beat_no=0):
     """The fogarone: a cone of crossed logs with flames out of the top and
     through the gaps. Each beat throws a handful of sparks up."""
     W, H = s.W, s.H
-    by, h0 = _heights(s, lv, beat_sec, box)
+    box = None                            # round 10: no wrapping, a big natural fire
+    by, h0 = _heights(s, min(lv, 3), beat_sec, box)
+    leap = LEAP[lv]
+    if lv == 4:
+        h0, leap = H * 0.145, 0.24        # tips lick up behind the combo on the beat
     cx = s.vpx
     hole = _hole(s, box)
-    ph_ = h0 * 0.42 if lv < 4 else H * 0.05             # height of the log cone
+    ph_ = h0 * 0.42                       # height of the log cone
     pw = W * (0.07 + 0.008 * lv)
     p = bob(beat_sec)
     # flames behind the logs, then the logs, then flames in the gaps
-    n = 3 if lv < 3 else 5
-    for i in range(n):
+    n = {1: 3, 2: 3, 3: 5, 4: 7}[lv]
+    for i in sorted(range(n), key=lambda i: -abs(i - (n - 1) / 2)):
         off = (i - (n - 1) / 2) / max(1, (n - 1) / 2)
         pp = bob(beat_sec - LAG * abs(off))
-        hh = (h0 * (1 - 0.3 * abs(off) ** 1.5)) * (1 + LEAP[lv] * pp)
+        hh = (h0 * (1 - 0.3 * abs(off) ** 1.5)) * (1 + leap * pp) * (1 + 0.06 * math.sin(tt * 9 + i * 2.1))
         side = (1 if off > 0 else -1) if box is not None else 0
         if box is not None and abs(off) < 0.6:
             hh = min(hh, by - box[1] - box[3] * 0.9)
-        m, c, half, v = _tongue(s, cx + off * pw * 0.55, by - ph_ * 0.3, hh, W * (0.03 + 0.005 * lv), 0.8, tt * 7 + i * 2.3, side, box)
+        m, c, half, v = _tongue(s, cx + off * pw * (0.55 if lv < 4 else 0.75), by - ph_ * 0.3, hh, W * (0.03 + 0.005 * lv) * (1.15 if lv == 4 else 1), 0.8, tt * 7 + i * 2.3, side, box)
         m &= hole
         s.fill(_dil(m) & ~m & hole, INK)
         s.fill(m, RED)
