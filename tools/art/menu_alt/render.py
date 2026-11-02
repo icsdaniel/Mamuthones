@@ -280,10 +280,15 @@ SCARF = [(44, 60), (46, 44), (52, 33), (62, 25), (74, 21), (86, 22), (95, 28),
          (64, 100), (72, 112), (66, 118), (56, 112), (48, 98), (44, 80)]
 
 # the carved visera, three-quarter view looking right and a little down
-MASK = [(62, 40), (70, 34), (82, 33), (90, 36), (95, 42), (97, 47), (100, 51),
-        (96, 55), (96, 59), (100, 67), (104, 76), (106, 82), (104, 84), (99, 85),
-        (99, 88), (103, 90), (103, 93), (99, 95), (103, 98), (102, 102), (97, 106),
-        (97, 111), (92, 115), (82, 116), (72, 111), (65, 100), (61, 82), (60, 60)]
+MASK = [(62, 40), (70, 35), (82, 34), (92, 36), (95, 42), (97, 46),          # forehead
+        (101, 47), (104, 48), (104, 51), (100, 52),                            # brow shelf juts out
+        (97, 53), (97, 56),                                                   # deep notch at the nose root
+        (104, 66), (112, 77), (115, 81), (115, 85), (111, 87), (102, 87),      # long straight nose, heavy tip
+        (100, 88), (105, 89), (107, 91), (106, 93),                           # thick upper lip
+        (101, 94), (101, 95),                                                 # open mouth
+        (105, 96), (105, 99), (101, 101),                                     # lower lip
+        (99, 103), (100, 108), (97, 113), (90, 116), (82, 116),               # receding chin, jaw
+        (72, 111), (65, 100), (61, 82), (60, 60)]
 
 KNOT = [(70, 110), (82, 116), (92, 116), (96, 121), (90, 126), (84, 124), (80, 134),
         (74, 132), (76, 122), (68, 116)]
@@ -348,7 +353,7 @@ def draw_scarf(cv, dy):
     lit = m & poly([(52, 34), (62, 25), (74, 21), (86, 22), (95, 28), (99, 36),
                     (84, 33), (70, 34), (62, 42), (60, 60), (60, 90), (64, 102),
                     (56, 96), (54, 70), (52, 50)], 0, dy)
-    cv[lit] = B
+    dither(cv, lit, K, B, 5)                       # the scarf stays darker than the mask's lit planes
     folds = lines([[(52, 44), (58, 34), (68, 28), (80, 26)],
                    [(48, 66), (50, 52), (56, 42)],
                    [(54, 100), (52, 84), (54, 70)],
@@ -362,56 +367,62 @@ def draw_scarf(cv, dy):
 
 
 def draw_mask(cv, dy):
-    """Carved black visera lit by the fire from the right: chiaroscuro planes."""
+    """The black visera from Daniele's photo, three-quarter view facing right, lit by the fire."""
     m = poly(MASK, 0, dy)
     cv[m] = K
+    cv[dilate(m, 1) & ~m & (XX < 100)] = K          # a dark seam where the scarf meets the mask
 
     def P(pts, ink):
         cv[poly(pts, 0, dy) & m] = ink
 
-    def Lz(pts_list, ink):
-        cv[lines(pts_list, dy) & m] = ink
+    def Lz(pts_list, ink, w=1):
+        cv[lines(pts_list, dy, w) & m] = ink
 
-    # forehead: only the part turned to the fire catches light
-    P([(82, 36), (89, 36), (94, 42), (96, 46), (80, 46)], B)
-    Lz([[(84, 38), (88, 44)]], K)            # frown furrow
-    # heavy brow crest
-    Lz([[(70, 47), (98, 46)]], G)
-    Lz([[(86, 46), (98, 46)]], C)
-    # near eye: almond hole under the brow, lower lid catches light
-    P([(72, 50), (84, 50), (84, 54), (79, 57), (73, 55)], K)
-    P([(76, 52), (81, 52), (81, 54), (77, 54)], B)
-    Lz([[(74, 57), (83, 55)]], B)
-    Lz([[(76, 58), (82, 56)]], G)
-    # far eye half hidden behind the nose bridge
-    P([(91, 50), (95, 50), (95, 53), (92, 54)], K)
-    Lz([[(92, 55), (95, 54)]], B)
-    # cheek: front plane lit, back plane in shadow
-    P([(78, 60), (88, 60), (92, 70), (91, 84), (86, 92), (78, 88), (76, 72)], B)
-    Lz([[(70, 64), (80, 60)]], B)
-    Lz([[(78, 61), (86, 60)]], G)
-    # nasolabial fold carved deep, from the nose wing to the mouth corner
-    Lz([[(89, 71), (86, 80), (84, 90)]], K)
-    Lz([[(90, 73), (87, 82)]], G)
-    # nose: long lit side plane and bright ridge
-    P([(89, 56), (95, 56), (103, 74), (105, 82), (96, 82), (91, 68)], B)
-    Lz([[(94, 56), (100, 67), (104, 78)]], G)
-    Lz([[(95, 58), (99, 65)]], C)
-    P([(92, 83), (105, 83), (100, 86), (92, 86)], K)
-    Lz([[(95, 80), (97, 80)]], K)               # nostril
-    # open mouth with thick lips
-    P([(90, 87), (101, 87), (103, 90), (90, 90)], B)
-    Lz([[(92, 87), (101, 87)]], G)
-    P([(86, 91), (102, 91), (99, 94), (86, 94)], K)
-    P([(90, 95), (100, 95), (102, 98), (90, 99)], B)
-    Lz([[(91, 95), (100, 95)]], G)
-    # chin
-    P([(86, 101), (97, 101), (96, 110), (88, 112)], B)
-    Lz([[(89, 102), (96, 102)]], G)
-    # fire rim along the profile; cream on the forward-most carving
+    # forehead: the plane turned to the fire, a soft sheen, the small red mark
+    P([(70, 38), (92, 37), (95, 43), (96, 46), (68, 46)], B)          # broad flat forehead
+    Lz([[(82, 40), (92, 41)]], G)
+    P([(87, 37), (89, 37), (89, 39), (87, 39)], R)
+    # heavy brow shelf: bright top edge running out to its tip, black shadow under it
+    Lz([[(70, 47), (103, 47)]], G, 2)
+    Lz([[(90, 47), (104, 48)]], C)
+    P([(70, 49), (104, 50), (100, 53), (70, 53)], K)
+    # the eye: a round hole under the brow, warm inside like the photo
+    P([(83, 52), (90, 52), (91, 55), (88, 57), (84, 56)], K)
+    P([(86, 53), (88, 53), (88, 55), (86, 55)], R)
+    Lz([[(82, 58), (91, 57)]], B, 2)                 # lower lid catches light
+    # cheek: one broad lit plane from under the eye down to the mouth
+    P([(70, 60), (95, 58), (98, 70), (98, 84), (92, 92), (72, 92), (68, 76)], B)   # broad cheek plane
+    Lz([[(84, 62), (95, 60)]], G)                    # cheekbone
+    Lz([[(70, 60), (68, 76), (72, 94), (80, 108)]], K, 3)   # the far edge turns away into shadow
+    Lz([[(84, 72), (86, 80)]], K, 2)                 # carved crease under the cheekbone, like the photo
+    # deep carved fold from the nose wing round the mouth
+    Lz([[(99, 84), (96, 90), (93, 97), (92, 102)]], K, 2)
+    # the long nose: lit side plane, bright ridge, glint near the tip, shadow under it
+    P([(97, 56), (104, 66), (112, 77), (114, 83), (104, 84), (100, 74), (96, 62)], B)
+    Lz([[(98, 57), (104, 67), (112, 78)]], G)
+    Lz([[(106, 70), (113, 80)]], C)
+    P([(100, 84), (115, 85), (111, 87), (100, 87)], K)
+    Lz([[(105, 83), (107, 83)]], K)                  # nostril
+    Lz([[(96, 60), (99, 72), (99, 82)]], K, 2)       # the nose's shadow on the cheek
+    # thick lips, slightly open
+    P([(100, 88), (105, 89), (107, 91), (106, 93), (99, 93)], B)
+    Lz([[(101, 89), (106, 90)]], G)
+    P([(84, 94), (102, 94), (102, 96), (84, 96)], K)            # wide open mouth
+    P([(84, 89), (100, 88), (99, 93), (84, 93)], B)             # upper lip runs back to the corner
+    P([(86, 97), (98, 96), (98, 100), (86, 100)], B)            # lower lip
+    P([(98, 96), (105, 96), (105, 99), (100, 100), (97, 99)], B)
+    Lz([[(99, 96), (104, 96)]], G)
+    # chin and jaw
+    P([(84, 101), (99, 103), (100, 108), (96, 112), (86, 110)], B)   # chin
+    Lz([[(95, 104), (99, 104)]], G)
+    # a black gap between the mask and the glow, so the profile reads against the fire
+    halo = dilate(m, 2) & ~m & (XX > 92) & (YY > 44 + dy)
+    cv[halo] = K
+    # fire rim along the profile; cream on the parts that jut out furthest
     rim = edge_right(m)
     cv[rim] = R
-    hot = rim & ((XX >= 103) | ((XX >= 98) & (YY > 44 + dy) & (YY < 52 + dy)))
+    hot = rim & (((XX >= 111) & (YY > 70 + dy)) | ((XX >= 101) & (YY > 44 + dy) & (YY < 53 + dy))
+                 | ((XX >= 105) & (YY > 86 + dy) & (YY < 100 + dy)))
     cv[hot] = C
     cv[edge_down(m) & (XX > 84)] = R
     return m
