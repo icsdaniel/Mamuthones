@@ -274,24 +274,36 @@ def draw_bell(cv, cx, cy, ang, L, w0, w1, light=1, tongue=0.0, band=True, clip=N
 FLEECE = [(0, 104), (12, 100), (24, 100), (36, 102), (48, 106), (60, 110), (70, 114),
           (84, 120), (96, 128), (104, 142), (108, 158), (110, SHEET_Y), (0, SHEET_Y)]
 
-# hood of the brown headscarf, behind and above the mask
-SCARF = [(44, 60), (46, 44), (52, 33), (62, 25), (74, 21), (86, 22), (95, 28),
-         (99, 36), (92, 36), (84, 33), (70, 34), (62, 42), (60, 60), (60, 84),
-         (64, 100), (72, 112), (66, 118), (56, 112), (48, 98), (44, 80)]
+# The head is drawn from Daniele's photo (mamuthone_reference.jpg): every point
+# below is in photo pixels and A() maps it onto the canvas.  Three-quarter view,
+# turned to the viewer's right and a little down.
+MS = 0.14                        # art px per photo px
+MX0, MY0 = 60, 32                # where photo (885, 100) lands on the canvas
 
-# the carved visera, three-quarter view looking right and a little down
-MASK = [(62, 40), (70, 35), (82, 34), (92, 36), (95, 42), (97, 46),          # forehead
-        (101, 47), (104, 48), (104, 51), (100, 52),                            # brow shelf juts out
-        (97, 53), (97, 56),                                                   # deep notch at the nose root
-        (104, 66), (112, 77), (115, 81), (115, 85), (111, 87), (102, 87),      # long straight nose, heavy tip
-        (100, 88), (105, 89), (107, 91), (106, 93),                           # thick upper lip
-        (101, 94), (101, 95),                                                 # open mouth
-        (105, 96), (105, 99), (101, 101),                                     # lower lip
-        (99, 103), (100, 108), (97, 113), (90, 116), (82, 116),               # receding chin, jaw
-        (72, 111), (65, 100), (61, 82), (60, 60)]
 
-KNOT = [(70, 110), (82, 116), (92, 116), (96, 121), (90, 126), (84, 124), (80, 134),
-        (74, 132), (76, 122), (68, 116)]
+def A(pts):
+    return [(MX0 + (x - 885) * MS, MY0 + (y - 100) * MS) for x, y in pts]
+
+
+# hood of the brown headscarf: wide on the near side, a thin band over the top
+# and down the far side of the forehead, then drawn in under the chin
+SCARF = A([(690, 430), (698, 310), (735, 205), (795, 125), (875, 68), (975, 40),
+           (1075, 42), (1155, 75), (1205, 135), (1218, 210), (1212, 285),
+           (1150, 330), (1040, 600), (1000, 745), (930, 770), (840, 720),
+           (760, 630), (705, 530)])
+
+# the carved visera
+MASK = A([(890, 175), (940, 135), (1000, 110), (1080, 102), (1140, 108),       # forehead top
+          (1180, 132), (1186, 200), (1186, 262),                               # far edge, under the scarf
+          (1205, 272), (1224, 292), (1232, 330), (1226, 370), (1206, 392),     # far end of the brow
+          (1188, 398), (1192, 440), (1196, 482), (1188, 510), (1166, 524),     # nose, straight down to a heavy tip
+          (1104, 528), (1128, 532), (1142, 544), (1134, 554),                  # upper lip juts out
+          (1112, 556), (1124, 572), (1130, 592), (1124, 614), (1104, 630),     # open slit, lower lip
+          (1104, 655), (1104, 700), (1088, 736), (1045, 754), (985, 752),      # strong chin
+          (950, 730), (925, 660), (905, 560), (895, 450), (888, 330), (886, 240)])
+
+KNOT = A([(870, 700), (950, 742), (1010, 760), (1030, 790), (1000, 815), (965, 805),
+          (960, 890), (915, 895), (925, 810), (860, 750)])
 
 
 def lines(pts_list, dy, width=1):
@@ -348,92 +360,97 @@ def draw_fleece(cv, dy):
 
 def draw_scarf(cv, dy):
     m = poly(SCARF, 0, dy)
-    # in shadow: brown dithered with black; lit near the face
-    dither(cv, m, K, B, 9)
-    lit = m & poly([(52, 34), (62, 25), (74, 21), (86, 22), (95, 28), (99, 36),
-                    (84, 33), (70, 34), (62, 42), (60, 60), (60, 90), (64, 102),
-                    (56, 96), (54, 70), (52, 50)], 0, dy)
-    dither(cv, lit, K, B, 5)                       # the scarf stays darker than the mask's lit planes
-    folds = lines([[(52, 44), (58, 34), (68, 28), (80, 26)],
-                   [(48, 66), (50, 52), (56, 42)],
-                   [(54, 100), (52, 84), (54, 70)],
-                   [(62, 114), (58, 106)]], dy)
-    cv[folds & m] = K
-    sheen = lines([[(60, 30), (70, 26), (82, 25)], [(56, 72), (56, 88)]], dy)
+    # dark cloth: black with brown folds running from the crown down round the face,
+    # so it reads as fabric and stays darker than the carved planes of the mask
+    cv[m] = K
+    folds = lines([A([(1150, 70), (1040, 52), (940, 62), (850, 100), (780, 170), (730, 260)]),
+                   A([(1180, 110), (1100, 80), (980, 82), (880, 130), (810, 220), (770, 330), (760, 450)]),
+                   A([(860, 160), (820, 260), (800, 380), (810, 500), (850, 620)]),
+                   A([(740, 300), (720, 420), (740, 540), (790, 640)]),
+                   A([(1200, 160), (1202, 260)]),
+                   A([(900, 680), (960, 735)])], dy, 2)
+    cv[folds & m] = B
+    sheen = lines([A([(812, 210), (796, 260)])], dy, 2)
     cv[sheen & m] = G
-    cv[edge_up(m) & (XX > 72)] = R
-    cv[edge_right(m) & (YY < 40 + dy)] = R
+    # fire rim on the crown and on the far fold beside the forehead
+    cv[edge_up(m) & (XX > 84)] = R
+    cv[edge_right(m) & (YY < MY0 + 30 + dy)] = R
     return m
 
 
 def draw_mask(cv, dy):
-    """The black visera from Daniele's photo, three-quarter view facing right, lit by the fire."""
+    """The black visera from Daniele's photo, three-quarter view, back-lit by the fire."""
     m = poly(MASK, 0, dy)
     cv[m] = K
-    cv[dilate(m, 1) & ~m & (XX < 100)] = K          # a dark seam where the scarf meets the mask
+    cv[dilate(m, 1) & ~m & (XX < MX0 + 40)] = K      # a dark seam where the scarf meets the mask
 
-    def P(pts, ink):
-        cv[poly(pts, 0, dy) & m] = ink
+    def P(pts, ink, lvl=None):
+        pm = poly(A(pts), 0, dy) & m
+        if lvl is None:
+            cv[pm] = ink
+        else:
+            dither(cv, pm, K, ink, lvl)
 
-    def Lz(pts_list, ink, w=1):
-        cv[lines(pts_list, dy, w) & m] = ink
+    def Lz(pts_list, ink, w=2):
+        cv[lines([A(p) for p in pts_list], dy, w) & m] = ink
 
-    # forehead: the plane turned to the fire, a soft sheen, the small red mark
-    P([(70, 38), (92, 37), (95, 43), (96, 46), (68, 46)], B)          # broad flat forehead
-    Lz([[(82, 40), (92, 41)]], G)
-    P([(87, 37), (89, 37), (89, 39), (87, 39)], R)
-    # heavy brow shelf: bright top edge running out to its tip, black shadow under it
-    Lz([[(70, 47), (103, 47)]], G, 2)
-    Lz([[(90, 47), (104, 48)]], C)
-    P([(70, 49), (104, 50), (100, 53), (70, 53)], K)
-    # the eye: a round hole under the brow, warm inside like the photo
-    P([(83, 52), (90, 52), (91, 55), (88, 57), (84, 56)], K)
-    P([(86, 53), (88, 53), (88, 55), (86, 55)], R)
-    Lz([[(82, 58), (91, 57)]], B, 2)                 # lower lid catches light
-    # cheek: one broad lit plane from under the eye down to the mouth
-    P([(70, 60), (95, 58), (98, 70), (98, 84), (92, 92), (72, 92), (68, 76)], B)   # broad cheek plane
-    Lz([[(84, 62), (95, 60)]], G)                    # cheekbone
-    Lz([[(70, 60), (68, 76), (72, 94), (80, 108)]], K, 3)   # the far edge turns away into shadow
-    Lz([[(84, 72), (86, 80)]], K, 2)                 # carved crease under the cheekbone, like the photo
-    # deep carved fold from the nose wing round the mouth
-    Lz([[(99, 84), (96, 90), (93, 97), (92, 102)]], K, 2)
-    # the long nose: lit side plane, bright ridge, glint near the tip, shadow under it
-    P([(97, 56), (104, 66), (112, 77), (114, 83), (104, 84), (100, 74), (96, 62)], B)
-    Lz([[(98, 57), (104, 67), (112, 78)]], G)
-    Lz([[(106, 70), (113, 80)]], C)
-    P([(100, 84), (115, 85), (111, 87), (100, 87)], K)
-    Lz([[(105, 83), (107, 83)]], K)                  # nostril
-    Lz([[(96, 60), (99, 72), (99, 82)]], K, 2)       # the nose's shadow on the cheek
-    # thick lips, slightly open
-    P([(100, 88), (105, 89), (107, 91), (106, 93), (99, 93)], B)
-    Lz([[(101, 89), (106, 90)]], G)
-    P([(84, 94), (102, 94), (102, 96), (84, 96)], K)            # wide open mouth
-    P([(84, 89), (100, 88), (99, 93), (84, 93)], B)             # upper lip runs back to the corner
-    P([(86, 97), (98, 96), (98, 100), (86, 100)], B)            # lower lip
-    P([(98, 96), (105, 96), (105, 99), (100, 100), (97, 99)], B)
-    Lz([[(99, 96), (104, 96)]], G)
-    # chin and jaw
-    P([(84, 101), (99, 103), (100, 108), (96, 112), (86, 110)], B)   # chin
-    Lz([[(95, 104), (99, 104)]], G)
-    # a black gap between the mask and the glow, so the profile reads against the fire
-    halo = dilate(m, 2) & ~m & (XX > 92) & (YY > 44 + dy)
+    # forehead: broad flat plane facing the viewer, a sheen high on it, the small red mark
+    P([(886, 176), (1000, 112), (1100, 106), (1150, 112), (1156, 240), (886, 222)], B)
+    Lz([[(950, 156), (1060, 128)]], G)
+    P([(1102, 132), (1126, 132), (1126, 154), (1102, 154)], R)
+    # heavy brow shelf sloping down across the face, lit top edge, deep shadow under it
+    P([(892, 228), (1186, 258), (1196, 284), (892, 254)], B)
+    Lz([[(910, 234), (1110, 254)]], G)
+    # near cheek: one big plane under the eye, sheen high on it; it turns away into shadow at the scarf
+    P([(886, 290), (950, 300), (1000, 356), (1062, 352), (1074, 455), (990, 470), (900, 470)], B)
+    Lz([[(925, 392), (950, 425)]], G)
+    Lz([[(900, 490), (930, 620)]], K, 3)
+    # the eyes: the near one a round hole with the wearer's skin deep inside; the far one a
+    # sliver past the nose, under the end of the brow
+    def oval(x0, y0, x1, y1):
+        e = ellipse(*[v for p in A([(x0, y0), (x1, y1)]) for v in p])
+        return np.roll(e, dy, axis=0) & m
+
+    cv[oval(938, 262, 1074, 384)] = B                               # the carved socket round it
+    cv[oval(960, 280, 1054, 362)] = K
+    Lz([[(950, 340), (972, 370), (1010, 380), (1046, 370)]], G)   # lower rim of the eye hole catches light
+    P([(1176, 330), (1200, 330), (1198, 404), (1180, 404)], K)
+    # far end of the brow, rounding off past the nose root
+    P([(1186, 262), (1224, 292), (1232, 330), (1226, 368), (1200, 380), (1190, 300)], K)
+    # the long nose: flat front plane widening to a heavy tip, bright ridge, dark near side
+    Lz([[(1088, 296), (1080, 400), (1066, 500)]], K, 4)
+    P([(1100, 296), (1174, 316), (1194, 470), (1186, 506), (1168, 518), (1080, 504), (1090, 460)], B)
+    Lz([[(1108, 312), (1104, 400), (1098, 480)]], G)
+    Lz([[(1140, 490), (1176, 496)]], G)
+    Lz([[(1016, 446), (1046, 426), (1072, 436)]], K, 2)  # carved nostril wing
+    # the lower face follows the tilt of the head: everything slopes down to the right
+    P([(980, 478), (1080, 500), (1180, 510), (1166, 534), (980, 504)], K)   # shadow under the nose
+    P([(966, 502), (1130, 532), (1142, 544), (1134, 554), (966, 528)], B)   # thick upper lip
+    Lz([[(984, 508), (1126, 536)]], G)
+    P([(960, 528), (1134, 554), (1116, 578), (960, 556)], K)                # open slit
+    P([(964, 556), (1116, 576), (1130, 594), (1122, 614), (1100, 626), (964, 600)], B)  # lower lip
+    Lz([[(1000, 568), (1116, 590)]], G)
+    P([(950, 600), (1104, 626), (1104, 654), (950, 630)], K)   # shadow under the lower lip
+    # strong chin
+    P([(980, 646), (1094, 664), (1088, 712), (1050, 738), (998, 724)], B)
+    Lz([[(1030, 674), (1080, 680)]], G)
+    # a black gap between the mask and the glow, so the face reads against the fire
+    halo = dilate(m, 3) & ~m & (XX > MX0 + 36) & (YY > MY0 + 22 + dy)
     cv[halo] = K
-    # fire rim along the profile; cream on the parts that jut out furthest
-    rim = edge_right(m)
+    # fire rim down the far side; cream where the carving juts out furthest
+    rim = edge_right(m) & (XX > MX0 + 20)
     cv[rim] = R
-    hot = rim & (((XX >= 111) & (YY > 70 + dy)) | ((XX >= 101) & (YY > 44 + dy) & (YY < 53 + dy))
-                 | ((XX >= 105) & (YY > 86 + dy) & (YY < 100 + dy)))
-    cv[hot] = C
-    cv[edge_down(m) & (XX > 84)] = R
+    cv[rim & (XX > MX0 + 41) & (YY > MY0 + 23 + dy)] = C   # brow end and nose
+    cv[rim & (XX > MX0 + 33) & (YY > MY0 + 60 + dy) & (YY < MY0 + 75 + dy)] = C   # lips
+    cv[edge_down(m) & (XX > MX0 + 26)] = R
     return m
 
 
 def draw_knot(cv, dy):
     k = poly(KNOT, 0, dy)
-    dither(cv, k, K, B, 11)
-    cv[lines([[(76, 118), (90, 120)], [(80, 124), (78, 132)]], dy) & k] = K
+    dither(cv, k, K, B, 9)
+    cv[lines([A([(900, 740), (1000, 775)]), A([(960, 800), (935, 885)])], dy, 2) & k] = K
     cv[edge_right(k)] = R
-
 
 def draw_mamuthone(cv, t, env):
     dy = int(round(2 * env))
