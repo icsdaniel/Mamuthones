@@ -361,6 +361,28 @@ def draw_head(cv, t, env):
     cv[solid] = full[solid]
 
 
+# big sonazzos tied on his back, mouths up over the shoulder; drawn straight on the
+# 2 px grid (half-size coordinates, then doubled) so they match the low-res picture
+BACK_BELLS = [(8, 160, -96, 56, 12, 28, 6), (34, 168, -108, 60, 12, 30, 8)]
+
+
+def draw_back_bells(cv, t, env):
+    dy = int(round(2 * env))
+    dy -= dy % 2
+    tmp = np.full((H, W), 255, dtype=np.uint8)
+    for bx, by, deg, L, w0, w1, swing in BACK_BELLS:
+        a = math.radians(deg + swing * env)          # they swing back on the landing
+        draw_bell(tmp, bx / 2, (by + dy) / 2, a, L / 2, w0 / 2, w1 / 2, light=1, tongue=None)
+    half = tmp[:H // 2, :W // 2 + 1]
+    lay = np.repeat(np.repeat(half, 2, 0), 2, 1)[:H, :W]
+    full = np.full((H, W), 255, dtype=np.uint8)
+    full[:lay.shape[0], :lay.shape[1]] = lay
+    full[SHEET_Y:] = 255
+    ok = full != 255
+    cv[dilate(ok, 2) & ~ok & (YY < SHEET_Y)] = K
+    cv[ok] = full[ok]
+
+
 # --------------------------------------------------------------------- logo
 def draw_logo(cv, t, env):
     word = "SONAZZOS"
@@ -472,6 +494,7 @@ def render(t, pressed=None):
     if LOWRES:
         cv[:SHEET_Y] = chunky(cv[:SHEET_Y])
     draw_head(cv, t, env)
+    draw_back_bells(cv, t, env)
     draw_logo(cv, t, env)
     draw_sheet(cv, pressed)
     return cv
