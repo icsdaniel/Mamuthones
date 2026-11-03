@@ -364,7 +364,7 @@ def draw_head(cv, t, env):
 # big sonazzos tied on his back, drawn behind the silhouette so only their mouths and
 # upper bodies show past his shoulder, against the fire; drawn straight on the
 # 2 px grid (half-size coordinates, then doubled) so they match the low-res picture
-BACK_BELLS = [(108, 170, -62, 36, 9, 18, -4), (120, 176, -44, 32, 8, 16, -6)]  # r19: small, only the mouths peek past his right shoulder, fire stays visible
+BACK_BELLS = [(108, 170, -62, 36, 9, 18, -4), (120, 176, -44, 32, 8, 16, -6), (96, 164, -76, 40, 9, 18, -3), (12, 158, -118, 36, 9, 18, 4)]  # r20: two past the right shoulder, one nearer the face, one peeking on the left
 
 
 def draw_back_bells(cv, t, env):
