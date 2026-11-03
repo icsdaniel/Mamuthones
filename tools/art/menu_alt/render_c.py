@@ -361,9 +361,10 @@ def draw_head(cv, t, env):
     cv[solid] = full[solid]
 
 
-# big sonazzos tied on his back, mouths up over the shoulder; drawn straight on the
+# big sonazzos tied on his back, drawn behind the silhouette so only their mouths and
+# upper bodies show past his shoulder, against the fire; drawn straight on the
 # 2 px grid (half-size coordinates, then doubled) so they match the low-res picture
-BACK_BELLS = [(8, 160, -96, 56, 12, 28, 6), (34, 168, -108, 60, 12, 30, 8)]
+BACK_BELLS = [(104, 150, -72, 66, 12, 28, -6), (118, 162, -52, 58, 11, 26, -8)]
 
 
 def draw_back_bells(cv, t, env):
@@ -493,8 +494,8 @@ def render(t, pressed=None):
     draw_body(cv, t, env)
     if LOWRES:
         cv[:SHEET_Y] = chunky(cv[:SHEET_Y])
-    draw_head(cv, t, env)
     draw_back_bells(cv, t, env)
+    draw_head(cv, t, env)
     draw_logo(cv, t, env)
     draw_sheet(cv, pressed)
     return cv
