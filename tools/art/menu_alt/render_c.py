@@ -541,8 +541,6 @@ def draw_sheet_lo(hv, pressed=None):
     hv[y3 - 3, 2:66] = np.where((np.arange(2, 66) % 2) == 0, B, C)
     stamp(hv, ICON_LEARN_LO, 3, y3, K)
     draw_text(hv, "LEARN", 10, y3, K, F3)
-    stamp(hv, ICON_RANKS_LO, 32, y3, K)
-    draw_text(hv, "RANKS", 39, y3, K, F3)
     stamp(hv, ICON_GEAR_LO, 61, y3, K)
 
 
