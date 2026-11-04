@@ -115,6 +115,9 @@ FIRE_CX, FIRE_BASE = 126, 152
 
 def draw_glow(cv, t, env):
     d = np.hypot((XX - FIRE_CX) * 1.0, (YY - (FIRE_BASE - 34)) * 0.8)
+    if LOWRES:  # r23: night sky like the play screen, only a faint brown haze round the fire
+        cv[(YY < FIRE_BASE + 4) & (d < 70 * (1 + 0.06 * env)) & (BAY2 < 3)] = B
+        return
     r = 1.0 + 0.06 * env
     bands = [(96, B, 3), (80, B, 6), (66, R, 4), (52, R, 8)]
     sky = YY < FIRE_BASE + 4
@@ -161,6 +164,70 @@ def draw_fire(cv, t, env):
                        [(104, FIRE_BASE - 10), (135, FIRE_BASE)],
                        [(114, FIRE_BASE - 1), (126, FIRE_BASE - 16)]], 2)
     cv[logs] = K
+
+
+def _lo_put(cv, hm, ink):
+    """Write a half-res mask into the canvas as 2x2 blocks."""
+    up = np.repeat(np.repeat(hm, 2, 0), 2, 1)[:H, :W]
+    up[SHEET_Y:] = False
+    cv[up] = ink
+
+
+def draw_fire_lo(cv, t, env):
+    """r23: the play screen's lino flames - separate tongues, outer first, each with a
+    black outline, flat red with a cream heart, outer ones lagging the beat."""
+    hy, hx = np.mgrid[0:H // 2, 0:W // 2 + 1]
+    cx, by = FIRE_CX / 2, FIRE_BASE / 2
+    h0 = 44.0
+    n = 5
+    for i in sorted(range(n), key=lambda i: -abs(i - (n - 1) / 2)):
+        off = (i - (n - 1) / 2) / ((n - 1) / 2)
+        p = beat_env(t - 0.033 * abs(off))
+        ph = 2 * math.pi * 2 * t / LOOP + i * 2.3
+        hh = h0 * (1 - 0.32 * abs(off) ** 1.5) * (1 + 0.16 * p) * (1 + 0.06 * math.sin(ph * 1.3 + i))
+        w = 5.0 * (1.15 if abs(off) < 0.4 else 1.0) * (1 - 0.1 * p)
+        x0 = cx + off * 9
+        v = (by - hy) / hh
+        c = x0 + 0.8 * np.sin(v * 4.2 - ph) * v * w * 0.7
+        half = w * np.clip(1 - v, 0, 1) ** 0.85 * np.clip((v + 0.06) * 3.5, 0, 1)
+        m = (v >= 0) & (v <= 1) & (np.abs(hx - c) <= half)
+        _lo_put(cv, dilate_h(m) & ~m, K)
+        _lo_put(cv, m, R)
+        _lo_put(cv, m & (np.abs(hx - c) <= half * 0.4) & (v < 0.5), C)
+    # crossed logs at the foot, cream with black edges like the play screen's pile
+    lg = np.zeros(hy.shape, dtype=bool)
+    for (xa, ya, xb, yb) in [(cx - 9, by - 1, cx + 7, by - 5), (cx - 6, by - 5, cx + 9, by - 1)]:
+        for k in range(40):
+            u = k / 39
+            lg[int(round(ya + (yb - ya) * u)), min(lg.shape[1] - 1, int(round(xa + (xb - xa) * u)))] = True
+    _lo_put(cv, dilate_h(lg) & ~lg, K)
+    _lo_put(cv, lg, G)
+
+
+def dilate_h(m):
+    n = m.copy()
+    n[1:] |= m[:-1]; n[:-1] |= m[1:]; n[:, 1:] |= m[:, :-1]; n[:, :-1] |= m[:, 1:]
+    return n
+
+
+def draw_embers_lo(cv, t, env):
+    """Sparks on the 2x2 grid, rising from the fire."""
+    rng = np.random.default_rng(11)
+    hm_c = np.zeros((H // 2, W // 2 + 1), dtype=bool)
+    hm_r = hm_c.copy()
+    for i in range(16):
+        x0 = rng.uniform(52, 67)
+        off = rng.uniform(0, 1)
+        sp = rng.choice([1, 2])
+        amp = rng.uniform(1, 3)
+        u = (t / LOOP * sp + off) % 1.0
+        y = FIRE_BASE / 2 - 24 - u * 56
+        x = x0 - u * 10 + amp * math.sin(2 * math.pi * (u * 2 + off))
+        xi, yi = int(round(x)), int(round(y))
+        if 0 <= xi < hm_c.shape[1] and 0 <= yi < SHEET_Y // 2:
+            (hm_c if (i % 3 == 0 and u < 0.5) else hm_r)[yi, xi] = True
+    _lo_put(cv, hm_r, R)
+    _lo_put(cv, hm_c, C)
 
 
 def draw_embers(cv, t, env):
@@ -558,13 +625,19 @@ def render(t, pressed=None):
     cv = np.zeros((H, W), dtype=np.uint8)
     env = beat_env(t)
     draw_glow(cv, t, env)
-    draw_fire(cv, t, env)
+    if LOWRES:
+        draw_fire_lo(cv, t, env)
+    else:
+        draw_fire(cv, t, env)
     draw_far_figures(cv, t, env)
     draw_ground(cv, t, env)
-    draw_embers(cv, t, env)
+    if not LOWRES:
+        draw_embers(cv, t, env)
     draw_body(cv, t, env)
     if LOWRES:
         cv[:SHEET_Y] = chunky(cv[:SHEET_Y])
+    if LOWRES:
+        draw_embers_lo(cv, t, env)
     draw_back_bells(cv, t, env)
     draw_head(cv, t, env)
     if LOWRES:
