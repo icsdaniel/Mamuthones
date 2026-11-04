@@ -482,6 +482,79 @@ def draw_sheet(cv, pressed=None):
     cv[y3 - 6, 8:W - 8] = np.where((np.arange(8, W - 8) % 2) == 0, B, C)
 
 
+# ------------------------------------------------- low-res logo and sheet (r21)
+# Drawn on a half-size canvas, then doubled, so every pixel is a 2x2 block like the play screen.
+LOGO_LO = {
+    "S": [".#####", "######", "##....", "#####.", ".#####", "....##", "######", "#####."],
+    "O": [".####.", "######", "##..##", "##..##", "##..##", "##..##", "######", ".####."],
+    "N": ["##..##", "##..##", "###.##", "######", "######", "##.###", "##..##", "##..##"],
+    "A": [".####.", "######", "##..##", "##..##", "######", "######", "##..##", "##..##"],
+    "Z": ["######", "######", "...###", "..###.", ".###..", "###...", "######", "######"],
+}
+ICON_PLAY_LO = bm(["#...", "##..", "###.", "####", "###.", "##..", "#..."])
+ICON_LEARN_LO = bm([".##.", "#..#", "..#.", "....", "..#."])
+ICON_RANKS_LO = bm(["..#..", "..#..", "#.#..", "#.#.#", "#####"])
+ICON_GEAR_LO = bm(["#.#.#", ".###.", "##.##", ".###.", "#.#.#"])
+
+
+def draw_logo_lo(hv):
+    hw = hv.shape[1]
+    word = "SONAZZOS"
+    gw, gh, gap = 6, 8, 1
+    total = len(word) * gw + (len(word) - 1) * gap
+    x0 = (hw - 1 - total) // 2 + 1
+    y0 = SHEET_Y // 2 - gh - 5
+    m = np.zeros(hv.shape, dtype=bool)
+    for i, ch in enumerate(word):
+        g = np.array([[c == "#" for c in row] for row in LOGO_LO[ch]])
+        x = x0 + i * (gw + gap)
+        m[y0:y0 + gh, x:x + gw] |= g
+    ext = np.zeros_like(m)
+    ext[1:, :] |= m[:-1, :]
+    outline = dilate(m | ext, 1)
+    hv[outline] = K
+    hv[ext & ~m] = R
+    hv[m] = C
+
+
+def draw_sheet_lo(hv, pressed=None):
+    sy = SHEET_Y // 2
+    hv[sy:, :] = C
+    hv[sy, :] = K
+    # CONTINUE
+    x, y, w, h = 2, sy + 5, 64, 25
+    oy = block(hv, x, y, w, h, R, pressed == "continue", shadow=2)
+    draw_text(hv, "CONTINUE", x + 3, oy + 3, C, F3)
+    draw_text(hv, "STOP 4", x + 3, oy + 9, C, F5)
+    cx = draw_text(hv, "CARNIVAL", x + 3, oy + 18, C, F3)
+    draw_text(hv, "SUNDAY", cx + 1, oy + 18, C, F3)
+    stamp(hv, ICON_PLAY_LO, x + w - 9, oy + 9, C)
+    # STORY / SONGS
+    y2 = y + h + 5
+    bw, bh = 30, 13
+    for i, label in enumerate(["STORY", "SONGS"]):
+        bx = 2 + i * (bw + 4)
+        oy2 = block(hv, bx, y2, bw, bh, G, pressed == label.lower(), shadow=2)
+        draw_text(hv, label, bx + (bw - text_width(label, F3)) // 2, oy2 + 4, K, F3)
+    # small row
+    y3 = y2 + bh + 7
+    hv[y3 - 3, 2:66] = np.where((np.arange(2, 66) % 2) == 0, B, C)
+    stamp(hv, ICON_LEARN_LO, 3, y3, K)
+    draw_text(hv, "LEARN", 10, y3, K, F3)
+    stamp(hv, ICON_RANKS_LO, 32, y3, K)
+    draw_text(hv, "RANKS", 39, y3, K, F3)
+    stamp(hv, ICON_GEAR_LO, 61, y3, K)
+
+
+def draw_front_lo(cv, pressed=None):
+    hv = np.full((H // 2, W // 2 + 1), 255, dtype=np.uint8)
+    draw_logo_lo(hv)
+    draw_sheet_lo(hv, pressed)
+    up = np.repeat(np.repeat(hv, 2, 0), 2, 1)[:H, :W]
+    ok = up != 255
+    cv[ok] = up[ok]
+
+
 # ------------------------------------------------------------------- frames
 def render(t, pressed=None):
     cv = np.zeros((H, W), dtype=np.uint8)
@@ -496,8 +569,11 @@ def render(t, pressed=None):
         cv[:SHEET_Y] = chunky(cv[:SHEET_Y])
     draw_back_bells(cv, t, env)
     draw_head(cv, t, env)
-    draw_logo(cv, t, env)
-    draw_sheet(cv, pressed)
+    if LOWRES:
+        draw_front_lo(cv, pressed)
+    else:
+        draw_logo(cv, t, env)
+        draw_sheet(cv, pressed)
     return cv
 
 
