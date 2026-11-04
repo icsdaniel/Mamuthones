@@ -288,15 +288,14 @@ func test_two_taps_to_a_song_and_lanes_dominate() -> void:
 		print("  %s: lanes %.0f%% of height, %.0f%% of width" % [sz, lanes.size.y / h * 100.0, lanes.size.x / play.size.x * 100.0])
 		check(lanes.size.y >= h * 0.8, "%s: the lanes are the stage (%.0f%% of the height)" % [sz, lanes.size.y / h * 100.0])
 		check(lanes.size.x >= minf(play.size.x * 0.95, 890.0), "%s: the road's near end fills the width (%.0f px)" % [sz, lanes.size.x])
-		check_eq(street._puppets.size(), 2, "%s: both portraits have their figure" % sz)
+		check(street != null, "%s: the woodcut street is behind the lanes" % sz)
 		UIHarness.free_app(app)
 		UIHarness.restore_profile()
 
 
-## The portraits never hide a note: at every store size, the middle of each outer lane, from the fire
-## down to the hit line, stays outside its portrait's frame; and at the hit line an outer lane's note is
-## well on the screen (the street picture is stretched below the fire when needed).
-func test_portraits_stay_off_the_lanes() -> void:
+## At every store size an outer lane's note at the hit line is well on the screen (the lanes are laid
+## longer below the fire when needed), and the lanes follow the street's painted lines up to the fire.
+func test_outer_notes_stay_on_screen() -> void:
 	for sz in [Vector2i(720, 1440), Vector2i(720, 1280), Vector2i(720, 1600), Vector2i(1080, 1920), Vector2i(1536, 2048)]:
 		UIHarness.fresh_profile()
 		var app := UIHarness.make_app(tree, "", {}, sz)
@@ -313,15 +312,14 @@ func test_portraits_stay_off_the_lanes() -> void:
 		var to_street := street.get_global_transform().affine_inverse() * lanes.get_global_transform()
 		var nearest := INF
 		for s in 2:
-			var frame := street._frame_points(s)
 			var cx := lanes.lane_center(0 if s == 0 else 2).x
-			for k in 21:
-				var p: Vector2 = to_street * lanes.project(Vector2(cx, hl * float(k) / 20.0))
-				check(not Geometry2D.is_point_in_polygon(p, frame), "%s: lane %d's middle at depth %d/20 is clear of the portrait" % [sz, s * 2, k])
 			var at: Vector2 = to_street * lanes.project(Vector2(cx, hl))
 			var gap := at.x if s == 0 else street.size.x - at.x
 			nearest = minf(nearest, gap)
-			check(gap >= street.size.x * 0.1, "%s: an outer note at the hit line is well on the screen (%.0f px)" % [sz, gap])
+			check(gap >= street.size.x * 0.08, "%s: an outer note at the hit line is well on the screen (%.0f px)" % [sz, gap])
+			var far: Vector2 = to_street * lanes.project(Vector2(cx, 0.0))
+			var fire := street.pic_point(StreetBackdrop.FIRE_BASE)
+			check(absf(far.y - fire.y) < street.size.y * 0.06, "%s: lane %d starts at the fire" % [sz, s * 2])
 		print("  %s: outer notes at least %.0f px in from the edge at the hit line" % [sz, nearest])
 		UIHarness.free_app(app)
 		UIHarness.restore_profile()

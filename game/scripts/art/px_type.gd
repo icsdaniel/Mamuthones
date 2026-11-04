@@ -16,73 +16,54 @@ extends RefCounted
 ##
 ## PxType.label(l, "caps", PixelPalette.GOLD[4]) styles a Label; PxType.draw(ci, ...) draws a line.
 
-const DIR := "res://art/px/field/font_"
-## The face's design size (its BMFont size): a Label's font size is this x PX x k.
-const SIZES := {"caps": 10, "caps_gold": 10, "big": 20, "big_gold": 20, "score": 12, "count": 48,
-	"num_gold": 15, "num_big": 26, "num_white": 15}
-## Rows from the top of a line to the baseline, in font px.
-const BASE := {"caps": 9, "caps_gold": 9, "big": 18, "big_gold": 18, "score": 10, "count": 40,
-	"num_gold": 15, "num_big": 26, "num_white": 15}
+const FONT := "res://fonts/woodcut5.fnt"
+## The Woodcut look sets every face in its one pixel type (fonts/woodcut5, the Controluce menu's 5 x 7
+## capitals, made by tools/art/claude_styles/export_font.py), at a whole number of screen px per
+## type px: the faces differ only in size.
+const LINE := 11                     ## the type's line, in its own px (its BMFont size)
+const SCALE := {"caps": 3, "caps_gold": 3, "big": 6, "big_gold": 6, "score": 4, "count": 12,
+	"num_gold": 4, "num_big": 7, "num_white": 4}
+const SIZES := {"caps": 11, "caps_gold": 11, "big": 11, "big_gold": 11, "score": 11, "count": 11,
+	"num_gold": 11, "num_big": 11, "num_white": 11}
+const BASE := {"caps": 9, "caps_gold": 9, "big": 9, "big_gold": 9, "score": 9, "count": 9,
+	"num_gold": 9, "num_big": 9, "num_white": 9}
+const CREAM := Color("#efe6d2")
 
-static var _fonts := {}
-## Set while the street play screen is up: the faces become Daniele's-art type (Alegreya, smooth,
-## with a dark outline) instead of the bitmap ones, at SMOOTH_SIZES.
+static var _font: FontFile
+## Kept for the screens that set it; the woodcut type is the same either way.
 static var smooth := false
-const SMOOTH_FONTS := {"caps": "AlegreyaSans-ExtraBold", "caps_gold": "AlegreyaSans-ExtraBold", "big": "AlegreyaSans-ExtraBold",
-	"big_gold": "AlegreyaSans-ExtraBold", "score": "AlegreyaSans-ExtraBold", "count": "AlegreyaSans-ExtraBold"}
-const SMOOTH_SIZES := {"caps": 28, "caps_gold": 28, "big": 58, "big_gold": 58, "score": 40, "count": 150}
-const SMOOTH_GOLD := Color("#ffd35a")
-const SMOOTH_OUTLINE := Color("#0a0608")
 
 
-static func font(face: String) -> Font:
-	if smooth and not face.begins_with("num_"):
-		var key := "smooth_" + face
-		if not _fonts.has(key):
-			_fonts[key] = load("res://fonts/%s.ttf" % SMOOTH_FONTS.get(face, "AlegreyaSans-ExtraBold"))
-		return _fonts[key]
-	if _fonts.has(face):
-		return _fonts[face]
-	var f: Font = null
-	var path := DIR + face + ".fnt"
-	if ResourceLoader.exists(path):
-		f = load(path)
-	if f is FontFile:
-		(f as FontFile).fixed_size_scale_mode = TextServer.FIXED_SIZE_SCALE_INTEGER_ONLY
-		(f as FontFile).antialiasing = TextServer.FONT_ANTIALIASING_NONE
-	if f == null:
-		f = ThemeDB.fallback_font
-	_fonts[face] = f
-	return f
+static func font(_face := "caps") -> Font:
+	if _font == null:
+		_font = load(FONT) as FontFile
+		if _font != null:
+			_font.fixed_size_scale_mode = TextServer.FIXED_SIZE_SCALE_INTEGER_ONLY
+			_font.antialiasing = TextServer.FONT_ANTIALIASING_NONE
+	return _font if _font != null else ThemeDB.fallback_font
 
 
-## The font size that sets `face` at k art px per font px.
+## The font size that sets `face` at k times its scale.
 static func size(face: String, k := 1) -> int:
-	if smooth and not face.begins_with("num_"):
-		return int(SMOOTH_SIZES.get(face, 28)) * k
-	return int(SIZES.get(face, 10) * PxArt.PX) * k
+	return LINE * int(SCALE.get(face, 3)) * k
 
 
-## Styles a Label in `face`: the colour tints a white face (keep white for the gold faces); no
-## outline or shadow (the faces carry their own).
+## Styles a Label in `face`: plain ink, no outline or shadow (the woodcut prints flat).
 static func label(l: Label, face: String, color := Color.WHITE, k := 1) -> void:
 	l.add_theme_font_override("font", font(face))
 	l.add_theme_font_size_override("font_size", size(face, k))
-	l.add_theme_color_override("font_color", color)
+	l.add_theme_color_override("font_color", CREAM if color == Color.WHITE else color)
 	l.add_theme_constant_override("outline_size", 0)
 	l.add_theme_constant_override("shadow_outline_size", 0)
 	l.add_theme_color_override("font_shadow_color", Color(0, 0, 0, 0))
 	l.add_theme_constant_override("line_spacing", 0)
 	l.material = null
-	if smooth and not face.begins_with("num_"):
-		l.add_theme_color_override("font_color", color * _ink(face))
-		l.add_theme_color_override("font_outline_color", SMOOTH_OUTLINE)
-		l.add_theme_constant_override("outline_size", 8 if SMOOTH_SIZES.get(face, 28) > 40 else 6)
 
 
 ## The smooth faces' own ink: gold for the gold faces and the figures, white for the rest.
-static func _ink(face: String) -> Color:
-	return SMOOTH_GOLD if face.ends_with("_gold") or face == "score" or face == "count" else Color.WHITE
+static func _ink(_face: String) -> Color:
+	# white type takes the paper's cream; coloured type keeps its colour
+	return Color.WHITE
 
 
 ## Width of `text` on screen in `face` at k.
@@ -104,10 +85,5 @@ static func draw(ci: CanvasItem, face: String, pos: Vector2, text: String, color
 	if align >= 0:
 		var w := f.get_string_size(text, HORIZONTAL_ALIGNMENT_LEFT, -1, fs).x
 		x -= w * (0.5 if align == 0 else 1.0)
-	var p := Vector2(roundf(x / PxArt.PX) * PxArt.PX, roundf(pos.y)) + Vector2(0.0, f.get_ascent(fs))
-	if smooth:
-		p = Vector2(roundf(x), roundf(pos.y)) + Vector2(0.0, f.get_ascent(fs))
-		ci.draw_string_outline(f, p, text, HORIZONTAL_ALIGNMENT_LEFT, -1, fs, maxi(6, fs / 7), Color(SMOOTH_OUTLINE, color.a))
-		ci.draw_string(f, p, text, HORIZONTAL_ALIGNMENT_LEFT, -1, fs, color * _ink(face))
-		return
-	ci.draw_string(f, p, text, HORIZONTAL_ALIGNMENT_LEFT, -1, fs, color)
+	var p := Vector2(roundf(x), roundf(pos.y)) + Vector2(0.0, f.get_ascent(fs))
+	ci.draw_string(f, p, text, HORIZONTAL_ALIGNMENT_LEFT, -1, fs, color if color != Color.WHITE else CREAM)

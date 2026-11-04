@@ -1,41 +1,45 @@
 class_name Palette
 extends RefCounted
-## The named colours code-drawn art and UI use, all taken from the one "Bonfire Night" pixel palette
+## The Woodcut look (2026-11-05): every name below is now one of its five inks, black #141014, cream
+## #efe6d2, vermilion #c8352a, warm grey #c9bba0 and brown #4a3c38, so whatever is drawn in code takes
+## the woodcut's colours. The old names stay so every script keeps working.
+##
+## Formerly: the named colours code-drawn art and UI use, all taken from the one "Bonfire Night" pixel palette
 ## (tools/art/pixel/palette.py, mirrored as PixelPalette), plus cached loaders for the shared textures,
 ## the UI kit and the fonts. The old names are kept so every script keeps working: BONE is the cream of
 ## the menu's text, EMBER its old gold, INK the K0 outline, WOOD and NIGHT the navy of the panels.
 
-const BLACK := Color("#0b0c1c")        ## NAVY0: the darkest ground, and ink on parchment
-const BONE := Color("#ecdfbc")         ## BONE3: cream text and lines
-const RED := Color("#c02a22")          ## RED3: kilim red
-const EMBER := Color("#e8b64c")        ## GOLD4: old gold (section labels, accents, embers)
+const BLACK := Color("#141014")        ## NAVY0: the darkest ground, and ink on parchment
+const BONE := Color("#efe6d2")         ## BONE3: cream text and lines
+const RED := Color("#c8352a")          ## RED3: kilim red
+const EMBER := Color("#c8352a")        ## GOLD4: old gold (section labels, accents, embers)
 
-const INK := Color("#07060e")          ## K0: outlines, holes and shadows
-const WOOD := Color("#12142a")         ## NAVY1: the navy of buttons and boards
-const NIGHT := Color("#0a0c24")        ## NIGHT0: night sky, deepest board
-const BONE_DIM := Color("#c4b494")     ## BONE2: captions, secondary text on dark
-const BONE_FAINT := Color("#8a7c6c")   ## BONE1: disabled text
-const RED_DEEP := Color("#8e1a18")     ## RED2: shaded red cloth
-const EMBER_HOT := Color("#f8dc8a")    ## GOLD5: the hottest gold, the white-hot heart of a fire
-const ASH := Color("#8a7c6c")          ## BONE1: grey for stand-stills and ash
+const INK := Color("#141014")          ## K0: outlines, holes and shadows
+const WOOD := Color("#141014")         ## NAVY1: the navy of buttons and boards
+const NIGHT := Color("#141014")        ## NIGHT0: night sky, deepest board
+const BONE_DIM := Color("#c9bba0")     ## BONE2: captions, secondary text on dark
+const BONE_FAINT := Color("#4a3c38")   ## BONE1: disabled text
+const RED_DEEP := Color("#c8352a")     ## RED2: shaded red cloth
+const EMBER_HOT := Color("#efe6d2")    ## GOLD5: the hottest gold, the white-hot heart of a fire
+const ASH := Color("#4a3c38")          ## BONE1: grey for stand-stills and ash
 
 ## UI kit names (the menu reference): the gold frames, the navy panels, the cream of the labels.
-const GOLD := Color("#e8b64c")         ## GOLD4
-const GOLD_DIM := Color("#c08a2e")     ## GOLD3
-const GOLD_DEEP := Color("#8a5a1c")    ## GOLD2
-const GOLD_HOT := Color("#f8dc8a")     ## GOLD5
-const NAVY := Color("#12142a")         ## NAVY1
-const NAVY_DEEP := Color("#0b0c1c")    ## NAVY0
-const NAVY_LIGHT := Color("#1a1d3a")   ## NAVY2
-const CREAM := Color("#fdf6df")        ## BONE4
-const FIRE := Color("#f47e22")         ## FIRE4
-const FIRE_HOT := Color("#fde07a")     ## FIRE6
+const GOLD := Color("#c8352a")         ## GOLD4
+const GOLD_DIM := Color("#c9bba0")     ## GOLD3
+const GOLD_DEEP := Color("#4a3c38")    ## GOLD2
+const GOLD_HOT := Color("#efe6d2")     ## GOLD5
+const NAVY := Color("#141014")         ## NAVY1
+const NAVY_DEEP := Color("#141014")    ## NAVY0
+const NAVY_LIGHT := Color("#4a3c38")   ## NAVY2
+const CREAM := Color("#efe6d2")        ## BONE4
+const FIRE := Color("#c8352a")         ## FIRE4
+const FIRE_HOT := Color("#efe6d2")     ## FIRE6
 
 ## Timing feedback, shared with the UI (UIKit.EARLY / UIKit.LATE): early is up and cool, late is down
 ## and warm. They also differ in lightness (early is the lighter one), and every early/late mark
 ## points its own way, so they stay apart in greyscale.
-const EARLY := Color("#8ec3e6")
-const LATE := Color("#ef8250")
+const EARLY := Color("#c9bba0")
+const LATE := Color("#c8352a")
 ## The soha as it really is: natural rush or hemp. (Red is kept only for the swipe note and the logo.)
 const ROPE := Color("#a88e62")         ## ROPE1
 const ROPE_DARK := Color("#6e5a3e")    ## ROPE0: its twists

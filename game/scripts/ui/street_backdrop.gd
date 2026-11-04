@@ -1,256 +1,100 @@
 class_name StreetBackdrop
 extends Control
-## The play screen's street, from Daniele's second street picture laid as pixel art (art/ai/street_laid.png,
-## from tools/art/sources/ai/street.png): the road of Mamoiada at night with its four glowing lines running
-## up to the bonfire. The lanes are the picture's own: LaneView asks flat_to_local() where a point of
-## its flat field lies, and the answer follows the painted lines (each lane between two of them) with
-## a true perspective along the road.
+## The play screen's street in the Woodcut look (tools/art/claude_styles, the play screen Daniele
+## approved on the review page, exported by export_game.py into art/woodcut/): the road of Mamoiada at
+## night in three inks, black, cream and vermilion, its houses either side, the bonfire at the far end
+## and two files of Mamuthones beside the road, bobbing on every beat.
 ##
-## The picture covers the screen, top aligned. So the outer lanes' notes still reach the hit line on
-## screen, the part of the picture below the fire can be stretched downward a little (straight lines
-## stay straight): just enough that a note in an outer lane at the hit line is clear of the edge.
+## The lanes are the picture's own: LaneView asks flat_to_local() where a point of its flat field lies,
+## and the answer follows the lines painted on the road (each lane between two of them) with a true
+## perspective along it.
 ##
-## Over the picture, all subtle so the notes stay the clearest thing: the fire flickers and flares on
-## the beat (a shader on the picture) and sparks rise from it, the lanterns flicker, the four lines
-## pulse on the beat, a warm light flashes where a note is hit, and two framed portraits (the
-## Issohadore, a Mamuthone, cut from Daniele's turnarounds) bob down on every beat.
+## The picture covers the screen, top aligned, at one scale (never stretched). So the outer lanes'
+## notes still reach the hit line on screen, the lanes below the fire may be laid a little longer
+## than the picture's (`stretch`); LaneView then draws their lines itself.
 ##
 ## It stands in for FireBackdrop (beat, dim, kick) and SideRows (jolt, stomp, set_still, ...), so the
 ## play screen drives it the same way.
 
-const PIXEL_STREET := "res://art/ai/street_laid.png"   ## the pixel look's street: Daniele's ChatGPT causeway laid into this one's frame at one uniform scale (tools/art/chatgpt/street.py); shown unstretched (the lanes' stretch below STRETCH_FROM moves only the lanes, which the shader draws as gold lines); drawn smoothed into the one-px-per-cell street, so every cell takes one even sample of it (a 270-wide copy drawn NEAREST gave cells of uneven sizes)
-const IMG := Vector2(941.0, 1672.0)
-## The painted lines, x = a + b * y in the picture's pixels: the road's edges and the lane dividers.
-const RAILS := [Vector2(609.17, -0.45827), Vector2(510.90, -0.14397), Vector2(445.17, 0.12678), Vector2(356.72, 0.43025)]
-const VANISH_Y := 265.0              ## where the lines meet (the horizon), picture px
-const FAR_Y := 468.0                 ## the road's far end, just in front of the fire, picture px
-const STRETCH_FROM := 460.0          ## the picture is only ever stretched below this row
-const FIRE := Vector2(479.0, 372.0)  ## the fire's heart, picture px
-## Where the bonfire's logs stand (FireTiers' origin): on the road's far end, where Daniele's ChatGPT
-## causeway meets the mountains (tools/art/chatgpt/street.py lays it in: horizon at 421).
-const FIRE_BASE := Vector2(479.0, 436.0)
-## The first picture's lanterns (none on the causeway: their light is left out).
-const LANTERNS := []
-## On the hit line, an outer lane's whole slot and its biggest note (a stomp, StreetSkin.STOMP_R,
-## with its outline) stay on screen: their edge keeps EDGE_PAD of the width off the screen's edge.
-const CLEAR_R := 0.53                ## lane widths from an outer lane's centre that must show
-const EDGE_PAD := 0.035
-## The picture is shown this much bigger than it takes to cover the screen (top aligned, centred
-## across), so the road's far end and the notes there are bigger (Daniele, 2026-10-05).
-const ZOOM := 1.2
-## The portrait frames' corners (picture px, the left one; the right mirrors it), raised by
-## FRAME_LIFT (Daniele, 2026-10-05): a shallower lower edge (2026-10-08) hides the figures'
-## legs, so they stand in their frames from the knees up and the cut is level across them.
-const FRAME_PIXEL := [Vector2(-12, 226), Vector2(300, 276), Vector2(262, 560), Vector2(-12, 636)]
-## The art row (from the top of a pixel figure's 172) its portrait's lower edge cuts at: just under
-## the Issohadore's skirt, at the hem of the Mamuthone's fleece.
-const PIXEL_CUT := [112.0, 136.0]
-const BEAM := 22.0             ## base px: the depth of the beam along a pixel portrait's lower edge
-const FIGURE_IN := 24.0           ## picture px each figure stands in from its portrait's middle, toward the road (mirrored)
-const ISSO_RIGHT := 16.0          ## picture px the Issohadore (left portrait) then moves further right (Daniele, 2026-10-05)
-const FRAME_GROW := 140.0 / 118.0   ## the portraits grew with the pixel figures (bake_figures.py H, 118 -> 140)
-const FRAME_LIFT := Vector2(20.0, 55.0)   ## picture px the portraits' top and bottom edges are raised (as far as the HUD's words allow; the puppets keep their size)
+const DIR := "res://art/woodcut/"
+const IMG := Vector2(135.0, 300.0)
+## The painted lines, x = a + b * y in the picture's pixels: the road's edges and the lane dividers
+## (art/woodcut/geometry.json).
+const RAILS := [Vector2(99.618132, -0.42032967), Vector2(78.206044, -0.14010989), Vector2(56.793956, 0.14010989), Vector2(35.381868, 0.42032967)]
+const VANISH_Y := 76.411765          ## where the lines meet (the horizon), picture px
+const FAR_Y := 100.5                 ## the road's far end, just in front of the fire, picture px
+const STRETCH_FROM := 104.0          ## the lanes are only ever laid longer below this row
+const FIRE := Vector2(67.5, 80.0)    ## the fire's heart, picture px
+const FIRE_BASE := Vector2(67.5, 104.1)
+## On the hit line, an outer lane's whole slot and its biggest note stay on screen: their edge keeps
+## EDGE_PAD of the width off the screen's edge.
+const CLEAR_R := 0.53
+const EDGE_PAD := 0.02
+const ZOOM := 1.0
 ## The figures' bob on each beat, timed on Daniele's reference clip (30 fps).
-const BOB := 0.1                     ## how far a figure drops on the beat, share of its portrait's height
-const BOB_HOLD := 0.03               ## seconds it stays down after the beat
-const BOB_BACK := 0.1                ## seconds after the beat it is back up
+const BOB := 0.1
+const BOB_HOLD := 0.03
+const BOB_BACK := 0.1
+const HUD_GAP := 6.0
 
 var lanes: LaneView
 var beat := -1000.0
 var dim := 0.0
 var reduced_motion := false
-## Settings: animations off (UIKit.animations_off): the street stands still, fire, sparks, lights
-## and figures, for the smoothest play; only the notes and the hit feedback move.
+## Settings: animations off (UIKit.animations_off): the street stands still.
 var animations := true
 var still := false
 var unison := 0
-## The HUD's lower edge in this control's coordinates (-INF: unknown). The portraits and their
-## figures move down as far as needed for the heads to stay under it (a notch pushes the HUD down).
 var hud_bottom := -INF
-const HUD_GAP := 6.0
 var bell_set := "village"
+var own_cells := false               ## kept for the play screen; the woodcut is drawn as it is
 
-## The picture on screen: scale, x offset, and the stretch below STRETCH_FROM.
+## The picture on screen: scale, x offset, and how much longer the lanes are laid below STRETCH_FROM.
 var pic_scale := 1.0
 var pic_off := 0.0
 var stretch := 1.0
 
-var _pic: TextureRect                ## the street through PICTURE_SHADER, drawn once into _bake
-var _bake: SubViewport
-var _still: TextureRect              ## the baked street on screen
-var _fire_pic: TextureRect           ## the fire's corner of the street, its shader running every frame
-var _fire_mat: ShaderMaterial
-var _fire: FireTiers                 ## the bonfire, its tier following the multiplier
-var _baked_key := []                 ## what the bake was drawn with (redrawn when it changes)
-var _vp: SubViewport                 ## the pixel look: the street drawn at one texel per lens cell
-var own_cells := true                ## false when the whole play screen is already drawn one px per cell
-var _cells: TextureRect              ## ... and shown scaled up
-var _mat: ShaderMaterial
-var _glow: Control                   ## additive: lines pulsing, lanterns, hit flashes
-var _sparks: CPUParticles2D
-var _frames: Array[Node2D] = []
-var _puppets: Array[PixelFigure] = []
-var _cuts: Array[ShaderMaterial] = []   ## per portrait: cuts its figure at the frame's lower edge
-var _glow_tex: Texture2D
-var _flashes: Array = []             ## [local pos, t0, strength]
+var _street: Texture2D
+var _files: Array[Texture2D] = []
+var _fires: Array[Texture2D] = []
+var _geo := {}
 var _clock := 0.0
 var _kick := 0.0
 var _jolt_kind := ""
-var _bell_at := -9.0                  ## _clock of the last bell rung on time
-var _bell_up := true
-var _rope_at := -9.0                  ## _clock of the last call answered on time
 var _jolt_at := -9.0
-var _surge_at := -9.0
-const SURGE_TIME := 0.5
 var _layout := Vector3.ZERO
+## For tests: the old portraits are gone; nothing stands over the lanes.
+var _puppets: Array = []
 
 
 func _init() -> void:
 	mouse_filter = Control.MOUSE_FILTER_IGNORE
 	clip_contents = true
+	texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
 
 
 func _ready() -> void:
-	_pic = TextureRect.new()
-	_pic.name = "StreetPicture"
-	_pic.texture = load(PIXEL_STREET)
-	_pic.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
-	_pic.stretch_mode = TextureRect.STRETCH_SCALE
-	_pic.texture_filter = CanvasItem.TEXTURE_FILTER_LINEAR   # the pixel look's cells come from the viewport it is drawn into
-	_pic.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	_pic.set_anchors_preset(Control.PRESET_FULL_RECT)
-	_mat = ShaderMaterial.new()
-	var sh := Shader.new()
-	sh.code = PICTURE_SHADER
-	_mat.shader = sh
-	_pic.material = _mat
-	# The street never moves: it is drawn once (_bake) and shown still (_still), and only the fire's
-	# own corner of it (_fire_pic) runs the picture's shader every frame. Before, the whole screen ran
-	# it every frame, averaging 21 samples a pixel for the smooth lanes.
-	_bake = SubViewport.new()
-	_bake.name = "StreetBake"
-	_bake.disable_3d = true
-	_bake.transparent_bg = false
-	_bake.render_target_update_mode = SubViewport.UPDATE_ONCE
-	_bake.canvas_item_default_texture_filter = Viewport.DEFAULT_CANVAS_ITEM_TEXTURE_FILTER_LINEAR
-	_pic.set_anchors_preset(Control.PRESET_TOP_LEFT)
-	_bake.add_child(_pic)
-	add_child(_bake)
-	_still = TextureRect.new()
-	_still.name = "Street"
-	_still.texture = _bake.get_texture()
-	_still.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
-	_still.stretch_mode = TextureRect.STRETCH_SCALE
-	_still.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
-	_still.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	_fire_mat = _mat.duplicate() as ShaderMaterial
-	_fire_pic = TextureRect.new()
-	_fire_pic.name = "Fire"
-	_fire_pic.texture = _pic.texture
-	_fire_pic.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
-	_fire_pic.stretch_mode = TextureRect.STRETCH_SCALE
-	_fire_pic.texture_filter = CanvasItem.TEXTURE_FILTER_LINEAR
-	_fire_pic.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	_fire_pic.material = _fire_mat
-	if own_cells:
-		# the pixel look draws the street at one texel per cell of the lens, then shows it scaled
-		# up: a ninth of the work, and crisp on the grid
-		_vp = SubViewport.new()
-		_vp.name = "StreetCells"
-		_vp.disable_3d = true
-		_vp.transparent_bg = false
-		_vp.render_target_update_mode = SubViewport.UPDATE_ALWAYS
-		_vp.add_child(_still)
-		_vp.add_child(_fire_pic)
-		add_child(_vp)
-		_cells = TextureRect.new()
-		_cells.name = "StreetView"
-		_cells.texture = _vp.get_texture()
-		_cells.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
-		_cells.stretch_mode = TextureRect.STRETCH_SCALE
-		_cells.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
-		_cells.mouse_filter = Control.MOUSE_FILTER_IGNORE
-		_cells.set_anchors_preset(Control.PRESET_FULL_RECT)
-		_cells.material = _snap_material()
-		add_child(_cells)
-	else:
-		_still.set_anchors_preset(Control.PRESET_FULL_RECT)
-		add_child(_still)
-		add_child(_fire_pic)
-	if FireTiers.available():
-		_fire = FireTiers.new()
-		_fire.name = "Bonfire"
-		add_child(_fire)
-	_glow_tex = _radial()
-	for i in 2:
-		var f := _make_frame(i)
-		add_child(f)
-		_frames.append(f)
-	_glow = _Layer.new(self)
-	_glow.name = "Glow"
-	var add := CanvasItemMaterial.new()
-	add.blend_mode = CanvasItemMaterial.BLEND_MODE_ADD
-	_glow.material = add
-	add_child(_glow)
-	# the pixel look's light stays on the street, under the portraits: added over them it washed
-	# the figures' few colours out (the Mamuthone's dark fleece turned tan)
-	move_child(_glow, _frames[0].get_index())
-	_sparks = _make_sparks()
-	add_child(_sparks)
+	_street = load(DIR + "street.png")
+	var f := FileAccess.open(DIR + "geometry.json", FileAccess.READ)
+	if f != null:
+		_geo = JSON.parse_string(f.get_as_text())
+	for i in int(_geo.get("file_frames", 0)):
+		_files.append(load(DIR + "files_%02d.png" % i))
+	for lv in [1, 2, 3, 4]:
+		_fires.append(load(DIR + "fire_%d.png" % lv))
 	animations = not UIKit.animations_off()
-	if not animations:
-		_glow.visible = false
-		_sparks.emitting = false
-		_sparks.visible = false
 	resized.connect(_fit)
 	_fit()
 
 
-## Snaps every cell of the street to the one pixel-art palette (art/pixel/palette.png), so the smooth
-## light, the moving cobbles and the fire's glow are drawn in the same few colours as every other
-## picture, not in thousands. Nearest colour, no dither: bands read as pixel art; blends do not.
-const SNAP_SHADER := """
-shader_type canvas_item;
-uniform sampler2D palette : filter_nearest, repeat_disable;
-uniform int count = 78;
-void fragment() {
-	vec4 c = texture(TEXTURE, UV);
-	float best = 1e9;
-	vec3 pick = c.rgb;
-	for (int i = 0; i < 78; i++) {
-		vec3 p = texelFetch(palette, ivec2(i, 0), 0).rgb;
-		vec3 d = (c.rgb - p) * vec3(0.9, 1.0, 1.1);
-		float dd = dot(d, d);
-		if (dd < best) { best = dd; pick = p; }
-	}
-	COLOR = vec4(pick, c.a);
-}
-"""
-
-
-static func _snap_material() -> ShaderMaterial:
-	var m := ShaderMaterial.new()
-	var sh := Shader.new()
-	sh.code = SNAP_SHADER
-	m.shader = sh
-	m.set_shader_parameter("palette", load("res://art/pixel/palette.png"))
-	return m
-
-
-# ------------------------------------------------------------------ the picture on screen
-
 func _fit() -> void:
 	_layout = Vector3.ZERO
-	if _vp != null:
-		_vp.size = Vector2i(maxi(1, ceili(size.x / PxArt.PX)), maxi(1, ceili(size.y / PxArt.PX)))
-		_cells.size = Vector2(_vp.size) * PxArt.PX
-		_cells.set_anchors_preset(Control.PRESET_TOP_LEFT)
-		_cells.size = Vector2(_vp.size) * PxArt.PX
 	_solve()
+	queue_redraw()
 
 
-## Cover the screen with the picture (top aligned), then stretch below the fire just enough for the
-## outer lanes' notes at LaneView's hit line.
+## Cover the screen with the picture (top aligned, centred across), then lay the lanes below the fire
+## just long enough for the outer lanes' notes at LaneView's hit line.
 func _solve() -> void:
 	var hl := _hit_line_local()
 	var key := Vector3(size.x, size.y, hl)
@@ -262,26 +106,14 @@ func _solve() -> void:
 	var margin := size.x * EDGE_PAD
 	var x_min := (margin - pic_off) / pic_scale
 	var x_max := (size.x - margin - pic_off) / pic_scale
-	# the outer lanes' middles (halfway between the edge line and the divider), less or plus CLEAR_R
-	# of the middle lane's width (the size LaneView draws notes at): the lowest picture row where both
-	# outer slots still fit; the hit line is stretched up to it
 	var lane: Vector2 = RAILS[2] - RAILS[1]
 	var yl := _solve_line(RAILS[0].lerp(RAILS[1], 0.5) - lane * CLEAR_R, x_min)
 	var yr := _solve_line(RAILS[2].lerp(RAILS[3], 0.5) + lane * CLEAR_R, x_max)
 	var need := minf(yl, yr)
 	var hl_img := hl / pic_scale
 	stretch = maxf(1.0, (hl_img - STRETCH_FROM) / maxf(need - STRETCH_FROM, 1.0))
-	_place_frames()
-	if _fire != null:
-		_fire.position = PxArt.snap2(to_local_pic(FIRE_BASE))
-		_fire.scale = Vector2(PxArt.PX, PxArt.PX)
-	if _sparks != null:
-		_sparks.position = to_local_pic(FIRE + Vector2(0, -90))
-		_sparks.scale = Vector2.ONE * pic_scale / 0.86
 
 
-## The picture row where the line between rails i and j at fraction f reaches picture x.
-## The picture row where the line x = a.x + a.y * y reaches picture x.
 func _solve_line(a: Vector2, x: float) -> float:
 	return (x - a.x) / a.y if absf(a.y) > 0.0001 else 1e6
 
@@ -294,11 +126,17 @@ func _hit_line_local() -> float:
 	return size.y * 0.79
 
 
-## A point of the picture (px) on screen, in this control's coordinates.
+## A point of the lanes' road (picture px) on screen, in this control's coordinates.
 func to_local_pic(p: Vector2) -> Vector2:
 	_solve()
 	var y := p.y if p.y <= STRETCH_FROM else STRETCH_FROM + (p.y - STRETCH_FROM) * stretch
 	return Vector2(pic_off + p.x * pic_scale, y * pic_scale)
+
+
+## A point of the picture itself on screen (never stretched).
+func pic_point(p: Vector2) -> Vector2:
+	_solve()
+	return Vector2(pic_off + p.x * pic_scale, p.y * pic_scale)
 
 
 func rail_x(i: int, y: float) -> float:
@@ -306,8 +144,6 @@ func rail_x(i: int, y: float) -> float:
 	return r.x + r.y * y
 
 
-## The picture row of a flat depth: a true perspective, 1 / (y - horizon) linear in the flat depth,
-## from FAR_Y at the field's top (flat 0) to the hit line's row at the hit line.
 func _pic_y(fy: float) -> float:
 	var fr := lanes.field_rect()
 	var hl := LaneSkin.hit_line_y(fr)
@@ -322,9 +158,7 @@ func _pic_y(fy: float) -> float:
 	return VANISH_Y + 1.0 / maxf(inv, 0.00005)
 
 
-## The numbers flat_to_local() works from, for LaneView, which maps many points a frame and keeps
-## them for the frame: [a, b, the hit line's flat depth, the field's width, pic_off, pic_scale,
-## stretch] (a and b: 1 / (row - horizon) at the road's far end and at the hit line).
+## [a, b, the hit line's flat depth, the field's width, pic_off, pic_scale, stretch] for LaneView.
 func flat_consts() -> PackedFloat32Array:
 	var fr := lanes.field_rect()
 	_solve()
@@ -335,8 +169,6 @@ func flat_consts() -> PackedFloat32Array:
 		maxf(fr.size.x, 1.0), pic_off, pic_scale, stretch])
 
 
-## Where a point of LaneView's flat field lies on screen (this control's coordinates): across the
-## lanes between the painted lines, down the road in perspective.
 func flat_to_local(p: Vector2) -> Vector2:
 	var fr := lanes.field_rect()
 	var y := _pic_y(p.y)
@@ -347,7 +179,6 @@ func flat_to_local(p: Vector2) -> Vector2:
 	return to_local_pic(Vector2(x, y))
 
 
-## A lane's width on screen at flat depth fy (the middle lane's), this control's px.
 func lane_px(fy: float) -> float:
 	var y := _pic_y(fy)
 	return (rail_x(2, y) - rail_x(1, y)) * pic_scale
@@ -367,16 +198,13 @@ func set_stop(_n: int) -> void:
 	pass
 
 
-## 0 at the 1x fire .. 1 at the 4x fire: how much light the bonfire throws.
-func _fire_light() -> float:
-	var t := FireTiers.tier_of(Session.UNISON_MULTS[clampi(unison, 0, Session.UNISON_MULTS.size() - 1)])
-	return clampf(float(t) / 3.0, 0.0, 1.0)
-
-
 func set_unison(level: int) -> void:
 	unison = level
-	if _fire != null:
-		_fire.set_tier(FireTiers.tier_of(Session.UNISON_MULTS[clampi(level, 0, Session.UNISON_MULTS.size() - 1)]))
+
+
+## The bonfire's size, 0..3: one step for each step of the multiplier (1x .. 4x).
+func fire_level() -> int:
+	return FireTiers.tier_of(Session.UNISON_MULTS[clampi(unison, 0, Session.UNISON_MULTS.size() - 1)])
 
 
 func set_still(on: bool) -> void:
@@ -401,26 +229,19 @@ func stomp() -> void:
 	kick(1.0)
 
 
-## A bell rung on time: the Mamuthone's load (and the Issohadore's rope) is thrown and swings hard,
-## on top of the bob (PixelFigure.pose's ring); the painted figures rock.
-func bell_strike(up: bool) -> void:
-	_bell_at = _clock
-	_bell_up = up
+func bell_strike(_up: bool) -> void:
+	pass
 
 
-## A call answered on time: the Issohadore cracks his rope (it swings like the load on a bell).
 func rope_crack() -> void:
-	_rope_at = _clock
+	pass
 
 
 func kick(amount := 1.0) -> void:
 	_kick = maxf(_kick, amount)
 
 
-## A surge of light runs up the four lines from the player to the fire, and the fire roars (the
-## procession's unison rose).
 func surge() -> void:
-	_surge_at = _clock
 	kick(1.0)
 
 
@@ -436,156 +257,71 @@ func set_reduced_motion(on: bool) -> void:
 	reduced_motion = on
 
 
-## A warm light flashing up where a note was hit (this control's coordinates).
-func flash(at: Vector2, strength := 1.0) -> void:
-	_flashes.append([at, _clock, strength])
-	if _flashes.size() > 8:
-		_flashes.pop_front()
+func set_hud_bottom(y: float) -> void:
+	hud_bottom = y
 
 
-## The beat's envelope for the light: 1 on the beat, falling away (a third with reduced motion).
+func flash(_at: Vector2, _strength := 1.0) -> void:
+	pass
+
+
 func beat_env() -> float:
 	if beat <= -999.0:
 		return 0.0
 	return PxArt.beat_env(beat, 0.4, 0.6, 0.0) * (0.35 if reduced_motion else 1.0)
 
 
-# ------------------------------------------------------------------ every frame
-
-func _process(delta: float) -> void:
-	_clock += delta
-	_solve()
-	_kick = maxf(0.0, _kick - delta * 2.0)
-	var env := beat_env()
-	_street_layout()
-	var night := 1.0 - 0.35 * dim
-	_still.modulate = Color(night, night, night)
-	if _fire != null:
-		# the drawn bonfire stands in for the first picture's painted one
-		_fire_pic.visible = false
-		_fire.beat = beat
-		_fire.dim = dim
-		_fire.animations = animations
-	if not animations:
-		# the fire's corner shows the still fire (dimmed with the rest), nothing else is drawn
-		_fire_pic.visible = false
-		return
-	# the fire's corner: it sways, flickers, and flares on every beat (most on the bar's first)
-	_fire_pic.visible = _fire == null
-	_fire_mat.set_shader_parameter("t", _clock)
-	_fire_mat.set_shader_parameter("flare", FIRE_BEAT * env + 0.35 * _kick)
-	_fire_mat.set_shader_parameter("dim", dim)
-	_fire_mat.set_shader_parameter("motion", 0.35 if reduced_motion else 1.0)
-	if _sparks != null:
-		_sparks.speed_scale = 1.0 - 0.5 * dim
-	_bob_figures()
-	_glow.queue_redraw()
-	var lit := _fire_light()
-	for f in _frames:
-		(f.get_node("Rim") as Line2D).default_color = Color(1.0, 0.5, 0.12, lit * 0.45)
-		(f.get_node("Halo") as Line2D).default_color = Color(1.0, 0.55, 0.15, 0.16 + lit * 0.25)
-
-
-## How much the fire's hot core brightens on a beat (the bar's first; the others 0.6 of it).
-const FIRE_BEAT := 0.8
-
-
-## The street's layout for its shader: where the picture lies on screen and where the road's lanes
-## run (the pixel look's cobbled road, laid in the street's perspective, and the smooth lanes of both
-## looks). It stays still (Daniele found the travelling road too much on his phone, 2026-10-05, so
-## only the notes move), so it is drawn once, and again only when the layout changes.
-func _street_layout() -> void:
-	var px_k := _pixels_per_unit()
-	var rect := Vector2(_vp.size) * PxArt.PX if _vp != null else size
-	var pix := Vector2i((rect * px_k).ceil()).max(Vector2i.ONE)
-	var p := {"pic": IMG, "rect": rect, "sc": pic_scale, "off": pic_off, "y0": STRETCH_FROM,
-		"stretch": stretch, "fire": FIRE, "road": false, "smooth_lanes": true, "rails": true, "cell": PxArt.PX,
-		"rail_a": Vector4(RAILS[0].x, RAILS[1].x, RAILS[2].x, RAILS[3].x),
-		"rail_b": Vector4(RAILS[0].y, RAILS[1].y, RAILS[2].y, RAILS[3].y),
-		"vanish_y": VANISH_Y, "far_y": FAR_Y, "inv_far": 1.0 / (FAR_Y - VANISH_Y), "scroll": 0.0}
-	if lanes != null and lanes.is_inside_tree():
-		var fr := lanes.field_rect()
-		var lane := maxf(fr.size.x / 3.0, 1.0)
-		var yh := _hit_line_local() / pic_scale
-		if yh > STRETCH_FROM:
-			yh = STRETCH_FROM + (yh - STRETCH_FROM) / stretch
-		# the pixel street (Daniele's second street picture, 2026-10-08) has its own cobbles: the
-		# shader's laid stones only for the first picture's painted look
-		p.inv_hit = 1.0 / maxf(yh - VANISH_Y, 1.0)
-		p.depth = LaneSkin.hit_line_y(fr) / lane
-	var key := [p, pix]
-	if key == _baked_key:
-		return
-	_baked_key = key
-	for k: String in p:
-		_mat.set_shader_parameter(k, p[k])
-		_fire_mat.set_shader_parameter(k, p[k])
-	# the still street: flames at rest, full light (a low fire darkens it through its modulate)
-	_mat.set_shader_parameter("t", 0.0)
-	_mat.set_shader_parameter("flare", 0.0)
-	_mat.set_shader_parameter("dim", 0.0)
-	_mat.set_shader_parameter("motion", 0.0)
-	_bake.size = pix
-	_pic.position = Vector2.ZERO
-	_pic.size = Vector2(pix)
-	_bake.render_target_update_mode = SubViewport.UPDATE_ONCE
-	if _vp != null:
-		_still.position = Vector2.ZERO
-		_still.size = Vector2(_vp.size)
-	# the fire's corner: everywhere the flames sway or brighten (PICTURE_SHADER's flame ellipse)
-	var a := to_local_pic(FIRE - Vector2(126.0, 156.0))
-	var b := to_local_pic(FIRE + Vector2(126.0, 104.0))
-	var cell := PxArt.PX if _vp != null else 1.0
-	a = (a / cell).floor() * cell
-	b = (b / cell).ceil() * cell
-	_fire_pic.position = a / cell
-	_fire_pic.size = (b - a) / cell
-	_fire_mat.set_shader_parameter("origin", a)
-	_fire_mat.set_shader_parameter("rect", b - a)
-
-
-## Screen pixels per unit of this control (the street is baked at the size it shows).
-func _pixels_per_unit() -> float:
-	if _vp != null:
-		return 1.0 / PxArt.PX
-	if not is_inside_tree():
-		return 1.0
-	return absf((get_viewport().get_final_transform() * get_global_transform()).get_scale().x)
-
-
-## Whether the street's own animation runs (Settings: animations).
 func motion_on() -> bool:
 	return animations
 
 
-## The figures bob on every beat, after the character in Daniele's recording: on the beat each drops
-## at once, holds there for a moment, and
-## springs back up within a tenth of a second, then stands still until the next beat. Never a jump.
-func _bob_figures() -> void:
+# ------------------------------------------------------------------ every frame
+
+func _process(delta: float) -> void:
+	_clock += delta
+	_kick = maxf(0.0, _kick - delta * 2.0)
+	_solve()
+	queue_redraw()
+
+
+## Seconds since the last beat (99: no song running, everything at rest).
+func since_beat() -> float:
+	if beat <= -999.0 or not animations or still:
+		return 99.0
 	var spb := lanes.spb if lanes != null and lanes.spb > 0.0 else 0.5
-	var m := 0.35 if reduced_motion else 1.0
-	var age := _clock - _jolt_at
-	var shake := 0.0
-	if _jolt_kind == "miss":
-		shake = sin(age * 28.0) * exp(-age * 7.0)
-	if not _puppets.is_empty():
-		var t := 99.0
-		var bar := 0.0
-		if beat > -999.0:
-			t = (beat - floorf(beat)) * spb
-			bar = fposmod(beat, 4.0)
-		if _jolt_kind == "stomp" and age < 0.3:
-			t = minf(t, age)
-		var ring := _clock - _bell_at
-		for p in _puppets:
-			p.reduced_motion = reduced_motion
-			p.spb = spb
-			var r := ring
-			if p.figure == "issohadore" and _clock - _rope_at < ring:
-				r = _clock - _rope_at
-			p.pose(t, bar, still, r, _bell_up or r != ring)
-			var at: Vector2 = p.get_meta("base_pos", p.position)
-			p.position = at + Vector2(shake * 0.02 * float(p.get_meta("frame_h", 0.0)), 0.0) * m
+	var t := (beat - floorf(beat)) * spb
+	if _jolt_kind == "stomp" and _clock - _jolt_at < 0.3:
+		t = minf(t, _clock - _jolt_at)
+	return t
+
+
+func _draw() -> void:
+	if _street == null:
+		return
+	_solve()
+	var night := 1.0 - 0.45 * dim
+	var mod := Color(night, night, night)
+	var at := Vector2(pic_off, 0.0)
+	var sz := IMG * pic_scale
+	draw_texture_rect(_street, Rect2(at, sz), false, mod)
+	var t := since_beat()
+	# the bonfire: its frame follows the beat (on it the flames leap, then settle)
+	var lv := fire_level()
+	if lv < _fires.size() and _fires[lv] != null:
+		var box: Array = _geo.get("fire_box", [0, 0, 1, 1])
+		var n := int(_geo.get("fire_frames", 1))
+		var fi := clampi(int(t * float(_geo.get("fire_fps", 30))), 0, n - 1)
+		var fw := float(box[2])
+		var fh := float(box[3])
+		draw_texture_rect_region(_fires[lv], Rect2(pic_point(Vector2(box[0], box[1])), Vector2(fw, fh) * pic_scale),
+			Rect2(fi * fw, 0.0, fw, fh), mod)
+	# the files of Mamuthones: one picture per moment of the bob
+	if not _files.is_empty():
+		var nf := _files.size()
+		var k := nf - 1
+		if t < float(nf - 1) / float(_geo.get("file_fps", 60)):
+			k = clampi(int(t * float(_geo.get("file_fps", 60))), 0, nf - 2)
+		draw_texture_rect(_files[k], Rect2(at, sz), false, mod)
 
 
 ## How far down a figure is (1 = the full drop) t seconds after the beat: down at once, held for a
@@ -595,603 +331,3 @@ static func _bob(t: float) -> float:
 		return 0.0
 	var x := clampf((t - BOB_HOLD) / (BOB_BACK - BOB_HOLD), 0.0, 1.0)
 	return 1.0 - x * x * (3.0 - 2.0 * x)
-
-
-# ------------------------------------------------------------------ the portraits
-
-## A portrait: a dark panel in a gold frame, following the wall's perspective, a warm light glowing
-## up from its bottom. The figure stands in front of it (Daniele, 2026-10-05): its legs go down into
-## the frame, cut at the frame's lower edge, and the rest of it stands out over the frame, so it bobs
-## out of the box.
-func _make_frame(i: int) -> Node2D:
-	var root := Node2D.new()
-	root.name = "Portrait" + ("L" if i == 0 else "R")
-	var panel := Polygon2D.new()
-	panel.name = "Panel"
-	panel.color = Color.WHITE
-	panel.vertex_colors = PackedColorArray([Color("#1a0f10"), Color("#1a0f10"), Color("#3a1a0e"), Color("#3a1a0e")])
-	# warmer firelight behind the pixel figures, so the Mamuthone's dark fleece stands out of it
-	panel.vertex_colors = PackedColorArray([Color("#2a1a1c"), Color("#2a1a1c"), Color("#6a3416"), Color("#6a3416")])
-	root.add_child(panel)
-	# the figure's layer, over the frame: the figure is cut at the frame's lower edge by CUT_SHADER
-	# (see _place_frames), not by clip_children, which costs every frame a render pass of its own
-	var stand := Node2D.new()
-	stand.name = "Stand"
-	var cut := ShaderMaterial.new()
-	cut.shader = _cut_shader()
-	_cuts.append(cut)
-	var pup := PixelFigure.new("issohadore" if i == 0 else "mamuthone")
-	pup.name = "Figure"
-	pup.black = str(Profile.get_look().get("fleece", "black")) != "dark_brown"
-	pup.mirror = i == 1
-	pup.material = cut
-	stand.add_child(pup)
-	_puppets.append(pup)
-	var border := Line2D.new()
-	border.name = "Frame"
-	border.closed = true
-	border.width = 5.0
-	border.default_color = Color("#ffb347")
-	border.joint_mode = Line2D.LINE_JOINT_SHARP
-	root.add_child(border)
-	var halo := Line2D.new()
-	halo.name = "Halo"
-	halo.closed = true
-	halo.width = 16.0
-	halo.default_color = Color(1.0, 0.55, 0.15, 0.22)
-	var add := CanvasItemMaterial.new()
-	add.blend_mode = CanvasItemMaterial.BLEND_MODE_ADD
-	halo.material = add
-	root.add_child(halo)
-	root.add_child(stand)
-	# the bonfire's light on the portrait's side toward the road (stronger as the fire grows)
-	var rim := Line2D.new()
-	rim.name = "Rim"
-	rim.width = 18.0
-	rim.default_color = Color(1.0, 0.5, 0.12, 0.0)
-	var rim_add := CanvasItemMaterial.new()
-	rim_add.blend_mode = CanvasItemMaterial.BLEND_MODE_ADD
-	rim.material = rim_add
-	root.add_child(rim)
-	# a carved beam along the lower edge, over the figure, so the cut at its knees reads as the
-	# figure standing behind a ledge (Daniele, 2026-10-08)
-	var beam := Polygon2D.new()
-	beam.name = "Beam"
-	beam.vertex_colors = PackedColorArray([Color("#5a2e14"), Color("#5a2e14"), Color("#2a140a"), Color("#2a140a")])
-	root.add_child(beam)
-	for n in ["BeamTop", "BeamLow"]:
-		var l := Line2D.new()
-		l.name = n
-		l.width = 5.0 if n == "BeamTop" else 3.0
-		l.default_color = Color("#ffb347") if n == "BeamTop" else Color("#1a0c06")
-		root.add_child(l)
-	return root
-
-
-## Tells the street where the HUD ends (this control's coordinates); the portraits make room.
-func set_hud_bottom(y: float) -> void:
-	if absf(y - hud_bottom) > 0.5:
-		hud_bottom = y
-		_place_frames()
-
-
-func _frame_points(i: int, drop := 0.0) -> PackedVector2Array:
-	var pts := PackedVector2Array()
-	# placed on the screen as on the picture before ZOOM (the zoom is for the road), and grown by
-	# FRAME_GROW from the outer top corner, so the bigger figures fit and stay clear of the HUD
-	var bs := pic_scale / ZOOM
-	var bo := (size.x - IMG.x * bs) * 0.5
-	var frame: Array = FRAME_PIXEL
-	var anchor: Vector2 = frame[0] - Vector2(0.0, FRAME_LIFT.x)
-	for k in frame.size():
-		var p: Vector2 = frame[k] - Vector2(0.0, FRAME_LIFT.x if k < 2 else FRAME_LIFT.y)
-		p = anchor + (p - anchor) * FRAME_GROW
-		var q := p if i == 0 else Vector2(IMG.x - p.x, p.y)
-		pts.append(Vector2(bo + q.x * bs, q.y * bs + drop))
-	return pts
-
-
-## The top of figure i's head when it stands in a portrait at pts (its pose at rest).
-func _head_top(i: int, pts: PackedVector2Array) -> float:
-	if i >= _puppets.size():
-		return (pts[0].y + pts[1].y) * 0.5
-	return _puppet_feet(i, pts).y - _puppets[i].art_height() * PxArt.PX
-
-
-func _place_frames() -> void:
-	# down just enough that no head reaches into the HUD
-	var drop := 0.0
-	if is_finite(hud_bottom):
-		for i in _frames.size():
-			drop = maxf(drop, hud_bottom + HUD_GAP - _head_top(i, _frame_points(i)))
-	for i in _frames.size():
-		var pts := _frame_points(i, drop)
-		var f := _frames[i]
-		(f.get_node("Panel") as Polygon2D).polygon = pts
-		_wall_panel(f.get_node("Panel") as Polygon2D, pts, i)
-		# the figure shows above the frame's lower edge only (the line through it, out past its sides)
-		var to_canvas := get_global_transform()
-		var ca := to_canvas * pts[3]
-		var d := to_canvas * pts[2] - ca
-		_cuts[i].set_shader_parameter("cut_a", ca)
-		var n := Vector2(-d.y, d.x).normalized()
-		_cuts[i].set_shader_parameter("cut_n", n if n.y > 0.0 else -n)    # pointing down, below the edge
-		(f.get_node("Frame") as Line2D).points = pts
-		(f.get_node("Halo") as Line2D).points = pts
-		(f.get_node("Rim") as Line2D).points = PackedVector2Array([pts[1], pts[2]])
-		_place_puppet(i, pts)
-		var down := Vector2(0.0, BEAM)
-		var a := pts[3] - (pts[2] - pts[3]).normalized() * 40.0
-		(f.get_node("Beam") as Polygon2D).polygon = PackedVector2Array([a, pts[2], pts[2] + down, a + down])
-		(f.get_node("BeamTop") as Line2D).points = PackedVector2Array([a, pts[2]])
-		(f.get_node("BeamLow") as Line2D).points = PackedVector2Array([a + down, pts[2] + down])
-
-
-static var _cut: Shader
-
-## Keeps what lies above a line (cut_a, a point on it, and cut_n, its normal toward the side cut
-## away, both in canvas coordinates) and drops the rest: a portrait's lower edge cutting its figure.
-## Children of the cut node draw with it (PixelFigure's pieces use their parent's material).
-static func _cut_shader() -> Shader:
-	if _cut == null:
-		_cut = Shader.new()
-		_cut.code = """
-shader_type canvas_item;
-uniform vec2 cut_a = vec2(0.0, 1e6);
-uniform vec2 cut_n = vec2(0.0, 1.0);
-varying vec2 at;
-void vertex() {
-	at = (MODEL_MATRIX * vec4(VERTEX, 0.0, 1.0)).xy;
-}
-void fragment() {
-	if (dot(at - cut_a, cut_n) > 0.0) {
-		discard;
-	}
-}
-"""
-	return _cut
-
-
-## The pixel look's portrait backing: a stone wall of a Mamoiada house lit by the bonfire, in whole
-## cells (one texel per lens cell), the light dithered in steps from the fire's side (Bayer 4x4)
-## and darkening into a carved inner edge under the gold frame.
-const WALL_RAMP := ["#120a0d", "#1e1116", "#2c1715", "#401f15", "#5a2a15", "#783a16", "#9a4e1a"]
-const BAYER := [0, 8, 2, 10, 12, 4, 14, 6, 3, 11, 1, 9, 15, 7, 13, 5]
-static var _wall_cache := {}
-
-func _wall_panel(panel: Polygon2D, pts: PackedVector2Array, i: int) -> void:
-	var px := PxArt.PX
-	var lo := Vector2(INF, INF)
-	var hi := -lo
-	for q in pts:
-		lo = lo.min(q)
-		hi = hi.max(q)
-	lo = (lo / px).floor() * px
-	var cells := Vector2i(((hi - lo) / px).ceil()) + Vector2i.ONE
-	var local := PackedVector2Array()
-	for q in pts:
-		local.append((q - lo) / px)
-	var key := "%d_%d_%d_%s" % [i, cells.x, cells.y, str(local)]
-	if not _wall_cache.has(key):
-		_wall_cache[key] = _wall_image(local, cells, i)
-	panel.texture = _wall_cache[key]
-	panel.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
-	panel.uv = local
-	panel.vertex_colors = PackedColorArray()
-	panel.color = Color.WHITE
-
-
-static func _wall_image(poly: PackedVector2Array, cells: Vector2i, i: int) -> ImageTexture:
-	var ramp: Array[Color] = []
-	for c in WALL_RAMP:
-		ramp.append(Color(c))
-	var img := Image.create(cells.x, cells.y, false, Image.FORMAT_RGBA8)
-	# the fire is toward the road: low on the portrait's inner side
-	var glow := Vector2(cells.x * (0.9 if i == 0 else 0.1), cells.y * 0.55)
-	var reach := maxf(cells.x, cells.y) * 1.05
-	var course := 8
-	var stone := 13
-	for y in cells.y:
-		for x in cells.x:
-			var c := Vector2(x + 0.5, y + 0.5)
-			if not Geometry2D.is_point_in_polygon(c, poly):
-				continue
-			var d := 1.0 - clampf(c.distance_to(glow) / reach, 0.0, 1.0)
-			var lvl := 1.5 + pow(d, 1.5) * 5.0
-			# stone courses: mortar lines a step darker, each stone a little lighter or darker
-			var row := y / course
-			var sx := x + (stone / 2 if row % 2 == 1 else 0)
-			var col := sx / stone
-			if y % course == 0 or sx % stone == 0:
-				lvl -= 1.0
-			else:
-				lvl += (float(hash(Vector2i(col, row)) % 7) - 3.0) * 0.12
-				# the stone's top edge catches the firelight
-				if y % course == 1:
-					lvl += 0.35
-			# the carved inner edge under the gold frame
-			var edge := INF
-			for k in poly.size():
-				var a := poly[k]
-				var b := poly[(k + 1) % poly.size()]
-				edge = minf(edge, c.distance_to(Geometry2D.get_closest_point_to_segment(c, a, b)))
-			if edge < 2.0:
-				lvl = 0.0
-			elif edge < 4.0:
-				lvl = minf(lvl, 1.2)
-			var t: float = (BAYER[(y % 4) * 4 + x % 4] + 0.5) / 16.0
-			var n := clampi(int(floor(lvl + t - 0.5)), 0, ramp.size() - 1)
-			img.set_pixel(x, y, ramp[n])
-	return ImageTexture.create_from_image(img)
-
-
-## Where a figure stands across its portrait: in from the middle toward the road, the Issohadore
-## then a little to the right.
-func _figure_x(i: int, pts: PackedVector2Array) -> float:
-	var dx := FIGURE_IN + ISSO_RIGHT if i == 0 else -FIGURE_IN
-	return (pts[0].x + pts[1].x + pts[2].x + pts[3].x) * 0.25 + dx * pic_scale / ZOOM
-
-
-## The pixel look's puppet in its portrait: its feet below the frame's lower edge, so the edge cuts
-## it at PIXEL_CUT and only the figure from the knees up shows.
-func _place_puppet(i: int, pts: PackedVector2Array) -> void:
-	if i >= _puppets.size():
-		return
-	var p := _puppets[i]
-	# one art px is one cell of the lens (PxArt.PX base px), and the feet sit on the lens's grid, so
-	# the figure comes through it crisp while it stands
-	p.position = _puppet_feet(i, pts)
-	p.scale = Vector2(PxArt.PX, PxArt.PX)
-	p.set_meta("base_pos", p.position)
-	p.set_meta("frame_h", (pts[2].y + pts[3].y - pts[0].y - pts[1].y) * 0.5)
-
-
-## Where figure i's feet go in a portrait at pts.
-func _puppet_feet(i: int, pts: PackedVector2Array) -> Vector2:
-	var cx := _figure_x(i, pts)
-	# the lower edge's height under the figure's middle
-	var a := pts[3]
-	var b := pts[2]
-	var edge := a.y + (b.y - a.y) * clampf((cx - a.x) / (b.x - a.x), 0.0, 1.0)
-	var art := _puppets[i].art_height()
-	return PxArt.snap2(Vector2(cx, edge + (art - PIXEL_CUT[i]) * PxArt.PX))
-
-
-# ------------------------------------------------------------------ the glow layer
-
-func _draw_glow(ci: CanvasItem) -> void:
-	var env := beat_env()
-	var fl := 0.5 + 0.5 * sin(_clock * 11.0) * sin(_clock * 7.3 + 1.0)
-	# the lanterns
-	for i in LANTERNS.size():
-		var p := to_local_pic(LANTERNS[i])
-		var f := 0.75 + 0.25 * sin(_clock * (8.0 + i * 1.7) + i * 2.0) * sin(_clock * 13.0 + i)
-		var r := 46.0 * pic_scale / 0.86 * (1.0 + 0.1 * f)
-		# (the pixel look keeps the lanterns' light off the portraits: it washes their few colours out)
-		var la := 0.04 if i < 2 else 0.3
-		ci.draw_texture_rect(_glow_tex, Rect2(p - Vector2(r, r), Vector2(r, r) * 2.0), false, Color(1.0, 0.62, 0.25, la * f * (1.0 - 0.5 * dim)))
-	# the bonfire's light pooled on the far road, by its tier (dim at 1x, strong at 4x)
-	var lit := _fire_light()
-	var pp := to_local_pic(FIRE_BASE + Vector2(0, 26))
-	var pr := (110.0 + 70.0 * lit) * pic_scale
-	ci.draw_texture_rect(_glow_tex, Rect2(pp - Vector2(pr, pr * 0.42), Vector2(pr, pr * 0.42) * 2.0), false,
-		Color(1.0, 0.5, 0.14, (0.12 + 0.3 * lit) * (1.0 - 0.6 * dim)))
-	# the fire's own breath, and its flare on the beat
-	var fp := to_local_pic(FIRE + Vector2(0, 40))
-	# (it lights up on every beat, most on the bar's first: one light, so it costs next to nothing)
-	var fr := 190.0 * pic_scale / 0.86 * (1.0 + 0.25 * env + 0.2 * _kick)
-	ci.draw_texture_rect(_glow_tex, Rect2(fp - Vector2(fr, fr * 0.8), Vector2(fr, fr * 0.8) * 2.0), false,
-		Color(1.0, 0.45, 0.12, (0.08 + 0.06 * fl + 0.6 * env + 0.3 * _kick) * (1.0 - 0.7 * dim)))
-	# the four lines pulse on the beat, brightest near the player
-	if lanes != null and lanes.visible and env > 0.01:
-		for i in 4:
-			var a := to_local_pic(Vector2(rail_x(i, FAR_Y + 20.0), FAR_Y + 20.0))
-			var y1 := IMG.y
-			var b := to_local_pic(Vector2(rail_x(i, y1), y1))
-			var n := 10
-			for k in n:
-				var p0 := a.lerp(b, float(k) / n)
-				var p1 := a.lerp(b, float(k + 1) / n)
-				var w := lerpf(2.0, 9.0, float(k) / n) * pic_scale / 0.86
-				ci.draw_line(p0, p1, Color(1.0, 0.6, 0.2, 0.3 * env * lerpf(0.4, 1.0, float(k) / n)), w)
-	# a surge running up the lines
-	var sa := (_clock - _surge_at) / SURGE_TIME
-	if lanes != null and lanes.visible and sa >= 0.0 and sa < 1.0:
-		var y_far := FAR_Y + 20.0
-		var y1 := IMG.y
-		for i in 4:
-			for k in 6:
-				var u0 := clampf(1.0 - sa * 1.15 + float(k) * 0.03, 0.0, 1.0)
-				var u1 := clampf(u0 + 0.03, 0.0, 1.0)
-				var ya := lerpf(y_far, y1, u0)
-				var yb := lerpf(y_far, y1, u1)
-				var p0 := to_local_pic(Vector2(rail_x(i, ya), ya))
-				var p1 := to_local_pic(Vector2(rail_x(i, yb), yb))
-				var w := lerpf(4.0, 16.0, u0) * pic_scale / 0.86
-				ci.draw_line(p0, p1, Color(1.0, 0.85, 0.5, (1.0 - float(k) / 6.0) * (1.0 - sa)), w)
-	# warm flashes where notes were hit
-	var i := 0
-	while i < _flashes.size():
-		var fh: Array = _flashes[i]
-		var age := _clock - float(fh[1])
-		if age > 0.3:
-			_flashes.remove_at(i)
-			continue
-		i += 1
-		var k := 1.0 - age / 0.3
-		var r := 120.0 * float(fh[2]) * (0.7 + 0.5 * (1.0 - k))
-		ci.draw_texture_rect(_glow_tex, Rect2(fh[0] - Vector2(r, r * 0.6), Vector2(r, r * 0.6) * 2.0), false, Color(1.0, 0.6, 0.2, 0.5 * k * k))
-
-
-static func _radial() -> Texture2D:
-	var g := Gradient.new()
-	g.set_color(0, Color(1, 1, 1, 1))
-	g.set_color(1, Color(1, 1, 1, 0))
-	g.add_point(0.35, Color(1, 1, 1, 0.45))
-	var t := GradientTexture2D.new()
-	t.gradient = g
-	t.fill = GradientTexture2D.FILL_RADIAL
-	t.fill_from = Vector2(0.5, 0.5)
-	t.fill_to = Vector2(1.0, 0.5)
-	t.width = 128
-	t.height = 128
-	return t
-
-
-func _make_sparks() -> CPUParticles2D:
-	var p := CPUParticles2D.new()
-	p.name = "Sparks"
-	p.amount = 40
-	p.lifetime = 2.6
-	p.preprocess = 2.6
-	p.emission_shape = CPUParticles2D.EMISSION_SHAPE_RECTANGLE
-	p.emission_rect_extents = Vector2(40, 16)
-	p.direction = Vector2(0, -1)
-	p.spread = 14.0
-	p.gravity = Vector2(6, -20)
-	p.initial_velocity_min = 40.0
-	p.initial_velocity_max = 95.0
-	p.scale_amount_min = 1.5
-	p.scale_amount_max = 3.5
-	var sc := Curve.new()
-	sc.add_point(Vector2(0, 1))
-	sc.add_point(Vector2(1, 0.2))
-	p.scale_amount_curve = sc
-	var ramp := Gradient.new()
-	ramp.set_color(0, Color(1.0, 0.9, 0.5, 1.0))
-	ramp.set_color(1, Color(1.0, 0.35, 0.05, 0.0))
-	p.color_ramp = ramp
-	var add := CanvasItemMaterial.new()
-	add.blend_mode = CanvasItemMaterial.BLEND_MODE_ADD
-	p.material = add
-	return p
-
-
-class _Layer extends Control:
-	var street: StreetBackdrop
-
-	func _init(p: StreetBackdrop) -> void:
-		street = p
-		mouse_filter = Control.MOUSE_FILTER_IGNORE
-		set_anchors_preset(Control.PRESET_FULL_RECT)
-
-	func _draw() -> void:
-		street._draw_glow(self)
-
-
-## The picture, laid over the screen (cover, top aligned, stretched below y0), the fire flickering:
-## its flames sway in a wave rising through them and brighten with `flare`; `dim` (low health)
-## darkens the night and burns the fire low.
-const PICTURE_SHADER := """
-shader_type canvas_item;
-uniform vec2 pic = vec2(941.0, 1672.0);
-uniform vec2 rect = vec2(720.0, 1440.0);  // this rect's size, in the street control's units
-uniform vec2 origin = vec2(0.0);          // ... and its top left (the fire's corner is drawn alone)
-uniform float sc = 1.0;
-uniform float off = 0.0;
-uniform float y0 = 460.0;
-uniform float stretch = 1.0;
-uniform vec2 fire = vec2(480.0, 370.0);
-uniform float t = 0.0;
-uniform float flare = 0.0;
-uniform float dim = 0.0;
-uniform float motion = 1.0;
-// the pixel look's moving road: cobbles laid in the lanes that travel toward the player with the
-// notes (scroll, in lane widths), lit by the picture's own light
-uniform bool road = false;
-uniform vec4 rail_a;
-uniform vec4 rail_b;
-uniform float vanish_y = 265.0;
-uniform float far_y = 468.0;
-uniform float inv_far = 0.005;
-uniform float inv_hit = 0.001;
-uniform float depth = 6.0;
-uniform float scroll = 0.0;
-uniform vec2 stone = vec2(0.3, 0.12);
-
-vec2 hash2(vec2 q) {
-	q = vec2(dot(q, vec2(127.1, 311.7)), dot(q, vec2(269.5, 183.3)));
-	return fract(sin(q) * 43758.5453);
-}
-
-// x: distance to the nearest stone's centre, y: to the gap between two stones, z: the stone's own
-// tone, w: which side of its centre this is (+ the far side, toward the fire)
-vec4 cobble(vec2 x) {
-	vec2 n = floor(x);
-	vec2 f = fract(x);
-	vec2 best = vec2(8.0);
-	vec2 bo = vec2(0.0);
-	vec2 bc = vec2(0.0);
-	for (int j = -1; j <= 1; j++) {
-		for (int i = -1; i <= 1; i++) {
-			vec2 g = vec2(float(i), float(j));
-			vec2 o = 0.2 + 0.6 * hash2(n + g);
-			vec2 r = g + o - f;
-			float dd = dot(r, r);
-			if (dd < best.x) { best.x = dd; bo = r; bc = n + g; }
-		}
-	}
-	float edge = 8.0;
-	for (int j = -1; j <= 1; j++) {
-		for (int i = -1; i <= 1; i++) {
-			vec2 g = vec2(float(i), float(j));
-			vec2 o = 0.2 + 0.6 * hash2(n + g);
-			vec2 r = g + o - f;
-			if (dot(bo - r, bo - r) > 0.0001) {
-				edge = min(edge, dot(0.5 * (bo + r), normalize(r - bo)));
-			}
-		}
-	}
-	return vec4(sqrt(best.x), edge, hash2(bc).x, bo.y);
-}
-
-vec3 moving_road(sampler2D tex, vec2 p, vec3 c) {
-	if (p.y < far_y + 4.0) {
-		return c;
-	}
-	vec4 xs = rail_a + rail_b * p.y;
-	// the whole street floor moves, not just the lanes: out to where the houses stand on it
-	float wall = p.x < 470.0 ? 470.0 + (330.0 - p.x) * 0.545 : 470.0 + (p.x - 610.0) * 0.574;
-	if (p.y < wall + 2.0) {
-		return c;
-	}
-	float u = p.x < xs.y ? (p.x - xs.x) / (xs.y - xs.x) : (p.x < xs.z ? 1.0 + (p.x - xs.y) / (xs.z - xs.y) : 2.0 + (p.x - xs.z) / (xs.w - xs.z));
-	float k = (1.0 / (p.y - vanish_y) - inv_far) / (inv_hit - inv_far);
-	float v = k * depth - scroll;
-	// the stones are laid on the ground in true perspective: across, in middle-lane widths from the
-	// road's centre line (a straight line to the vanishing point), so they keep their shape out past
-	// the painted lines instead of shearing along them
-	float gx = (p.x - (xs.y + xs.z) * 0.5) / (xs.z - xs.y);
-	vec4 cb = cobble(vec2(gx, v) / stone);
-	// the light here: the picture around this point, blurred wide so the painted street's own
-	// patches and streaks never show through as odd shades on the stones; it only sets how lit the
-	// stones are (a smooth fall-off away from the fire and the lines), not their colour
-	vec3 light = vec3(0.0);
-	for (int j = -1; j <= 1; j++) {
-		for (int i = -1; i <= 1; i++) {
-			vec2 q = clamp(p + vec2(float(i) * 26.0, float(j) * 16.0), vec2(4.0), pic - 4.0);
-			light += texture(tex, q / pic).rgb;
-		}
-	}
-	float lit = dot(light / 9.0, vec3(0.3, 0.55, 0.15));
-	// one stone colour, dusk-blue in the dark and warm where the firelight falls
-	light = mix(vec3(0.17, 0.14, 0.21), vec3(0.66, 0.42, 0.27), smoothstep(0.04, 0.5, lit));
-	float rail = min(min(abs(u), abs(u - 1.0)), min(abs(u - 2.0), abs(u - 3.0)));
-	// the lines' own glow spilling onto the stones beside them
-	light += vec3(0.55, 0.25, 0.05) * exp(-rail * 9.0);
-	// each stone a gently rounded top, all lit the same way, only a touch of tone between stones
-	float dome = 1.0 - 0.5 * cb.x * cb.x;
-	vec3 st = light * (0.97 + 0.08 * (cb.z - 0.5)) * (0.84 + 0.22 * dome);
-	// a lit lip on each stone's far side (the fire is up the road), a shaded one on its near side
-	float lip = 1.0 - smoothstep(0.08, 0.18, cb.y);
-	st *= 1.0 + lip * (cb.w > 0.0 ? 0.12 : -0.1);
-	vec3 col = cb.y < 0.05 ? light * 0.5 : st;
-	// tiny far stones would shimmer: fade to the picture there; keep the lines themselves
-	float lane_px = (xs.z - xs.y) * sc;
-	float fade = smoothstep(10.0, 26.0, lane_px * stone.x);
-	fade *= smoothstep(0.035, 0.08, rail) * smoothstep(wall + 2.0, wall + 14.0, p.y);
-	return mix(c, col, fade);
-}
-
-// the three lanes the notes slide down are kept smooth (Daniele, 2026-10-05: no cobbles where the
-// notes travel, for readability): an even surface in the picture's own light, averaged across the
-// lane and along a stretch of road so no stone shows, a little darker than the street so the notes
-// stand out, with the lines' glow spilling onto it. The lines themselves stay the picture's.
-uniform bool smooth_lanes = false;
-
-vec3 smooth_lane(sampler2D tex, vec2 p, vec3 c) {
-	if (p.y < far_y + 2.0) {
-		return c;
-	}
-	vec4 xs = rail_a + rail_b * p.y;
-	if (p.x <= xs.x || p.x >= xs.w) {
-		return c;
-	}
-	float u = p.x < xs.y ? (p.x - xs.x) / (xs.y - xs.x) : (p.x < xs.z ? 1.0 + (p.x - xs.y) / (xs.z - xs.y) : 2.0 + (p.x - xs.z) / (xs.w - xs.z));
-	int li = int(clamp(floor(u), 0.0, 2.0));
-	float x0 = xs[li];
-	float x1 = xs[li + 1];
-	float span = max((x1 - x0) * 0.35, 6.0);
-	vec3 light = vec3(0.0);
-	for (int j = -3; j <= 3; j++) {
-		for (int i = 1; i <= 3; i++) {
-			float ly = p.y + float(j) * span * 0.33;
-			ly = ly > y0 ? y0 + (ly - y0) * stretch : ly;   // back to the picture's own rows
-			light += texture(tex, vec2(mix(x0, x1, float(i) * 0.25), ly) / pic).rgb;
-		}
-	}
-	light = light / 21.0;
-	float rail = min(min(abs(u), abs(u - 1.0)), min(abs(u - 2.0), abs(u - 3.0)));
-	vec3 col = light * 0.72 + vec3(0.55, 0.25, 0.05) * exp(-rail * 9.0) * 0.45;
-	float fade = smoothstep(0.03, 0.07, rail) * smoothstep(far_y + 2.0, far_y + 14.0, p.y);
-	return mix(c, col, fade);
-}
-
-// the four lane lines (the road's edges and the two dividers) as gold neon on the lanes themselves:
-// a hot core one art px wide far off and two near, an orange rim, and a warm glow on the paving
-// beside them (Daniele's ChatGPT road has no lines of its own; review of round 1: the lanes must
-// read at a glance even at 1x)
-uniform bool rails = false;
-uniform float cell = 3.0;   // one art px, in this rect's units
-
-vec3 gold_rails(vec2 p, vec3 c) {
-	if (p.y < far_y - 10.0) {
-		return c;
-	}
-	vec4 xs = rail_a + rail_b * p.y;
-	float dmin = 1e6;
-	for (int i = 0; i < 4; i++) {
-		dmin = min(dmin, abs(p.x - xs[i]) * sc);
-	}
-	float on = clamp((p.y - far_y + 10.0) / 24.0, 0.0, 1.0) * (0.75 + 0.25 * clamp((p.y - far_y) / 500.0, 0.0, 1.0));
-	float near = clamp((p.y - far_y) / 400.0, 0.0, 1.0);
-	float half_w = cell * mix(0.75, 1.0, near);
-	float glow = pow(clamp(1.0 - (dmin - half_w) / (cell * 6.0), 0.0, 1.0), 2.0) * on;
-	vec3 col = c + vec3(0.78, 0.25, 0.05) * glow * 0.5;
-	if (dmin < half_w + cell * 0.9) {
-		col = mix(col, vec3(0.94, 0.44, 0.09), on);
-	}
-	if (dmin < half_w) {
-		col = mix(col, vec3(1.0, 0.85, 0.42), on);
-	}
-	if (dmin < half_w * 0.45 && near > 0.4) {
-		col = mix(col, vec3(1.0, 0.94, 0.63), on);
-	}
-	return col;
-}
-
-void fragment() {
-	vec2 s = origin + UV * rect;
-	// q: the picture's own px (it is never stretched: Daniele, 2026-10-26); p: the lanes' frame, in
-	// which the road below y0 is drawn out (stretch) so the outer lanes fit at the hit line
-	vec2 q = vec2((s.x - off) / sc, s.y / sc);
-	vec2 p = q;
-	if (p.y > y0) {
-		p.y = y0 + (p.y - y0) / stretch;
-	}
-	// the flames: an ellipse over the fire, strongest in its upper part
-	vec2 d = (q - fire) / vec2(120.0, 150.0);
-	float m = clamp(1.0 - dot(d, d), 0.0, 1.0);
-	m *= smoothstep(fire.y + 100.0, fire.y + 40.0, q.y);
-	float wave = sin(q.y * 0.07 + t * 8.0) * 0.6 + sin(q.y * 0.13 - t * 11.0 + q.x * 0.05) * 0.4;
-	q.x += wave * 3.5 * m * motion;
-	q.y += (sin(t * 6.0 + q.x * 0.08) * 2.0) * m * motion;
-	vec4 c = texture(TEXTURE, q / pic);
-	if (road) {
-		c.rgb = moving_road(TEXTURE, p, c.rgb);
-	}
-	if (smooth_lanes) {
-		c.rgb = smooth_lane(TEXTURE, p, c.rgb);
-	}
-	if (rails) {
-		c.rgb = gold_rails(p, c.rgb);
-	}
-	float lum = dot(c.rgb, vec3(0.3, 0.55, 0.15));
-	float hot = m * smoothstep(0.45, 0.9, lum);
-	float flick = 0.06 * sin(t * 17.0) + 0.04 * sin(t * 29.0 + 1.7);
-	c.rgb *= 1.0 + hot * (flare + flick * motion) - hot * 0.55 * dim;
-	// low health: the night closes in, the far end darkest
-	c.rgb *= 1.0 - 0.35 * dim;
-	COLOR = vec4(c.rgb, 1.0);
-}
-"""

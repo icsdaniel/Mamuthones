@@ -72,9 +72,8 @@ func _draw() -> void:
 				lit_at = maxf(lit_at, float(_lit[k]))
 		var flare := clampf(1.0 - (_clock - lit_at) / LIGHT_TIME, 0.0, 1.0)
 		var col := Color("#e8322a").lerp(Color("#ff7a5a"), pulse * 0.6).lerp(Color("#fff0c0"), flare)
-		if _pictures():
-			_heart_pic(i, c, pts, pulse, flare)
-			continue
+		_heart_px(c, pts, pulse, flare)
+		continue
 		# each heart stands in relief: its side shows below it, and its upper left swells into the light
 		_heart(c + Vector2(0, DEPTH), 15.0, Color("#0a0608"), 3.0)
 		_heart(c, 15.0, Color("#0a0608"), 3.0)
@@ -92,6 +91,32 @@ func _draw() -> void:
 		# the shine
 		if pts > 0:
 			draw_circle(c + Vector2(-6.0, -5.0), 3.0, Color(1, 1, 1, 0.5))
+
+
+## The Woodcut look's heart: a classic small pixel heart, red (half red when one point is left),
+## brown when lost, flashing cream as it is filled again.
+const HEART_PX := [".##.##.", "#######", "#######", ".#####.", "..###..", "...#..."]
+
+
+func _heart_px(c: Vector2, pts: int, pulse: float, flare: float) -> void:
+	var px := 4.0
+	var o := (c - Vector2(7.5, 6.5) * px).round()
+	var red := Color("#c8352a").lerp(Color("#efe6d2"), flare).lerp(Color("#e86a5a"), pulse * 0.4)
+	var lost := Color("#4a3c38")
+	for y in HEART_PX.size():
+		var row: String = HEART_PX[y]
+		for x in row.length():
+			if row[x] == "#":
+				draw_rect(Rect2(o + Vector2(x, y) * px - Vector2(px, px), Vector2(px * 3.0, px * 3.0)), Color("#141014"))
+	for y in HEART_PX.size():
+		var row: String = HEART_PX[y]
+		for x in row.length():
+			if row[x] != "#":
+				continue
+			var col := lost
+			if pts == 2 or (pts == 1 and x <= 3):
+				col = red
+			draw_rect(Rect2(o + Vector2(x, y) * px, Vector2(px, px)), col)
 
 
 ## A heart of half-width r centred on c (grown by `grow`); `half` keeps only its left half.

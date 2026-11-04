@@ -25,8 +25,8 @@ const CARD := "CardPanel"
 ## One early/late language everywhere (bursts, the timing ticks, judgement hints, the results
 ## histogram): early is cool and sits UP (the note had not reached the line yet), late is warm and
 ## sits DOWN (it had passed). The woodcut palette has no cool colour, so the UI keeps this pair.
-const EARLY := Color("#8ec3e6")
-const LATE := Color("#ef8250")
+const EARLY := Color("#c9bba0")   ## the Woodcut look: early in warm grey
+const LATE := Color("#c8352a")    ## ... late in vermilion
 
 
 ## "early", "late" or "" for a signed hit offset, with Core's one dead zone (Session.SIDE_DEAD_ZONE).

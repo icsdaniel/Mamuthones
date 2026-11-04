@@ -8,10 +8,25 @@ extends Screen
 var _play: Button
 
 
+const SHEET := Color("#efe6d2")
+const K := Color("#141014")
+const R := Color("#c8352a")
+const G := Color("#c9bba0")
+const MENU_H := 520.0           ## the cream sheet's least height (base px)
+
+
+## "Controluce" (Daniele's main menu, rounds 1-23 on the review page): the Mamuthone's black mask
+## close up, lit from behind by the bonfire, bobbing on the beat, the logo under it; below, a cream
+## sheet with the red Continue plate, Story and Songs, and Learn and the gear.
 func build() -> void:
 	var next_id := Progression.next_stop()
 	var next_song := SongLibrary.get_song(next_id)
 	var safe := UIKit.safe_margins(self)
+	var bg := ColorRect.new()
+	bg.color = K
+	bg.set_anchors_preset(Control.PRESET_FULL_RECT)
+	bg.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	add_child(bg)
 
 	var root := VBoxContainer.new()
 	root.set_anchors_preset(Control.PRESET_FULL_RECT)
@@ -19,66 +34,133 @@ func build() -> void:
 	root.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	add_child(root)
 
-	# ---- the logo alone on the calm ground (no scene art)
-	var top := Control.new()
+	var top := TitleArt.new()
 	top.name = "Top"
 	top.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	top.custom_minimum_size.y = 300
 	top.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	root.add_child(top)
-	var logo := Logo.new()
+	var logo := Control.new()      # tests look for the logo: it is drawn in the picture
 	logo.name = "Logo"
-	logo.mode = "title"
-	logo.subtitle = ""   # the name stands on its own
-	logo.set_anchors_preset(Control.PRESET_FULL_RECT)
-	logo.offset_top = 56.0 + safe.y
-	logo.offset_bottom = -56.0
-	logo.offset_left = 0.0
-	logo.offset_right = 0.0
+	logo.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	top.add_child(logo)
 	Sound.stop_ambience()   # no background loops (Daniele, 2026-10-15)
 
-	# ---- the menu
+	# ---- the cream sheet
+	var sheet := PanelContainer.new()
+	sheet.name = "Sheet"
+	var sb := StyleBoxFlat.new()
+	sb.bg_color = SHEET
+	sb.border_color = K
+	sb.border_width_top = 8
+	sheet.add_theme_stylebox_override("panel", sb)
+	sheet.custom_minimum_size.y = MENU_H + safe.w
+	root.add_child(sheet)
 	var margin := MarginContainer.new()
 	margin.name = "Menu"
 	margin.add_theme_constant_override("margin_left", int(UIKit.GUTTER + safe.x))
 	margin.add_theme_constant_override("margin_right", int(UIKit.GUTTER + safe.z))
+	margin.add_theme_constant_override("margin_top", 36)
 	margin.add_theme_constant_override("margin_bottom", int(24 + safe.w))
-	root.add_child(margin)
+	sheet.add_child(margin)
 	var center := CenterWidth.new()
 	center.max_width = UIKit.COLUMN_MAX
 	margin.add_child(center)
 	var box := VBoxContainer.new()
-	box.add_theme_constant_override("separation", 12)
+	box.add_theme_constant_override("separation", 24)
 	center.add_child(box)
 
-	var holder := Control.new()
-	holder.custom_minimum_size.y = UIKit.TOUCH
-	box.add_child(holder)
 	_play = UIKit.button("", _play_next, UIKit.PRIMARY)
 	_play.name = "PlayNext"
 	_play.text = tr("title_continue") % UIKit.song_title(next_song) if next_song != null else tr("title_procession")
 	if lessons_first():
 		_play.text = tr("title_learn")
 	_play.text_overrun_behavior = TextServer.OVERRUN_TRIM_ELLIPSIS
-	_play.set_anchors_preset(Control.PRESET_FULL_RECT)
-	holder.add_child(_play)
+	_play.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	_play.custom_minimum_size.y = 168
+	_block(_play, R, Color("#efe6d2"), PxType.LINE * 4)
+	box.add_child(_play)
 
 	var grid := GridContainer.new()
 	grid.columns = 2
-	grid.add_theme_constant_override("h_separation", 12)
-	grid.add_theme_constant_override("v_separation", 12)
+	grid.add_theme_constant_override("h_separation", 24)
+	grid.add_theme_constant_override("v_separation", 24)
 	box.add_child(grid)
 	for item in [
 		["StoryMap", "title_story", func() -> void: app.open("story")],
 		["FreePlay", "title_free", func() -> void: app.open("free_play")],
-		["Tutorial", "title_tutorial", func() -> void: app.open("tutorial")],
-		["Settings", "title_settings", func() -> void: app.open("settings")],
 	]:
 		var b := UIKit.button(tr(item[1]), item[2])
 		b.name = item[0]
 		b.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		b.custom_minimum_size.y = UIKit.TOUCH
+		_block(b, G, K, PxType.LINE * 3)
 		grid.add_child(b)
+
+	var rule := ColorRect.new()
+	rule.color = Color("#4a3c38")
+	rule.custom_minimum_size.y = 4
+	rule.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	box.add_child(rule)
+	var row := HBoxContainer.new()
+	row.add_theme_constant_override("separation", 24)
+	box.add_child(row)
+	for item in [
+		["Tutorial", "title_tutorial", func() -> void: app.open("tutorial"), true],
+		["Settings", "title_settings", func() -> void: app.open("settings"), false],
+	]:
+		var b := UIKit.button(tr(item[1]), item[2])
+		b.name = item[0]
+		b.custom_minimum_size = Vector2(UIKit.TOUCH, UIKit.TOUCH)
+		b.alignment = HORIZONTAL_ALIGNMENT_LEFT if item[3] else HORIZONTAL_ALIGNMENT_RIGHT
+		b.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		for st in ["normal", "hover", "pressed", "hover_pressed", "focus", "disabled"]:
+			b.add_theme_stylebox_override(st, StyleBoxEmpty.new())
+		for c in ["font_color", "font_hover_color", "font_focus_color"]:
+			b.add_theme_color_override(c, K)
+		b.add_theme_color_override("font_pressed_color", R)
+		b.add_theme_color_override("font_hover_pressed_color", R)
+		row.add_child(b)
+
+
+## A hard-shadow block on the sheet (the Controluce plates): `fill` in a black outline, its shadow
+## straight down; pressed it sinks onto its shadow.
+func _block(b: Button, fill: Color, ink: Color, font_size: int) -> void:
+	for st in ["normal", "hover", "focus", "disabled"]:
+		var sb := StyleBoxFlat.new()
+		sb.bg_color = fill
+		sb.border_color = K
+		sb.set_border_width_all(4)
+		sb.shadow_color = K
+		sb.shadow_size = 0
+		sb.shadow_offset = Vector2(0, 12)
+		sb.expand_margin_bottom = 0
+		sb.anti_aliasing = false
+		sb.content_margin_left = 28
+		sb.content_margin_right = 28
+		sb.content_margin_top = 12
+		sb.content_margin_bottom = 12
+		b.add_theme_stylebox_override(st, sb)
+		if st == "focus":
+			var f := StyleBoxEmpty.new()
+			b.add_theme_stylebox_override(st, f)
+	for st in ["pressed", "hover_pressed"]:
+		var sb := StyleBoxFlat.new()
+		sb.bg_color = fill
+		sb.border_color = K
+		sb.set_border_width_all(4)
+		sb.anti_aliasing = false
+		sb.content_margin_left = 28
+		sb.content_margin_right = 28
+		sb.content_margin_top = 24
+		sb.content_margin_bottom = 0
+		b.add_theme_stylebox_override(st, sb)
+	for c in ["font_color", "font_hover_color", "font_focus_color", "font_pressed_color", "font_hover_pressed_color"]:
+		b.add_theme_color_override(c, ink)
+	b.add_theme_font_size_override("font_size", font_size)
+	b.draw.connect(func() -> void:
+		if not b.button_pressed:
+			b.draw_rect(Rect2(0, b.size.y, b.size.x, 12), K))
 
 
 ## A new player's red banner leads to the lessons, not straight into a song with hearts (outside

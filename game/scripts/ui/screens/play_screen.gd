@@ -135,7 +135,9 @@ func build() -> void:
 	# That is the pixel art itself: no filter reads the screen back and no other picture is drawn,
 	# so a phone does far less work per frame than for a picture drawn at full resolution.
 	var host: Node = self
-	if not OS.has_environment("NO_WORLD"):
+	# the Woodcut look is drawn at full resolution: its pictures are pixel art already, shown with hard
+	# edges, and the notes slide at screen precision
+	if false and not OS.has_environment("NO_WORLD"):
 		world = SubViewportContainer.new()
 		world.name = "World"
 		world.stretch = true
@@ -233,7 +235,7 @@ func build() -> void:
 	words.z_index = PixelFilter.Z_OVER
 	lanes.add_child(words)
 
-	if world == null and not OS.has_environment("NO_LENS"):
+	if false and world == null and not OS.has_environment("NO_LENS"):
 		filter = PixelFilter.new()
 		filter.name = "PixelFilter"
 		host.add_child(filter)

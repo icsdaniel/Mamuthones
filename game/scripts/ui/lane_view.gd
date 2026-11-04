@@ -1340,19 +1340,16 @@ func _exit_tree() -> void:
 ## bursts, the stand-still label, the early/late marks and the buttons.
 func _draw_street() -> void:
 	var field := field_rect()
-	if StreetSkin.atlas != null and StreetSkin.atlas.lanes == self:
-		StreetSkin.atlas.ready_for(self)   # painted with the first frame, before any note shows
 	if session != null:
-		StreetSkin.draw_notes(self, field)
+		WoodcutSkin.draw_notes(self, field)
 	for b in _bursts:
 		var pos: Vector2 = b[0]
-		StreetSkin.burst(self, project(pos), str(b[1]), _clock - float(b[2]), road_scale(pos.y))
+		WoodcutSkin.burst(self, project(pos), str(b[1]), _clock - float(b[2]), road_scale(pos.y))
 	for st in _stomps:
 		var at := project(Vector2(lane_center(int(st[0])).x, LaneSkin.hit_line_y(field)))
-		StreetSkin.burst(self, at, "stomp" if bool(st[1]) else "ok", _clock - float(st[2]), road_scale(LaneSkin.hit_line_y(field)) * (1.6 if bool(st[1]) else 1.0))
-	_draw_pulses(field)
+		WoodcutSkin.burst(self, at, "stomp" if bool(st[1]) else "ok", _clock - float(st[2]), road_scale(LaneSkin.hit_line_y(field)) * (1.6 if bool(st[1]) else 1.0))
 	for sk in _strikes:
-		StreetSkin.bell_strike(self, field, bool(sk[0]), str(sk[1]), int(sk[2]), _clock - float(sk[3]))
+		WoodcutSkin.bell_strike(self, field, bool(sk[0]), str(sk[1]), int(sk[2]), _clock - float(sk[3]))
 	if session != null:
 		var hl := LaneSkin.hit_line_y(field)
 		var taken: Array[float] = []
@@ -1468,7 +1465,8 @@ func _street_chevron(pos: Vector2, side: String, age: float, size_k := 1.0) -> v
 ## middle one), lit gold while pressed, hot on a hit, dull red on a miss, their edge glowing when a
 ## note is about to reach their lane.
 func _draw_street_buttons() -> void:
-	_draw_pixel_buttons()
+	WoodcutSkin.buttons(self)
+	_draw_street_marks(buttons_rect(), buttons_rect().size.x / 3.0)
 
 
 # ------------------------------------------------------------------ the pixel look's buttons

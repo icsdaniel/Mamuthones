@@ -55,7 +55,7 @@ func show_word(word: String, side: String, at: Vector2, quality: String, life :=
 	spot[4] = at
 	spot[5] = quality
 	spot[6] = Time.get_ticks_msec()
-	w.add_theme_color_override("font_color", COLORS.get(quality, Palette.BONE))
+	w.add_theme_color_override("font_color", _ink(quality))
 	if side != "":
 		h.add_theme_color_override("font_color", UIKit.side_color(side))
 	_set_face(spot, false)
@@ -101,14 +101,20 @@ func show_word(word: String, side: String, at: Vector2, quality: String, life :=
 	tw.tween_property(box, "modulate:a", 0.0, 0.12)
 
 
+## The word's ink on its paper plate.
+static func _ink(q: String) -> Color:
+	return Color("#c9bba0") if q == "miss" else (Color("#c8352a") if q == "wrong" else Color("#141014"))
+
+
 ## Sets the word's face: the big pixel small caps in a K0 outline with a drop shadow (`small`: the
 ## plain caps face, two lanes' words side by side); perfect and held in the cream-to-gold face, the
 ## rest tinted.
 func _set_face(spot: Array, small: bool) -> void:
 	var w: Label = spot[1]
 	var gold: bool = spot[5] == "perfect" or spot[5] == "held"
-	var face := ("caps" if small else "big") + ("_gold" if gold else "")
-	PxType.label(w, face, COLORS.get(spot[5], Palette.BONE))
+	var face := "caps" if small else "score"
+	w.set_meta("q", spot[5])
+	PxType.label(w, face, _ink(str(spot[5])))
 	w.reset_size()
 	(spot[0] as Control).queue_redraw()
 
@@ -207,12 +213,10 @@ func _plate_cells(w: Label) -> Vector2i:
 ## taken out, tools/art/chatgpt/cut_sheets.py) behind the word, which stays the game's own text so it
 ## is translated. False when there is no picture (the gold rules are drawn instead).
 func _plate(box: Control, w: Label) -> bool:
-	var P := PxArt.PX
-	var wc := _plate_cells(w)
-	var tex := Hud.sliced("judge_plate", wc)
-	if tex == null:
-		return false
+	# the Woodcut look's plate: cream paper in an ink border, the word printed on it in ink
 	var c := w.position + w.size * 0.5
-	var at := Vector2(roundf((c.x - wc.x * P * 0.5) / P) * P, roundf((c.y - wc.y * P * 0.5) / P) * P)
-	box.draw_texture_rect(tex, Rect2(at, Vector2(wc) * P), false)
+	var pad := Vector2(14.0, 6.0)
+	var r := Rect2(c - w.size * 0.5 - pad, w.size + pad * 2.0)
+	box.draw_rect(r.grow(4.0), Color("#141014"))
+	box.draw_rect(r, Color("#4a3c38") if str(w.get_meta("q", "")) == "miss" else Color("#efe6d2"))
 	return true

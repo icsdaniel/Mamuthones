@@ -104,8 +104,7 @@ func setup(p_session: Session, p_ghost: Ghost) -> void:
 	_score = Label.new()
 	_score.name = "Score"
 	_score.text = "0"
-	pstyle(_score, 42, SCORE_INK)
-	PxType.label(_score, "num_gold")
+	PxType.label(_score, "score", WC_K)
 	_score.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	_score.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
 	_score.mouse_filter = Control.MOUSE_FILTER_IGNORE
@@ -126,8 +125,7 @@ func setup(p_session: Session, p_ghost: Ghost) -> void:
 	add_child(_health)
 	_unison = Label.new()
 	_unison.name = "Unison"
-	pstyle(_unison, 60, GOLD_INK, true, 8)
-	PxType.label(_unison, "num_white")
+	PxType.label(_unison, "big")
 	_unison.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	_unison.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
 	_unison.mouse_filter = Control.MOUSE_FILTER_IGNORE
@@ -147,8 +145,7 @@ func setup(p_session: Session, p_ghost: Ghost) -> void:
 	add_child(_pause)
 	_combo = Label.new()
 	_combo.name = "Combo"
-	pstyle(_combo, 36, INK, true, 6)
-	PxType.label(_combo, "num_white")
+	PxType.label(_combo, "score")
 	_combo.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	_combo.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	_combo.visible = false
@@ -156,7 +153,7 @@ func setup(p_session: Session, p_ghost: Ghost) -> void:
 	_combo_word = Label.new()
 	_combo_word.name = "ComboWord"
 	_combo_word.text = tr("hud_combo")
-	pstyle(_combo_word, 18, GOLD_INK, false, 4)
+	PxType.label(_combo_word, "caps")
 	_combo_word.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	_combo_word.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	_combo_word.visible = false
@@ -445,32 +442,37 @@ func _diamond(ci: CanvasItem, at: Vector2, r: float, col := EDGE_HOT) -> void:
 	_picture(ci, "hud_stud", Rect2(at - sz * 0.5, sz), tint)
 
 
+## The Woodcut look's HUD, flat in its three inks: the song's progress a red line across the top
+## over a dotted track, the score in black on a cream plate with an ink border, the multiplier set
+## big in cream in the sky (it bounces on the beat), the hearts on the left.
+const WC_K := Color("#141014")
+const WC_C := Color("#efe6d2")
+const WC_R := Color("#c8352a")
+const WC_B := Color("#4a3c38")
+
+
 func _draw_frames() -> void:
 	if session == null:
 		return
 	var ci := _frames
 	var b := _boxes()
 	var line: Vector3 = b[3]
-	# the progress line between two diamonds
-	var a := _to_frames(Vector2(line.x + 14.0, line.z))
-	var e := _to_frames(Vector2(line.y - 14.0, line.z))
-	# Daniele's bar, its groove filling with a glowing rod as the song goes on
-	# at its own proportions (never stretched): as long as it is for this height, centred on the line
-	var bh := 24.0
-	var bl := minf(line.y - line.x, bh * _aspect("hud_bar"))
-	var bar := Rect2(Vector2((line.x + line.y - bl) * 0.5, line.z - bh * 0.5), Vector2(bl, bh))
-	_picture(ci, "hud_bar", bar)
-	var px := PxArt.PX
-	var g0 := PxArt.snap2(Vector2(bar.position.x + bh * 0.9, line.z - px))
-	var gx1 := bar.end.x - bh * 0.9
-	var fw := roundf((lerpf(g0.x, gx1, clampf(_progress, 0.0, 1.0)) - g0.x) / px) * px
-	if fw >= px:
-		ci.draw_rect(Rect2(g0, Vector2(fw, px)), EDGE_HOT)
-		ci.draw_rect(Rect2(g0 + Vector2(0.0, px), Vector2(fw, px)), EDGE)
-	if session.health_on:
-		_panel(ci, b[0])
-	_panel(ci, b[2])
-	_draw_badge(ci, b)
+	var px := 4.0
+	var x0 := line.x
+	var x1 := line.y
+	var y := line.z - px
+	var x := x0
+	while x < x1:
+		ci.draw_rect(Rect2(x, y, px, px), WC_B)
+		x += px * 2.0
+	var fw := (x1 - x0) * clampf(_progress, 0.0, 1.0)
+	if fw > 0.5:
+		ci.draw_rect(Rect2(x0, y - px * 0.5, fw, px * 2.0), WC_R)
+	var r: Rect2 = b[2]
+	var plate := Rect2(r.position + Vector2(r.size.x * 0.1, 6.0), Vector2(r.size.x * 0.9, r.size.y - 12.0))
+	ci.draw_rect(plate.grow(px), WC_K)
+	ci.draw_rect(plate, WC_C)
+	ci.draw_rect(Rect2(plate.position + Vector2(px, plate.size.y - px * 2.0), Vector2(plate.size.x - px * 2.0, px)), Color(WC_B, 0.35))
 
 
 func _draw_line_frames(ci: CanvasItem, a: Vector2, e: Vector2) -> void:
@@ -568,8 +570,6 @@ func _tier(level: int) -> Array:
 ## reduced motion). It steps between two whole sizes, never in between.
 func badge_scale() -> float:
 	var lvl := session.unison_level if session != null else 0
-	if ResourceLoader.exists("res://art/ai/%s.webp" % _badge_key(lvl)):
-		return float(_badge_cells(lvl, _bounce_up()).y) / float(_badge_cells(0, false).y)
 	return (1.0 + 0.07 * float(lvl)) * (1.0 + (0.05 + 0.025 * float(lvl)) * _bounce)
 
 
@@ -602,9 +602,13 @@ func warm() -> void:
 ## The pause button: two bars in a small carved hexagon.
 func _draw_pause() -> void:
 	var down := _pause.button_pressed or _pause.is_hovered()
-	var c := _pause.size * 0.5 + (Vector2(0, DEPTH * 0.5) if down else Vector2.ZERO)
-	var sz := Vector2(51.0, 51.0)   # square, as drawn
-	_picture(_pause, "hud_pause", Rect2(c - sz * 0.5, sz), Color(0.8, 0.8, 0.8) if down else Color.WHITE)
+	var c := _pause.size * 0.5 + (Vector2(0, 3) if down else Vector2.ZERO)
+	var sz := Vector2(44.0, 44.0)
+	var r := Rect2(c - sz * 0.5, sz)
+	_pause.draw_rect(r.grow(4.0), WC_K)
+	_pause.draw_rect(r, WC_C if not down else Color("#c9bba0"))
+	for sx: float in [-1.0, 1.0]:
+		_pause.draw_rect(Rect2(c + Vector2(sx * 8.0 - 4.0, -12.0), Vector2(8.0, 24.0)), WC_K)
 
 
 func set_pause_visible(v: bool) -> void:
@@ -656,7 +660,7 @@ func tick(t: float, delta: float) -> void:
 	_unison.pivot_offset = _unison.size * 0.5
 	if not _unison_tweening():
 		_unison.scale = Vector2(bs, bs)
-	_unison.add_theme_color_override("font_color", Color.WHITE)
+	_unison.add_theme_color_override("font_color", PxType.CREAM)
 	_meter.fill = _streak
 	_bar.progress = session.progress(t)
 	_progress = _bar.progress
