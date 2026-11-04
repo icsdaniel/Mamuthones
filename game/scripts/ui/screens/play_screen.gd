@@ -74,6 +74,12 @@ var _spb := 0.5
 var _stomp_sounded := false       ## a stomp sounded on this touch: no plain step knock
 var _sched := 0                  ## next note to check for calls and accents
 var _last_accent_t := -INF       ## the last accent's note time (a chord swells once)
+const CLANK_GAP := 0.15
+## Notes make no sounds of their own for now (Daniele, 2026-10-15: "remove notes sounds, we'll work
+## on these again later"): no lane tones, bells, stomps, hold drones and chimes, bell cue ticks or
+## calls. The music and its lift on good hits are what the player hears.
+const NOTE_SOUNDS := false
+var _clank_at := -INF            ## when the last stand-still clank sounded (_clank)
 var _hold_ends: Array[Note] = []  ## holds whose end chime is still to come (_schedule)
 var _bell_sched := 0             ## next note to check for the bell cue
 var _bell_cue := false           ## a soft tick half a beat before each bell (Easy and Medium)
@@ -271,8 +277,9 @@ func build() -> void:
 		session.health_changed.connect(func(h: int, d: int) -> void: rl.event(_song_t, "health", {"health": h, "delta": d}))
 		session.unison_changed.connect(func(level: int) -> void: rl.event(_song_t, "unison", {"level": level}))
 	session.unison_changed.connect(_on_unison)
-	session.hold_started.connect(func(lane: int) -> void: Sound.hold_start(lane))
-	session.hold_ended.connect(func(lane: int, _kept: bool) -> void: Sound.hold_stop(lane))
+	if NOTE_SOUNDS:
+		session.hold_started.connect(func(lane: int) -> void: Sound.hold_start(lane))
+		session.hold_ended.connect(func(lane: int, _kept: bool) -> void: Sound.hold_stop(lane))
 	session.wrong_step.connect(_on_wrong_step)
 	session.stray.connect(_on_stray)
 	session.stomp_landed.connect(_on_stomp)
@@ -299,7 +306,7 @@ func build() -> void:
 	_bell_cue = bell_cue_on(difficulty)
 	Sound.set_key(song.key_root)
 	Sound.row_bells(0)
-	Sound.ambience(UIKit.ambience_for(song.stop))
+	Sound.stop_ambience()   # no background loops: the music and the bells are the sound (Daniele, 2026-10-15)
 	resized.connect(_layout_router)
 	_start.call_deferred()
 
@@ -347,6 +354,10 @@ func _settle() -> void:
 	await get_tree().process_frame
 	if lanes != null:
 		lanes.warm(session.notes.any(func(n: Note) -> bool: return n.kind == Note.Kind.BELL or n.kind == Note.Kind.RING))
+	if hud != null:
+		hud.warm()
+	if words != null:
+		words.warm(JUDGE_WORDS.values() + ["judge_one_thumb", "judge_wrong", "judge_still_kept"])
 	var until := Time.get_ticks_msec() + int(SETTLE_MAX * 1000.0)
 	var steady := 0
 	var last := Time.get_ticks_usec()
@@ -360,10 +371,14 @@ func _settle() -> void:
 			return
 
 
-## Whether the soft bell cue plays: the "bell_cue" setting (on unless turned off), Easy and Medium only.
+## Whether the soft bell cue plays: the "bell_cue" setting (on unless turned off) at Easy and Medium,
+## and at Hard and Expert too when "bell_cue_all" is on (players who lean on the sound most need it
+## there as well).
 static func bell_cue_on(difficulty: String) -> bool:
 	var v: Variant = Profile.get_setting("bell_cue")
-	return (v == null or bool(v)) and difficulty in ["easy", "medium"]
+	if not (v == null or bool(v)):
+		return false
+	return difficulty in ["easy", "medium"] or bool(Profile.get_setting("bell_cue_all"))
 
 
 ## Song time the music starts from: the latest bar line that leaves at least two bars and LEAD_MIN
@@ -449,11 +464,12 @@ func _process(delta: float) -> void:
 	lanes.beat_pulse = 1.0 - fposmod(beat, 1.0) if beat >= 0.0 else 0.0
 	_set_beat(beat)
 	hud.tick(t, delta)
+	_tick_combo()
 	_tick_health(delta)
 	if backdrop != null:
 		var hb := hud.get_global_transform() * Vector2(0.0, hud.frames_bottom())
 		backdrop.set_hud_bottom((backdrop.get_global_transform().affine_inverse() * hb).y)
-	_schedule(t)
+	_schedule(t, delta)
 	if not _no_lift:
 		conductor.set_lift(lift.tick(delta, _spb))
 	_count_in(t)
@@ -525,22 +541,25 @@ func _set_beat(beat: float) -> void:
 ## Things that happen on the music, not on the player: the Issohadore's call with off-beat steps (a
 ## touch early so it is heard on time), every note's accent (as if hit on time: the tune swells and a
 ## step's lane tone sounds; a miss is corrected afterwards), standing still.
-func _schedule(t: float) -> void:
+func _schedule(t: float, delta := 0.0) -> void:
 	# The whole sound delay, not just the output latency: with Bluetooth headphones (200 ms on
 	# Daniele's) the call and the cue otherwise came a fifth of a second after the music.
-	var lead := conductor.heard_delay()
+	# Sounds can only start on a frame: one due before the middle of the next frame plays now, so
+	# each lands within half a frame of its beat instead of up to a whole frame late (a flam
+	# against the music's own drum at 30-60 fps).
+	var lead := conductor.heard_delay() - minf(delta, 0.05) * 0.5
 	var notes := session.notes
 	while _sched < notes.size():
 		var n := notes[_sched]
 		var at := n.t - lead
 		if at > t:
 			break
-		if n.call:
+		if n.call and NOTE_SOUNDS:
 			Sound.call_out()
 		if n.kind != Note.Kind.REST and n.t > _last_accent_t + 0.01 and not _no_lift:
 			_last_accent_t = n.t
 			lift.accent()
-		if not _no_lift:
+		if not _no_lift and NOTE_SOUNDS:
 			_cue(n)
 		_sched += 1
 	# The bell cue: on Easy and Medium the music's rim clicks come before many beats with no bell, so
@@ -553,7 +572,7 @@ func _schedule(t: float) -> void:
 			continue
 		if n.t - 0.5 * _spb - lead > t:
 			break
-		if _bell_cue and not n.done and n.t > t:
+		if _bell_cue and NOTE_SOUNDS and not n.done and n.t > t:
 			Sound.ui("cue")
 		_bell_sched += 1
 	# a hold's small bell at its end, unless it was let go
@@ -563,7 +582,7 @@ func _schedule(t: float) -> void:
 		if h.end_t - lead > t:
 			k += 1
 			continue
-		if h.judgement != "let_go" and h.judgement != "miss":
+		if h.judgement != "let_go" and h.judgement != "miss" and NOTE_SOUNDS:
 			Sound.cued(Sound.hold_done.bind(h.lane))
 		_hold_ends.remove_at(k)
 	var still := false
@@ -624,6 +643,7 @@ func _on_stepped(lane: int) -> void:
 		_tap_hit = false
 		_tap_quality = ""
 		return
+	tap_buzz(j)
 	# A stomp's second thumb already sounded the stomp (_on_stomp); a wrong or stray tap sounds the
 	# miss; every other touch knocks its step.
 	if j == "wrong" or j == "stray":
@@ -635,6 +655,18 @@ func _on_stepped(lane: int) -> void:
 	_stomp_sounded = false
 	_tap_hit = false
 	_tap_quality = ""
+
+
+## Every press buzzes at once, in the same frame as its touch, and the buzz says how it went: a
+## Perfect a full, crisp knock, a Good a little lighter, an Ok (early or late) short and soft, and a
+## press that hit nothing (stray, wrong, or an empty button) just a tick, so every touch is felt
+## (Daniele, 2026-10-28: "more tactile feedback"). One buzz a press: _on_judged leaves steps to this.
+const TAP_BUZZ := {"perfect": [22, 1.0], "good": [16, 0.7], "early": [11, 0.45], "late": [11, 0.45],
+	"wrong": [8, 0.25], "stray": [8, 0.25], "": [6, 0.2]}
+
+static func tap_buzz(judgement: String) -> void:
+	var b: Array = TAP_BUZZ.get(judgement, TAP_BUZZ[""])
+	UIKit.vibrate(int(b[0]), float(b[1]))
 
 
 ## The step's knock at the hit's quality (Sound: "good" a little softer, "ok" dull and short), in the
@@ -670,7 +702,11 @@ func _on_rang(result: Dictionary) -> void:
 	var up := bool(result.get("up", true))
 	# A bell note already rang on the music (_schedule), heard on its beat; only a tilt with no bell
 	# to ring (free) or one in a stand-still (silence) sounds now.
-	if q == "free" or q == "silence":
+	if not NOTE_SOUNDS:
+		pass
+	elif q == "silence":
+		_clank(up, strength)
+	elif q == "free":
 		Sound.bell(BellSets.STANDARD, up, q, strength)
 	scene.jolt("bell")
 	if q == "perfect" or q == "good":
@@ -692,8 +728,17 @@ func _on_played_under(hold: Note, _note: Note) -> void:
 ## The phone tilted in a stand-still (gently, short of a ring): the load gives the Mamuthone away with
 ## a soft clank, and the stand-still is broken (the session judged it "silence").
 func _on_moved_still(_note: Note) -> void:
-	Sound.bell(BellSets.STANDARD, true, "silence", 0.2)
+	_clank()
 	UIKit.vibrate(12)
+
+
+## The load's clank in a stand-still. One shake is heard once: the tilt that broke it and the ring
+## the same flick then made (moved_still, then rang with "silence") came 20-60 ms apart, a double clank.
+func _clank(up := true, strength := 0.2) -> void:
+	if _clock - _clank_at < CLANK_GAP:
+		return
+	_clank_at = _clock
+	Sound.bell(BellSets.STANDARD, up, "silence", strength)
 
 
 ## A bell rung on time, the tilt's reward (stomp-sized, but the tilt's own): the strap strikes across
@@ -721,7 +766,7 @@ func _on_judged(note: Note, judgement: String, offset: float) -> void:
 		lift.hit(judgement)
 	elif soft:
 		lift.ok()
-	elif judgement in ["miss", "silence", "let_go"]:
+	elif judgement in ["miss", "silence"]:
 		lift.miss()
 	var quality := judgement
 	if not quality in ["perfect", "good", "early", "late", "miss", "held"]:
@@ -736,7 +781,7 @@ func _on_judged(note: Note, judgement: String, offset: float) -> void:
 	var pos: Vector2
 	if lane >= 0:
 		pos = lanes.lane_center(lane)
-		lanes.flash(lane, good or soft)
+		lanes.flash(lane, good or soft, judgement)
 	else:
 		pos = Vector2(lanes.size.x * 0.5, lanes.lane_center(1).y)
 	# Early/late is shown only off Perfect (like FAST/SLOW): on Good by the offset, and on the Ok band,
@@ -764,12 +809,17 @@ func _on_judged(note: Note, judgement: String, offset: float) -> void:
 			scene.jolt("ring")
 		elif note != null and not note.is_bell():
 			scene.jolt("step")
-		UIKit.vibrate(30 if note != null and note.is_bell() else 14)
+		# a step's press already buzzed in _on_stepped (tap_buzz); a bell, a ring and a kept hold
+		# buzz here
+		if note != null and (note.is_bell() or note.kind == Note.Kind.RING):
+			UIKit.vibrate(30, 1.0)
+		elif judgement == "held":
+			UIKit.vibrate(14, 0.6)
 	elif judgement in ["miss", "silence"]:
 		scene.jolt("miss")
 		if note != null and note.is_bell():
 			_bell_chain = 0
-	if judgement == "miss" or judgement == "let_go":
+	if judgement == "miss":
 		Sound.miss()
 
 
@@ -789,7 +839,7 @@ func _on_time_step(note: Note, judgement: String) -> void:
 
 
 ## A note's colour in the pixel look (StreetSkin's kinds): heal green, call pink, hold gold, an Expert
-## sixteenth silver, an off-beat violet, a step blue.
+## sixteenth silver, an off-grid note teal, an off-beat violet, a step blue.
 func note_colour(note: Note) -> Color:
 	if note.heal:
 		return StreetSkin.K_HEAL[3]
@@ -797,6 +847,8 @@ func note_colour(note: Note) -> Color:
 		return StreetSkin.K_CALL[3]
 	if note.kind == Note.Kind.HOLD:
 		return StreetSkin.K_HOLD[3]
+	if note.free:
+		return StreetSkin.K_FREE[3]
 	if lanes._sixteenth(note):
 		return StreetSkin.K_SIX[3]
 	var fr := fposmod(note.beat, 1.0)
@@ -901,10 +953,60 @@ func _on_still_kept(_note: Note, points: float) -> void:
 	UIKit.vibrate(20)
 
 
+# ---------------------------------------------------------------- juice: combo milestones and breaks
+
+const COMBO_MILESTONES: Array[int] = [25, 50, 100]   ## then every 100
+const BREAK_SHOWN := 10          ## a combo this long falls away in red when it is lost
+const BREAK_SOUND := 20          ## ... and from this long the chimes tumble with it
+var _combo_seen := 0
+
+
+## The combo milestone crossed going from combo `prev` to `now` (one hit), as a tier: 1 at 25, 2 at
+## 50, 3 at 100 and every 100 after; 0 for none.
+static func milestone_tier(prev: int, now: int) -> int:
+	if now <= prev:
+		return 0
+	for i in COMBO_MILESTONES.size():
+		if prev < COMBO_MILESTONES[i] and now >= COMBO_MILESTONES[i]:
+			return i + 1
+	if now >= 200 and prev / 100 < now / 100:
+		return 3
+	return 0
+
+
+## Watches the combo each frame (it moves on hits, misses, wrong and stray taps alike): a milestone
+## gets its chime run, the number's gold and sparks, the fire's roar and, from 50, a gold light up
+## every lane; a long combo lost falls away in red with the chimes tumbling.
+func _tick_combo() -> void:
+	var now := session.combo
+	if now == _combo_seen:
+		return
+	var prev := _combo_seen
+	_combo_seen = now
+	var tier := milestone_tier(prev, now)
+	if tier > 0:
+		Sound.juice("combo_%d" % tier)
+		hud.milestone(tier)
+		if backdrop != null:
+			backdrop.kick(0.5 + 0.2 * float(tier))
+		if tier >= 2:
+			for lane in 3:
+				lanes.lane_pulse(lane, StreetSkin.K_HOLD[3], 0.6 + 0.3 * float(tier - 2))
+		UIKit.vibrate(18, 0.6)
+	elif now < prev and prev >= BREAK_SHOWN:
+		hud.combo_broken(prev)
+		if prev >= BREAK_SOUND:
+			Sound.juice("combo_break")
+
+
 func _on_unison(level: int) -> void:
-	if level > _last_unison and backdrop != null:
-		backdrop.surge()
-		shake(4.0)
+	if level > _last_unison:
+		var top := level >= Session.UNISON_MULTS.size() - 1
+		Sound.juice("unison_top" if top else "unison_up")
+		hud.unison_rose(top)
+		if backdrop != null:
+			backdrop.surge()
+		shake(4.0 if not top else 6.0)
 	_last_unison = level
 	Sound.row_bells(level)
 	hud.set_unison(level)
@@ -937,6 +1039,7 @@ func _on_failed() -> void:
 		run_log.event(_song_t, "failed")
 	failed = true
 	done = true
+	Sound.juice("fail")
 	if _pause_panel != null:
 		_pause_panel.queue_free()
 		_pause_panel = null
@@ -1005,6 +1108,8 @@ func _on_pause_choice(what: String) -> void:
 		run_log.event(_song_t, "menu", {"choice": what})
 	match what:
 		"resume":
+			if _pause_panel == null:
+				return   # a second tap on Resume while the menu closes
 			_pause_panel.queue_free()
 			_pause_panel = null
 			# Back to a bar line one to two bars before the pause, count one bar in on the beat grid,

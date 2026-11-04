@@ -1,0 +1,14 @@
+[remap]
+
+importer="image"
+type="Image"
+uid="uid://4blv7hwfy0ee"
+path="res://.godot/imported/heart_empty.webp-45ce9082bf3920e7e469c0a2bccc076b.image"
+
+[deps]
+
+source_file="res://art/ai/heart_empty.webp"
+dest_files=["res://.godot/imported/heart_empty.webp-45ce9082bf3920e7e469c0a2bccc076b.image"]
+
+[params]
+

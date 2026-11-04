@@ -44,7 +44,7 @@ func test_profile_save_load_roundtrip() -> void:
 	_clean()
 	var p := _fresh_profile()
 	check_eq(p.load_status, "new", "no file yet")
-	check_eq(p.get_setting("note_speed"), 1.0, "default setting")
+	check_eq(p.get_setting("note_speed"), 1.6, "default setting")
 	p.set_setting("note_speed", 1.5)
 	p.set_setting("language", "it")
 	p.set_setting("audio_offset", 0.042)
@@ -79,7 +79,7 @@ func test_profile_corruption_and_versions() -> void:
 	f.close()
 	var p := _fresh_profile()
 	check_eq(p.load_status, "corrupt", "garbage detected")
-	check_eq(p.get_setting("note_speed"), 1.0, "fresh defaults")
+	check_eq(p.get_setting("note_speed"), 1.6, "fresh defaults")
 	check(FileAccess.file_exists(P.get_basename() + ".corrupt.cfg"), "damaged file kept aside")
 	# Two saves leave a backup; damaging the main file restores the backup.
 	p.set_setting("note_speed", 2.0)
@@ -104,12 +104,22 @@ func test_profile_corruption_and_versions() -> void:
 	ProfileScript.write_sealed(cfg, P)
 	var w := _fresh_profile()
 	check_eq(w.load_status, "ok", "loads")
-	check_eq(w.get_setting("note_speed"), 1.0, "bad field -> default")
+	check_eq(w.get_setting("note_speed"), 1.6, "bad field -> default")
 	check_eq(w.get_setting("music_volume"), 0.5, "good field kept")
 	check(w.best("s1", "easy").is_empty(), "bad best dropped")
 	check_eq(w.best("s2", "easy").get("score"), 1000, "good best kept")
 	check_eq(w.plays(), 0, "bad count -> 0")
 	w.free()
+	# Version 1 -> 2: a profile on the old standard speed (1.0) moves to the new one (1.6); a speed
+	# chosen by hand is kept.
+	for pair in [[1.0, 1.6], [2.2, 2.2]]:
+		cfg = ConfigFile.new()
+		cfg.set_value("meta", "version", 1)
+		cfg.set_value("settings", "values", {"note_speed": pair[0]})
+		ProfileScript.write_sealed(cfg, P)
+		var m := _fresh_profile()
+		check_eq(m.get_setting("note_speed"), pair[1], "v1 speed %s -> %s" % pair)
+		m.free()
 	# A file from a newer version: loaded, and a copy kept for later.
 	cfg = ConfigFile.new()
 	cfg.set_value("meta", "version", 99)
@@ -141,7 +151,8 @@ func test_progression_unlock_order() -> void:
 	var p := _fresh_profile()
 	var lb := _boards()
 	p.leaderboards = lb
-	check_eq(Progression.story_order(), ["s1", "s2", "s3", "s4", "s5", "s6", "s7"] as Array[String], "story order by stop")
+	# the tutorial (s1) is in the Tutorial screen, not the story (2026-10-28)
+	check_eq(Progression.story_order(), ["s2", "s3", "s4", "s5", "s6", "s7"] as Array[String], "story order by stop")
 	check(Progression.is_unlocked("s1", p), "stop 1 open")
 	# Every stop is open from the start; the story still starts at stop 2 (the tutorial is optional).
 	for id in Progression.story_order():
@@ -320,8 +331,9 @@ func test_grades_from_old_saves_and_thresholds() -> void:
 func test_song_library() -> void:
 	SongLibrary.use_directory(STORY)
 	check_eq(SongLibrary.all().size(), 7, "7 stops")
-	check_eq(SongLibrary.story().size(), 7, "story includes the tutorial")
-	check_eq(SongLibrary.story()[0].kind, "tutorial", "the workshop first")
+	check_eq(SongLibrary.story().size(), 6, "the story leaves the tutorial to the Tutorial screen")
+	check_eq(SongLibrary.story()[0].stop, 2, "the story starts at stop 2")
+	check_eq(SongLibrary.tutorial().kind, "tutorial", "the tutorial song is found on its own")
 	check_eq(SongLibrary.get_song("s3_remix"), SongLibrary.get_song("s3"), "remix id gives the base song")
 	check(SongLibrary.is_remix_id("s3_remix") and not SongLibrary.is_remix_id("s3"), "is_remix_id")
 	check_eq(SongLibrary.get_song("nope"), null, "unknown id")
@@ -480,7 +492,7 @@ func test_profile_fuzz() -> void:
 			check(q.get_setting("note_speed") == 1.25 and q.has_flag("tutorial_done") and not q.best("s2", "easy").is_empty(), "fuzz %d: a trusted file reads back exactly" % i)
 		else:
 			check(q.load_status in ["corrupt", "new"], "fuzz %d: otherwise a fresh profile (%s)" % [i, q.load_status])
-			check_eq(q.get_setting("note_speed"), 1.0, "fuzz %d: fresh defaults" % i)
+			check_eq(q.get_setting("note_speed"), 1.6, "fuzz %d: fresh defaults" % i)
 		q.free()
 	check(statuses.get("corrupt", 0) > 100, "most damage is detected (%s)" % [statuses])
 	SongLibrary.reset()

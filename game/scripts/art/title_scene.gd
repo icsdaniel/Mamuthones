@@ -137,25 +137,17 @@ func _process(delta: float) -> void:
 	_front.queue_redraw()
 
 
-## Pose and lift (art px) of a Mamuthone at beat b: land on the beat, stand, crouch just before the
-## next, then leap (a slow rise, a fast drop onto the beat).
-static func jump(b: float, height: float) -> Array:
+## Pose and lift (art px) of a Mamuthone at beat b: he never jumps (Daniele): down on the beat
+## ("land", the drawn down pose), back up ("crouch"), then standing; the lift is always 0.
+static func jump(b: float, _height: float) -> Array:
 	if b < 0.0:
 		return ["stand", 0.0]
 	var f := fposmod(b, 1.0)
-	if f < 0.14:
+	if f < 0.16:
 		return ["land", 0.0]
-	if f < 0.5:
-		return ["stand", 0.0]
-	if f < 0.66:
+	if f < 0.3:
 		return ["crouch", 0.0]
-	var u := (f - 0.66) / 0.34
-	var h := 0.0
-	if u < 0.62:
-		h = sin(u / 0.62 * PI * 0.5)
-	else:
-		h = cos((u - 0.62) / 0.38 * PI * 0.5)
-	return ["air", roundf(h * height)]
+	return ["stand", 0.0]
 
 
 func _other_fleece() -> String:

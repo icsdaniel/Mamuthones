@@ -34,7 +34,7 @@ func test_no_missing_samples() -> void:
 
 func test_every_sample_loads() -> void:
 	var count := 0
-	for dir in ["bells", "steps", "loops", "voice", "fx", "ui", "ambience"]:
+	for dir in ["bells", "steps", "loops", "voice", "fx", "ui", "ambience", "juice"]:
 		var path: String = "res://audio/sfx/" + dir
 		for f in DirAccess.get_files_at(path):
 			if f.ends_with(".import"):

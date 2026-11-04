@@ -227,19 +227,16 @@ func _paint_front(ci: CanvasItem) -> void:
 	StopBackdrops.draw_layer(ci, stop, "front", o, crop)
 
 
-## The heavy Mamuthone jump on a beat that lands on the whole number: land (squash) just after it,
-## stand, crouch (anticipation), then a slow rise and a fast fall. Returns {pose, lift (art px)}.
-static func jump(b: float, height := 5.0) -> Dictionary:
+## The Mamuthone's step on a beat: he never jumps (Daniele): he bobs down on the beat ("land", the
+## drawn down pose), comes back up ("crouch", the pose on the way back), then stands. Returns
+## {pose, lift (always 0)}. height is kept for the callers.
+static func jump(b: float, _height := 5.0) -> Dictionary:
 	var p := fposmod(b, 1.0)
-	if p < 0.12:
+	if p < 0.16:
 		return {"pose": "land", "lift": 0.0}
-	if p < 0.5:
-		return {"pose": "stand", "lift": 0.0}
-	if p < 0.64:
+	if p < 0.3:
 		return {"pose": "crouch", "lift": 0.0}
-	var q := (p - 0.64) / 0.36
-	var h := sin(minf(q / 0.62, 1.0) * PI * 0.5) if q < 0.62 else cos((q - 0.62) / 0.38 * PI * 0.5)
-	return {"pose": "air", "lift": height * h}
+	return {"pose": "stand", "lift": 0.0}
 
 
 func _paint_rope(ci: CanvasItem, o: Vector2, pts: Array) -> void:

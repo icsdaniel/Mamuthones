@@ -24,6 +24,9 @@ const OVERALL_GAP_THIRD := {"easy": 1.0, "medium": 1.0 / 3.0, "hard": 1.0 / 3.0,
 const BELL_CLEAR := {"medium": 0.5, "hard": 0.5}
 const BELL_CLEAR_S := {"expert": 0.15}
 const EASY_MIN_GAP_S := 0.6
+const FREE_GAP_S := 0.09     ## an off-grid note ("free"): this far (s) from every other input...
+const FREE_BELL_S := 0.15    ## ... this far from a tilt...
+const FREE_HAND_S := 0.15    ## ... and this far from the same button's other inputs
 const MIN_STILL_BEATS := 2
 const THIRDS: Array[float] = [1.0 / 3.0, 2.0 / 3.0, 1.0 / 6.0, 5.0 / 6.0]
 const LEVEL_EXTRAS := {
@@ -50,11 +53,13 @@ static func check(song: SongData, difficulty: String) -> Array[String]:
 	if raw.is_empty():
 		out.append("%s: empty chart" % where)
 		return out
+	difficulty = str(song.level_rules.get(difficulty, difficulty))
 	var prev_b := -INF
 	var last_bell := -INF
 	var holds := []   # [lane, start, end]
 	var rests := []   # [start, end]
 	var notes := []   # well-formed notes, for the spacing rules
+	var frees := []   # off-grid notes: outside the grid and gap rules, checked on their own
 	for item in raw:
 		if not (item is Dictionary):
 			out.append("%s: a note is not an object" % where)
@@ -77,6 +82,11 @@ static func check(song: SongData, difficulty: String) -> Array[String]:
 		var lane := int(item.get("lane", -1))
 		if k in ["step", "hold", "ring", "stomp"] and (lane < 0 or lane > 2):
 			out.append("%s: %s needs lane 0, 1 or 2" % [at, k])
+			continue
+		if bool(item.get("free", false)):
+			if k != "step" or difficulty != "expert" or bool(item.get("call", false)):
+				out.append("%s: free is only for plain Expert steps" % at)
+			frees.append({"b": b, "lane": lane})
 			continue
 		var length := float(item.get("len", 1.0))
 		if (k == "hold" or k == "rest") and length <= 0.0:
@@ -108,6 +118,7 @@ static func check(song: SongData, difficulty: String) -> Array[String]:
 							out.append("%s: bell inside a stand-still" % at)
 							break
 	out.append_array(_check_spacing(song, difficulty, notes, where))
+	out.append_array(_check_free(song, frees, notes, where))
 	# Report each problem once.
 	var seen := {}
 	var unique: Array[String] = []
@@ -116,6 +127,29 @@ static func check(song: SongData, difficulty: String) -> Array[String]:
 			seen[p] = true
 			unique.append(p)
 	return unique
+
+
+## Off-grid notes (see Note.free): FREE_GAP_S from every other input, FREE_BELL_S from a tilt,
+## FREE_HAND_S from the same button's other inputs, never under a hold of their button or in a
+## stand-still. Mirrors check_free in tools/audio/validate_charts.py.
+static func _check_free(song: SongData, frees: Array, notes: Array, where: String) -> Array[String]:
+	var out: Array[String] = []
+	var spb := 60.0 / song.bpm
+	for f: Dictionary in frees:
+		var at := "%s b=%s" % [where, f.b]
+		for m: Dictionary in notes:
+			if m.k == "rest":
+				if f.b > m.b - TOL and f.b < m.b + m.len - TOL:
+					out.append("%s: free note inside a stand-still" % at)
+				continue
+			var dt := absf(float(m.b) - float(f.b)) * spb
+			if dt < (FREE_BELL_S if m.k in ["bell", "ring"] else FREE_GAP_S) - 0.0001:
+				out.append("%s: free note %d ms from another input" % [at, roundi(dt * 1000.0)])
+			if m.lane == f.lane and m.k in ["step", "hold", "ring", "stomp"] and dt < FREE_HAND_S - 0.0001:
+				out.append("%s: free note %d ms from the same button's input" % [at, roundi(dt * 1000.0)])
+			if m.k == "hold" and m.lane == f.lane and f.b > m.b - TOL and f.b < m.b + m.len - TOL:
+				out.append("%s: free note under a hold" % at)
+	return out
 
 
 ## On the beat, the half-beat or a triplet eighth: where Medium and Hard notes sit.
@@ -188,7 +222,7 @@ static func _check_spacing(song: SongData, difficulty: String, notes: Array, whe
 	for i in range(1, beats.size()):
 		var a: float = beats[i - 1]
 		var c: float = beats[i]
-		var g := maxf(_overall(difficulty, third_at.get(a, false), easy_min), _overall(difficulty, third_at.get(c, false), easy_min))
+		var g := maxf(_overall(difficulty, third_at.get(a, false), easy_min), _overall(difficulty, third_at.get(c, false), easy_min)) - _swing(song, difficulty)
 		if c - a < g - TOL:
 			out.append("%s b=%s: inputs %.3f beats apart (min %.3f)" % [where, a, c - a, g])
 	# Thumbs, in order of beat (fixed lanes first on a beat).
@@ -219,7 +253,7 @@ static func _check_spacing(song: SongData, difficulty: String, notes: Array, whe
 			out.append("%s b=%s: input too close after the bell at b=%s (both thumbs tilt the phone)" % [where, b, last_bell])
 		var key := snappedf(b, 0.001)
 		var taken: Array = used_at.get(key, [])
-		var gap: float = (HAND_GAP_THIRD if feel[i] else HAND_GAP)[difficulty]
+		var gap: float = (HAND_GAP_THIRD if feel[i] else HAND_GAP)[difficulty] - _swing(song, difficulty)
 		if k == "stomp":
 			# Both thumbs on one button: each must be free and rested, and nothing else on its beat.
 			if not taken.is_empty():
@@ -261,6 +295,11 @@ static func _check_spacing(song: SongData, difficulty: String, notes: Array, whe
 		if k == "hold":
 			busy[h] = b + float(n.len)
 	return out
+
+
+## A swung song's Expert gaps shrink by its swing (see SongData.swing).
+static func _swing(song: SongData, difficulty: String) -> float:
+	return song.swing if difficulty == "expert" else 0.0
 
 
 static func _overall(difficulty: String, third: bool, easy_min: float) -> float:

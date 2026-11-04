@@ -1,0 +1,14 @@
+{
+ "title": {
+  "en": "Shrove Tuesday (Suno test)",
+  "it": "Martedì grasso (prova Suno)"
+ },
+ "stop": 7,
+ "bpm": 128.48,
+ "offset": 0.702,
+ "id": "suno_shrove",
+ "audio": "res://audio/music/suno_shrove.ogg",
+ "length": 128.4,
+ "preview": 40.0,
+ "rests": []
+}

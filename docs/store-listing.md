@@ -7,11 +7,14 @@ description 80).
 
 ## Names
 
+Updated after the outside review (2026-10-31): the game is called Sonazzos, the Workshop and mask
+carving are gone, and there are no stand-stills.
+
 | | English | Italiano |
 | --- | --- | --- |
-| App name / Play title (30 max) | Mamuthones (10) | Mamuthones (10) |
-| App Store subtitle (30 max) | The Weight of Bells (19) | Il peso dei campanacci (22) |
-| Google Play short description (80 max) | The Weight of Bells. Ring the bells, keep the row. (50) | Il peso dei campanacci. Suonali a tempo, tieni la fila. (55) |
+| App name / Play title (30 max) | Sonazzos (8) | Sonazzos (8) |
+| App Store subtitle (30 max) | Mamuthones rhythm game (22) | Ritmo dei Mamuthones (20) |
+| Google Play short description (80 max) | Ring the Mamuthones' bells on the beat. A rhythm game from Sardinia. (69) | Suona i campanacci dei Mamuthones a tempo. Un gioco ritmico sardo. (67) |
 | Category | Games › Music | Giochi › Musica |
 | Age rating | 4+ / PEGI 3 (no violence, no chat, no purchases) | 4+ / PEGI 3 |
 
@@ -19,27 +22,26 @@ description 80).
 
 **Walk with the Mamuthones of Mamoiada.**
 
-Every winter in Mamoiada, in the heart of Sardinia, the Mamuthones walk through the village in black
-wooden masks and dark sheepskins, carrying a heavy load of cowbells on their backs. Step by step, they
-move together, and their bells ring as one.
+Every winter in Mamoiada, in the heart of Sardinia, the Mamuthones walk through the village in dark
+wooden masks and sheepskins, carrying a heavy load of cowbells, the sonazzos, on their backs. Step by
+step they move together, and their bells ring as one.
 
-In *The Weight of Bells* you are one of them. Tap the three step buttons with your thumbs as the notes
-come down, and ring your bells by sharply tilting the phone. The better your row keeps together, the
-louder and cleaner the bells ring.
+In *Sonazzos* you are one of them. Hold the phone in both hands, tap the three step buttons as the
+notes slide down, and ring your bells with a sharp tilt of the phone, up, then down. The better you
+keep time, the louder the whole row rings behind you.
 
-- **The bells are the game.** A quick tilt rings them. Hit it on time and they ring clean and full; keep
-  the row together and the whole row's bells ring behind yours.
-- **Unison, not combos.** Streaks raise your unison, and a slip costs two levels, not everything. Stand
-  still when the procession stands still.
-- **Seven stops of the procession,** from the workshop the night before to the last day of Carnival,
-  each with an original song in the spirit of Sardinian music: tenore-style voices, reed melodies over a
-  drone, frame drums. Get a B or better on a stop at Hard or Expert to unlock its modern remix.
-- **Carve your own mask.** Every grade you earn gives carving points, up to S+.
-- **Four difficulties** for every song, a gentle tutorial, and a tilt calibration that takes seconds.
-  Prefer not to tilt? Slam mode rings the bells with two buttons.
+- **The bells are the game.** A quick tilt rings them, alternating up and down. Prefer buttons? Press
+  Left and Right together instead.
+- **Unison.** Hits on time raise your row's unison, up to 4x; a slip costs two levels, not everything.
+  The fire burns brighter as the row comes together.
+- **Seven stops,** from the dressing before the first outing and the fires of Sant'Antonio in January
+  to the last day of Carnival, each with its own song and a modern remix to unlock.
+- **Four difficulties** for every song, grades from F to S+, and online leaderboards through Game
+  Center and Google Play Games.
+- **Fair timing.** A tilt calibration, sound and screen delay tests, and a results screen that shows
+  whether you hit early or late, with one tap to fix it.
 
-Made with respect for a living tradition: the game aims to show only real forms, with no joke skins,
-and lists in its credits the details still being checked with the community. Best with headphones.
+Made with respect for a living tradition that belongs to the people of Mamoiada. Best with headphones.
 
 Plays fully offline. No ads. No in-app purchases. No data collected.
 
@@ -48,30 +50,25 @@ Plays fully offline. No ads. No in-app purchases. No data collected.
 **Cammina con i Mamuthones di Mamoiada.**
 
 Ogni inverno a Mamoiada, nel cuore della Sardegna, i Mamuthones attraversano il paese con le maschere
-di legno nero e le pelli di pecora scure, portando sulla schiena un pesante carico di campanacci. Passo
-dopo passo avanzano insieme, e i campanacci suonano come uno solo.
+di legno scuro e le pelli di pecora, portando sulla schiena un pesante carico di campanacci, i sonazzos.
+Passo dopo passo avanzano insieme, e i campanacci suonano come uno solo.
 
-In *Il peso dei campanacci* sei uno di loro. Batti il tempo con i pollici sui tre tasti dei passi mentre
-scendono le note, e fai suonare i campanacci con un colpo secco del telefono. Più la tua fila resta
-unita, più i campanacci suonano forti e puliti.
+In *Sonazzos* sei uno di loro. Tieni il telefono con due mani, batti i tre tasti dei passi mentre
+scendono le note, e fai suonare i campanacci con un colpo secco del telefono, in su e poi in giù. Più
+tieni il tempo, più forte suona dietro di te tutta la fila.
 
-- **I campanacci sono il gioco.** Basta un colpo di polso. A tempo suonano pieni e puliti; se la fila
-  resta unita, dietro ai tuoi suonano quelli di tutta la fila.
-- **Conta l'unisono, non la combo.** Le serie alzano l'unisono, e un errore ti fa scendere di due
-  livelli, non da capo. Quando la processione si ferma, stai fermo anche tu.
-- **Sette tappe della processione,** dal laboratorio della vigilia all'ultimo giorno di Carnevale,
-  ognuna con un brano originale ispirato alla musica sarda: voci a tenore, melodie di canne su un
-  bordone, tamburi. Prendi almeno una B in una tappa a Difficile o Esperto per sbloccarne il remix
-  moderno.
-- **Intaglia la tua maschera.** Ogni voto guadagnato dà punti d'intaglio, fino alla S+. Scegli il tuo carico:
-  i campanacci più pesanti valgono di più, ma chiedono un tempo più preciso.
-- **Quattro difficoltà** per ogni brano, un tutorial senza fretta e una calibrazione del movimento che
-  richiede pochi secondi. Non vuoi inclinare il telefono? Con la modalità "colpo" i campanacci si
-  suonano con due tasti.
+- **I campanacci sono il gioco.** Basta un colpo di polso, alternando su e giù. Preferisci i tasti?
+  Premi insieme Sinistra e Destra.
+- **L'unisono.** I colpi a tempo alzano l'unisono della fila, fino a 4x; un errore ti fa scendere di
+  due livelli, non da capo. Il fuoco arde più forte quando la fila è unita.
+- **Sette tappe,** dalla vestizione prima della prima uscita e dai fuochi di Sant'Antonio a gennaio
+  fino all'ultimo giorno di Carnevale, ognuna con il suo brano e un remix moderno da sbloccare.
+- **Quattro difficoltà** per ogni brano, voti dalla F alla S+, e classifiche online con Game Center e
+  Google Play Games.
+- **Un tempo giusto.** Calibrazione del movimento, test del ritardo di audio e schermo, e una
+  schermata dei risultati che mostra se anticipi o ritardi, con un tocco per correggere.
 
-Fatto con rispetto per una tradizione viva: il gioco cerca di mostrare solo forme vere, senza costumi
-per ridere, e nei riconoscimenti elenca i dettagli ancora in verifica con la comunità. Meglio con le
-cuffie.
+Fatto con rispetto per una tradizione viva, che appartiene alla gente di Mamoiada. Meglio con le cuffie.
 
 Si gioca interamente offline. Niente pubblicità. Niente acquisti in-app. Nessun dato raccolto.
 
@@ -80,7 +77,7 @@ Si gioca interamente offline. Niente pubblicità. Niente acquisti in-app. Nessun
 Use the same text for the App Store privacy label ("Data Not Collected"), the Google Play Data safety
 form ("No data collected, no data shared") and the privacy policy URL.
 
-> **English.** Mamuthones does not collect, store off the device, or share any personal data. It has
+> **English.** Sonazzos does not collect, store off the device, or share any personal data. It has
 > no accounts of its own, no advertising, no analytics and no tracking, and the game itself makes no
 > internet connections. Your settings, scores and progress are saved only on your phone and are deleted
 > when you uninstall the game. The motion sensors are read only while you play, to detect the bell
@@ -91,7 +88,7 @@ form ("No data collected, no data shared") and the privacy policy URL.
 > Google, under their own privacy policies, to show the global leaderboards. Nothing else is sent, and
 > the game works fully without signing in.
 >
-> **Italiano.** Mamuthones non raccoglie, non conserva fuori dal dispositivo e non condivide alcun dato
+> **Italiano.** Sonazzos non raccoglie, non conserva fuori dal dispositivo e non condivide alcun dato
 > personale. Non ha account propri, pubblicità, statistiche d'uso né tracciamento, e il gioco in sé non
 > si collega a internet. Impostazioni, punteggi e progressi restano solo sul tuo telefono e vengono
 > cancellati quando disinstalli il gioco. I sensori di movimento vengono letti solo mentre giochi, per
@@ -106,6 +103,9 @@ Platform settings that back this up (`game/export_presets.cfg`): Android asks on
 permission (no internet permission); the iOS privacy manifest declares no tracking and no collected data. If
 the Google Play Games leaderboards are switched on in a later build, the Android preset will need the
 internet permission and the Play "Data safety" form must then say the score is shared with Google.
+The outside review (2026-10-31) flagged this: the game already shows a Game Center / Play Games button
+on the Scores screen, so either that button stays hidden on Android until the permission is added, or
+the permission and the Data safety answer change before launch.
 
 ## Screenshots
 
@@ -115,9 +115,9 @@ Use these, in this order:
 | # | File (per size folder) | Caption (EN) | Didascalia (IT) |
 | --- | --- | --- | --- |
 | 1 | `play_fires.png` | Ring the bells. Keep the row. | Suona i campanacci. Tieni il passo. |
-| 2 | `results.png` | Your score is your row: accuracy and unison. | Il punteggio è la tua fila: precisione e unisono. |
+| 2 | `results.png` | See your grade, your unison and your timing. | Il tuo voto, il tuo unisono e il tuo tempo. |
 | 3 | `story.png` | Seven stops, from the fires to Shrove Tuesday. | Sette tappe, dai fuochi al Martedì grasso. |
-| 4 | `workshop.png` | Carve your own mask. Choose your bells. | Intaglia la tua maschera. Scegli i campanacci. |
+| 4 | `play_bell.png` | Tilt the phone to ring the bells. | Inclina il telefono per suonare i campanacci. |
 | 5 | `stop_card.png` | Every stop is a real moment of the procession. | Ogni tappa è un vero momento della processione. |
 | 6 | `title.png` | Offline. No ads. No purchases. | Offline. Niente pubblicità, niente acquisti. |
 
@@ -156,5 +156,5 @@ Art's app icon: `game/art/icon.png` (1024 × 1024, iOS and stores). Android's ad
 
 ## Keywords (App Store, 100 chars)
 
-EN: `rhythm,bells,sardinia,carnival,mask,procession,music,tilt,folk,party`
-IT: `ritmo,campanacci,sardegna,carnevale,maschera,processione,musica,festa`
+EN: `rhythm,bells,sardinia,mamuthones,carnival,mask,music,tilt,folk,cowbell`
+IT: `ritmo,campanacci,sardegna,mamuthones,carnevale,maschera,musica,tradizione`

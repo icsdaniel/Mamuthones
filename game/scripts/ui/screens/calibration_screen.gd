@@ -10,7 +10,7 @@ extends Screen
 var reader: MotionReader
 var calibrator: Calibrator
 var _t := 0.0
-var _phone: SetupArtView         ## Art's phone in two hands, following the real tilt
+var _phone: SetupArtView         ## Daniele's nine drawn phone-in-hands poses, following the real tilt
 var _angle := 0.0                ## radians, > 0 = top edge toward the player
 var _flash := 0.0
 var _nod := 0.0                  ## a slow demonstration nod while waiting for the first move
@@ -43,10 +43,11 @@ func build() -> void:
 	box.add_child(UIKit.label(tr("cal_title"), UIKit.HEADER, true, HORIZONTAL_ALIGNMENT_CENTER))
 	_instruction = UIKit.label("", UIKit.LEAD, true, HORIZONTAL_ALIGNMENT_CENTER)
 	box.add_child(_instruction)
+	# (hidden on 2026-10-28 as if it were menu decoration; it is the move to make, so it is back)
 	_phone = SetupArtView.new()
 	_phone.name = "Phone"
 	_phone.kind = "phone"
-	_phone.custom_minimum_size = Vector2(0, 340)
+	_phone.custom_minimum_size = Vector2(0, 360)
 	_phone.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	box.add_child(_phone)
 	# Three bells for the tilts toward you, three for away: each counted tilt rings one in.
@@ -68,6 +69,7 @@ func build() -> void:
 	graph = TiltGraph.new()
 	graph.name = "TiltGraph"
 	graph.threshold = Calibrator.ROT_TRIGGER
+	graph.custom_minimum_size.y = 260
 	box.add_child(graph)
 	_sensor = UIKit.label("", UIKit.CAPTION, true, HORIZONTAL_ALIGNMENT_CENTER)
 	_sensor.name = "Sensor"

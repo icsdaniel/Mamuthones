@@ -1,0 +1,14 @@
+[remap]
+
+importer="image"
+type="Image"
+uid="uid://bjivpqrntdcj"
+path="res://.godot/imported/hud_badge_3.webp-a10fbab1f2556c3a7879effe5be9ebe5.image"
+
+[deps]
+
+source_file="res://art/ai/hud_badge_3.webp"
+dest_files=["res://.godot/imported/hud_badge_3.webp-a10fbab1f2556c3a7879effe5be9ebe5.image"]
+
+[params]
+

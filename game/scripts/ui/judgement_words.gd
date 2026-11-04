@@ -15,6 +15,7 @@ const COLORS := {
 	"late": UIKit.LATE, "miss": Color("#8a7c6c"), "held": Color.WHITE, "wrong": Color("#e24a32"),
 }
 const HAIR := Color("#c08a2e")      ## the flanking gold rules (GOLD3)
+const MIN_PLATE_W := 56            ## cells: the judgement board's least width
 const CHORD_MS := 80                ## words this close together belong to one chord
 
 var _spots := {}   # int key -> [HBoxContainer, Label, Label, Tween, centre: Vector2, quality: String, shown at: ms]
@@ -139,6 +140,8 @@ static func _overlaps(a: Control, b: Control) -> bool:
 func _draw_rules(box: Control, w: Label) -> void:
 	if box.get_child_count() > 1 and (box.get_child(1) as Control).visible:
 		return
+	if _plate(box, w):
+		return
 	var P := PxArt.PX
 	var y := roundf((w.position.y + w.size.y * 0.5) / P) * P
 	for sd in [-1.0, 1.0]:
@@ -171,3 +174,45 @@ func shown_rects() -> Array[Rect2]:
 		if (spot[0] as Control).modulate.a > 0.5:
 			out.append((spot[0] as Control).get_global_rect())
 	return out
+
+
+## Makes, before the song, the banner behind every word the play screen can show (keys: the words'
+## i18n keys), in both faces and both inks, so none is made the first time it appears mid-song.
+func warm(keys: Array) -> void:
+	var w := UIKit.label("", UIKit.HUD, false, HORIZONTAL_ALIGNMENT_CENTER)
+	add_child(w)
+	w.visible = false
+	for key in keys:
+		for face in ["big", "big_gold", "caps", "caps_gold"]:
+			PxType.label(w, face)
+			w.text = tr(key)
+			w.reset_size()
+			w.size = w.get_combined_minimum_size()
+			Hud.sliced("judge_plate", _plate_cells(w))
+	w.queue_free()
+
+
+## The banner's size in cells round word w: at its own proportions (never stretched), wide enough
+## for the word and tall enough for it.
+func _plate_cells(w: Label) -> Vector2i:
+	var P := PxArt.PX
+	var asp := Hud._aspect("judge_plate")
+	# never narrower than MIN_PLATE_W: the smaller face two words together drop to (and a short word)
+	# gets the same board as the first word, not a smaller one
+	var cw := maxi(maxi(roundi(w.size.x / P) + 14, roundi((roundi(w.size.y / P) + 4) * asp)), MIN_PLATE_W)
+	return Vector2i(cw, roundi(cw / asp))
+
+
+## Daniele's ChatGPT judgement banner (art/ai/judge_plate: a carved bronze-framed board with its word
+## taken out, tools/art/chatgpt/cut_sheets.py) behind the word, which stays the game's own text so it
+## is translated. False when there is no picture (the gold rules are drawn instead).
+func _plate(box: Control, w: Label) -> bool:
+	var P := PxArt.PX
+	var wc := _plate_cells(w)
+	var tex := Hud.sliced("judge_plate", wc)
+	if tex == null:
+		return false
+	var c := w.position + w.size * 0.5
+	var at := Vector2(roundf((c.x - wc.x * P * 0.5) / P) * P, roundf((c.y - wc.y * P * 0.5) / P) * P)
+	box.draw_texture_rect(tex, Rect2(at, Vector2(wc) * P), false)
+	return true

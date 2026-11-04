@@ -18,7 +18,7 @@ func _cases() -> Array:
 		["title", {}], ["story", {}], ["stop_card", {"song_id": song}], ["stop_card", {"song_id": tut}],
 		["free_play", {}], ["boards", {}],
 		["settings", {}], ["credits", {}],
-		["workshop", {"tab": "mask"}], ["workshop", {"tab": "dress"}],
+		
 		["tutorial", {"song_id": tut}],
 		["play", {"song_id": song, "difficulty": "easy", "autoplay": true}],
 		["results", {"session": s, "record": {"prev_best": 1000, "new_best": true, "unlocked": [{"kind": "song", "id": song}], "carving_gained": 1},

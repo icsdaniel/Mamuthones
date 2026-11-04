@@ -18,15 +18,19 @@ extends Control
 ## It stands in for FireBackdrop (beat, dim, kick) and SideRows (jolt, stomp, set_still, ...), so the
 ## play screen drives it the same way.
 
-const PIXEL_STREET := "res://art/ai/street_laid.png"   ## the pixel look's street: Daniele's second street picture laid into this one's frame at full size, lines painted on (tools/art/pixel3d/bake_ai_street.py); drawn smoothed into the one-px-per-cell street, so every cell takes one even sample of it (a 270-wide copy drawn NEAREST gave cells of uneven sizes)
+const PIXEL_STREET := "res://art/ai/street_laid.png"   ## the pixel look's street: Daniele's ChatGPT causeway laid into this one's frame at one uniform scale (tools/art/chatgpt/street.py); shown unstretched (the lanes' stretch below STRETCH_FROM moves only the lanes, which the shader draws as gold lines); drawn smoothed into the one-px-per-cell street, so every cell takes one even sample of it (a 270-wide copy drawn NEAREST gave cells of uneven sizes)
 const IMG := Vector2(941.0, 1672.0)
 ## The painted lines, x = a + b * y in the picture's pixels: the road's edges and the lane dividers.
 const RAILS := [Vector2(609.17, -0.45827), Vector2(510.90, -0.14397), Vector2(445.17, 0.12678), Vector2(356.72, 0.43025)]
 const VANISH_Y := 265.0              ## where the lines meet (the horizon), picture px
 const FAR_Y := 468.0                 ## the road's far end, just in front of the fire, picture px
 const STRETCH_FROM := 460.0          ## the picture is only ever stretched below this row
-const FIRE := Vector2(480.0, 370.0)  ## the fire's heart, picture px
-const LANTERNS := [Vector2(104, 256), Vector2(855, 276), Vector2(320, 382)]
+const FIRE := Vector2(479.0, 372.0)  ## the fire's heart, picture px
+## Where the bonfire's logs stand (FireTiers' origin): on the road's far end, where Daniele's ChatGPT
+## causeway meets the mountains (tools/art/chatgpt/street.py lays it in: horizon at 421).
+const FIRE_BASE := Vector2(479.0, 436.0)
+## The first picture's lanterns (none on the causeway: their light is left out).
+const LANTERNS := []
 ## On the hit line, an outer lane's whole slot and its biggest note (a stomp, StreetSkin.STOMP_R,
 ## with its outline) stay on screen: their edge keeps EDGE_PAD of the width off the screen's edge.
 const CLEAR_R := 0.53                ## lane widths from an outer lane's centre that must show
@@ -40,7 +44,7 @@ const ZOOM := 1.2
 const FRAME_PIXEL := [Vector2(-12, 226), Vector2(300, 276), Vector2(262, 560), Vector2(-12, 636)]
 ## The art row (from the top of a pixel figure's 172) its portrait's lower edge cuts at: just under
 ## the Issohadore's skirt, at the hem of the Mamuthone's fleece.
-const PIXEL_CUT := [124.0, 134.0]
+const PIXEL_CUT := [112.0, 136.0]
 const BEAM := 22.0             ## base px: the depth of the beam along a pixel portrait's lower edge
 const FIGURE_IN := 24.0           ## picture px each figure stands in from its portrait's middle, toward the road (mirrored)
 const ISSO_RIGHT := 16.0          ## picture px the Issohadore (left portrait) then moves further right (Daniele, 2026-10-05)
@@ -76,6 +80,7 @@ var _bake: SubViewport
 var _still: TextureRect              ## the baked street on screen
 var _fire_pic: TextureRect           ## the fire's corner of the street, its shader running every frame
 var _fire_mat: ShaderMaterial
+var _fire: FireTiers                 ## the bonfire, its tier following the multiplier
 var _baked_key := []                 ## what the bake was drawn with (redrawn when it changes)
 var _vp: SubViewport                 ## the pixel look: the street drawn at one texel per lens cell
 var own_cells := true                ## false when the whole play screen is already drawn one px per cell
@@ -166,11 +171,16 @@ func _ready() -> void:
 		_cells.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
 		_cells.mouse_filter = Control.MOUSE_FILTER_IGNORE
 		_cells.set_anchors_preset(Control.PRESET_FULL_RECT)
+		_cells.material = _snap_material()
 		add_child(_cells)
 	else:
 		_still.set_anchors_preset(Control.PRESET_FULL_RECT)
 		add_child(_still)
 		add_child(_fire_pic)
+	if FireTiers.available():
+		_fire = FireTiers.new()
+		_fire.name = "Bonfire"
+		add_child(_fire)
 	_glow_tex = _radial()
 	for i in 2:
 		var f := _make_frame(i)
@@ -194,6 +204,37 @@ func _ready() -> void:
 		_sparks.visible = false
 	resized.connect(_fit)
 	_fit()
+
+
+## Snaps every cell of the street to the one pixel-art palette (art/pixel/palette.png), so the smooth
+## light, the moving cobbles and the fire's glow are drawn in the same few colours as every other
+## picture, not in thousands. Nearest colour, no dither: bands read as pixel art; blends do not.
+const SNAP_SHADER := """
+shader_type canvas_item;
+uniform sampler2D palette : filter_nearest, repeat_disable;
+uniform int count = 78;
+void fragment() {
+	vec4 c = texture(TEXTURE, UV);
+	float best = 1e9;
+	vec3 pick = c.rgb;
+	for (int i = 0; i < 78; i++) {
+		vec3 p = texelFetch(palette, ivec2(i, 0), 0).rgb;
+		vec3 d = (c.rgb - p) * vec3(0.9, 1.0, 1.1);
+		float dd = dot(d, d);
+		if (dd < best) { best = dd; pick = p; }
+	}
+	COLOR = vec4(pick, c.a);
+}
+"""
+
+
+static func _snap_material() -> ShaderMaterial:
+	var m := ShaderMaterial.new()
+	var sh := Shader.new()
+	sh.code = SNAP_SHADER
+	m.shader = sh
+	m.set_shader_parameter("palette", load("res://art/pixel/palette.png"))
+	return m
 
 
 # ------------------------------------------------------------------ the picture on screen
@@ -231,6 +272,9 @@ func _solve() -> void:
 	var hl_img := hl / pic_scale
 	stretch = maxf(1.0, (hl_img - STRETCH_FROM) / maxf(need - STRETCH_FROM, 1.0))
 	_place_frames()
+	if _fire != null:
+		_fire.position = PxArt.snap2(to_local_pic(FIRE_BASE))
+		_fire.scale = Vector2(PxArt.PX, PxArt.PX)
 	if _sparks != null:
 		_sparks.position = to_local_pic(FIRE + Vector2(0, -90))
 		_sparks.scale = Vector2.ONE * pic_scale / 0.86
@@ -323,8 +367,16 @@ func set_stop(_n: int) -> void:
 	pass
 
 
+## 0 at the 1x fire .. 1 at the 4x fire: how much light the bonfire throws.
+func _fire_light() -> float:
+	var t := FireTiers.tier_of(Session.UNISON_MULTS[clampi(unison, 0, Session.UNISON_MULTS.size() - 1)])
+	return clampf(float(t) / 3.0, 0.0, 1.0)
+
+
 func set_unison(level: int) -> void:
 	unison = level
+	if _fire != null:
+		_fire.set_tier(FireTiers.tier_of(Session.UNISON_MULTS[clampi(level, 0, Session.UNISON_MULTS.size() - 1)]))
 
 
 func set_still(on: bool) -> void:
@@ -408,11 +460,18 @@ func _process(delta: float) -> void:
 	_street_layout()
 	var night := 1.0 - 0.35 * dim
 	_still.modulate = Color(night, night, night)
+	if _fire != null:
+		# the drawn bonfire stands in for the first picture's painted one
+		_fire_pic.visible = false
+		_fire.beat = beat
+		_fire.dim = dim
+		_fire.animations = animations
 	if not animations:
 		# the fire's corner shows the still fire (dimmed with the rest), nothing else is drawn
 		_fire_pic.visible = false
 		return
 	# the fire's corner: it sways, flickers, and flares on every beat (most on the bar's first)
+	_fire_pic.visible = _fire == null
 	_fire_mat.set_shader_parameter("t", _clock)
 	_fire_mat.set_shader_parameter("flare", FIRE_BEAT * env + 0.35 * _kick)
 	_fire_mat.set_shader_parameter("dim", dim)
@@ -421,6 +480,10 @@ func _process(delta: float) -> void:
 		_sparks.speed_scale = 1.0 - 0.5 * dim
 	_bob_figures()
 	_glow.queue_redraw()
+	var lit := _fire_light()
+	for f in _frames:
+		(f.get_node("Rim") as Line2D).default_color = Color(1.0, 0.5, 0.12, lit * 0.45)
+		(f.get_node("Halo") as Line2D).default_color = Color(1.0, 0.55, 0.15, 0.16 + lit * 0.25)
 
 
 ## How much the fire's hot core brightens on a beat (the bar's first; the others 0.6 of it).
@@ -436,7 +499,7 @@ func _street_layout() -> void:
 	var rect := Vector2(_vp.size) * PxArt.PX if _vp != null else size
 	var pix := Vector2i((rect * px_k).ceil()).max(Vector2i.ONE)
 	var p := {"pic": IMG, "rect": rect, "sc": pic_scale, "off": pic_off, "y0": STRETCH_FROM,
-		"stretch": stretch, "fire": FIRE, "road": false, "smooth_lanes": true,
+		"stretch": stretch, "fire": FIRE, "road": false, "smooth_lanes": true, "rails": true, "cell": PxArt.PX,
 		"rail_a": Vector4(RAILS[0].x, RAILS[1].x, RAILS[2].x, RAILS[3].x),
 		"rail_b": Vector4(RAILS[0].y, RAILS[1].y, RAILS[2].y, RAILS[3].y),
 		"vanish_y": VANISH_Y, "far_y": FAR_Y, "inv_far": 1.0 / (FAR_Y - VANISH_Y), "scroll": 0.0}
@@ -516,6 +579,7 @@ func _bob_figures() -> void:
 		var ring := _clock - _bell_at
 		for p in _puppets:
 			p.reduced_motion = reduced_motion
+			p.spb = spb
 			var r := ring
 			if p.figure == "issohadore" and _clock - _rope_at < ring:
 				r = _clock - _rope_at
@@ -558,6 +622,7 @@ func _make_frame(i: int) -> Node2D:
 	_cuts.append(cut)
 	var pup := PixelFigure.new("issohadore" if i == 0 else "mamuthone")
 	pup.name = "Figure"
+	pup.black = str(Profile.get_look().get("fleece", "black")) != "dark_brown"
 	pup.mirror = i == 1
 	pup.material = cut
 	stand.add_child(pup)
@@ -579,6 +644,15 @@ func _make_frame(i: int) -> Node2D:
 	halo.material = add
 	root.add_child(halo)
 	root.add_child(stand)
+	# the bonfire's light on the portrait's side toward the road (stronger as the fire grows)
+	var rim := Line2D.new()
+	rim.name = "Rim"
+	rim.width = 18.0
+	rim.default_color = Color(1.0, 0.5, 0.12, 0.0)
+	var rim_add := CanvasItemMaterial.new()
+	rim_add.blend_mode = CanvasItemMaterial.BLEND_MODE_ADD
+	rim.material = rim_add
+	root.add_child(rim)
 	# a carved beam along the lower edge, over the figure, so the cut at its knees reads as the
 	# figure standing behind a ledge (Daniele, 2026-10-08)
 	var beam := Polygon2D.new()
@@ -644,6 +718,7 @@ func _place_frames() -> void:
 		_cuts[i].set_shader_parameter("cut_n", n if n.y > 0.0 else -n)    # pointing down, below the edge
 		(f.get_node("Frame") as Line2D).points = pts
 		(f.get_node("Halo") as Line2D).points = pts
+		(f.get_node("Rim") as Line2D).points = PackedVector2Array([pts[1], pts[2]])
 		_place_puppet(i, pts)
 		var down := Vector2(0.0, BEAM)
 		var a := pts[3] - (pts[2] - pts[3]).normalized() * 40.0
@@ -795,6 +870,12 @@ func _draw_glow(ci: CanvasItem) -> void:
 		# (the pixel look keeps the lanterns' light off the portraits: it washes their few colours out)
 		var la := 0.04 if i < 2 else 0.3
 		ci.draw_texture_rect(_glow_tex, Rect2(p - Vector2(r, r), Vector2(r, r) * 2.0), false, Color(1.0, 0.62, 0.25, la * f * (1.0 - 0.5 * dim)))
+	# the bonfire's light pooled on the far road, by its tier (dim at 1x, strong at 4x)
+	var lit := _fire_light()
+	var pp := to_local_pic(FIRE_BASE + Vector2(0, 26))
+	var pr := (110.0 + 70.0 * lit) * pic_scale
+	ci.draw_texture_rect(_glow_tex, Rect2(pp - Vector2(pr, pr * 0.42), Vector2(pr, pr * 0.42) * 2.0), false,
+		Color(1.0, 0.5, 0.14, (0.12 + 0.3 * lit) * (1.0 - 0.6 * dim)))
 	# the fire's own breath, and its flare on the beat
 	var fp := to_local_pic(FIRE + Vector2(0, 40))
 	# (it lights up on every beat, most on the bar's first: one light, so it costs next to nothing)
@@ -1034,7 +1115,9 @@ vec3 smooth_lane(sampler2D tex, vec2 p, vec3 c) {
 	vec3 light = vec3(0.0);
 	for (int j = -3; j <= 3; j++) {
 		for (int i = 1; i <= 3; i++) {
-			light += texture(tex, vec2(mix(x0, x1, float(i) * 0.25), p.y + float(j) * span * 0.33) / pic).rgb;
+			float ly = p.y + float(j) * span * 0.33;
+			ly = ly > y0 ? y0 + (ly - y0) * stretch : ly;   // back to the picture's own rows
+			light += texture(tex, vec2(mix(x0, x1, float(i) * 0.25), ly) / pic).rgb;
 		}
 	}
 	light = light / 21.0;
@@ -1044,25 +1127,64 @@ vec3 smooth_lane(sampler2D tex, vec2 p, vec3 c) {
 	return mix(c, col, fade);
 }
 
+// the four lane lines (the road's edges and the two dividers) as gold neon on the lanes themselves:
+// a hot core one art px wide far off and two near, an orange rim, and a warm glow on the paving
+// beside them (Daniele's ChatGPT road has no lines of its own; review of round 1: the lanes must
+// read at a glance even at 1x)
+uniform bool rails = false;
+uniform float cell = 3.0;   // one art px, in this rect's units
+
+vec3 gold_rails(vec2 p, vec3 c) {
+	if (p.y < far_y - 10.0) {
+		return c;
+	}
+	vec4 xs = rail_a + rail_b * p.y;
+	float dmin = 1e6;
+	for (int i = 0; i < 4; i++) {
+		dmin = min(dmin, abs(p.x - xs[i]) * sc);
+	}
+	float on = clamp((p.y - far_y + 10.0) / 24.0, 0.0, 1.0) * (0.75 + 0.25 * clamp((p.y - far_y) / 500.0, 0.0, 1.0));
+	float near = clamp((p.y - far_y) / 400.0, 0.0, 1.0);
+	float half_w = cell * mix(0.75, 1.0, near);
+	float glow = pow(clamp(1.0 - (dmin - half_w) / (cell * 6.0), 0.0, 1.0), 2.0) * on;
+	vec3 col = c + vec3(0.78, 0.25, 0.05) * glow * 0.5;
+	if (dmin < half_w + cell * 0.9) {
+		col = mix(col, vec3(0.94, 0.44, 0.09), on);
+	}
+	if (dmin < half_w) {
+		col = mix(col, vec3(1.0, 0.85, 0.42), on);
+	}
+	if (dmin < half_w * 0.45 && near > 0.4) {
+		col = mix(col, vec3(1.0, 0.94, 0.63), on);
+	}
+	return col;
+}
+
 void fragment() {
 	vec2 s = origin + UV * rect;
-	vec2 p = vec2((s.x - off) / sc, s.y / sc);
+	// q: the picture's own px (it is never stretched: Daniele, 2026-10-26); p: the lanes' frame, in
+	// which the road below y0 is drawn out (stretch) so the outer lanes fit at the hit line
+	vec2 q = vec2((s.x - off) / sc, s.y / sc);
+	vec2 p = q;
 	if (p.y > y0) {
 		p.y = y0 + (p.y - y0) / stretch;
 	}
 	// the flames: an ellipse over the fire, strongest in its upper part
-	vec2 d = (p - fire) / vec2(120.0, 150.0);
+	vec2 d = (q - fire) / vec2(120.0, 150.0);
 	float m = clamp(1.0 - dot(d, d), 0.0, 1.0);
-	m *= smoothstep(fire.y + 100.0, fire.y + 40.0, p.y);
-	float wave = sin(p.y * 0.07 + t * 8.0) * 0.6 + sin(p.y * 0.13 - t * 11.0 + p.x * 0.05) * 0.4;
-	p.x += wave * 3.5 * m * motion;
-	p.y += (sin(t * 6.0 + p.x * 0.08) * 2.0) * m * motion;
-	vec4 c = texture(TEXTURE, p / pic);
+	m *= smoothstep(fire.y + 100.0, fire.y + 40.0, q.y);
+	float wave = sin(q.y * 0.07 + t * 8.0) * 0.6 + sin(q.y * 0.13 - t * 11.0 + q.x * 0.05) * 0.4;
+	q.x += wave * 3.5 * m * motion;
+	q.y += (sin(t * 6.0 + q.x * 0.08) * 2.0) * m * motion;
+	vec4 c = texture(TEXTURE, q / pic);
 	if (road) {
 		c.rgb = moving_road(TEXTURE, p, c.rgb);
 	}
 	if (smooth_lanes) {
 		c.rgb = smooth_lane(TEXTURE, p, c.rgb);
+	}
+	if (rails) {
+		c.rgb = gold_rails(p, c.rgb);
 	}
 	float lum = dot(c.rgb, vec3(0.3, 0.55, 0.15));
 	float hot = m * smoothstep(0.45, 0.9, lum);

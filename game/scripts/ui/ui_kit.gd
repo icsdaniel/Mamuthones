@@ -82,10 +82,11 @@ static func first_screen() -> String:
 static var vibrations := 0
 
 
-static func vibrate(ms: int) -> void:
+## amplitude 0..1 (-1: the phone's default); phones without amplitude control just buzz for ms.
+static func vibrate(ms: int, amplitude := -1.0) -> void:
 	if bool(Profile.get_setting("vibration")):
 		vibrations += 1
-		Input.vibrate_handheld(ms)
+		Input.vibrate_handheld(ms, amplitude)
 
 
 ## A centred column inside safe-area margins, optionally scrolling. Returns the VBox to fill.
@@ -106,10 +107,12 @@ static func column(parent: Control, scroll := true, separation := 20) -> VBoxCon
 		var sc := ScrollContainer.new()
 		sc.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
 		sc.follow_focus = true
+		hide_bars(sc)
 		margin.add_child(sc)
 		sc.add_child(center)
 		center.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 		center.size_flags_vertical = Control.SIZE_EXPAND_FILL
+		more_below(margin, sc)
 	else:
 		margin.add_child(center)
 	center.add_child(box)
@@ -136,6 +139,7 @@ static func column_with_footer(parent: Control, separation := 16) -> Array[VBoxC
 	var sc := ScrollContainer.new()
 	sc.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
 	sc.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	hide_bars(sc)
 	outer.add_child(sc)
 	var box := VBoxContainer.new()
 	box.add_theme_constant_override("separation", separation)
@@ -153,6 +157,28 @@ static func column_with_footer(parent: Control, separation := 16) -> Array[VBoxC
 	sc.get_v_scroll_bar().visibility_changed.connect(foot.queue_redraw)
 	outer.add_child(foot)
 	return [box, foot]
+
+
+## While scroller sc has more below, the bottom of over (a container laid over it) sinks into
+## shadow in stepped bands with a small gold chevron, so a list running off the screen reads as
+## going on, not cut off (graphics review, 2026-10-28: settings looked cut).
+static func more_below(over: Container, sc: ScrollContainer) -> void:
+	var fade := Control.new()
+	fade.name = "MoreBelow"
+	fade.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	over.add_child(fade)
+	var bar := sc.get_v_scroll_bar()
+	fade.draw.connect(func() -> void:
+		if not bar.visible or bar.value + bar.page >= bar.max_value - 4.0:
+			return
+		var h := fade.size.y
+		for i in 4:
+			fade.draw_rect(Rect2(-GUTTER, h - 64.0 + i * 16.0, fade.size.x + 2.0 * GUTTER, 16.0), Color(PixelPalette.K[0], 0.22 * (i + 1)))
+		var c := Vector2(fade.size.x * 0.5, h - 18.0)
+		fade.draw_colored_polygon(PackedVector2Array([c + Vector2(-18, -9), c + Vector2(18, -9), c + Vector2(0, 9)]), PixelPalette.GOLD[4]))
+	bar.value_changed.connect(func(_v: float) -> void: fade.queue_redraw())
+	bar.changed.connect(fade.queue_redraw)
+	bar.visibility_changed.connect(fade.queue_redraw)
 
 
 ## Safe-area insets in canvas units (left, top, right, bottom) for notches and home bars.
@@ -184,6 +210,99 @@ static func header(box: Container, title: String, on_back: Callable) -> HBoxCont
 	row.add_child(l)
 	box.add_child(row)
 	return row
+
+
+## A thin bronze rule between groups.
+static func rule(box: Container, gap := 8.0) -> void:
+	var m := MarginContainer.new()
+	m.add_theme_constant_override("margin_top", int(gap))
+	m.add_theme_constant_override("margin_bottom", int(gap))
+	var r := ColorRect.new()
+	r.color = PixelPalette.GOLD[2]
+	r.custom_minimum_size.y = 3
+	m.add_child(r)
+	box.add_child(m)
+
+
+## A list row: a flat bronze-ruled bar with a number or mark on the left, a title and a caption in the
+## middle, and an optional control (a grade badge, a chevron) on the right. Returns the Button; the
+## children are mouse-transparent. `state` is "next" (lit red edge), "open" or "locked" (dimmed).
+static func list_row(lead: String, title: String, caption: String, right: Control, state := "open", on_press := Callable()) -> Button:
+	var b := Button.new()
+	b.focus_mode = Control.FOCUS_NONE
+	b.custom_minimum_size = Vector2(0, 120)
+	b.disabled = state == "locked" or not on_press.is_valid()
+	if on_press.is_valid():
+		b.pressed.connect(func() -> void:
+			Sound.ui("tap")
+			on_press.call())
+		juice(b)
+	var fill: Color = PixelPalette.NAVY[2] if state != "locked" else PixelPalette.NAVY[0]
+	var edge: Color = PixelPalette.RED[3] if state == "next" else (PixelPalette.GOLD[3] if state == "open" else PixelPalette.NAVY[2])
+	for st in ["normal", "hover", "pressed", "disabled", "focus", "hover_pressed"]:
+		var sb := StyleBoxFlat.new()
+		sb.bg_color = fill.lightened(0.12) if st in ["pressed", "hover_pressed"] else fill
+		sb.border_color = edge
+		sb.set_border_width_all(5)   # a chunky rim like the boards' bronze (2026-10-28)
+		if state == "next":
+			sb.border_width_left = 9
+		sb.anti_aliasing = false
+		b.add_theme_stylebox_override(st, sb)
+	var row := HBoxContainer.new()
+	row.set_anchors_preset(Control.PRESET_FULL_RECT)
+	row.offset_left = 20
+	row.offset_right = -20
+	row.add_theme_constant_override("separation", 16)
+	row.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	b.add_child(row)
+	if lead != "":
+		var n := label(lead, HEADER, false, HORIZONTAL_ALIGNMENT_CENTER)
+		n.custom_minimum_size.x = 56
+		n.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+		n.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		n.add_theme_color_override("font_color", PixelPalette.GOLD[4] if state != "locked" else PixelPalette.BONE[0])
+		row.add_child(n)
+	var text := VBoxContainer.new()
+	text.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	text.alignment = BoxContainer.ALIGNMENT_CENTER
+	text.add_theme_constant_override("separation", 0)
+	text.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	row.add_child(text)
+	var t := label(title, SUB, false)
+	t.text_overrun_behavior = TextServer.OVERRUN_TRIM_ELLIPSIS
+	t.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	t.add_theme_color_override("font_color", PixelPalette.BONE[3] if state != "locked" else PixelPalette.BONE[1])
+	text.add_child(t)
+	if caption != "":
+		var c := label(caption, CAPTION, false)
+		c.text_overrun_behavior = TextServer.OVERRUN_TRIM_ELLIPSIS
+		c.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		if state == "next":
+			c.add_theme_color_override("font_color", PixelPalette.GOLD[4])
+		text.add_child(c)
+	if right != null:
+		right.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+		right.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		row.add_child(right)
+	return b
+
+
+## Lights or dims a list row used as a choice (a toggle): bright gold frame and a lighter fill when on.
+static func row_select(b: Button, on: bool) -> void:
+	b.set_pressed_no_signal(on)
+	for st in ["normal", "hover", "pressed", "disabled", "focus", "hover_pressed"]:
+		var sb := b.get_theme_stylebox(st) as StyleBoxFlat
+		if sb == null:
+			continue
+		sb.border_color = PixelPalette.GOLD[5] if on else PixelPalette.GOLD[2]
+		sb.set_border_width_all(6 if on else 3)
+		sb.bg_color = PixelPalette.NAVY[3] if on else PixelPalette.NAVY[2]
+
+
+## Hides a scroll container's bar (touch scrolling stays): no scrollbars on phones.
+static func hide_bars(sc: ScrollContainer) -> void:
+	sc.get_v_scroll_bar().modulate.a = 0.0
+	sc.get_v_scroll_bar().mouse_filter = Control.MOUSE_FILTER_IGNORE
 
 
 ## Browser-style tabs in one row: the chosen tab is lit and open at the bottom onto the page below,

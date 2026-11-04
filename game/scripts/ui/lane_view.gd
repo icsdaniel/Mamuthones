@@ -127,12 +127,29 @@ func press(lane: int) -> void:
 	queue_redraw()
 
 
-func flash(lane: int, good: bool) -> void:
+func flash(lane: int, good: bool, quality := "") -> void:
 	if lane < 0 or lane > 2:
 		return
 	_flash[lane] = _clock
 	_flash_kind[lane] = "hit" if good else "miss"
+	_punch_k[lane] = PUNCH.get(quality, 0.0) if good else 0.0
 	queue_redraw()
+
+
+## A hit ring's pop on a hit (share it grows by, by the hit's quality), gone in PUNCH_TIME: the ring
+## jumps out and settles back, so a hit lands with a knock you can see.
+const PUNCH := {"perfect": 0.2, "good": 0.13, "early": 0.07, "late": 0.07, "held": 0.13}
+const PUNCH_TIME := 0.12
+var _punch_k := [0.0, 0.0, 0.0]
+
+
+## How far lane's ring is popped out now (0: at rest).
+func ring_punch(lane: int) -> float:
+	var age := _clock - _flash[lane]
+	if age < 0.0 or age >= PUNCH_TIME:
+		return 0.0
+	var x := 1.0 - age / PUNCH_TIME
+	return _punch_k[lane] * x * x
 
 
 ## A hit burst at pos. side ("early"/"late") adds a chevron in the early/late pair: up and cool for
@@ -1127,7 +1144,7 @@ func _off_beat(n: Note) -> bool:
 ## note inside a run of sixteenths is played at the same speed, so it is silver too: violet between
 ## two silver notes read as a slower note (Daniele, 2026-10-10; Note.quick marks the pairs).
 func _sixteenth(n: Note) -> bool:
-	if n.quick or absf(fposmod(n.beat, 0.5) - 0.25) < 0.02:
+	if n.quick or (session != null and session.sixteenth_beat(n.beat)) or (session == null and absf(fposmod(n.beat, 0.5) - 0.25) < 0.02):
 		return true
 	if absf(fposmod(n.beat, 1.0) - 0.5) >= 0.02 or session == null:
 		return false
@@ -1147,10 +1164,9 @@ func _in_sixteenth_run(n: Note) -> bool:
 	var ns := session.notes
 	for dir: int in [-1, 1]:
 		var i: int = n.index + dir
-		while i >= 0 and i < ns.size() and absf(ns[i].beat - n.beat) <= 0.27:
+		while i >= 0 and i < ns.size() and absf(ns[i].beat - n.beat) <= 0.27 + session.swing():
 			var m: Note = ns[i]
-			var gap := absf(m.beat - n.beat)
-			if m.uses_lane() and gap > 0.02 and absf(gap - 0.25) < 0.02:
+			if m.uses_lane() and session.quarter_gap(absf(m.beat - n.beat)):
 				return true
 			i += dir
 	return false
@@ -1460,12 +1476,16 @@ func _draw_street_buttons() -> void:
 const PX_WOOD := [Color("#160c0a")]   ## the shade under a step
 const PX_BRONZE := [Color("#4e2a0a"), Color("#b0701e"), Color("#f2c46a")]
 const PX_LIFT := 3          ## art px a button stands up from the panel (its side shows below it)
-const BTN_CAP := 118        ## source px of the button pictures' carved frame (kept square when stretched)
+const BTN_CAP := 118        ## source px of the button pictures' carved frame
 const FOOT_ASPECT := 206.0 / 431.0
+## The carved steps (btn_idle / btn_pressed, sinking on a press) instead of the ChatGPT crates: back
+## since Daniele's test of 2026-10-28 ("controls used to be a lot snappier before").
+const STEP_BUTTONS := true
 
 
-## Picture `key` from art/ai stretched to cells, nine-sliced: its frame (cap source px from each
-## edge) keeps its shape at the cells' scale and only the middle stretches; alpha cut hard at half.
+## Picture `key` from art/ai at cells, never stretched: the whole picture scaled by one factor (its
+## carved frame cap_src source px, at the cells' height), its four corners laid as they are and its
+## edges and middle repeated (the last copy cropped) to fill the rest. Alpha cut hard at half.
 ## "<name>!white": its silhouette in white, for a glow tinted by modulate.
 static var _nine_cache := {}
 
@@ -1475,33 +1495,46 @@ static func _nine(key: String, cells: Vector2i, cap_src: int) -> Texture2D:
 	if _nine_cache.has(k):
 		return _nine_cache[k]
 	var tex: Texture2D = null
-	var path := "res://art/ai/%s.png" % key.trim_suffix("!white")
+	var path := "res://art/ai/%s.webp" % key.trim_suffix("!white")
 	if ResourceLoader.exists(path):
-		var src := (load(path) as Texture2D).get_image()
+		var src := StreetSkin.ai_image(path)
 		src.decompress()
 		src.convert(Image.FORMAT_RGBA8)
 		var sw := src.get_width()
 		var sh := src.get_height()
-		var cap := clampi(roundi(cap_src * float(cells.y) / sh), 1, mini(cells.x, cells.y) / 2 - 1)
-		var xs := [[0, cap_src, 0, cap], [cap_src, sw - cap_src, cap, cells.x - cap], [sw - cap_src, sw, cells.x - cap, cells.x]]
-		var ys := [[0, cap_src, 0, cap], [cap_src, sh - cap_src, cap, cells.y - cap], [sh - cap_src, sh, cells.y - cap, cells.y]]
+		# one scale for the whole picture: the frame as thick as it would be at the cells' height
+		var sc := float(cells.y) / sh
+		var big := src.duplicate() as Image
+		big.resize(maxi(4, roundi(sw * sc)), maxi(4, roundi(sh * sc)), Image.INTERPOLATE_LANCZOS)
+		var bw := big.get_width()
+		var bh := big.get_height()
+		var cap := clampi(roundi(cap_src * sc), 1, mini(mini(bw, bh), mini(cells.x, cells.y)) / 2 - 1)
 		var out := Image.create(cells.x, cells.y, false, Image.FORMAT_RGBA8)
+		# source spans [from, to) of the scaled picture and the cells they cover
+		var xs := [[0, cap, 0, cap], [cap, bw - cap, cap, cells.x - cap], [bw - cap, bw, cells.x - cap, cells.x]]
+		var ys := [[0, cap, 0, cap], [cap, bh - cap, cap, cells.y - cap], [bh - cap, bh, cells.y - cap, cells.y]]
 		for py: Array in ys:
 			for px: Array in xs:
-				var dw: int = px[3] - px[2]
-				var dh: int = py[3] - py[2]
-				if dw <= 0 or dh <= 0:
+				var tw: int = px[1] - px[0]
+				var th: int = py[1] - py[0]
+				if tw <= 0 or th <= 0:
 					continue
-				var piece := src.get_region(Rect2i(px[0], py[0], px[1] - px[0], py[1] - py[0]))
-				piece.resize(dw, dh, Image.INTERPOLATE_LANCZOS)
-				out.blit_rect(piece, Rect2i(0, 0, dw, dh), Vector2i(px[2], py[2]))
-		for y in cells.y:
-			for x in cells.x:
-				var c := out.get_pixel(x, y)
-				c.a = 1.0 if c.a > 0.5 else 0.0
-				if key.ends_with("!white"):
-					c = Color(1, 1, 1, c.a)
-				out.set_pixel(x, y, c)
+				var y: int = py[2]
+				while y < py[3]:
+					var hh := mini(th, int(py[3]) - y)
+					var x: int = px[2]
+					while x < px[3]:
+						var ww := mini(tw, int(px[3]) - x)
+						out.blit_rect(big, Rect2i(px[0], py[0], ww, hh), Vector2i(x, y))
+						x += ww
+					y += hh
+		var d := out.get_data()
+		var white := key.ends_with("!white")
+		for i in range(0, d.size(), 4):
+			d[i + 3] = 255 if d[i + 3] > 127 else 0
+			if white:
+				d[i] = 255; d[i + 1] = 255; d[i + 2] = 255
+		out.set_data(cells.x, cells.y, false, Image.FORMAT_RGBA8, d)
 		tex = ImageTexture.create_from_image(out)
 	_nine_cache[k] = tex
 	return tex
@@ -1529,11 +1562,15 @@ func _px(o: Vector2, x: float, y: float, w: float, h: float, col: Color) -> void
 func warm(bells: bool) -> void:
 	if street == null:
 		return
-	for lane in 3:
-		var cr := _button_cells(lane)
-		for key in ["btn_idle", "btn_pressed"]:
-			_nine(key, cr, BTN_CAP)
-		_nine("btn_idle!white", cr + Vector2i(2, 2), BTN_CAP)
+	if STEP_BUTTONS:
+		for lane in 3:
+			var cr := _button_cells(lane)
+			for key in ["btn_idle", "btn_pressed"]:
+				_nine(key, cr, BTN_CAP)
+			_nine("btn_idle!white", cr + Vector2i(2, 2), BTN_CAP)
+	else:
+		_warm_crates()
+	StreetSkin.warm_notes(self, field_rect())
 	if bells:
 		StreetSkin.warm(self, field_rect())
 
@@ -1565,6 +1602,19 @@ func _draw_pixel_buttons() -> void:
 	_px(panel.position, 0, 0, panel.size.x / p, 1, PX_BRONZE[1].lerp(PX_BRONZE[2], env))
 	_px(panel.position, 0, 1, panel.size.x / p, 1, PX_BRONZE[0])
 	var w := r.size.x / 3.0
+	if STEP_BUTTONS:
+		_draw_steps()
+	elif StreetSkin.ai_tex("crate_idle_0", Vector2i.ONE) != null:
+		_draw_crates()
+	_draw_street_marks(r, w)
+
+
+## The carved wooden steps (art/ai/btn_idle, btn_pressed, foot) standing up out of the panel, their
+## side showing below them. A press sinks the step and shows the pressed picture; a hit lights it hot,
+## a miss dull red; a note about to reach its lane lights its edge. A bare foot is carved into each
+## (both in the middle one).
+func _draw_steps() -> void:
+	var p := PxArt.PX
 	for lane in 3:
 		var br := _button_rect(lane)
 		var st := _button_state(lane)
@@ -1590,19 +1640,72 @@ func _draw_pixel_buttons() -> void:
 				draw_texture_rect(sil, Rect2(o - Vector2(p, p), Vector2(cols + 2, rows + 2) * p), false, Color(glow, 0.8))
 		if tex != null:
 			draw_texture_rect(tex, Rect2(o, Vector2(cols, rows) * p), false, mod)
-		# the feet carved into it
+		# the feet carved into it, at the foot picture's own proportions
 		var fmod := {"idle": Color(0.82, 0.78, 0.72), "cued": Color(1, 0.97, 0.9), "pressed": Color.WHITE,
 			"hit": Color(1.15, 1.1, 1.0), "miss": Color(0.55, 0.32, 0.3)}[st] as Color
 		var feet := [-1.0, 1.0] if lane == 1 else ([-1.0] if lane == 0 else [1.0])
 		var fh := clampi(int(rows * 0.5), 16, 40)
-		var fw := maxi(roundi(fh * FOOT_ASPECT), 6)
+		var fasp := StreetSkin.ai_aspect("foot")
+		var fw := maxi(roundi(fh * (fasp if fasp > 0.0 else FOOT_ASPECT)), 6)
 		for i in feet.size():
 			var cx := cols * 0.5 + (0.0 if feet.size() == 1 else (float(i) - 0.5) * fw * 1.5)
 			var ftex := StreetSkin.ai_tex("foot" if feet[i] > 0.0 else "foot!mirror", Vector2i(fw, fh))
 			if ftex != null:
 				var fo := Vector2(roundf(cx - fw * 0.5), roundf(rows * 0.5 - fh * 0.5))
 				draw_texture_rect(ftex, Rect2(o + fo * p, Vector2(fw, fh) * p), false, fmod)
-	_draw_street_marks(r, w)
+
+
+## The step crates from Daniele's ChatGPT controls sheet (art/ai/crate_{idle,pressed}_<lane>, cut by
+## tools/art/chatgpt/cut_sheets.py): a wooden crate with the lane's bare feet carved in its lid (left,
+## both, right), pressed in with the feet glowing orange while held. A hit lights it hot, a miss dull
+## red, a note about to reach its lane lights its edge.
+func _draw_crates() -> void:
+	var p := PxArt.PX
+	for lane in 3:
+		var br := _button_rect(lane)
+		var st := _button_state(lane)
+		var slot := _button_cells(lane) + Vector2i(0, PX_LIFT)
+		var down_pic := st == "pressed" or st == "hit"
+		var key := "crate_%s_%d" % ["pressed" if down_pic else "idle", lane]
+		var cells := _crate_cells(lane, key)
+		var mod := {"idle": Color.WHITE, "cued": Color(1.2, 1.1, 0.92), "pressed": Color.WHITE,
+			"hit": Color(1.35, 1.2, 0.9), "miss": Color(0.95, 0.5, 0.45)}[st] as Color
+		var o := br.position + Vector2(float((slot.x - cells.x) / 2), float(slot.y - cells.y)) * p
+		if st == "cued" or st == "hit":
+			var glow := Color("#fff2c0") if st == "hit" else Color("#ffc445")
+			var ic := _crate_cells(lane, "crate_idle_%d" % lane)
+			var sil := StreetSkin.ai_tex("crate_idle_%d!white" % lane, ic + Vector2i(2, 2))
+			if sil != null:
+				var io := br.position + Vector2(float((slot.x - ic.x) / 2), float(slot.y - ic.y)) * p
+				draw_texture_rect(sil, Rect2(io - Vector2(p, p), Vector2(ic + Vector2i(2, 2)) * p), false, Color(glow, 0.8))
+		var tex := StreetSkin.ai_tex(key, cells)
+		if tex != null:
+			draw_texture_rect(tex, Rect2(o, Vector2(cells) * p), false, mod)
+
+
+## A crate picture's size in cells: one height for all the crates (the smallest that fits every slot,
+## so the middle crate is as tall as the outer ones), each at its own proportions (never stretched:
+## Daniele, 2026-10-26), centred in its slot and standing on the slot's floor.
+func _crate_cells(_lane: int, key: String) -> Vector2i:
+	var asp := StreetSkin.ai_aspect(key)
+	if asp <= 0.0:
+		return _button_cells(_lane) + Vector2i(0, PX_LIFT)
+	var h := 9999
+	for l in 3:
+		var slot := _button_cells(l) + Vector2i(0, PX_LIFT)
+		for k in ["idle", "pressed"]:
+			var a := StreetSkin.ai_aspect("crate_%s_%d" % [k, l])
+			if a > 0.0:
+				h = mini(h, mini(slot.y, floori(float(slot.x) / a)))
+	return Vector2i(roundi(h * asp), h)
+
+
+## Paints every crate picture at its size before the song (each was a hitch on its first press).
+func _warm_crates() -> void:
+	for lane in 3:
+		for k in ["idle", "pressed"]:
+			StreetSkin.ai_tex("crate_%s_%d" % [k, lane], _crate_cells(lane, "crate_%s_%d" % [k, lane]))
+		StreetSkin.ai_tex("crate_idle_%d!white" % lane, _crate_cells(lane, "crate_idle_%d" % lane) + Vector2i(2, 2))
 
 
 ## A bare footprint (left foot for -1, right for 1): the sole and five toes.

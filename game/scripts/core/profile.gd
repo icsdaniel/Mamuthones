@@ -24,23 +24,27 @@ extends Node
 signal changed
 
 const PATH := "user://profile.cfg"
-const VERSION := 1
+const VERSION := 2
+## The standard note speed (Daniele, 2026-10-31: "make the standard speed 1.6x"): the notes slide
+## 1.6 times faster than the old standard, so about 0.94 s of notes show on the road instead of 1.5 s.
+const STANDARD_SPEED := 1.6
 const DEFAULT_SETTINGS := {
 	"language": "",          # "" = follow the phone
 	"vibration": true,
 	"slam": false,
 	"reduced_motion": false,  # kept for older profiles: true reads as animations "calm"
 	"animations": "full",     # "full", "calm" or "off" (UIKit.animations)
-	"note_speed": 1.0,
+	"note_speed": STANDARD_SPEED,
 	"music_volume": 1.0,
 	"sfx_volume": 1.0,
 	"audio_offset": 0.0,     # seconds, from the tap test or set by hand
 	"visual_offset": 0.06,   # seconds the notes are drawn early (screen and touch delay); see visual_offset()
 	"bell_cue": true,        # the bell cue shown at Easy and Medium
+	"bell_cue_all": false,   # ...and at Hard and Expert too (an assist; outside review, 2026-10-31)
 	"step_knocks": false,    # a knock on each step button (off: hits on time bring up the song's tune instead)
 }
 const FLAGS: Array[String] = ["language_chosen", "headphones_seen", "calibrated", "latency_tested", "tutorial_done"]
-const FLEECES: Array[String] = ["black", "dark_brown"]
+const FLEECES: Array[String] = ["dark_brown", "black"]   ## the first is the default: the drawn one
 const STRAPS: Array[String] = ["natural", "dark"]
 ## Allowed ranges for number settings; values outside are clamped.
 const RANGES := {
@@ -124,8 +128,10 @@ func set_flag(flag: String, on := true) -> void:
 # ---------------------------------------------------------------- look, calibration
 
 
+## The Workshop and its customizations are gone (Daniele, 2026-10-31: "lets just get the game
+## finished"): every Mamuthone is his ChatGPT picture as drawn, whatever an older profile saved.
 func get_look() -> Dictionary:
-	return _look.duplicate(true)
+	return {"mask": _default_mask(), "fleece": FLEECES[0], "straps": STRAPS[0]}
 
 
 func set_look(part: String, value: Variant) -> void:
@@ -404,10 +410,17 @@ func _read(cfg: ConfigFile, version: int) -> void:
 
 ## Upgrades older layouts in place, one version at a time. Version 1 is the first release, so
 ## there is nothing to upgrade yet; a version-less file is read as version 1 field by field.
-func _migrate(_cfg: ConfigFile, from_version: int) -> void:
+func _migrate(cfg: ConfigFile, from_version: int) -> void:
 	var v := from_version
 	while v < VERSION:
 		v += 1
+		if v == 2:
+			# 1 -> 2: the standard note speed went from 1.0 to 1.6. A profile still on the old
+			# standard moves to the new one; a speed the player chose by hand is kept.
+			var s = cfg.get_value("settings", "values", {})
+			if s is Dictionary and s.has("note_speed") and is_equal_approx(float(s["note_speed"]), 1.0):
+				s["note_speed"] = STANDARD_SPEED
+				cfg.set_value("settings", "values", s)
 
 
 func _leaderboards() -> Node:

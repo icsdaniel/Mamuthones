@@ -218,10 +218,14 @@ func test_stray_tap_breaks_the_combo() -> void:
 
 
 func test_mashing_locks_the_buttons() -> void:
-	var s := Session.new(make(steps(30, 1)), "easy")
+	# Beats 0-4, then nothing until beat 10: mashing in the gap locks the buttons.
+	var gap := []
+	for b in [0, 1, 2, 3, 4, 10, 11]:
+		gap.append({"b": b, "k": "step", "lane": 1})
+	var s := Session.new(make(gap), "easy")
 	var locks := []
 	s.input_locked.connect(func(until): locks.append(until))
-	var t0 := _bt(4) + 0.25   # between beats 4 and 5, nothing due
+	var t0 := _bt(5) + 0.25   # after beat 4, nothing due until beat 10
 	check_eq(s.tap(0, t0, 0).judgement, "stray", "first random tap")
 	check_eq(s.tap(2, t0 + 0.05, 1).judgement, "stray", "second")
 	check(not s.is_locked(t0 + 0.06), "not locked yet")
@@ -230,16 +234,20 @@ func test_mashing_locks_the_buttons() -> void:
 	check_eq(locks.size(), 1, "input_locked fired once")
 	check_near(s.lock_left(t0 + 0.1), Session.LOCK_TIME, 1e-6, "for LOCK_TIME")
 	check_eq(s.stats.locks, 1, "counted")
-	var due := s.notes[5]
-	check(due.t < t0 + 0.1 + Session.LOCK_TIME, "a note comes during the lock")
-	check_eq(s.tap(1, due.t, 3).judgement, "locked", "a press on time while locked judges nothing")
-	check(not due.done, "the note is still open")
-	s.update(due.t + 0.2)
-	check_eq(due.judgement, "miss", "and is missed")
+	check_eq(s.tap(1, t0 + 0.3, 3).judgement, "locked", "a press while locked judges nothing")
 	var after := t0 + 0.1 + Session.LOCK_TIME + 0.01
 	check(not s.is_locked(after), "the lock ends")
-	var n := s.notes[6]
+	var n := s.notes[5]
 	check_eq(s.tap(1, n.t, 4).judgement, "perfect", "and taps count again")
+	# The lock never falls where it would cost a note (Daniele, 2026-10-19: in crowded runs one slip
+	# cascaded into the next notes): the same mashing just before a note is due locks nothing.
+	var r := Session.new(make(steps(30, 1)), "easy")
+	var r0 := _bt(4) + 0.25
+	for i in 4:
+		r.tap(0 if i % 2 == 0 else 2, r0 + 0.04 * i, i)
+	check_eq(r.stats.locks, 0, "no lock with a note due")
+	var due := r.notes[5]
+	check_eq(r.tap(1, due.t, 9).judgement, "perfect", "the next note is still playable")
 	# Slow random taps never lock.
 	var q := Session.new(make(steps(30, 1)), "easy")
 	for i in 6:
@@ -247,14 +255,18 @@ func test_mashing_locks_the_buttons() -> void:
 	check_eq(q.stats.stray, 6, "six strays")
 	check_eq(q.stats.locks, 0, "a stray a beat apart never locks")
 	# Wrong steps count toward the lock too, when the buttons are pressed more often than the notes
-	# come: here two buttons for every note.
+	# come (here two buttons for every note), once no note is left due.
 	var chart := [{"b": 0, "k": "step", "lane": 0}, {"b": 0.25, "k": "step", "lane": 0}, {"b": 0.5, "k": "step", "lane": 0}, {"b": 8, "k": "step", "lane": 0}]
 	var w := Session.new(make(chart), "easy")
 	for i in 3:
 		w.tap(2, _bt(0.25 * i), 10 + i)
 		w.tap(1, _bt(0.25 * i) + 0.01, 20 + i)
 	check(w.stats.wrong >= 3, "wrong steps (%d)" % w.stats.wrong)
-	check(w.is_locked(_bt(0.5) + 0.02), "lock the buttons too")
+	check(not w.is_locked(_bt(0.5) + 0.02), "but not while their note is still due")
+	w.tap(2, _bt(1.5), 30)
+	w.tap(1, _bt(1.5) + 0.01, 31)
+	w.tap(2, _bt(1.5) + 0.02, 32)
+	check(w.is_locked(_bt(1.5) + 0.03), "mashing on after them locks the buttons")
 	# One wrong press per note is a player on the wrong button, not mashing: no lock.
 	var v := Session.new(make(chart), "easy")
 	for i in 3:
@@ -297,6 +309,24 @@ func test_stray_exemptions() -> void:
 	var sl := Session.new(make([{"b": 0, "k": "step", "lane": 1}, {"b": 4, "k": "step", "lane": 1}, {"b": 8, "k": "step", "lane": 1}]), "easy", {"slam": true})
 	check_eq(sl.tap(0, _bt(2) + 0.25, 0).judgement, "", "an outer press in slam is a bell press")
 	check_eq(sl.tap(1, _bt(2) + 0.25, 1).judgement, "stray", "the middle can stray")
+
+
+func test_late_thumb_after_a_miss_is_free() -> void:
+	# Lane 0 due at beat 0, lane 2 at beat 1 (0.5 s later). The lane-0 note is missed; the thumb that
+	# lands on it 0.2 s after its time, while lane 2's note is the one now due, costs nothing more
+	# (Daniele, 2026-10-25: after a miss or a late tap everything felt like it dragged).
+	var s := Session.new(make([{"b": 0, "k": "step", "lane": 0}, {"b": 1, "k": "step", "lane": 2}, {"b": 4, "k": "step", "lane": 0}]), "easy")
+	s.update(_bt(0) + 0.3)
+	check_eq(s.stats.miss, 1, "the first note was missed")
+	var r := s.tap(0, _bt(0) + 0.2 + 0.1, 0)
+	check_eq(r.judgement, "", "a late thumb on the missed lane's button is free")
+	check_eq(s.stats.wrong, 0, "no wrong step")
+	check_eq(s.stats.stray, 0, "no stray")
+	# Well after the miss, with lane 2's note due, the same button is a wrong step again.
+	var s2 := Session.new(make([{"b": 0, "k": "step", "lane": 0}, {"b": 1, "k": "step", "lane": 2}, {"b": 4, "k": "step", "lane": 0}]), "easy")
+	s2.update(_bt(0) + 0.3)
+	check_eq(s2.tap(0, _bt(0) + Session.MISS_FOLLOW + 0.15, 1).judgement, "wrong", "past the follow time it is judged as before")
+	check_eq(s.tap(2, _bt(1), 2).judgement, "perfect", "the next note still counts")
 
 
 func test_tap_with_own_note_coming_is_stray() -> void:
@@ -392,7 +422,9 @@ func test_hold_kept_and_let_go() -> void:
 	s.release(_bt(20) - 0.2, 9)
 	check_eq(ends[2], [2, false], "released 200 ms early is let go")
 	check_eq(s.stats.let_go, 1, "let go counted")
-	check_eq(s.combo, 0, "letting go breaks the combo")
+	check_eq(s.combo, 3, "letting go keeps the combo (Daniele, 2026-10-19)")
+	check_eq(s.health, Session.MAX_HEALTH, "and costs no health")
+	check(s.full_combo(), "nor the full combo")
 	check_eq(s.score, 450 + 450 + 300, "no bonus when let go")
 	check_eq(s.stats.held, 2, "two kept")
 
@@ -589,14 +621,14 @@ func test_still_bonus_per_beat_and_hit_cap() -> void:
 	check_near(l.still_beats(l.notes[3]), 6.0, 1e-9, "still_beats")
 
 
-func test_let_go_costs_one_unison_level() -> void:
+func test_let_go_keeps_the_unison_level() -> void:
 	var s := Session.new(make(steps(24) + [{"b": 24, "k": "hold", "lane": 1, "len": 4}]), "easy")
 	for i in 24:
 		s.tap(1, _bt(i), 0)
 	s.tap(1, _bt(24), 5)
 	check_eq(s.unison_level, 2, "×2 before")
 	s.release(_bt(25), 5)
-	check_eq(s.unison_level, 1, "letting go drops one level")
+	check_eq(s.unison_level, 2, "letting go only loses the hold's bonus")
 
 
 func test_note_lock_in_fast_streams() -> void:

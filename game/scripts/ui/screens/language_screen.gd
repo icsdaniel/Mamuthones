@@ -9,7 +9,7 @@ func build() -> void:
 	var logo := Logo.new()
 	logo.name = "Logo"
 	logo.show_title = true
-	logo.subtitle = tr("app_title")
+	logo.subtitle = ""   # the name stands on its own (2026-10-28)
 	logo.custom_minimum_size = Vector2(0, 700)   # x3 on the base screen
 	box.add_child(logo)
 	UIKit.spacer(box, 24)

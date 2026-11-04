@@ -3,7 +3,8 @@ extends TestCase
 ## English one where a translation is expected.
 
 const KEEP_SAME := ["lang_name_en", "lang_name_it", "date_fmt",
-	"ms_signed", "lat_count", "boards_online", "unlock_remix", "section_intro"]
+	"ms_signed", "lat_count", "boards_online", "unlock_remix", "section_intro",
+	"app_title"]   # the game's name, Sardinian in both
 
 
 func _table() -> Dictionary:

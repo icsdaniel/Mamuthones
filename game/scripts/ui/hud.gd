@@ -53,6 +53,10 @@ var _combo: Label
 var _combo_word: Label
 var _combo_shown := 0
 var _combo_pop := 0.0
+var _sparks: Sparks          ## juice: milestone rings, the multiplier's sparks, a lost combo's ash
+var _gold_at := -9.0         ## _clock of the last combo milestone: the number burns gold a moment
+var _ember_t := 0.0          ## at the top multiplier the badge sheds embers; time to the next
+const MILESTONE_GLOW := 0.9  ## seconds a milestone's gold lasts on the combo number
 
 
 func _init() -> void:
@@ -101,6 +105,7 @@ func setup(p_session: Session, p_ghost: Ghost) -> void:
 	_score.name = "Score"
 	_score.text = "0"
 	pstyle(_score, 42, SCORE_INK)
+	PxType.label(_score, "num_gold")
 	_score.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	_score.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
 	_score.mouse_filter = Control.MOUSE_FILTER_IGNORE
@@ -122,6 +127,7 @@ func setup(p_session: Session, p_ghost: Ghost) -> void:
 	_unison = Label.new()
 	_unison.name = "Unison"
 	pstyle(_unison, 60, GOLD_INK, true, 8)
+	PxType.label(_unison, "num_white")
 	_unison.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	_unison.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
 	_unison.mouse_filter = Control.MOUSE_FILTER_IGNORE
@@ -142,6 +148,7 @@ func setup(p_session: Session, p_ghost: Ghost) -> void:
 	_combo = Label.new()
 	_combo.name = "Combo"
 	pstyle(_combo, 36, INK, true, 6)
+	PxType.label(_combo, "num_white")
 	_combo.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	_combo.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	_combo.visible = false
@@ -170,6 +177,11 @@ func setup(p_session: Session, p_ghost: Ghost) -> void:
 	# are still kept up to date (tests read them).
 	_section.visible = false
 	_ghost.visible = false
+	_sparks = Sparks.new()
+	_sparks.name = "Sparks"
+	_sparks.px = PxArt.PX * 2.0   # two art pixels: one reads as dust at phone size
+	_sparks.set_anchors_preset(Control.PRESET_FULL_RECT)
+	add_child(_sparks)
 	resized.connect(_layout)
 	_layout()
 	set_unison(session.unison_level, false)
@@ -246,7 +258,7 @@ func _to_frames(p: Vector2) -> Vector2:
 ## slices: its two ends kept to their shape at the frame's height, its middle stretched between
 ## them. Made once per size at one texel per cell (the HUD is drawn one px per cell), every texel
 ## wholly in or out, so they stay crisp.
-const SLICE := {"hud_plate": 240, "hud_bar": 90}   ## each picture's end width, its own px
+const SLICE := {"hud_plate": 56, "hud_bar": 48, "judge_plate": 56}   ## each picture's end width, its own px (tools/art/chatgpt/cut_sheets.py)
 static var _sliced := {}
 
 
@@ -256,9 +268,9 @@ static func sliced(key: String, cells: Vector2i) -> Texture2D:
 	if _sliced.has(k):
 		return _sliced[k]
 	var tex: Texture2D = null
-	var path := "res://art/ai/%s.png" % key
+	var path := "res://art/ai/%s.webp" % key
 	if ResourceLoader.exists(path):
-		var src := (load(path) as Texture2D).get_image()
+		var src := StreetSkin.ai_image(path)
 		src.decompress()
 		src.convert(Image.FORMAT_RGBA8)
 		var w := src.get_width()
@@ -286,10 +298,30 @@ static func sliced(key: String, cells: Vector2i) -> Texture2D:
 	return tex
 
 
+static var _aspects := {}
+
+
+## Picture key's width over its height (1 when there is none).
+static func _aspect(key: String) -> float:
+	if not _aspects.has(key):
+		var path := "res://art/ai/%s.webp" % key
+		var a := 1.0
+		if ResourceLoader.exists(path):
+			var img := StreetSkin.ai_image(path)
+			if img != null and img.get_height() > 0:
+				a = float(img.get_width()) / img.get_height()
+		_aspects[key] = a
+	return _aspects[key]
+
+
 ## Draws picture `key` over r (base px), snapped to whole cells.
 func _picture(ci: CanvasItem, key: String, r: Rect2, mod := Color.WHITE) -> void:
 	var px := PxArt.PX
 	var cells := Vector2i((r.size / px).round())
+	var asp := _aspect(key)
+	if asp > 0.0:
+		# rounded once: the other side follows from the picture's proportions
+		cells.y = maxi(1, roundi(cells.x / asp))
 	var tex := sliced(key, cells)
 	if tex != null:
 		ci.draw_texture_rect(tex, Rect2(PxArt.snap2(r.position), Vector2(cells) * px), false, mod)
@@ -301,6 +333,9 @@ func _panel(ci: CanvasItem, r: Rect2, glow := 1.0) -> void:
 	# the plate's diamonds stand out past the frame's points, as the drawn ones did
 	var grow := r.size.y * 0.16
 	var rr := r.grow_individual(grow, grow * 0.35, grow, grow * 0.35)
+	# the plate at its own proportions (never stretched: Daniele, 2026-10-26), as wide as its box
+	var ph := rr.size.x / _aspect("hud_plate")
+	rr = Rect2(rr.position.x, rr.get_center().y - ph * 0.5, rr.size.x, ph)
 	_glow_round(ci, rr, glow)
 	_picture(ci, "hud_plate", rr)
 
@@ -406,7 +441,8 @@ func _glow_round(ci: CanvasItem, r: Rect2, glow: float) -> void:
 func _diamond(ci: CanvasItem, at: Vector2, r: float, col := EDGE_HOT) -> void:
 	# Daniele's stud, tinted toward the badge's colour when it is not plain gold
 	var tint := Color.WHITE if col == EDGE_HOT else Color.WHITE.lerp(col, 0.5) * 1.2
-	_picture(ci, "hud_stud", Rect2(at - Vector2(r, r) * 1.25, Vector2(r, r) * 2.5), tint)
+	var sz := Vector2(r * 2.5 * 52.0 / 56.0, r * 2.5)   # its own proportions (cut_sheets.py)
+	_picture(ci, "hud_stud", Rect2(at - sz * 0.5, sz), tint)
 
 
 func _draw_frames() -> void:
@@ -419,8 +455,10 @@ func _draw_frames() -> void:
 	var a := _to_frames(Vector2(line.x + 14.0, line.z))
 	var e := _to_frames(Vector2(line.y - 14.0, line.z))
 	# Daniele's bar, its groove filling with a glowing rod as the song goes on
-	var bh := 21.0
-	var bar := Rect2(Vector2(line.x, line.z - bh * 0.5), Vector2(line.y - line.x, bh))
+	# at its own proportions (never stretched): as long as it is for this height, centred on the line
+	var bh := 24.0
+	var bl := minf(line.y - line.x, bh * _aspect("hud_bar"))
+	var bar := Rect2(Vector2((line.x + line.y - bl) * 0.5, line.z - bh * 0.5), Vector2(bl, bh))
 	_picture(ci, "hud_bar", bar)
 	var px := PxArt.PX
 	var g0 := PxArt.snap2(Vector2(bar.position.x + bh * 0.9, line.z - px))
@@ -469,25 +507,41 @@ func _draw_badge(ci: CanvasItem, b: Array) -> void:
 			var an := TAU * float(i) / n + _clock * 0.6
 			var w := 0.09
 			var col: Color = pal[1] if i % 2 == 0 else pal[0]
-			if lvl >= 5:
-				col = Color.from_hsv(fposmod(float(i) / n + _clock * 0.25, 1.0), 0.75, 1.0)
 			ci.draw_polygon(PackedVector2Array([ctr, ctr + Vector2(cos(an - w), sin(an - w)) * ray_r, ctr + Vector2(cos(an + w), sin(an + w)) * ray_r]),
 				PackedColorArray([Color(col, 0.55), Color(col, 0.0), Color(col, 0.0)]))
 	var hx := PackedVector2Array()
 	for q in [Vector2(0.0, -0.5), Vector2(0.5, -0.24), Vector2(0.5, 0.24), Vector2(0.0, 0.5), Vector2(-0.5, 0.24), Vector2(-0.5, -0.24)]:
 		hx.append(ctr + q * r.size * sc)
-	_shape(ci, hx, 1.0 + 0.8 * float(lvl) + 2.0 * fl + 1.5 * _bounce, pal)
-	if _streak > 0.0:
-		var p0 := _to_frames(hx[4])
-		var p1 := _to_frames(hx[3])
-		var p2 := _to_frames(hx[2])
-		var k := clampf(_streak, 0.0, 1.0) * 2.0
-		var q := p0.lerp(p1, minf(k, 1.0))
-		ci.draw_line(p0, q, pal[1], 5.0)
-		if k > 1.0:
-			ci.draw_line(p1, p1.lerp(p2, k - 1.0), pal[1], 5.0)
-	for p in [hx[0], hx[3]]:
-		_diamond(ci, p, 8.0 * sc, Color.WHITE.lerp(pal[1], 1.0 - fl))
+	var key := _badge_key(lvl)
+	if ResourceLoader.exists("res://art/ai/%s.webp" % key):
+		# Daniele's ChatGPT badge for the tier (x1 dark bronze .. x4 gold and fire), its lettering
+		# taken out: the multiplier is written over it. It takes one of two sizes made before the song
+		# (warm()): its own, and two art px taller on the beat, so it never shimmers. A warm glow round
+		# it, swelling on a gain.
+		var cells := _badge_cells(lvl, _bounce_up())
+		var px := PxArt.PX
+		var at := PxArt.snap2(ctr - Vector2(cells) * px * 0.5)
+		# at 4x the badge is tallest: keep its top one art px inside the screen, never cut at the edge
+		var screen_top := ci.get_global_transform().affine_inverse() * Vector2.ZERO
+		at.y = maxf(at.y, ceilf(screen_top.y / px) * px + px)
+		var br := Rect2(at, Vector2(cells) * px)
+		_glow_round(ci, br, 1.0 + 0.8 * float(lvl) + 2.0 * fl + 1.5 * _bounce)
+		var tex := sliced(key, cells)
+		if tex != null:
+			ci.draw_texture_rect(tex, br, false, Color(1.0 + 0.4 * fl, 1.0 + 0.3 * fl, 1.0 + 0.2 * fl))
+	else:
+		_shape(ci, hx, 1.0 + 0.8 * float(lvl) + 2.0 * fl + 1.5 * _bounce, pal)
+		if _streak > 0.0:
+			var p0 := _to_frames(hx[4])
+			var p1 := _to_frames(hx[3])
+			var p2 := _to_frames(hx[2])
+			var k := clampf(_streak, 0.0, 1.0) * 2.0
+			var q := p0.lerp(p1, minf(k, 1.0))
+			ci.draw_line(p0, q, pal[1], 5.0)
+			if k > 1.0:
+				ci.draw_line(p1, p1.lerp(p2, k - 1.0), pal[1], 5.0)
+		for p in [hx[0], hx[3]]:
+			_diamond(ci, p, 8.0 * sc, Color.WHITE.lerp(pal[1], 1.0 - fl))
 	# the little spurs at its foot (the pixel look's badge stands on its own: they read as stray marks)
 	for sx: float in []:
 		var c := _to_frames(Vector2(ctr.x + sx * (r.size.x * 0.5 * sc + 10.0), ctr.y + r.size.y * 0.5 * sc - 8.0))
@@ -503,31 +557,53 @@ func _tier(level: int) -> Array:
 		[Color("#ff9a32"), Color("#ffd27a"), Color("#7a2e06"), Color("#5a2408"), Color(1.0, 0.5, 0.1), Color("#ffd35a")],
 		[Color("#ffc42a"), Color("#fff0a0"), Color("#8a5200"), Color("#5e3a04"), Color(1.0, 0.75, 0.1), Color("#fff2a8")],
 		[Color("#ff4a24"), Color("#ffb070"), Color("#7a0e06"), Color("#4e0a04"), Color(1.0, 0.3, 0.1), Color("#ffe0b0")],
-		[Color("#d23cff"), Color("#ffa8ff"), Color("#5a0a7a"), Color("#3a0650"), Color(0.8, 0.3, 1.0), Color("#ffe0ff")],
-		[Color("#40c8ff"), Color("#e0ffff"), Color("#0a3a7a"), Color("#062650"), Color(0.3, 0.8, 1.0), Color("#ffffff")],
+		[Color("#ff7018"), Color("#ffd86a"), Color("#7a1c0a"), Color("#4e0a04"), Color(1.0, 0.45, 0.1), Color("#fff4cc")],
+		[Color("#fba832"), Color("#fff4cc"), Color("#c8400c"), Color("#5a0e12"), Color(1.0, 0.65, 0.2), Color("#fff4cc")],
 	]
-	var t: Array = tiers[clampi(level, 0, tiers.size() - 1)].duplicate()
-	if level >= 5:
-		var hue := fposmod(_clock * 0.25, 1.0)
-		t[0] = Color.from_hsv(hue, 0.8, 1.0)
-		t[1] = Color.from_hsv(hue, 0.3, 1.0)
-		t[2] = Color.from_hsv(hue, 0.9, 0.45)
-		t[4] = Color.from_hsv(hue, 0.7, 1.0)
-	return t
+	# violet, blue and the rainbow are the notes' colours: the HUD only burns hotter (Daniele, 2026-10)
+	return tiers[clampi(level, 0, tiers.size() - 1)].duplicate()
 
 
-## The badge's size now: bigger at each unison level, and a bounce on every beat (smaller with
-## reduced motion).
+## The badge's size now: bigger at each unison level, and a step up on every beat (none with
+## reduced motion). It steps between two whole sizes, never in between.
 func badge_scale() -> float:
 	var lvl := session.unison_level if session != null else 0
+	if ResourceLoader.exists("res://art/ai/%s.webp" % _badge_key(lvl)):
+		return float(_badge_cells(lvl, _bounce_up()).y) / float(_badge_cells(0, false).y)
 	return (1.0 + 0.07 * float(lvl)) * (1.0 + (0.05 + 0.025 * float(lvl)) * _bounce)
+
+
+func _bounce_up() -> bool:
+	return _bounce > 0.45
+
+
+func _badge_key(lvl: int) -> String:
+	return "hud_badge_%d" % (FireTiers.tier_of(Session.UNISON_MULTS[clampi(lvl, 0, Session.UNISON_MULTS.size() - 1)]) + 1)
+
+
+## The badge picture's size in cells at unison level lvl (up: on the beat, two art px taller).
+func _badge_cells(lvl: int, up: bool) -> Vector2i:
+	var hc := roundi(BADGE.y * 1.12 * (1.0 + 0.07 * float(lvl)) / PxArt.PX) + (2 if up else 0)
+	return Vector2i(roundi(hc * 36.0 / 41.0), hc)
+
+
+## Makes, before the song, every picture the HUD would otherwise make the first time it is needed
+## mid-song: the badge at every level in its two sizes, the studs, the hearts.
+func warm() -> void:
+	for lvl in Session.UNISON_MULTS.size():
+		for up in [false, true]:
+			sliced(_badge_key(lvl), _badge_cells(lvl, up))
+	for r in [8.0]:
+		var sw := roundi(r * 2.5 * 52.0 / 56.0 / PxArt.PX)
+		sliced("hud_stud", Vector2i(sw, roundi(sw / _aspect("hud_stud"))))
+	HealthPips.warm()
 
 
 ## The pause button: two bars in a small carved hexagon.
 func _draw_pause() -> void:
 	var down := _pause.button_pressed or _pause.is_hovered()
 	var c := _pause.size * 0.5 + (Vector2(0, DEPTH * 0.5) if down else Vector2.ZERO)
-	var sz := Vector2(48.0, 53.0)
+	var sz := Vector2(51.0, 51.0)   # square, as drawn
 	_picture(_pause, "hud_pause", Rect2(c - sz * 0.5, sz), Color(0.8, 0.8, 0.8) if down else Color.WHITE)
 
 
@@ -558,9 +634,21 @@ func tick(t: float, delta: float) -> void:
 		_combo.text = str(_combo_shown)
 	_combo.visible = _combo_shown > 0
 	_combo_word.visible = _combo.visible
-	_combo_pop = move_toward(_combo_pop, 0.0, delta * 1.5)
+	_combo_pop = move_toward(_combo_pop, 0.0, delta * (1.5 if _combo_pop < 0.3 else 3.0))
 	_combo.pivot_offset = _combo.size * 0.5
 	_combo.scale = Vector2.ONE * (1.0 + _combo_pop)
+	# a milestone burns the number gold, cooling back to white
+	var g := clampf(1.0 - (_clock - _gold_at) / MILESTONE_GLOW, 0.0, 1.0)
+	_combo.modulate = Color.WHITE.lerp(Color(1.0, 0.82, 0.3), g)
+	_combo_word.modulate = Color.WHITE.lerp(Color(1.3, 1.1, 0.6), g)
+	# the top multiplier: the badge sheds embers that float up off it
+	if session.unison_level >= Session.UNISON_MULTS.size() - 1 and not UIKit.reduced_motion():
+		_ember_t -= delta
+		if _ember_t <= 0.0:
+			_ember_t = randf_range(0.05, 0.12)
+			var b: Rect2 = _boxes()[1]
+			var at := b.get_center() + Vector2(randf_range(-0.4, 0.4) * b.size.x, b.size.y * randf_range(-0.1, 0.3))
+			_sparks.burst(at, 1, Sparks.FIRE, 40.0, 0.9, Vector2.UP, 0.8, -60.0)
 	_streak = float(session.unison_streak) / float(Session.UNISON_STEP) if session.unison_level < 5 else 1.0
 	# the badge bounces on the beat: a quick swell, easing back before the next one
 	_bounce = 0.0 if beat < 0.0 else pow(1.0 - fposmod(beat, 1.0), 3.0) * (0.35 if UIKit.reduced_motion() else 1.0)
@@ -568,7 +656,7 @@ func tick(t: float, delta: float) -> void:
 	_unison.pivot_offset = _unison.size * 0.5
 	if not _unison_tweening():
 		_unison.scale = Vector2(bs, bs)
-	_unison.add_theme_color_override("font_color", _tier(session.unison_level)[5])
+	_unison.add_theme_color_override("font_color", Color.WHITE)
 	_meter.fill = _streak
 	_bar.progress = session.progress(t)
 	_progress = _bar.progress
@@ -598,6 +686,52 @@ func set_unison(level: int, animate := true) -> void:
 			tw.tween_property(_unison, "scale", Vector2.ONE * badge_scale(), 0.22).set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT)
 		tw.parallel().tween_property(_unison, "modulate", Color.WHITE, 0.3)
 		_meter.flare()
+
+
+## A combo milestone (25, 50, 100, ...): the number jumps and burns gold, and a ring of gold sparks
+## runs out from it with a spray thrown up and falling away. tier 1..3 makes it bigger. It all
+## happens under the HUD's frames, over the far end of the road, where no note is yet.
+func milestone(tier: int) -> void:
+	_gold_at = _clock
+	if UIKit.reduced_motion():
+		return
+	_combo_pop = 0.55 + 0.2 * float(tier)
+	var at := _combo.position + _combo.size * 0.5
+	_sparks.ring(at, 12 + 6 * tier, 220.0 + 80.0 * float(tier))
+	_sparks.burst(at, 10 + 8 * tier, Sparks.GOLD, 260.0 + 60.0 * float(tier), 0.7, Vector2.UP, PI * 1.2, 700.0)
+
+
+## A combo of `n` lost: the number drops out of its place in red and falls away as ash.
+func combo_broken(n: int) -> void:
+	if UIKit.animations_off() or _combo == null:
+		return
+	var ghost_l := _combo.duplicate() as Label
+	ghost_l.text = str(n)
+	ghost_l.visible = true
+	ghost_l.modulate = Color(1.0, 0.35, 0.3)
+	ghost_l.scale = Vector2.ONE
+	add_child(ghost_l)
+	move_child(ghost_l, _sparks.get_index())
+	var at := _combo.position + _combo.size * 0.5
+	_sparks.burst(at, 14, Sparks.ASH, 160.0, 0.6, Vector2.DOWN, PI, 500.0)
+	var tw := ghost_l.create_tween()
+	tw.set_parallel(true)
+	tw.tween_property(ghost_l, "position:y", ghost_l.position.y + 46.0, 0.45).set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_IN)
+	tw.tween_property(ghost_l, "rotation", deg_to_rad(randf_range(-14.0, 14.0)), 0.45)
+	tw.tween_property(ghost_l, "modulate:a", 0.0, 0.45).set_delay(0.1)
+	tw.chain().tween_callback(ghost_l.queue_free)
+
+
+## The multiplier rose (top: it reached the highest): sparks fly off the badge, a fountain at the top.
+func unison_rose(top: bool) -> void:
+	var b: Rect2 = _boxes()[1]
+	var at := b.get_center()
+	_sparks.ring(at, 14 if top else 10, 260.0 if top else 200.0, Sparks.FIRE, 0.4)
+	_sparks.burst(at, 30 if top else 12, Sparks.FIRE, 300.0 if top else 220.0, 0.8, Vector2.UP, PI * 1.4, 600.0)
+
+
+func sparks_alive() -> int:
+	return _sparks.alive() if _sparks != null else 0
 
 
 func _unison_tweening() -> bool:

@@ -1,0 +1,14 @@
+[remap]
+
+importer="image"
+type="Image"
+uid="uid://b58lnwkuoojxg"
+path="res://.godot/imported/heart_full.webp-283b0032a13c88fe1936e62bd848c7a9.image"
+
+[deps]
+
+source_file="res://art/ai/heart_full.webp"
+dest_files=["res://.godot/imported/heart_full.webp-283b0032a13c88fe1936e62bd848c7a9.image"]
+
+[params]
+

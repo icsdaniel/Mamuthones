@@ -61,6 +61,7 @@ func build() -> void:
 	_glow.offset_top = -36
 	_glow.offset_bottom = 36
 	_glow.modulate.a = 0.0
+	_glow.visible = false   # no halo art behind the grade
 	holder.add_child(_glow)
 	var top := HBoxContainer.new()
 	top.alignment = BoxContainer.ALIGNMENT_CENTER
@@ -73,6 +74,24 @@ func build() -> void:
 	grade.stamped.connect(func() -> void:
 		grade_stamped.emit(grade.rank)
 		_flare(0.5 + 0.1 * maxi(grade.rank - Session.RANK_B, 0)))
+	# Juice (2026-10-31): the stamp is heard (heavier and ringing for better grades), throws sparks
+	# and knocks the row it lands in; the count ticks climb; a new best gets its fanfare.
+	_sparks = Sparks.new()
+	_sparks.name = "Sparks"
+	_sparks.top_level = true
+	_sparks.px = 9.0
+	_sparks.z_index = 50
+	_sparks.set_anchors_preset(Control.PRESET_FULL_RECT)
+	add_child(_sparks)
+	grade_stamped.connect(func(rank: int) -> void:
+		Sound.juice("stamp_%d" % stamp_tier(rank))
+		var at := grade.get_global_rect().get_center()
+		var tier := stamp_tier(rank)
+		_sparks.ring(at, 10 + 6 * tier, 260.0 + 60.0 * tier, Sparks.GOLD if tier >= 2 else Sparks.ASH)
+		_sparks.burst(at, 6 + 10 * tier, Sparks.GOLD if tier >= 2 else Sparks.ASH, 300.0 + 80.0 * tier, 0.8, Vector2.UP, PI * 1.5, 900.0)
+		_knock(stage, 4.0 + 3.0 * tier))
+	count_tick.connect(func(v: int) -> void:
+		Sound.juice("count_tick", 0.85 + 0.55 * float(v) / maxf(float(session.score), 1.0)))
 	grade.animate(0.35)
 	var score := UIKit.label(UIKit.fmt_score(session.score), "BigNumberLabel", false, HORIZONTAL_ALIGNMENT_CENTER)
 	score.name = "Score"
@@ -132,6 +151,17 @@ func build() -> void:
 	if session.slam:
 		box.add_child(UIKit.label(tr("res_slam_note"), UIKit.CAPTION, true, HORIZONTAL_ALIGNMENT_CENTER))
 	box.add_child(UIKit.label(tr("res_formula"), UIKit.CAPTION))
+	if box.has_node("BestLine"):
+		var bl2: Control = box.get_node("BestLine")
+		best_revealed.connect(func(new_best: bool) -> void:
+			if not new_best:
+				return
+			Sound.juice("new_best")
+			var r := bl2.get_global_rect()
+			for k in 3:
+				# From the line's ends and above it, so no ember lands on the words.
+				_sparks.burst(Vector2(r.position.x + r.size.x * [0.04, 0.5, 0.96][k], r.position.y - (40.0 if k == 1 else 0.0)), 12, Sparks.FIRE,
+					380.0, 1.0, Vector2.UP, 0.9, 700.0))
 
 	var again := UIKit.button(tr("res_again"), func() -> void: app.replace("play", play_args), UIKit.PRIMARY)
 	again.name = "Again"
@@ -147,11 +177,15 @@ func build() -> void:
 	foot.add_child(row)
 	again.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	row.add_child(again)
-	var leave := UIKit.button(tr("res_done"), _leave, UIKit.QUIET)
-	leave.name = "Done"
-	leave.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	row.add_child(leave)
-	Sound.ui("result")
+	# The top bar already has Back: the bottom row's way out only shows when there is no next stop,
+	# and then it says where it goes (two "Back" buttons read as a mistake; outside review).
+	if next == null:
+		var leave := UIKit.button(tr("res_done"), _leave, UIKit.QUIET)
+		leave.name = "Done"
+		leave.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		row.add_child(leave)
+	if session.grade_rank() < 0:
+		Sound.ui("result")   # no grade to stamp (its sound is the stamp's)
 
 
 static func grade_key(acc: float) -> String:
@@ -219,10 +253,11 @@ static func still_share(net: float, score: int) -> int:
 	return maxi(1, roundi(net / float(score) * 100.0))
 
 
-## "Unison peak ×4 · 38 s at ×4", or just the peak when the top was never reached.
+## "Top unison 4x, held for 0:38", or just the peak when the top was never reached.
 static func unison_headline(peak: float, secs_at_top: float, top: float) -> String:
 	if peak >= top and secs_at_top >= 0.5:
-		return UIKit.tr_("res_unison_head_top") % [Hud._mult_text(peak), UIKit.fmt_dec(secs_at_top, 0), Hud._mult_text(top)]
+		var secs := int(round(secs_at_top))
+		return UIKit.tr_("res_unison_head_top") % [Hud._mult_text(peak), "%d:%02d" % [secs / 60, secs % 60]]
 	return UIKit.tr_("res_unison_head") % Hud._mult_text(peak)
 
 
@@ -330,7 +365,7 @@ const TIMING_FIX_MIN := 0.015
 
 func _unlocks(box: Container) -> void:
 	var list: Array = record.get("unlocked", [])
-	var carving := int(record.get("carving_gained", 0))
+	var carving := 0   # (no carving points to show: the Workshop is gone)
 	var closest := closest_unlock(session)
 	if list.is_empty() and carving <= 0:
 		if closest != "":
@@ -410,6 +445,25 @@ static func tip_text(s: Session) -> String:
 
 var _glow: TextureRect
 var _ticks := 0
+var _sparks: Sparks
+
+
+## The stamp's weight for a grade rank: 1 up to C, 2 for B and A, 3 for S and S+.
+static func stamp_tier(rank: int) -> int:
+	if rank >= Session.RANK_S:
+		return 3
+	if rank >= Session.RANK_B:
+		return 2
+	return 1
+
+
+## Knocks a row down by `px` and springs it back (none with reduced motion).
+func _knock(c: Control, px: float) -> void:
+	if UIKit.reduced_motion() or c == null:
+		return
+	var tw := c.create_tween()
+	tw.tween_property(c, "position:y", c.position.y + px, 0.04)
+	tw.tween_property(c, "position:y", c.position.y, 0.22).set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT)
 
 
 ## The score counts up in about 24 audible ticks, then lands with a flare of the glow.

@@ -30,17 +30,21 @@ const K_ROPE := [Color("#f0c878"), Color("#c0842c"), Color("#5e3810"), Color("#f
 const K_UP := [Color("#ff9c8c"), Color("#c8282a"), Color("#5e0c10"), Color("#ff5040")]
 const K_OFF := [Color("#d8b4ff"), Color("#8a3fd8"), Color("#461a7a"), Color("#b070ff")]   ## the pixel look's off-beat step
 const K_SIX := [Color("#ffffff"), Color("#d2d8e8"), Color("#6c7490"), Color("#eef2ff")]   ## ... a sixteenth (Expert): silver
-const K_CALL := [Color("#ffb0d8"), Color("#e0408c"), Color("#7a1446"), Color("#ff70b0")]  ## ... and its call
+const K_FREE := [Color("#c4fff4"), Color("#14c8b0"), Color("#07625a"), Color("#30f0d8")]   ## ... an off-grid note (between the sixteenths): teal
+const K_CALL := [Color("#ffb0a0"), Color("#e0242a"), Color("#7a1c0a"), Color("#ff5a42")]  ## ... and its call: a true red (pink read as the off-beat's violet)
 const K_DOWN := [Color("#a4b6ff"), Color("#3450c0"), Color("#141e5e"), Color("#6080ff")]
 const DISC_R := 0.4                  ## a pintadera's radius, in lane widths
 const OFF_R := 0.3                   ## ... an off-beat step's or a call's
 const STOMP_R := 0.48                ## ... a stomp's
+const SIX_SCALE := 0.8               ## a sixteenth's coin, of a step's (the pictures)
 const DISC_H := 0.1                  ## how thick a disc stands, in lane widths
 const FORE := 0.42                   ## how much the road's depth is foreshortened on screen
 const SIDES := 24                    ## a disc's facets round its edge
 const ROPE_W := 0.2                  ## the rope's width, in lane widths
-const ROPE_PIC_W := 18                ## cells across the rope's picture is shrunk to (the pixel look)
+const ROPE_PIC_W := 16                ## cells across the rope's picture is shrunk to (the pixel look)
 const STRAP_D := 0.42                ## the bell strap's depth along the road, in lane widths
+const BAR_ARROW := 0.3               ## a strap's arrow, half its width, in lane widths (the review of 2026-10-28: big enough to read far up the road)
+const BAR_BELL := 0.4                ## a strap's cowbell's height, in lane widths
 ## Bursts and sparks are drawn as opaque pixel shapes (no soft glows or fades, which turn to mud on the
 ## pixel grid): flashes, stamped rings and square embers.
 
@@ -192,19 +196,38 @@ static var _ai_sized := {}
 static var _ai_mips := {}
 
 
+## One of Daniele's pictures in game/art/ai as an Image of its own (safe to change). They are imported
+## as images, not textures: they are only ever shrunk on the CPU, so none is sent to the GPU (a texture
+## had to be read back from it, and took video memory for the whole song).
+static func ai_image(path: String) -> Image:
+	var r: Resource = load(path)
+	if r is Image:
+		return (r as Image).duplicate() as Image
+	if r is Texture2D:
+		return (r as Texture2D).get_image()
+	return null
+
+
 static func ai_tex(key: String, size: Vector2i) -> Texture2D:
 	if not _ai.has(key):
 		# "<name>!flip": the picture upside down; "<name>!mirror": left for right
-		var path := "res://art/ai/%s.png" % key.trim_suffix("!flip").trim_suffix("!mirror")
+		var path := "res://art/ai/%s.webp" % key.trim_suffix("!flip").trim_suffix("!mirror").trim_suffix("!white")
 		var img: Image = null
 		if ResourceLoader.exists(path):
-			img = (load(path) as Texture2D).get_image()
+			img = ai_image(path)
 			if img != null:
 				img.decompress()
 				if key.ends_with("!flip"):
 					img.flip_y()
 				elif key.ends_with("!mirror"):
 					img.flip_x()
+				elif key.ends_with("!white"):
+					# its silhouette in white, for a glow tinted by modulate
+					img.convert(Image.FORMAT_RGBA8)
+					var d := img.get_data()
+					for i in range(0, d.size(), 4):
+						d[i] = 255; d[i + 1] = 255; d[i + 2] = 255
+					img.set_data(img.get_width(), img.get_height(), false, Image.FORMAT_RGBA8, d)
 		_ai[key] = img if img != null and not img.is_empty() else null
 		if _ai[key] != null:
 			var mips: Array[Image] = [img]
@@ -242,10 +265,12 @@ static func warm(lv: LaneView, field: Rect2) -> void:
 	if ai_tex("bar_up", Vector2i.ONE) == null:
 		return
 	field.position = Vector2.ZERO
+	for k in ["bar_arrow", "bar_arrow!flip", "bar_bell", "bar_up", "bar_down"]:
+		ai_aspect(k)
 	# from where bars come into view to just past the hit line (a missed bar sweeping on past it,
 	# bigger, can still meet a new size)
 	var y := -field.size.y * 0.1
-	var end := LaneSkin.hit_line_y(field) + field.size.y * 0.03
+	var end := LaneSkin.hit_line_y(field) + field.size.y * 0.1
 	while y < end:
 		var b := _bell_size(lv, field, y)
 		if b.lw >= 2.0:
@@ -255,14 +280,16 @@ static func warm(lv: LaneView, field: Rect2) -> void:
 				ai_tex("bar_bell", b.bell)
 				ai_tex("bar_arrow", b.arrow)
 				ai_tex("bar_arrow!flip", b.arrow)
-		y += 1.0
+		y += 0.5
 	ai_tex("bar_bell", Vector2i.ONE)
 	# a bell rung on time: its cowbells thrown off the strap (bell_strike), at each size a strike has
 	var lw: float = lv.road_scale(LaneSkin.hit_line_y(field)) * _lane(field)
 	for q: float in [1.0, 0.8]:
 		for chain in 6:
-			var bs := lw * 0.42 * q * (1.0 + 0.07 * float(chain))
-			ai_tex("bar_bell", ai_cells(Vector2(-bs * 0.42, -bs * 1.2), Vector2(bs * 0.42, 0.0)))
+			var bs := lw * 0.36 * q * (1.0 + 0.07 * float(chain))
+			for key in ["bar_bell", "bar_bell_l", "bar_bell_r"]:
+				if ai_tex(key, Vector2i.ONE) != null:
+					ai_tex(key, ai_fit_cells(key, Vector2(-bs * 0.42, -bs * 1.2), Vector2(bs * 0.42, 0.0)))
 	# the hit rings burning gold or red, at the size the grey ones are drawn
 	for k: String in _ai_sized.keys():
 		if k.begins_with("ring_idle_"):
@@ -281,20 +308,22 @@ static func _bell_size(lv: LaneView, field: Rect2, y: float) -> Dictionary:
 	var f := _frame3(lv, field, (x0 + x1) * 0.5, y, hw, STRAP_D * lw * FORE)
 	var h := DISC_H * 0.7
 	var quad := PackedVector2Array([f.call(Vector3(-1, h, -1)), f.call(Vector3(1, h, -1)), f.call(Vector3(1, 0, 1)), f.call(Vector3(-1, 0, 1))])
-	var s := lw * 0.34
-	var a := lw * 0.25
-	var hh := lw * 0.23
+	var s := lw * BAR_BELL
+	var a := lw * BAR_ARROW
+	var hh := lw * BAR_ARROW
 	return {"lw": lw, "cells": bar_cells(quad),
-		"bell": ai_cells(Vector2(-s * 0.35, -s), Vector2(s * 0.35, 0.0)),
-		"arrow": ai_cells(Vector2(-a, -hh * 1.4), Vector2(a, hh * 0.4))}
+		"bell": ai_fit_cells("bar_bell", Vector2(-s * 0.35, -s), Vector2(s * 0.35, 0.0)),
+		"arrow": ai_fit_cells("bar_arrow", Vector2(-a, -hh * 1.4), Vector2(a, hh * 0.4))}
 
 
-## The beam's picture size for its quad on screen: few sizes (a beam slides down every frame), its
-## width in steps of 8 cells.
+## The beam's picture size for its quad on screen: its width in steps of 2 cells, one a side (2026-10-31: in steps of 8
+## cells it jumped 24 px wider at a time as it came down, off its bells and arrows, which read as a
+## glitch; every size is made before the song by warm()).
 static func bar_cells(quad: PackedVector2Array) -> Vector2i:
 	var w := quad[1].x - quad[0].x
-	var tall := quad[2].y - quad[1].y
-	return Vector2i(maxi(8, roundi(w / PxArt.PX / 8.0) * 8), maxi(3, roundi(tall / PxArt.PX)))
+	var cw := maxi(8, roundi(w / PxArt.PX / 2.0) * 2)
+	var asp := ai_aspect("bar_up")
+	return Vector2i(cw, maxi(2, roundi(cw / asp))) if asp > 0.0 else Vector2i(cw, maxi(3, roundi((quad[2].y - quad[1].y) / PxArt.PX)))
 
 
 ## The pixel look's note from its picture: the picture stretched over the disc it stands for (r lane
@@ -310,6 +339,39 @@ static func ai_disc(lv, field: Rect2, cx: float, y: float, r: float, key: String
 	var f := _frame3(lv, field, cx, y, r * lane, 2.0 * r * lw * FORE)
 	if alpha <= 0.01 or lw < 2.0:
 		return true
+	var box := _fit(key, _disc_box(f, h))
+	var lo: Vector2 = box[0]
+	var hi: Vector2 = box[1]
+	if paint_glow:
+		disc_glow(lv, f.call(Vector3.ZERO), r * lw, K_STEP if key == "note_step" else K_HOLD, alpha, glow)
+	ai_draw(lv, key, lo, hi, Color(1.0, 1.0, 1.0, alpha))
+	return true
+
+
+## The box lo..hi narrowed to picture key's own proportions: as wide, its height from the picture,
+## about the same middle (Daniele, 2026-10-26: the art is never stretched; the coins are drawn in
+## their own perspective, not squashed flat to the road's).
+static func _fit(key: String, box: Array) -> Array:
+	var asp := ai_aspect(key)
+	if asp <= 0.0:
+		return box
+	var lo: Vector2 = box[0]
+	var hi: Vector2 = box[1]
+	var c := (lo + hi) * 0.5
+	var half := Vector2(hi.x - lo.x, (hi.x - lo.x) / asp) * 0.5
+	return [c - half, c + half]
+
+
+## Picture key's width over its height (0 when there is none).
+static func ai_aspect(key: String) -> float:
+	ai_tex(key, Vector2i.ONE)
+	var img: Image = _ai.get(key)
+	if img == null or img.get_height() == 0:
+		return 0.0
+	return float(img.get_width()) / float(img.get_height())
+
+
+static func _disc_box(f: Callable, h: float) -> Array:
 	var lo := Vector2(INF, INF)
 	var hi := -lo
 	for level: float in [0.0, h]:
@@ -318,16 +380,57 @@ static func ai_disc(lv, field: Rect2, cx: float, y: float, r: float, key: String
 			var q: Vector2 = f.call(Vector3(cos(an), level, sin(an)))
 			lo = lo.min(q)
 			hi = hi.max(q)
-	if paint_glow:
-		disc_glow(lv, f.call(Vector3.ZERO), r * lw, K_STEP if key == "note_step" else K_HOLD, alpha, glow)
-	ai_draw(lv, key, lo, hi, Color(1.0, 1.0, 1.0, alpha))
-	return true
+	return [lo, hi]
+
+
+## Shrinks, before the song, every note picture at every size it takes sliding down each lane to a
+## little past the hit line (each size was otherwise made the first time a note reached it, mid-song).
+static func warm_notes(lv, field: Rect2) -> void:
+	# the drawn rings and bursts at every size (a hit's pop asks for a bigger ring mid-song)
+	for g: String in ["rings", "bursts", "chimes"]:
+		var dir := "res://art/pxl/%s/" % g
+		for f in ResourceLoader.list_directory(dir):
+			if f.ends_with(".png"):
+				PxArt.tex(dir + f)
+	if ai_tex("note_step", Vector2i.ONE) == null:
+		return
+	var lane := _lane(field)
+	var kinds := [["note_step", DISC_R, DISC_H], ["note_offbeat", DISC_R, DISC_H], ["note_call", DISC_R, DISC_H],
+		["note_heal", DISC_R, DISC_H], ["note_six", DISC_R * SIX_SCALE, DISC_H], ["note_hold", DISC_R, DISC_H],
+		["note_stomp", STOMP_R, DISC_H * 1.6], ["knot", ROPE_W * 1.35, ROPE_W * 0.9]]
+	var end := LaneSkin.hit_line_y(field) + lane * 1.2
+	# the hold's rope: its one size (and the probes that read its proportions)
+	var rasp := ai_aspect("rope")
+	if rasp > 0.0:
+		ai_tex("rope", Vector2i(ROPE_PIC_W, roundi(ROPE_PIC_W / rasp)))
+	var done := {}
+	for li in 3:
+		var cx := lane * (float(li) + 0.5)
+		var y := 0.0
+		while y < end:
+			var lw: float = lv.road_scale(y) * lane
+			if lw >= 2.0:
+				for k: Array in kinds:
+					var r: float = k[1]
+					var f := _frame3(lv, field, cx, y, r * lane, 2.0 * r * lw * FORE)
+					var box := _fit(k[0], _disc_box(f, k[2]))
+					var cells := ai_cells_keep(k[0], box[0], box[1])
+					var dk := "%s_%d_%d" % [k[0], cells.x, cells.y]
+					if not done.has(dk):
+						done[dk] = true
+						ai_tex(k[0], cells)
+			y += 3.0
 
 
 ## Picture `key` over the box lo..hi in whole cells: shrunk to the cells it covers, drawn one to one.
 static func ai_draw(ci: CanvasItem, key: String, lo: Vector2, hi: Vector2, mod := Color.WHITE) -> void:
+	# never stretched (Daniele, 2026-10-26): the picture at its own proportions inside the box,
+	# across its middle and standing on its floor
 	var px := PxArt.PX
-	var cells := ai_cells(lo, hi)
+	var fit := ai_fit(key, lo, hi)
+	lo = fit[0]
+	hi = fit[1]
+	var cells := ai_cells_keep(key, lo, hi)
 	var tex := ai_tex(key, cells)
 	if tex == null:
 		return
@@ -335,7 +438,79 @@ static func ai_draw(ci: CanvasItem, key: String, lo: Vector2, hi: Vector2, mod :
 	ci.draw_texture_rect(tex, Rect2(at, Vector2(cells) * px), false, mod)
 
 
+## The pxl pictures (tools/art/pxl, drawn pixel by pixel at each size they take) of `key` in
+## res://art/pxl/<group>/: {Vector2i size: path}, read once.
+static var _pxl := {}
+
+
+static func _pxl_sizes(group: String, key: String) -> Dictionary:
+	var k := group + "/" + key
+	if not _pxl.has(k):
+		var found := {}
+		var dir := "res://art/pxl/%s/" % group
+		for f in ResourceLoader.list_directory(dir):
+			if not (f.begins_with(key + "_") and f.ends_with(".png")):
+				continue
+			var wh := f.trim_prefix(key + "_").trim_suffix(".png").split("x")
+			if wh.size() == 2 and wh[0].is_valid_int() and wh[1].is_valid_int():
+				found[Vector2i(int(wh[0]), int(wh[1]))] = dir + f
+		_pxl[k] = found
+	return _pxl[k]
+
+
+## Draws pxl picture `key` (group `group`) at the size nearest the cells between lo and hi, one art px
+## to a cell, centred on the box. False when there is none (the caller falls back).
+static func pxl_draw(ci: CanvasItem, group: String, key: String, lo: Vector2, hi: Vector2, mod := Color.WHITE) -> bool:
+	var sizes := _pxl_sizes(group, key)
+	if sizes.is_empty():
+		return false
+	var want := ai_cells(lo, hi)
+	var best := Vector2i.ZERO
+	for s: Vector2i in sizes:
+		if best == Vector2i.ZERO or (s - want).length_squared() < (best - want).length_squared():
+			best = s
+	var px := PxArt.PX
+	var at := PxArt.snap2((lo + hi) * 0.5 - Vector2(best) * px * 0.5)
+	ci.draw_texture_rect(PxArt.tex(sizes[best]), Rect2(at, Vector2(best) * px), false, mod)
+	return true
+
+
 ## The picture size (cells) ai_draw shows a picture at between lo and hi on screen.
+## The box lo..hi shrunk to picture `key`'s own proportions, centred across and standing on the floor
+## (hi.y); [lo, hi].
+static func ai_fit(key: String, lo: Vector2, hi: Vector2) -> Array:
+	var asp := ai_aspect(key)
+	if asp > 0.0 and hi.y > lo.y and hi.x > lo.x:
+		var w := hi.x - lo.x
+		var h := hi.y - lo.y
+		if w / h > asp:
+			var cx := (lo.x + hi.x) * 0.5
+			lo.x = cx - h * asp * 0.5
+			hi.x = cx + h * asp * 0.5
+		else:
+			lo.y = hi.y - w / asp
+	return [lo, hi]
+
+
+## The cells of picture `key` over the (already fitted) box lo..hi: one side rounded, the other
+## derived from it and the picture's proportions, so a small picture is never squeezed by rounding.
+static func ai_cells_keep(key: String, lo: Vector2, hi: Vector2) -> Vector2i:
+	var asp := ai_aspect(key)
+	var c := ai_cells(lo, hi)
+	if asp <= 0.0:
+		return c
+	if (hi.x - lo.x) / maxf(hi.y - lo.y, 0.001) > asp:
+		c.x = maxi(1, roundi(c.y * asp))
+	else:
+		c.y = maxi(1, roundi(c.x / asp))
+	return c
+
+
+static func ai_fit_cells(key: String, lo: Vector2, hi: Vector2) -> Vector2i:
+	var f := ai_fit(key, lo, hi)
+	return ai_cells_keep(key, f[0], f[1])
+
+
 static func ai_cells(lo: Vector2, hi: Vector2) -> Vector2i:
 	var cells := Vector2i(((hi - lo) / PxArt.PX).round())
 	if cells.x > 40:
@@ -402,12 +577,13 @@ static func _pintadera(lv, top: Callable, lw: float, col: Color, alpha: float, t
 
 ## A tap: a pintadera in its lane at flat depth y. small: an off-beat step or a call. six: a
 ## sixteenth (a quarter of a beat off), which the pixel look shows in silver.
-static func step(lv, field: Rect2, cx: float, y: float, alpha: float, small := false, call := false, six := false) -> void:
+static func step(lv, field: Rect2, cx: float, y: float, alpha: float, small := false, call := false, six := false, free := false) -> void:
 	var lw: float = lv.road_scale(y) * _lane(field)
 	# the pixel look keeps every tap round and full size; the kind shows in its colour: blue on
 	# the beat, violet on the half-beat (or a triplet), silver on a sixteenth, pink for a call
-	var k: Array = K_CALL if call else (K_SIX if six else (K_OFF if small else K_STEP))
-	if ai_disc(lv, field, cx, y, DISC_R, "call" if call else ("six" if six else ("offbeat" if small else "step")), alpha):
+	var k: Array = K_CALL if call else (K_FREE if free else (K_SIX if six else (K_OFF if small else K_STEP)))
+	# (a sixteenth's coin is smaller and plainer than a step's, so it never reads as a hold or a stomp)
+	if ai_disc(lv, field, cx, y, DISC_R * (SIX_SCALE if six and not call and not free else 1.0), "call" if call else ("free" if free else ("six" if six else ("offbeat" if small else "step"))), alpha):
 		return
 	var top := disc(lv, field, cx, y, DISC_R, k, alpha)
 	_pintadera(lv, top, lw, CREAM, 0.92 * alpha)
@@ -534,11 +710,12 @@ static func _rope_sparks(lv: LaneView, f: Callable, h: float, yb: float, lane: f
 ## picture repeats down the road, its twist fixed to the rope's far end (the hold's end) so it travels
 ## with it. False when there is no picture.
 static func _rope_pic(lv: LaneView, f: Callable, ya: float, yb: float, lane: float, lit: bool, alpha: float) -> bool:
-	var tex := ai_tex("rope", Vector2i(ROPE_PIC_W, roundi(ROPE_PIC_W * 794.0 / 143.0)))
-	if tex == null:
+	var asp := ai_aspect("rope")
+	if asp <= 0.0:
 		return false
+	var tex := ai_tex("rope", Vector2i(ROPE_PIC_W, roundi(ROPE_PIC_W / asp)))
 	# one picture's length along the road, flat px: its own shape, at the rope's width, foreshortened
-	var tile := lane * ROPE_W * (794.0 / 143.0) * 0.5 / FORE
+	var tile := lane * ROPE_W / asp * 0.5 / FORE
 	var span := maxf(yb - ya, 1.0)
 	var mod := Color(1.0, 1.0, 1.0, alpha) if lit else Color(0.85, 0.85, 0.85, alpha)
 	# in pieces that never cross a picture's end, so each piece maps into the one picture
@@ -561,7 +738,8 @@ static func _rope_pic(lv: LaneView, f: Callable, ya: float, yb: float, lane: flo
 
 ## A bell note: the Mamuthone's leather bell strap across the whole road at flat depth y, a bronze
 ## cowbell standing on it at each lane divider, and a big arrow in each lane the way to tilt.
-static func bell(lv: LaneView, field: Rect2, y: float, up: bool, alpha := 1.0, pal: Array = [], cowbells := true) -> void:
+## skip: a lane whose arrow is left out (a ring: its coin stands there, and the arrow peeked out behind it).
+static func bell(lv: LaneView, field: Rect2, y: float, up: bool, alpha := 1.0, pal: Array = [], cowbells := true, skip := -1) -> void:
 	var lane := _lane(field)
 	var lw: float = lv.road_scale(y) * lane
 	var k: Array = pal if not pal.is_empty() else (K_UP if up else K_DOWN)
@@ -579,7 +757,7 @@ static func bell(lv: LaneView, field: Rect2, y: float, up: bool, alpha := 1.0, p
 		return
 	_glow(lv, f.call(Vector3.ZERO), Vector2(hw * 1.1, lw * 0.35), _a(k[3], 0.3 * alpha))
 	if ai_tex("bar_up", Vector2i.ONE) != null:
-		_bell_pic(lv, f, h, lane, lw, y, up, alpha, not pal.is_empty(), cowbells)
+		_bell_pic(lv, f, h, lane, lw, y, up, alpha, not pal.is_empty(), cowbells, skip)
 		return
 	solid(lv, f, verts, faces, Vector3(hw / lane, 1.0, STRAP_D * 0.5), k, alpha, maxf(2.0, lw * 0.02), -0.4)
 	if lw < 6.0:
@@ -611,23 +789,30 @@ static func bell(lv: LaneView, field: Rect2, y: float, up: bool, alpha := 1.0, p
 ## The pixel look's bell note from Daniele's pictures: the red (up) or blue (down) beam across the
 ## road through the strap's frame f, his bells at the lane dividers, his arrow in each lane (upside
 ## down for a tilt down). hot: lit up by a strike.
-static func _bell_pic(lv: LaneView, f: Callable, h: float, lane: float, lw: float, y: float, up: bool, alpha: float, hot: bool, cowbells: bool) -> void:
+static func _bell_pic(lv: LaneView, f: Callable, h: float, lane: float, lw: float, y: float, up: bool, alpha: float, hot: bool, cowbells: bool, skip := -1) -> void:
 	var mod := Color(1.45, 1.4, 1.3, alpha) if hot else Color(1.0, 1.0, 1.0, alpha)
 	var quad := PackedVector2Array([f.call(Vector3(-1, h, -1)), f.call(Vector3(1, h, -1)), f.call(Vector3(1, 0, 1)), f.call(Vector3(-1, 0, 1))])
-	var tall := quad[2].y - quad[1].y
-	var tex := ai_tex("bar_up" if up else "bar_down", bar_cells(quad))
-	lv.draw_polygon(quad, PackedColorArray([mod, mod, mod, mod]), PackedVector2Array([Vector2(0, 0), Vector2(1, 0), Vector2(1, 1), Vector2(0, 1)]), tex)
+	# the beam at its own proportions (never stretched), as wide as the road, standing on the strap's
+	# near edge
+	var cells := bar_cells(quad)
+	var tex := ai_tex("bar_up" if up else "bar_down", cells)
+	var px := PxArt.PX
+	var o := PxArt.snap2(Vector2((quad[0].x + quad[1].x) * 0.5 - cells.x * px * 0.5, quad[2].y - cells.y * px))
+	lv.draw_texture_rect(tex, Rect2(o, Vector2(cells) * px), false, mod)
 	if lw < 6.0:
 		return
-	var top := (quad[0].y + quad[2].y) * 0.5 - h * lw
+	var tall := cells.y * px
+	var top := o.y + tall * 0.5
 	for i in (2 if cowbells else 0):
 		var at := Vector2(lv.project(Vector2(lane * float(i + 1), y)).x, top + tall * 0.25)
-		var s := lw * 0.34
+		var s := lw * BAR_BELL
 		ai_draw(lv, "bar_bell", at - Vector2(s * 0.35, s), at + Vector2(s * 0.35, 0.0), mod)
 	for i in 3:
+		if i == skip:
+			continue
 		var c := Vector2(lv.project(Vector2(lane * (float(i) + 0.5), y)).x, top - lw * 0.02)
-		var a := lw * 0.25
-		var hh := lw * 0.23
+		var a := lw * BAR_ARROW
+		var hh := lw * BAR_ARROW
 		ai_draw(lv, "bar_arrow" if up else "bar_arrow!flip", c - Vector2(a, hh * 1.4), c + Vector2(a, hh * 0.4), mod)
 
 
@@ -693,6 +878,8 @@ const PX_HOT := [Color("#fffaf0"), Color("#ffe9a8"), Color("#ffd35a"), Color("#f
 ## in the hit's colour that breaks up as it fades, a shock ring running out, and square embers thrown
 ## up that cool from white through gold to red. A miss: a dull red ring and grey cinders.
 static func _burst_px(ci: CanvasItem, at: Vector2, quality: String, age: float, tt: float, lw: float) -> void:
+	if _burst_pxl(ci, at, quality, tt, lw):
+		return
 	var px := PxArt.PX
 	var e := 1.0 - pow(1.0 - tt, 3.0)
 	var seed := int(absf(at.x) * 13.0) + quality.length() * 7
@@ -726,6 +913,43 @@ static func _burst_px(ci: CanvasItem, at: Vector2, quality: String, age: float, 
 	if tt < 0.55:
 		_ring(ci, at, Vector2(r, r * FORE) * (1.0 + 0.9 * e), px * (2.0 if tt < 0.3 else 1.0), col.lerp(Color.WHITE, 0.3))
 	_embers_px(ci, at, lw * big, age, 14 if quality == "stomp" else 10, seed, PX_HOT, 1.0)
+
+
+const BURST_FRAMES := 8              ## frames in a pxl hit burst (tools/art/pxl/art/bursts.px.js)
+const BURST_RISE := 30               ## art px above a burst's footprint, for its embers
+const BURST_BIG := {"perfect": 1.25, "stomp": 1.6}
+const BURST_KIND := {"early": "ok", "late": "ok"}
+
+
+## The pxl hit burst (an 8-frame strip drawn pixel by pixel) for `quality`, its slot footprint
+## centred on `at`. False when there is none.
+static func _burst_pxl(ci: CanvasItem, at: Vector2, quality: String, tt: float, lw: float) -> bool:
+	var q: String = BURST_KIND.get(quality, quality)
+	var big: float = BURST_BIG.get(q, 1.0)
+	# the caller's stomp is already 1.6 lanes; the strip draws its own size
+	var base := lw / 1.6 if q == "stomp" else lw
+	var fw := 2.0 * base * DISC_R / PxArt.PX
+	var sizes := _pxl_sizes("bursts", "burst_" + q)
+	if sizes.is_empty():
+		sizes = _pxl_sizes("bursts", "burst_good")
+		if sizes.is_empty():
+			return false
+		q = "good"
+	var best := Vector2i.ZERO
+	for sz: Vector2i in sizes:
+		if best == Vector2i.ZERO or absf(sz.x - fw) < absf(best.x - fw):
+			best = sz
+	var tex := PxArt.tex(sizes[best])
+	if tex == null:
+		return false
+	var fwh := Vector2(tex.get_width() / BURST_FRAMES, tex.get_height())
+	var ry0 := float(best.y) / 2.0 * big
+	var anchor := Vector2(floorf(fwh.x / 2.0), fwh.y - ceilf(ry0 * 1.3) - 2.0)
+	var f := clampi(int(tt * BURST_FRAMES), 0, BURST_FRAMES - 1)
+	var px := PxArt.PX
+	var top := PxArt.snap2(at - anchor * px)
+	ci.draw_texture_rect_region(tex, Rect2(top, fwh * px), Rect2(Vector2(fwh.x * f, 0.0), fwh))
+	return true
 
 
 ## Square embers (whole pixels) thrown up from `at` and falling back, cooling through `ramp`.
@@ -855,14 +1079,17 @@ static func draw_notes(lv: LaneView, field: Rect2) -> void:
 						if n.heal:
 							heal(lv, field, cx, y, a)
 						else:
-							step(lv, field, cx, y, a, n.call or lv._off_beat(n), n.call, not n.call and lv._sixteenth(n))
+							step(lv, field, cx, y, a, n.call or n.free or lv._off_beat(n), n.call, not n.call and not n.free and lv._sixteenth(n), n.free and not n.call)
 					Note.Kind.STOMP:
 						stomp(lv, field, cx, y, a * (0.6 if n.thumbs > 0 else 1.0))
 					Note.Kind.BELL:
 						bell(lv, field, y, n.up, a)
 					Note.Kind.RING:
-						bell(lv, field, y, n.up, a)
+						bell(lv, field, y, n.up, a, [], true, n.lane)
 						step(lv, field, cx, y, a, true)
+
+
+const CORD := [Color("#8a5a1c"), Color("#c89030")]   ## a chord's cord: bronze body, lit top
 
 
 ## A chord: two notes on one beat, joined by a bar in the steps' blue lying across the road between their centres, so
@@ -873,10 +1100,17 @@ static func cord(lv: LaneView, field: Rect2, x0: float, x1: float, y: float, alp
 		return
 	var a: Vector2 = lv.project(Vector2(x0, y))
 	var b: Vector2 = lv.project(Vector2(x1, y))
-	var w := maxf(2.0, lw * 0.11)
-	lv.draw_line(a, b, _a(K_STEP[2], alpha), w + maxf(2.0, lw * 0.05))
-	lv.draw_line(a, b, _a(K_STEP[1], alpha), w)
-	lv.draw_line(a + Vector2(0, -w * 0.22), b + Vector2(0, -w * 0.22), _a(K_STEP[0], alpha * 0.8), maxf(1.0, w * 0.3))
+	# a dim bronze cord on the grid with an ink outline and a lit top: a link, not a hold (a hold is
+	# the gold rope; the cord takes no note's colour) and never as bright as a bell strap, the one bar
+	# across the road that asks for a tilt (graphics review, 2026-10-28)
+	var px := PxArt.PX
+	var th := maxf(1.0, roundf(lw * 0.08 / px)) * px
+	var x_a := PxArt.snap(minf(a.x, b.x))
+	var x_b := PxArt.snap(maxf(a.x, b.x))
+	var y0 := PxArt.snap(a.y - th * 0.5)
+	lv.draw_rect(Rect2(x_a, y0 - px, x_b - x_a, th + px * 2.0), _a(PixelPalette.K[0], alpha))
+	lv.draw_rect(Rect2(x_a, y0, x_b - x_a, th), _a(CORD[0], alpha))
+	lv.draw_rect(Rect2(x_a, y0, x_b - x_a, px), _a(CORD[1], alpha))
 
 
 ## Stamps a note from the pixel look's sheet, with its glow drawn live under it. False when the
@@ -898,6 +1132,8 @@ static func _stamp(lv: LaneView, field: Rect2, what: String, n: Note, cx: float,
 						key = "heal"; k = K_HEAL
 					elif n.call:
 						key = "call"; k = K_CALL
+					elif n.free:
+						key = "free"; k = K_FREE
 					elif lv._sixteenth(n):
 						key = "six"; k = K_SIX
 					elif lv._off_beat(n):
@@ -917,7 +1153,7 @@ static func _stamp(lv: LaneView, field: Rect2, what: String, n: Note, cx: float,
 	if not atlas.covers(lw):
 		return false
 	if n.kind == Note.Kind.RING and what != "hold" and what != "knot":
-		bell(lv, field, y, n.up, a)
+		bell(lv, field, y, n.up, a, [], true, n.lane)
 	var c: Vector2 = lv.project(Vector2(cx, y))
 	disc_glow(lv, c, r * lw, k, a, glow)
 	atlas.stamp(lv, key, c, lw, a)
@@ -946,6 +1182,8 @@ static func _kind(lv: LaneView, n: Note, hold: bool) -> Array:
 				return K_HEAL
 			if n.call:
 				return K_CALL
+			if n.free:
+				return K_FREE
 			if lv._sixteenth(n):
 				return K_SIX
 			if lv._off_beat(n):
@@ -1010,7 +1248,7 @@ static func _hit_line(lv: LaneView, field: Rect2, rects: Array[Rect2], hl: float
 		if g > 0.01:
 			ci_poly(lv, sil, Color(1.0, 0.97, 0.9, 0.7 * g))
 		if ai_tex("ring_idle", Vector2i.ONE) != null:
-			_ring_pic(lv, sil, k, g, incoming[lane], lv.get("_lock_on") == true)
+			_ring_pic(lv, sil, k, g, incoming[lane], lv.get("_lock_on") == true, lv.ring_punch(lane))
 			continue
 		lv.draw_polyline(ring, Color(OUTLINE, 0.9), 12.0, true)
 		var rim := Color(CREAM, 0.75 + 0.25 * k)
@@ -1024,10 +1262,15 @@ static func _hit_line(lv: LaneView, field: Rect2, rects: Array[Rect2], hl: float
 		lv.draw_polyline(ring, rim, 5.0, true)
 
 
+## The pxl rings (tools/art/pxl, drawn by Claude) over the ring pictures: back on with the notes from
+## before the ChatGPT kits (Daniele's test of 2026-10-28: the drawn notes played better).
+const PXL_RINGS := true
+
+
 ## The pixel look's hit slot from Daniele's ring pictures, over the slot's outline sil: the grey ring
 ## takes the coming note's colour as it nears, burns gold when the lane is struck, red while the
 ## buttons are locked.
-static func _ring_pic(lv: LaneView, sil: PackedVector2Array, k: float, g: float, incoming, locked: bool) -> void:
+static func _ring_pic(lv: LaneView, sil: PackedVector2Array, k: float, g: float, incoming, locked: bool, punch := 0.0) -> void:
 	var lo := Vector2(INF, INF)
 	var hi := -lo
 	for q in sil:
@@ -1037,23 +1280,61 @@ static func _ring_pic(lv: LaneView, sil: PackedVector2Array, k: float, g: float,
 	var grow := Vector2(1.0, 0.75) * PxArt.PX * 1.5
 	lo -= grow
 	hi += grow
+	if punch > 0.0:
+		# a hit pops the ring out and lets it settle (LaneView.ring_punch)
+		var c := (lo + hi) * 0.5
+		var half := (hi - lo) * 0.5 * (1.0 + punch)
+		lo = c - half
+		hi = c + half
 	var mod := Color(1.0, 1.0, 1.0).lerp(Color(1.15, 1.1, 1.0), k - 0.6)
 	if incoming != null:
 		var kk: Array = incoming[0]
 		var near: float = incoming[1]
 		ci_poly(lv, sil, _a(kk[1], 0.35 * near * near))
 		mod = mod.lerp(kk[0] * 1.25, near)
+	if PXL_RINGS and not _pxl_sizes("rings", "ring_idle").is_empty():
+		# the pxl rings: every lane the same ring; the coming note's colour lights only its inner lip
+		if locked:
+			pxl_draw(lv, "rings", "ring_red", lo, hi)
+			return
+		pxl_draw(lv, "rings", "ring_idle", lo, hi)
+		if incoming != null:
+			var near: float = incoming[1]
+			pxl_draw(lv, "rings", "ring_lip", lo, hi, Color(incoming[0][0], clampf(near * 1.4, 0.0, 1.0)))
+		if g > 0.05:
+			pxl_draw(lv, "rings", "ring_gold", lo, hi, Color(1.0, 1.0, 1.0, clampf(g * 1.5, 0.0, 1.0)))
+		return
 	if locked:
 		ai_draw(lv, "ring_red", lo, hi)
 		return
 	ai_draw(lv, "ring_idle", lo, hi, mod)
 	if g > 0.05:
-		ai_draw(lv, "ring_gold", lo, hi, Color(1.0, 1.0, 1.0, clampf(g * 1.5, 0.0, 1.0)))
+		var lit := Color(1.0, 1.0, 1.0, clampf(g * 1.5, 0.0, 1.0))
+		ai_draw(lv, "ring_gold", lo, hi, lit)
 
 
 # ------------------------------------------------------------------ the bell strike
 
-const STRIKE_TIME := 0.5          ## how long a bell strike shows
+## The sound arcs "( )" beside a struck cowbell, from the pxl pictures (tools/art/pxl/art/chimes.px.js):
+## the arc of radius `rad` (screen px) about `c`, tinted `col`, 1 or 2 art px thick by `wid`. False when
+## there are none.
+static func _chime(ci: CanvasItem, c: Vector2, rad: float, col: Color, wid: float) -> bool:
+	var px := PxArt.PX
+	var want := clampi(int(roundf(rad / px / 2.0)) * 2, 14, 72)
+	var t := 1 if wid < px * 1.6 else 2
+	var tex := PxArt.tex("res://art/pxl/chimes/chime_%d_%d.png" % [want, t])
+	if tex == null:
+		return false
+	var sz := Vector2(tex.get_width(), tex.get_height()) * px
+	var y := PxArt.snap(c.y - sz.y * 0.5)
+	var xl := PxArt.snap(c.x - rad)
+	ci.draw_texture_rect(tex, Rect2(Vector2(xl, y), sz), false, col)
+	var xr := PxArt.snap(c.x + rad - sz.x)
+	ci.draw_texture_rect(tex, Rect2(Vector2(xr + sz.x, y), Vector2(-sz.x, sz.y)), false, col)
+	return true
+
+
+const STRIKE_TIME := 0.35         ## how long a bell strike shows (0.5 until the review of 2026-10-28)
 const STRIKE_HOLD := 0.16         ## the struck strap stays on the hit line this long
 const K_WHITE := [Color("#ffffff"), Color("#fff6dc"), Color("#c8b48c"), Color("#ffffff")]
 
@@ -1098,30 +1379,42 @@ static func bell_strike(lv: LaneView, field: Rect2, up: bool, quality: String, c
 		var hot_col: Color = PX_HOT[mini(int(kk * 4.0), 3)]
 		_glow(lv, (p0 + p1) * 0.5, Vector2((p1.x - p0.x) * 0.55, sl * 0.25), _a(k[3], 0.5 * (1.0 - kk)))
 		var thick := maxf(PxArt.PX, sl * 0.07 * (1.0 - kk) * big)
-		lv.draw_line(p0, p1, hot_col if hot else col, thick)
-	# the cowbells thrown off the strap, swinging, ringing
+		# whole pixels: a bar on the art grid, not a smoothed line
+		var bar := maxf(1.0, roundf(thick / PxArt.PX)) * PxArt.PX
+		lv.draw_rect(Rect2(p0.x, PxArt.snap(p0.y - bar * 0.5), p1.x - p0.x, bar), hot_col if hot else col)
+	# the cowbells swinging under the strap, ringing: below the hit line, so they never cover the
+	# notes coming down to it (graphics review, 2026-10-28: thrown up the lanes, they hid the next
+	# notes for half a second), and at the road's two edges, clear of the judgement words in the
+	# lanes' middles (2026-10-29: between the lanes they sat on the words' boards)
 	var hy := lv.project(Vector2(0.0, hl)).y
-	var bs := lw * 0.42 * big
-	var throw := exp(-age * 7.0) * sin(minf(age * 24.0, PI * 0.5)) * bs * 0.9
-	var swing := sin(age * 30.0) * exp(-age * 5.0) * 0.55
-	var fade := clampf((0.42 - age) / 0.14, 0.0, 1.0)   # gone before the next notes need the line
+	var bs := lw * 0.36 * big
+	var drop := exp(-age * 9.0) * sin(minf(age * 30.0, PI * 0.5)) * bs * 0.25
+	var swing := sin(age * 30.0) * exp(-age * 6.0)
+	var fade := clampf((STRIKE_TIME - 0.04 - age) / 0.1, 0.0, 1.0)
 	for i in (2 if fade > 0.0 else 0):
-		var bx := lv.project(Vector2(lane * float(i + 1), hl)).x
-		var at := Vector2(bx, hy - bs * 0.35 - throw)
+		var bx := lv.project(Vector2(lane * 3.0 * float(i), hl)).x
+		var at := Vector2(bx, hy + bs * 1.15 + drop)
 		var c := at + Vector2(0.0, -bs * 0.5)
-		# the ring arcs, three in a row, each opening out and cooling
+		# the ring arcs, three in a row, each opening out and cooling, kept small
 		for r in 3:
 			var rk := tt * 1.8 - float(r) * 0.18
 			if rk <= 0.0 or rk >= 1.0:
 				continue
-			var rad := bs * (0.6 + 1.1 * rk) * (1.0 + 0.12 * float(r))
+			var rad := bs * (0.55 + 0.55 * rk) * (1.0 + 0.1 * float(r))
 			var rc: Color = ([Color.WHITE, PX_HOT[1], PX_HOT[2], PX_HOT[3]] if hot or perfect else [Color.WHITE, k[0], k[3], k[1]])[mini(int(rk * 4.0), 3)]
 			var wid := maxf(PxArt.PX, bs * 0.09 * (1.0 - rk))
-			lv.draw_arc(c, rad, -0.5, 0.5, 6, rc, wid)
-			lv.draw_arc(c, rad, PI - 0.5, PI + 0.5, 6, rc, wid)
-		lv.draw_set_transform(at, swing * (1.0 if i == 0 else -1.0), Vector2.ONE)
-		_cowbell(lv, Vector2(0.0, bs * 0.0), bs, fade)
-		lv.draw_set_transform(Vector2.ZERO, 0.0, Vector2.ONE)
+			if not _chime(lv, c, rad, rc, wid):
+				lv.draw_arc(c, rad, -0.5, 0.5, 6, rc, wid)
+				lv.draw_arc(c, rad, PI - 0.5, PI + 0.5, 6, rc, wid)
+		# the swing in Daniele's three drawn poses (never a rotated picture: its pixels would break)
+		var sw := swing * (1.0 if i == 0 else -1.0)
+		var key := "bar_bell_l" if sw < -0.3 else ("bar_bell_r" if sw > 0.3 else "bar_bell")
+		if ai_tex(key, Vector2i.ONE) == null:
+			key = "bar_bell"
+		if ai_tex(key, Vector2i.ONE) != null:
+			ai_draw(lv, key, at - Vector2(bs * 0.42, bs * 1.2), at + Vector2(bs * 0.42, 0.0), Color(1.0, 1.0, 1.0, fade))
+		else:
+			_cowbell(lv, at, bs, fade)
 	# embers all along the strap
 	var seed := (7 if up else 13) + chain * 5
 	for i in 6:

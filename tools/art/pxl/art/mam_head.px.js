@@ -1,0 +1,66 @@
+include("palette.px.js")
+keys({
+  k: "K0", K: "K1",
+  w: "WOOD0", x: "WOOD1", y: "WOOD2", z: "WOOD3", v: "WOOD4",
+  l: "LEATHER0", m: "LEATHER1", n: "LEATHER2", o: "LEATHER3",
+  r: "FIRE4", R: "FIRE5", e: "STONE5",
+})
+ramps("wxyzv", "lmno")
+// Mask, 3/4 view facing left, the fire on the left: lit left cheek, brow and nose bridge.
+// 18 wide x 30 tall. Slit eyes (k), long straight nose, thin mouth.
+sprite("_mask", { outline: "k" }, `
+  ....xyyyyyyyxx....
+  ..xyyzzzzyyyyxxx..
+  .xyzzzvzzyyyyyxxx.
+  .xyzzvvzzyyyyyxxx.
+  xyzzzzzzzyyyyyxxxx
+  xyzvzzzzzyyyyyxxxx
+  xyzzkkkzzyyxkkkxxx
+  xyzzxkkzyyyxkkkxxx
+  xyzzzzzzyyyyyyxxxx
+  xyzzzzvzyyyxxxxxxx
+  xyzzzzvzyyyxxxxxxx
+  xyzzzzvyyxxxxxxxxx
+  xyzzzzvyyxxxxxxxxx
+  .yzzzzvyyxxxxxxxx.
+  .yzzzzvyxxxxxxxxx.
+  .yzzzzzyyxxxxxxxx.
+  .xyzzzzyxxxxxxxxx.
+  .xyzzzyyyxxxxxxx..
+  ..xyzzzyyyxxxxxx..
+  ..xyzzyyyyxxxxx...
+  ..xyzzyyyyxxxxx...
+  ...xyyyyyyxxxx....
+  ...xyyyyyyxxxx....
+  ....xyyyyxxx......
+  ....xxyyyxxx......
+  .....xxxxxx.......
+`)
+// Kerchief: brown, wrapped over the head, falling past the mask on both sides, knotted under the chin.
+// Drawn as one silhouette, then tone steps along the leather ramp and a few folds.
+const HK = 1.15
+sprite("_hood", { w: 42, h: 53, outline: "k" },
+  poly([8, 4, 14, 1, 24, 1, 31, 5, 34, 14, 34, 28, 32, 36, 28, 41, 20, 43, 10, 41, 5, 34, 3, 22, 4, 12].map((v) => Math.round(v * HK)), "n"),
+  // lit on the left (the fire), dark on the right
+  light([0, 0, 16, 53], 1, 1),
+  shade([25, 0, 17, 53], 1, 1),
+  shade([31, 0, 11, 53], 1, 1),
+  // top of the head catches the light
+  light([11, 1, 16, 7], 1, 1),
+  // folds: strokes of the darker leather running from the crown down past the mask
+  line(12, 6, 6, 30, "m"), line(15, 5, 9, 34, "m"), line(32, 7, 37, 32, "l"), line(29, 5, 35, 30, "l"),
+  line(7, 34, 14, 46, "m"), line(37, 34, 31, 46, "l"))
+// the knot and the two ends falling from it, under the chin
+sprite("_knot", { outline: "k" }, `
+  .mnnnm.
+  mnooonm
+  mnonnnm
+  .mnnnm.
+  mnn.mnm
+  mnn.mnn
+  mn...nn
+  m.....n`)
+scene("_head", { w: 46, h: 62 },
+  layer("hood", stamp("_hood", 2, 0)),
+  layer("mask", stamp("_mask", 13, 9)),
+  layer("knot", stamp("_knot", 18, 45)))

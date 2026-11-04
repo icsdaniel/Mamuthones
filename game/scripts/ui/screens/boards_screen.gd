@@ -14,7 +14,7 @@ func build() -> void:
 		box.add_child(UIKit.label(tr("boards_offline"), UIKit.CAPTION))
 	box.add_child(UIKit.label(tr("boards_local"), UIKit.SUB))
 	var any := false
-	for song in SongLibrary.story():
+	for song in SongLibrary.catalogue():
 		if not Progression.is_unlocked(song.id):
 			continue
 		var c := UIKit.card(box)

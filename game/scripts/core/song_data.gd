@@ -12,6 +12,9 @@ const DIFFICULTIES: Array[String] = ["easy", "medium", "hard", "expert"]
 var id := ""
 var stop := 0
 var kind := "story"   ## story | tutorial
+## "" a stop's own song; "original" or "remix": a recorded version of the stop's music (Suno), which
+## stands in for the stop's synthesized placeholder (SongLibrary.story(), versions()).
+var version := ""
 var bpm := 120.0
 var offset := 0.0
 var audio := ""
@@ -19,6 +22,12 @@ var remix: Dictionary = {}
 var length := 0.0
 var preview := 0.0
 var key_root := 60
+## How late a swung song's off-beat sixteenths sound, in beats (0: straight). Expert's gaps shrink
+## by it, since a late sixteenth sits that much closer to the next eighth.
+var swing := 0.0
+## Which level's chart rules each chart follows: songs charted one rung up after Daniele's
+## 2026-10-19 playtest play Medium's rules at Easy and so on ({} = each level its own).
+var level_rules := {}
 var sections: Array = []
 var lessons: Array = []
 var charts: Dictionary = {}
@@ -52,6 +61,7 @@ static func from_dict(d: Dictionary) -> SongData:
 	s.id = str(d.get("id", ""))
 	s.stop = int(d.get("stop", 0))
 	s.kind = str(d.get("kind", "story"))
+	s.version = str(d.get("version", ""))
 	s.bpm = float(d.get("bpm", 120.0))
 	s.offset = float(d.get("offset", 0.0))
 	s.audio = str(d.get("audio", ""))
@@ -60,6 +70,9 @@ static func from_dict(d: Dictionary) -> SongData:
 	s.length = float(d.get("length", 0.0))
 	s.preview = float(d.get("preview", 0.0))
 	s.key_root = int(d.get("key_root", 60))
+	s.swing = float(d.get("swing", 0.0))
+	var lr = d.get("level_rules", {})
+	s.level_rules = lr if lr is Dictionary else {}
 	var sec = d.get("sections", [])
 	s.sections = sec if sec is Array else []
 	var les = d.get("lessons", [])
@@ -163,6 +176,7 @@ func notes(difficulty: String, use_remix := false, mirror := false, from_beat :=
 		n.end_t = n.t
 		n.lane = int(item.get("lane", -1))
 		n.call = bool(item.get("call", false))
+		n.free = bool(item.get("free", false))
 		if n.kind == Note.Kind.HOLD:
 			n.end_t = n.t + float(item.get("len", 1.0)) * spb
 		elif n.kind == Note.Kind.REST:

@@ -43,3 +43,22 @@ player-facing text avoids these details or uses plain words.
   5, 8 or 13 depending on the set).
 - The Issohadores' calls: the game's call is invented and uses vowels only. How do they really call?
 - The launeddas-style drone used for held notes.
+
+## Raised by the outside review (2026-10-31)
+The customiser, mask option names and bell sets above are gone from the game (no Workshop since
+2026-10-31); those questions only matter if they ever come back. New questions:
+- Colours of the figures: the game's Mamuthone has a brown-orange mask and a ginger-brown fleece. Is
+  the real visera always black (or near-black) wood, and the mastruca black sheepskin? Is dark brown
+  ever right?
+- The title logo: the mask has bells hanging at its sides. Is that acceptable as a symbol, or should
+  the bells sit behind or below the mask?
+- Stop 1 is now "The dressing" (la vestizione) instead of "the night before". Is the dressing a moment
+  people would recognise and accept in a game? What is it called locally?
+- Stop 2: the fires are lit on the evening of 16 January and the Mamuthones' first outing of the year
+  is tied to them (the 17th, Sant'Antonio Abate). Is that right?
+- The Sant'Antonio bonfire burns at the end of the road in every song, Carnival included. Should the
+  Carnival stops (4 to 7) drop the bonfire and be set in the afternoon or at dusk?
+- The Issohadore's lower half: the game shows a dark pleated skirt and a tricorn-like hat. What do they
+  really wear (white trousers, dark leggings, a woman's shawl at the hip?) and what is the cap?
+- Words: should the Italian text say "sonazzos", "carriga", "visera", "mastruca" alongside the Italian
+  words? Is "processione" right, or do people say "uscita" or "sfilata"?

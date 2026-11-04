@@ -255,27 +255,31 @@ def accent(pressed=False):
 
 
 def board():
-    """The dark board panel: NAVY0 with a double gold rule and small gold lozenges at the corners."""
+    """The dark board panel: NAVY0 in a chunky bronze rim like the play screen's HUD plates (graphics
+    review, 2026-10-28): a K0 outline, a three-pixel bronze band lit on its top and left and shaded on
+    its bottom and right, a K0 line, a thin dull-gold inner rule, and a round rivet on each corner."""
     tile = Canvas(8, 8, "NAVY0")
     # the faintest twill so a big board is not a dead flat colour
     for i in range(8):
         if i % 4 == 0:
             tile.pset(i, (i * 3) % 8, "NAVY1")
-    m = 7
+    m = 9
     w = m + tile.w + m
     h = m + tile.h + m
     cv = Canvas(w, h)
     ring(cv, 0, 0, w - 1, h - 1, "K0", "K0", "K0", "K0", chamfer=True)
-    ring(cv, 1, 1, w - 2, h - 2, "GOLD4", "GOLD3", "GOLD3", "GOLD2")
-    ring(cv, 2, 2, w - 3, h - 3, "K0", "K0", "K0", "K0")
-    ring(cv, 3, 3, w - 4, h - 4, "NAVY1", "NAVY1", "NAVY1", "NAVY1")
-    ring(cv, 4, 4, w - 5, h - 5, "GOLD2", "GOLD2", "GOLD2", "GOLD1")
-    tile_into(cv, tile, 5, 5, w - 5, h - 5)
-    ring(cv, 5, 5, w - 6, h - 6, "NAVY0", "NAVY0", "NAVY0", "NAVY0")
-    # corner lozenges on the outer rule
-    lz = diamond(2, ["GOLD5", "GOLD4", "K0"])
-    for (x, y) in ((-1, -1), (w - 4, -1), (-1, h - 4), (w - 4, h - 4)):
-        cv.blit(lz, x, y)
+    ring(cv, 1, 1, w - 2, h - 2, "GOLD5", "GOLD4", "GOLD2", "GOLD1")
+    ring(cv, 2, 2, w - 3, h - 3, "GOLD4", "GOLD3", "GOLD2", "GOLD2")
+    ring(cv, 3, 3, w - 4, h - 4, "GOLD3", "GOLD3", "GOLD1", "GOLD1")
+    ring(cv, 4, 4, w - 5, h - 5, "K0", "K0", "K0", "K0")
+    ring(cv, 5, 5, w - 6, h - 6, "NAVY1", "NAVY1", "NAVY1", "NAVY1")
+    ring(cv, 6, 6, w - 7, h - 7, "GOLD2", "GOLD1", "GOLD1", "GOLD1")
+    tile_into(cv, tile, 7, 7, w - 7, h - 7)
+    ring(cv, 7, 7, w - 8, h - 8, "NAVY0", "NAVY0", "NAVY0", "NAVY0")
+    # corner rivets on the bronze band: a lit dome with a dark rim
+    rv = diamond(2, ["GOLD5", "GOLD4", "K0"])
+    for (x, y) in ((0, 0), (w - 5, 0), (0, h - 5), (w - 5, h - 5)):
+        cv.blit(rv, x, y)
     return cv, (m, m, m, m)
 
 

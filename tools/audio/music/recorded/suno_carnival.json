@@ -1,0 +1,14 @@
+{
+ "title": {
+  "en": "Carnival Sunday (Suno test)",
+  "it": "Domenica di Carnevale (prova Suno)"
+ },
+ "stop": 4,
+ "bpm": 110.0,
+ "offset": 0.376,
+ "id": "suno_carnival",
+ "audio": "res://audio/music/suno_carnival.ogg",
+ "length": 175.252,
+ "preview": 40.0,
+ "rests": []
+}

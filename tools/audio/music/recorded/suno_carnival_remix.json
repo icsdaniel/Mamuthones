@@ -1,0 +1,14 @@
+{
+ "title": {
+  "en": "Carnival Sunday remix (Suno test)",
+  "it": "Domenica di Carnevale remix (prova Suno)"
+ },
+ "stop": 4,
+ "bpm": 110.0,
+ "offset": 0.02,
+ "id": "suno_carnival_remix",
+ "audio": "res://audio/music/suno_carnival_remix.ogg",
+ "length": 172.982,
+ "preview": 40.0,
+ "rests": []
+}

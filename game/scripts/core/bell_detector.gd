@@ -56,6 +56,8 @@ const TOUCH_WINDOW := 0.10    ## seconds after a touch during which accel rings 
 const RETRY_DROP := 0.8       ## a forgiven lobe has passed a peak once it falls under this × that peak
 const HELD_TILT := 0.06       ## seconds of steady turning before a full ring's tap that make its tilt
 const FORGIVE_PEAK := 0.75    ## a forgiven lobe re-arms only if it peaked under this × typical_peak
+const BACK_DROP := 0.6        ## a ring's return lobe is over once it falls under this × its peak
+const BACK_FLOOR := 0.5       ## a ring after a return lobe needs this × the last ring's peak: the ripples of one flick are not a second tilt
 ## Song threshold as a share of the calibrated flick's peak. Daniele calibrated with big flicks
 ## (peaks 333 °/s) and played much softer; replaying his six 2026-10-10 runs, 0.3 catches every bell
 ## the old adaptive threshold did.
@@ -105,6 +107,10 @@ var _cand_peak := 0.0
 var _cand_pred := 0.0         # peak predicted from the rising slope
 var _rise_since := NAN        # first fresh reading of the current lobe on its rising slope
 var _lobe_over := false # the current lobe already went over the threshold
+var _ring_sign := 0.0         # the sign of the lobe that last rang
+var _back_max := 0.0          # highest reading the other way since that ring (its return lobe)
+var _ring_peak := 0.0         # the peak of the ring that last rang (0 when unknown)
+var _floor := 0.0             # the peak a candidate needs while armed by a return lobe (0: only the threshold)
 var _prev_v := 0.0
 var _prev_t := -INF
 var _last_vec := Vector3(NAN, NAN, NAN)
@@ -245,6 +251,19 @@ func feed(t: float, acc: Vector3, gyro_dps: Vector3) -> bool:
 			_calm_since = NAN
 		if t - last_t >= lockout() and not is_nan(_calm_since) and t - _calm_since >= CALM:
 			_armed = true
+			_floor = 0.0
+		# Two tilts in a row: the next flick, the other way, can start while the last one's return lobe
+		# still swings, so the signal never calms between them. Once that return lobe has passed its
+		# peak (falling under BACK_DROP of it) after the lockout, the detector re-arms and the next rise
+		# rings. A lone return lobe that rings nothing is forgiven like any stray lobe.
+		elif fresh and _ring_sign != 0.0:
+			if signf(vec[axis]) == -_ring_sign:
+				_back_max = maxf(_back_max, v)
+			elif _ring_peak > 0.0 and _back_max <= 0.0:
+				_ring_peak = maxf(_ring_peak, v)   # the ring's own lobe, to its true top
+			if t - last_t >= lockout() and _back_max >= threshold and v < minf(BACK_DROP * _back_max, threshold):
+				_armed = true
+				_floor = BACK_FLOOR * _ring_peak
 	# A held reading says nothing new about a starting ring.
 	if not fresh:
 		return false
@@ -260,7 +279,7 @@ func feed(t: float, acc: Vector3, gyro_dps: Vector3) -> bool:
 	elif is_nan(_rise_since) and v < threshold and not _lobe_over:
 		_rise_since = t   # a reading on the rising slope, between half and the full threshold
 	_lobe_over = v >= threshold * SLOPE and (_lobe_over or v >= threshold)
-	var fast := mode == "gyro" and v >= threshold and not is_nan(_rise_since) and t - _rise_since >= CONFIRM_FAST - 1e-4
+	var fast := mode == "gyro" and v >= threshold and not is_nan(_rise_since) and t - _rise_since >= CONFIRM_FAST - 1e-4 and _floor <= 0.0
 	if _armed:
 		if is_nan(_cand_t):
 			if v > threshold:
@@ -280,8 +299,11 @@ func feed(t: float, acc: Vector3, gyro_dps: Vector3) -> bool:
 			_predict(v, t)
 			var near_touch := mode == "accel" and _last_touch >= _cand_t - TOUCH_WINDOW and _last_touch <= t
 			if fast or t - _cand_first >= (CONFIRM_NEAR_TOUCH if near_touch else CONFIRM):
-				fired = true
-				_fire()
+				if maxf(_cand_peak, _cand_pred) >= _floor:
+					fired = true
+					_fire()
+				else:
+					_cand_t = NAN   # the ripple of the last flick, not a new one
 		else:
 			_cand_t = NAN   # a spike: gone before it lasted
 	_prev_v = v
@@ -326,6 +348,10 @@ func claim(t: float) -> void:
 	last_t = t
 	_retry_t = NAN
 	_offered_t = INF
+	_ring_sign = signf(_last_vec[axis]) if not is_nan(_last_vec[axis]) else 0.0
+	_back_max = 0.0
+	_ring_peak = 0.0
+	_floor = 0.0
 
 
 ## A retry rang a bell: the rest of that lobe offers nothing more.
@@ -345,6 +371,10 @@ func _fire() -> void:
 	last_t = _cand_t - _reading_age()
 	var s := signf(_cand_vec[axis]) * up_sign
 	last_up = s >= 0.0
+	_ring_sign = signf(_cand_vec[axis])
+	_back_max = 0.0
+	_ring_peak = maxf(_cand_peak, _cand_pred)
+	_floor = 0.0
 	last_strength = strength_of(maxf(_cand_peak, _cand_pred))
 	_cand_t = NAN
 	rang.emit(last_t, last_up)

@@ -18,7 +18,6 @@ const SCREENS := {
 	"free_play": "res://scripts/ui/screens/free_play_screen.gd",
 	"settings": "res://scripts/ui/screens/settings_screen.gd",
 	"credits": "res://scripts/ui/screens/credits_screen.gd",
-	"workshop": "res://scripts/ui/screens/workshop_screen.gd",
 	"play": "res://scripts/ui/screens/play_screen.gd",
 	"tutorial": "res://scripts/ui/screens/tutorial_screen.gd",
 	"results": "res://scripts/ui/screens/results_screen.gd",
@@ -59,6 +58,9 @@ func _ready() -> void:
 	get_tree().root.set_meta("app", self)
 	get_tree().set_auto_accept_quit(true)
 	get_tree().set_quit_on_go_back(false)
+	# the ChatGPT figures at every size the title, procession, stops and workshop draw them, made
+	# now rather than on a screen's first frame
+	FigureSprites.warm_new()
 	if start_screen != "":
 		open(start_screen, start_args)
 	else:
@@ -117,7 +119,7 @@ func back() -> void:
 	var top: Screen = stack.pop_back()
 	top.queue_free()
 	var prev := current()
-	PxType.smooth = prev.screen_name() == "play_screen" and prev.get("backdrop") != null and not bool(prev.get("pixel"))
+	PxType.smooth = false
 	prev.show()
 	prev.on_resume()
 	_enter(prev, -1.0)

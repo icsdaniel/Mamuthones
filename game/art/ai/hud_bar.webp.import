@@ -1,0 +1,14 @@
+[remap]
+
+importer="image"
+type="Image"
+uid="uid://eyyhx5gaeg5s"
+path="res://.godot/imported/hud_bar.webp-f592653ba18ff7f19e7395692dea85f4.image"
+
+[deps]
+
+source_file="res://art/ai/hud_bar.webp"
+dest_files=["res://.godot/imported/hud_bar.webp-f592653ba18ff7f19e7395692dea85f4.image"]
+
+[params]
+

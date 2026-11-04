@@ -1,0 +1,14 @@
+{
+ "title": {
+  "en": "The Piazza (Suno test)",
+  "it": "La piazza (prova Suno)"
+ },
+ "stop": 6,
+ "bpm": 143.06,
+ "offset": 1.437,
+ "id": "suno_piazza",
+ "audio": "res://audio/music/suno_piazza.ogg",
+ "length": 133.92,
+ "preview": 40.0,
+ "rests": []
+}

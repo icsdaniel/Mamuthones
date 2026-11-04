@@ -1,0 +1,115 @@
+{
+ "title": {
+  "en": "Sant'Antonio's Fires remix (Suno test)",
+  "it": "I fuochi di Sant'Antonio remix (prova Suno)"
+ },
+ "stop": 2,
+ "bpm": 137.0,
+ "offset": 0.456,
+ "targets": {
+  "easy": 0.8,
+  "medium": 2.0,
+  "hard": 3.68,
+  "expert": 5.75
+ },
+ "id": "suno_fires_remix",
+ "audio": "res://audio/music/suno_fires_remix.ogg",
+ "length": 170.004,
+ "features": "/mnt/project-files/suno-songs/work/features-stems/fires_remix_feat.json",
+ "preview": 40.0,
+ "rests": [],
+ "sections": [
+  [
+   "intro",
+   0,
+   4,
+   0
+  ],
+  [
+   "rise",
+   4,
+   6,
+   1
+  ],
+  [
+   "drop1",
+   10,
+   8,
+   3
+  ],
+  [
+   "groove",
+   18,
+   7,
+   2
+  ],
+  [
+   "break1",
+   25,
+   4,
+   1
+  ],
+  [
+   "drop2",
+   29,
+   7,
+   3
+  ],
+  [
+   "groove2",
+   36,
+   13,
+   2
+  ],
+  [
+   "dip",
+   49,
+   9,
+   1
+  ],
+  [
+   "drop3",
+   58,
+   6,
+   3
+  ],
+  [
+   "pause",
+   64,
+   2,
+   1
+  ],
+  [
+   "groove3",
+   66,
+   8,
+   2
+  ],
+  [
+   "break2",
+   74,
+   10,
+   1
+  ],
+  [
+   "climax",
+   84,
+   7,
+   3
+  ],
+  [
+   "outro",
+   91,
+   5,
+   1
+  ]
+ ],
+ "thresholds": {
+  "hat": 0.35,
+  "snare": 0.4,
+  "kick": 0.4,
+  "mel": 0.3,
+  "chorus": 0.2,
+  "bell": 0.4
+ }
+}

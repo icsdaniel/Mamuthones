@@ -16,6 +16,9 @@ extends Node2D
 ## The origin is the feet (the pictures' bottom centre).
 
 const DIR := "res://art/pixel/"
+## Pieces drawn with pxl (tools/art/pxl/art/<figure>.px.js) take the place of the older pictures of
+## the same name where they exist.
+const PXL_DIR := "res://art/pxl/"
 ## The row (art px from the top) each figure's body is split at: the shins, just under the
 ## Mamuthone's fleece and the Issohadore's trousers, which drop over them (a cut higher shows its
 ## straight edge). Every piece is above it.
@@ -39,12 +42,25 @@ const RING_DAMP := 6.0
 const RING_DIP := 3.0         ## art px the body dips again when a bell is rung on time
 
 var figure := "mamuthone"
+var black := true             ## the Mamuthone's black fleece (the Workshop's choice); false: the picture's own brown
 var mirror := false           ## the road is to the left (true) or the right (false)
 var reduced_motion := false
 var _upper: Sprite2D
 var _legs: Sprite2D
 var _pieces: Array = []       ## [Sprite2D, kind]
 var _size := Vector2.ONE
+## Daniele's ChatGPT bob (tools/art/chatgpt/outputs.py -> art/ai/fig/<figure>_bob_<i>.png): four
+## drawn poses, 0 up, 1 going down, 2 down, 3 coming back (the beat snaps to 2, then 3, then 0). Where they exist the figure is one
+## picture swapped by the beat instead of pieces moved.
+const BOB_DIR := "res://art/ai/fig/"
+## How long each drawn pose shows, from the frames' own timing at 120 BPM (README of the bob set:
+## 0 up 200 ms, 1 going down 90 ms, 2 down 80 ms, 3 coming back 130 ms): the down pose lands on the
+## beat, the going-down pose leads into it. A faster song shortens them all alike; a slower one keeps
+## them and holds the up pose longer, so the snap never goes soft.
+const BOB_MS := [200.0, 90.0, 80.0, 130.0]
+const BOB_SPB := 0.5          ## the beat they were drawn for (120 BPM)
+var spb := 0.5                ## the song's seconds a beat (StreetBackdrop sets it)
+var _bob_tex: Array[Texture2D] = []
 
 
 func _init(p_figure := "mamuthone") -> void:
@@ -54,7 +70,16 @@ func _init(p_figure := "mamuthone") -> void:
 ## The body as two slices of its picture (the legs stay planted, the rest drops over them, so the
 ## seam is always exact), then the pieces over it.
 func _ready() -> void:
-	var tex: Texture2D = load(DIR + "%s_body.png" % figure)
+	if ResourceLoader.exists(BOB_DIR + "%s_bob_0.png" % figure):
+		for i in 4:
+			var src: Texture2D = load(BOB_DIR + "%s_bob_%d.png" % [figure, i])
+			if figure == "mamuthone" and black:
+				src = FigureSprites.black_tex(i, src)
+			_bob_tex.append(src)
+		_size = _bob_tex[0].get_size()
+		_upper = _sprite(_bob_tex[0], "Pose", 0.0, _size.y)
+		return
+	var tex: Texture2D = _piece("body")
 	if tex == null:
 		return
 	_size = tex.get_size()
@@ -62,9 +87,16 @@ func _ready() -> void:
 	_legs = _sprite(tex, "Legs", knee, _size.y)
 	_upper = _sprite(tex, "Upper", 0.0, knee)
 	for spec: Array in PIECES.get(figure, []):
-		var pt: Texture2D = load(DIR + "%s_%s.png" % [figure, spec[0]])
+		var pt: Texture2D = _piece(str(spec[0]))
 		if pt != null:
 			_pieces.append([_sprite(pt, str(spec[0]).capitalize().replace(" ", ""), 0.0, _size.y), str(spec[1])])
+
+
+func _piece(part: String) -> Texture2D:
+	var pxl := "%s%s/%s_%s.png" % [PXL_DIR, figure, figure, part]
+	if ResourceLoader.exists(pxl):
+		return load(pxl)
+	return load(DIR + "%s_%s.png" % [figure, part])
 
 
 func _sprite(tex: Texture2D, n: String, top: float, bottom: float) -> Sprite2D:
@@ -100,6 +132,9 @@ static func ring_swing(age: float) -> float:
 func pose(t: float, _bar: float, still := false, ring := 9.0, ring_up := true) -> void:
 	if _upper == null:
 		return
+	if not _bob_tex.is_empty():
+		_pose_frames(t, still, ring)
+		return
 	var m := 0.35 if reduced_motion else 1.0
 	var bob := 0.0 if still else StreetBackdrop._bob(t)
 	var rung := not still and ring >= 0.0 and ring < 0.5
@@ -126,3 +161,32 @@ func pose(t: float, _bar: float, still := false, ring := 9.0, ring_up := true) -
 				# never further off than the body is filled in behind it
 				y = body + clampf(y - body, -REACH, REACH)
 		s.position = Vector2(x, y)
+
+
+## The drawn bob: the down pose on the beat (and when a bell is rung on time), then the poses back up.
+## Reduced motion keeps the halfway poses only.
+func _pose_frames(t: float, still: bool, ring: float) -> void:
+	_upper.texture = _bob_tex[bob_frame(t, spb, still, ring, reduced_motion)]
+
+
+## The drawn pose t seconds after the beat (beats spb apart; ring: seconds since a bell rung on time).
+static func bob_frame(t: float, p_spb: float, still := false, ring := 9.0, calm := false) -> int:
+	if still:
+		return 0
+	var k := clampf(p_spb / BOB_SPB, 0.2, 1.0)
+	var down := BOB_MS[2] * 0.001 * k
+	var back := BOB_MS[3] * 0.001 * k
+	var lead := BOB_MS[1] * 0.001 * k
+	var since := t
+	if ring >= 0.0 and ring < since:
+		since = ring
+	var f := 0
+	if since >= 0.0 and since < down:
+		f = 2
+	elif since >= 0.0 and since < down + back:
+		f = 3
+	elif t >= 0.0 and t < 90.0 and p_spb - t <= lead:
+		f = 1   # going down into the next beat
+	if calm and f == 2:
+		f = 1
+	return f

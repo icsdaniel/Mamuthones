@@ -1,0 +1,14 @@
+[remap]
+
+importer="image"
+type="Image"
+uid="uid://d01ppmwncf7wf"
+path="res://.godot/imported/hud_stud.webp-e6c5ee161b068cc7742309cc5423b2e7.image"
+
+[deps]
+
+source_file="res://art/ai/hud_stud.webp"
+dest_files=["res://.godot/imported/hud_stud.webp-e6c5ee161b068cc7742309cc5423b2e7.image"]
+
+[params]
+

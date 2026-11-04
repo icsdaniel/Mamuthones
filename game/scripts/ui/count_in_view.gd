@@ -70,4 +70,5 @@ func _draw() -> void:
 		var lh := PxType.line_height("big_gold")
 		PxType.draw(self, "big_gold", Vector2(c.x, c.y - lh - hop), head, Color.WHITE, 1, 0)
 		var sub := tr("count_bar_one") if ready_bars == 1 else tr("count_bars") % ready_bars
-		PxType.draw(self, "caps", Vector2(c.x, c.y + 2.0 * P), sub, PixelPalette.FIRE[5], 1, 0)
+		# twice the size: at 1x it was too small to read over the fire (outside review, 2026-10-31)
+		PxType.draw(self, "caps", Vector2(c.x, c.y + 3.0 * P), sub, PixelPalette.FIRE[5], 2 if size.x >= 600.0 else 1, 0)
