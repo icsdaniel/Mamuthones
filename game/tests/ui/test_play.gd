@@ -154,8 +154,10 @@ func test_exempt_modes_never_fail() -> void:
 		var c: Conductor = play.get("conductor")
 		c.use_manual_clock(true)
 		for i in 300:
+			if not is_instance_valid(c):
+				break   # a lesson's range ran out and its screen moved on
 			c.advance(0.1)
 			await tree.process_frame
-		check(not s.has_failed and not play.get("failed"), "%s: never fails" % a.song_id)
+		check(not s.has_failed and (not is_instance_valid(play) or not play.get("failed")), "%s: never fails" % a.song_id)
 		UIHarness.free_app(app)
 	UIHarness.restore_profile()

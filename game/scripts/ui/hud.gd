@@ -12,18 +12,18 @@ extends Control
 signal pause_pressed
 
 const HEIGHT := 176.0
-const EDGE := Color("#ff9a32")
-const EDGE_HOT := Color("#ffd27a")
-const EDGE_DARK := Color("#7a2e06")
-const SIDE := Color("#5a2408")      ## the frames' sides, below their faces
+const EDGE := Color("#c8352a")
+const EDGE_HOT := Color("#efe6d2")
+const EDGE_DARK := Color("#4a3c38")
+const SIDE := Color("#141014")      ## the frames' sides, below their faces
 const LIGHT := Vector2(-0.45, -0.89)  ## where the HUD's light comes from (top left)
 const DEPTH := 7.0                  ## how far the frames stand out of the screen, px
 const BEVEL := 7.0                  ## the width of their bevelled rim, px
 const PANEL := Color(0.07, 0.04, 0.05, 0.9)
-const INK := Color("#fff1d6")
-const GOLD_INK := Color("#ffd35a")
-const SCORE_INK := Color("#ffe6a0")
-const OUTLINE := Color("#0a0608")
+const INK := Color("#efe6d2")
+const GOLD_INK := Color("#efe6d2")
+const SCORE_INK := Color("#efe6d2")
+const OUTLINE := Color("#141014")
 const PANEL_Y := 34.0            ## the frames' top
 const PANEL_H := 64.0
 const BADGE := Vector2(122.0, 112.0)
@@ -81,13 +81,13 @@ func pstyle(l: Label, size: int, color: Color, bold := true, outline := 6) -> vo
 
 static func style(l: Label, size: int, color: Color, bold := true, outline := 6) -> void:
 	l.add_theme_font_override("font", font(bold))
-	l.add_theme_font_size_override("font_size", size)
+	l.add_theme_font_size_override("font_size", maxi(PxType.LINE, roundi(size / float(PxType.LINE)) * PxType.LINE))
 	l.add_theme_color_override("font_color", color)
 	l.add_theme_color_override("font_outline_color", OUTLINE)
 	l.add_theme_constant_override("outline_size", outline)
 	# the letters stand out in relief: a bronze side below each one
 	l.add_theme_constant_override("shadow_outline_size", outline)
-	l.add_theme_color_override("font_shadow_color", Color("#9a4410"))
+	l.add_theme_color_override("font_shadow_color", Color("#141014"))
 	l.add_theme_constant_override("shadow_offset_x", 0)
 	l.add_theme_constant_override("shadow_offset_y", maxi(2, size / 12))
 	l.material = null
@@ -555,12 +555,12 @@ func _draw_badge(ci: CanvasItem, b: Array) -> void:
 ## through every colour.
 func _tier(level: int) -> Array:
 	var tiers := [
-		[Color("#b8641e"), Color("#e8a050"), Color("#5a2a08"), Color("#3e1c06"), Color(0.9, 0.4, 0.1), Color("#e8c890")],
-		[Color("#ff9a32"), Color("#ffd27a"), Color("#7a2e06"), Color("#5a2408"), Color(1.0, 0.5, 0.1), Color("#ffd35a")],
-		[Color("#ffc42a"), Color("#fff0a0"), Color("#8a5200"), Color("#5e3a04"), Color(1.0, 0.75, 0.1), Color("#fff2a8")],
-		[Color("#ff4a24"), Color("#ffb070"), Color("#7a0e06"), Color("#4e0a04"), Color(1.0, 0.3, 0.1), Color("#ffe0b0")],
-		[Color("#ff7018"), Color("#ffd86a"), Color("#7a1c0a"), Color("#4e0a04"), Color(1.0, 0.45, 0.1), Color("#fff4cc")],
-		[Color("#fba832"), Color("#fff4cc"), Color("#c8400c"), Color("#5a0e12"), Color(1.0, 0.65, 0.2), Color("#fff4cc")],
+		[Color("#c8352a"), Color("#efe6d2"), Color("#4a3c38"), Color("#141014"), Color("#c8352a"), Color("#efe6d2")],
+		[Color("#c8352a"), Color("#efe6d2"), Color("#4a3c38"), Color("#141014"), Color("#c8352a"), Color("#efe6d2")],
+		[Color("#c8352a"), Color("#efe6d2"), Color("#4a3c38"), Color("#141014"), Color("#c8352a"), Color("#efe6d2")],
+		[Color("#c8352a"), Color("#efe6d2"), Color("#4a3c38"), Color("#141014"), Color("#c8352a"), Color("#efe6d2")],
+		[Color("#c8352a"), Color("#efe6d2"), Color("#4a3c38"), Color("#141014"), Color("#c8352a"), Color("#efe6d2")],
+		[Color("#c8352a"), Color("#efe6d2"), Color("#4a3c38"), Color("#141014"), Color("#c8352a"), Color("#efe6d2")],
 	]
 	# violet, blue and the rainbow are the notes' colours: the HUD only burns hotter (Daniele, 2026-10)
 	return tiers[clampi(level, 0, tiers.size() - 1)].duplicate()
@@ -669,12 +669,12 @@ func tick(t: float, delta: float) -> void:
 		# Points, not seconds: how far above or below your best run you are at this moment.
 		var d := ghost.delta_at(t, session.score)
 		_ghost.text = ghost_text(d)
-		_ghost.modulate = Color("#ffc445") if d > 0 else Color.WHITE
+		_ghost.modulate = Color("#c8352a") if d > 0 else Color.WHITE
 	elif ghost != null and not ghost.is_empty():
 		_ghost.text = ""
 	else:
 		_ghost.text = tr("hud_unison_hint") if session.unison_level == 0 else ""
-		_ghost.modulate = Color("#ffc445")
+		_ghost.modulate = Color("#c8352a")
 
 
 func set_unison(level: int, animate := true) -> void:

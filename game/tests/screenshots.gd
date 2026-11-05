@@ -167,6 +167,11 @@ func _render(shot: Dictionary, size: Vector2i, locale: String, dir: String) -> v
 	await process_frame
 	await process_frame
 	var screen: Control = app.call("current")
+	if screen != null and "settled" in screen:
+		# the play screen starts its song once its first frames are drawn: seek only after that
+		var t_wait := Time.get_ticks_msec()
+		while not bool(screen.get("settled")) and Time.get_ticks_msec() - t_wait < 8000:
+			await process_frame
 	if setup.begins_with("advance:") and screen != null:
 		await _advance(screen, float(setup.get_slice(":", 1)))
 	elif setup.begins_with("moment:") and screen != null:

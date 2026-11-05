@@ -46,7 +46,7 @@ ACC = {"À": ("A", "grave"), "Á": ("A", "acute"), "È": ("E", "grave"), "É": (
        "Ì": ("I", "grave"), "Í": ("I", "acute"), "Ò": ("O", "grave"), "Ó": ("O", "acute"),
        "Ù": ("U", "grave"), "Ú": ("U", "acute")}
 TOP = 2                     # rows above the capitals, for the accents
-LINE = TOP + 7 + 2          # line height: room under the baseline for , ;
+LINE = TOP + 7 + 3          # line height: room under the baseline for , ; and a row of leading (12: font sizes 24, 36, 48 ...)
 BASE = TOP + 7
 
 

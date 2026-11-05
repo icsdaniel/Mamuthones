@@ -2,8 +2,8 @@ class_name LessonPicture
 extends Control
 ## A small animated picture of one lesson, drawn with the same LaneSkin as the play screen, so the
 ## player sees exactly what to look for: notes slide down to the line and the right button lights up
-## (or the phone tilts, or the thumbs press) as they arrive. It sits on a navy board in the gold
-## pixel frame; the thumbs and the phone are pixel art on the same grid (3 screen px to the art px).
+## (or the phone tilts, or the thumbs press) as they arrive. It sits on a black board in a cream
+## rule (the Woodcut look); the thumbs and the phone are pixel art on the same grid (3 screen px to the art px).
 ##
 ## Topics: steps, lanes, bells, holds, still, full and stomps: both thumbs come down together on the
 ## same step button on the music's strongest accent, and a heavy gold shock runs out under it.
@@ -26,17 +26,23 @@ func _process(delta: float) -> void:
 
 
 func _draw() -> void:
+	# the Woodcut look, seen flat: a black board in a cream rule, cream dotted dividers, cream rings,
+	# the notes as the play screen prints them, and the cream step plates with their feet
 	var px := PixelFrame.px_for(self)
 	var w := floorf(minf(size.x, 564.0) / px) * px
 	var frame := Rect2(floorf((size.x - w) * 0.5 / px) * px, 0.0, w, floorf(size.y / px) * px)
-	draw_rect(frame, PixelPalette.NAVY[0])
-	var inset := float(PixelFrame.DEPTH) * px
-	var area := frame.grow(-inset)
+	draw_rect(frame, WoodcutSkin.C)
+	draw_rect(frame.grow(-px), WoodcutSkin.K)
+	var area := frame.grow(-3.0 * px)
 	var buttons_h := floorf(110.0 / px) * px
 	var field := Rect2(area.position, Vector2(area.size.x, area.size.y - buttons_h))
-	LaneSkin.draw_lanes(self, field, [0.0, 0.0, 0.0])
-	LaneSkin.draw_hit_line(self, field, 0.0)
-	var lanes := LaneSkin.lane_rects(field)
+	var lw := field.size.x / 3.0
+	for i in [1, 2]:
+		var x := roundf(field.position.x + lw * float(i))
+		var yy := field.position.y
+		while yy < field.end.y:
+			draw_rect(Rect2(x - px * 0.5, yy, px, px * 2.0), WoodcutSkin.C)
+			yy += px * 5.0
 	var hit_y := LaneSkin.hit_line_y(field)
 	var pps := (hit_y - field.position.y) / 1.2
 	var arrive := 1.4
@@ -44,39 +50,53 @@ func _draw() -> void:
 	var y := LaneSkin.note_y(field, dt, pps)
 	var pressed := [false, false, false]
 	var lit := absf(dt) < 0.18 or (topic == "holds" and dt < 0.0 and dt > -0.8)
+	var rw := lw * WoodcutSkin.RING_W * 0.5
+	var nw := lw * WoodcutSkin.NOTE_W * 0.5
+	var cx := func(i: int) -> float: return field.position.x + lw * (float(i) + 0.5)
+	for i in 3:
+		WoodcutSkin.oval(self, Vector2(cx.call(i), hit_y), Vector2(rw, rw * WoodcutSkin.FLAT), WoodcutSkin.K, WoodcutSkin.C, maxf(2.0, rw * 0.14))
 	match topic:
 		"steps":
 			if dt > -0.05:
-				LaneSkin.draw_step(self, lanes[1], y, false)
+				_note(Vector2(cx.call(1), y), nw, WoodcutSkin.C, WoodcutSkin.K)
 			pressed[1] = lit
 		"lanes":
 			for i in 3:
 				var d := dt + (i - 1) * 0.4
 				if d > -0.05:
-					LaneSkin.draw_step(self, lanes[i], LaneSkin.note_y(field, d, pps), false)
+					_note(Vector2(cx.call(i), LaneSkin.note_y(field, d, pps)), nw, WoodcutSkin.C, WoodcutSkin.K)
 				pressed[i] = absf(d) < 0.18
 		"bells":
 			if dt > -0.05:
-				LaneSkin.draw_bell(self, field, y, true)
+				_bell(field, y, true, px)
 			if slam:
 				pressed[0] = lit
 				pressed[2] = lit
 		"holds":
 			var tail := LaneSkin.note_y(field, dt + 0.8, pps)
 			if dt + 0.8 > 0.0:
-				LaneSkin.draw_hold(self, lanes[1], minf(y, hit_y), tail, lit)
+				var head := minf(y, hit_y)
+				var t0 := maxf(tail, field.position.y)
+				if head > t0:
+					var rope_w := lw * WoodcutSkin.ROPE_W * 0.5
+					draw_rect(Rect2(cx.call(1) - rope_w * 1.5, t0, rope_w * 3.0, head - t0), WoodcutSkin.K)
+					draw_rect(Rect2(cx.call(1) - rope_w, t0, rope_w * 2.0, head - t0), WoodcutSkin.R if lit else WoodcutSkin.C)
+				_note(Vector2(cx.call(1), head), nw, WoodcutSkin.C if lit else WoodcutSkin.R, WoodcutSkin.R if lit else WoodcutSkin.C)
 			pressed[1] = lit
 		"still":
-			LaneSkin.draw_rest(self, field, LaneSkin.note_y(field, dt + 0.6, pps), y)
+			pass
 		"stomps":
 			if dt > -0.05:
-				# the stomp note itself, as the play screen draws it
-				var r: Rect2 = lanes[1]
-				FireSkin.draw_stomp_note(self, Vector2(r.get_center().x, y), r.size.x / FireSkin.REF_LANE)
+				var r := lw * 0.2
+				for sx: float in [-1.0, 1.0]:
+					var p := Vector2(cx.call(1) + sx * r * 1.15, y - r * 0.55)
+					draw_circle(p, r + maxf(2.0, r * 0.18), WoodcutSkin.K)
+					draw_circle(p, r, WoodcutSkin.C)
 			pressed[1] = dt < 0.1 and dt > -0.35
 		"full":
 			if dt > -0.05:
-				LaneSkin.draw_ring(self, field, lanes[0], y, true)
+				_bell(field, y, true, px)
+				_note(Vector2(cx.call(0), y), nw, WoodcutSkin.C, WoodcutSkin.K)
 			pressed[0] = lit
 			if slam:
 				pressed[2] = lit
@@ -84,13 +104,37 @@ func _draw() -> void:
 	var bw := floorf(br.size.x / 3.0 / px) * px
 	var buttons: Array[Rect2] = []
 	for i in 3:
-		buttons.append(Rect2(br.position.x + bw * i + 2.0 * px, br.position.y + 2.0 * px, bw - 4.0 * px, buttons_h - 4.0 * px))
-		LaneSkin.draw_button(self, buttons[i], i, "pressed" if pressed[i] else "idle")
+		var b := Rect2(br.position.x + bw * i + 2.0 * px, br.position.y + 2.0 * px, bw - 4.0 * px, buttons_h - 4.0 * px)
+		buttons.append(b)
+		var down: bool = pressed[i]
+		draw_rect(b, WoodcutSkin.R if down else WoodcutSkin.C)
+		var fh := minf(b.size.y * 0.6, b.size.x * 0.9)
+		var ink := WoodcutSkin.C if down else WoodcutSkin.K
+		if i == 1:
+			WoodcutSkin.foot(self, b.get_center() + Vector2(-fh * 0.2, 0), fh, true, ink)
+			WoodcutSkin.foot(self, b.get_center() + Vector2(fh * 0.2, 0), fh, false, ink)
+		else:
+			WoodcutSkin.foot(self, b.get_center(), fh, i == 0, ink)
 	if topic == "stomps":
 		_draw_stomp(buttons[1], dt, px)
 	if lit and topic in ["bells", "full"] and not slam:
 		_draw_tilt(Vector2(area.end.x - 26.0 * px, field.position.y + 30.0 * px), px, clampf(1.0 - absf(dt) / 0.18, 0.0, 1.0))
-	PixelFrame.draw(self, frame, px, "gold")
+
+
+func _note(c: Vector2, rx: float, fill: Color, rim: Color) -> void:
+	WoodcutSkin.oval(self, c, Vector2(rx, rx * WoodcutSkin.FLAT), fill, rim, maxf(2.0, rx * 2.0 * WoodcutSkin.RIM))
+
+
+## A bell bar across the lanes: red, with cream marks pointing the way to tilt.
+func _bell(field: Rect2, y: float, up: bool, px: float) -> void:
+	var h := maxf(px * 4.0, field.size.x * 0.06)
+	draw_rect(Rect2(field.position.x, y - h * 0.5 - px, field.size.x, h + px * 2.0), WoodcutSkin.K)
+	draw_rect(Rect2(field.position.x, y - h * 0.5, field.size.x, h), WoodcutSkin.R)
+	for i in 3:
+		var c := Vector2(field.position.x + field.size.x / 3.0 * (float(i) + 0.5), y)
+		var s := h * 0.3
+		var d := -1.0 if up else 1.0
+		draw_polyline(PackedVector2Array([c + Vector2(-s * 1.4, -d * s), c + Vector2(0, d * s), c + Vector2(s * 1.4, -d * s)]), WoodcutSkin.C, maxf(2.0, px))
 
 
 ## Two thumbs come down on the same button together (from the lower left and lower right), land on

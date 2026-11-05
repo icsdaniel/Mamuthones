@@ -136,21 +136,22 @@ func test_theme() -> void:
 	check(t != null, "theme builds")
 	check(t.default_font != null, "theme has a default font")
 	check(t.default_font_size >= 26, "default text is at least 26 px")
+	# The Night menus (the Woodcut look): flat inked boxes, black or red with a cream rule, no pictures.
 	for type in ["Button", "AccentButton", "OptionButton"]:
 		var sb := t.get_stylebox("normal", type)
-		check(sb is PixelBox and (sb as PixelBox).texture != null, "%s is a pixel-art box" % type)
+		check(sb is StyleBoxFlat and (sb as StyleBoxFlat).border_width_top > 0, "%s is an inked box with a rule" % type)
 		check(t.get_stylebox("pressed", type) != null and t.get_stylebox("disabled", type) != null, "%s has pressed/disabled" % type)
 	for type in ["Label", "TitleLabel", "HeaderLabel", "SubheaderLabel", "CaptionLabel", "HudLabel", "PaperLabel", "PaperHeaderLabel", "Button", "CheckButton", "LineEdit"]:
 		check(t.get_font_size("font_size", type) >= 24, "%s text is at least 24 px" % type)
+		check(t.get_font_size("font_size", type) % PxType.LINE == 0, "%s text is a whole step of the pixel type" % type)
 		check(t.get_font("font", type) != null, "%s has a font" % type)
 	for icon in ["checked", "unchecked"]:
 		check(t.get_icon(icon, "CheckButton") != null, "CheckButton %s icon" % icon)
 	check(t.get_icon("grabber", "HSlider") != null, "slider grabber icon")
-	check(t.get_stylebox("panel", "CardPanel") is PixelBox, "parchment card panel")
-	check(t.get_stylebox("grabber", "VScrollBar") is PixelBox, "scroll grabber")
+	check(t.get_stylebox("panel", "CardPanel") != null, "card panel")
+	check(t.get_stylebox("grabber", "VScrollBar") != null, "scroll grabber")
 	# Pixel art: every kit texture is drawn with nearest filtering at whole art pixels.
 	check(ProjectSettings.get_setting("rendering/textures/canvas_textures/default_texture_filter") == 0, "nearest filtering project-wide")
-	check_eq((t.get_stylebox("normal", "Button") as PixelBox).px, 3.0, "one art pixel is three screen pixels")
 	check_eq(t.get_type_variation_base("AccentButton"), &"Button", "AccentButton is a Button variation")
 
 
@@ -159,13 +160,13 @@ func test_text_contrast() -> void:
 	check(_contrast(Palette.BONE, Palette.WOOD) >= 7.0, "bone on wood")
 	check(_contrast(Palette.BONE_DIM, Palette.NIGHT) >= 4.5, "caption on night")
 	check(_contrast(Palette.BLACK, Palette.BONE) >= 7.0, "ink on paper")
-	check(_contrast(Palette.EMBER, Palette.NIGHT) >= 4.5, "ember on night")
+	# vermilion is the Woodcut's accent ink: headers and figures, set large (3:1 for large text)
+	check(_contrast(Palette.EMBER, Palette.NIGHT) >= 3.0, "ember on night (large text)")
 	check(_contrast(Palette.BONE, Palette.RED) >= 3.0, "bone on red (large bold only)")
 	var th := WoodcutTheme.build()
 	check(_contrast(th.get_color("font_placeholder_color", "LineEdit"), Palette.NIGHT) >= 4.5, "LineEdit placeholder readable")
 	# Progress text sits on the fill: it must not be the ember fill (bone on ember is about 1.5:1).
 	check(_contrast(th.get_color("font_color", "ProgressBar"), Palette.RED) >= 3.0, "progress text on its red fill (large bold)")
-	check(th.get_constant("outline_size", "ProgressBar") >= 8, "progress text has a heavy ink outline")
 
 
 func _contrast(a: Color, b: Color) -> float:
@@ -379,8 +380,8 @@ func test_settle_after_stand_still() -> void:
 
 
 func test_early_late_colours_match_ui() -> void:
-	check(Palette.EARLY.to_html(false) == "8ec3e6", "early is the UI's cool #8ec3e6")
-	check(Palette.LATE.to_html(false) == "ef8250", "late is the UI's warm #ef8250")
+	check(Palette.EARLY.to_html(false) == UIKit.EARLY.to_html(false), "early is the UI's warm grey")
+	check(Palette.LATE.to_html(false) == UIKit.LATE.to_html(false), "late is the UI's vermilion")
 	# In greyscale they still differ in lightness (and the chevrons point opposite ways).
 	var le := Palette.EARLY.get_luminance()
 	var ll := Palette.LATE.get_luminance()

@@ -113,6 +113,7 @@ func _slider(box: Container, key: String, title: String, lo: float, hi: float, s
 	var head := HBoxContainer.new()
 	var l := UIKit.label(title, "", false)
 	l.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	l.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART   # the wide pixel type: a long title wraps beside its value
 	head.add_child(l)
 	var value := UIKit.label("", UIKit.CAPTION, false)
 	head.add_child(value)

@@ -595,8 +595,8 @@ var _fx: Control                 ## additive, over the notes: hit bursts
 func _ready() -> void:
 	if street != null:
 		perspective = false
-	if street != null and not OS.has_environment("NO_ATLAS"):
-		# the notes are painted once into a sheet and stamped from it: drawing them each frame was the lag
+	if false and street != null and not OS.has_environment("NO_ATLAS"):
+		# (the old painted notes' sheet: the woodcut notes are flat shapes, drawn directly)
 		var at := NoteAtlas.new(self)
 		add_child(at)
 		StreetSkin.atlas = at
@@ -1401,12 +1401,12 @@ func _rest_tag(field: Rect2, y_a: float, y_b: float, taken: Array[float], hl: fl
 	var w := f.get_string_size(text, HORIZONTAL_ALIGNMENT_LEFT, -1, fs).x
 	var box := Rect2(p.x - w * 0.5 - 18.0 * sc, p.y - fs * 0.75, w + 36.0 * sc, fs * 1.5)
 	var sb := StyleBoxFlat.new()
-	sb.bg_color = Color("#101a33e6")
-	sb.border_color = Color("#6f9cf0")
+	sb.bg_color = Color("#141014")
+	sb.border_color = Color("#efe6d2")
 	sb.set_border_width_all(maxi(2, int(3.0 * sc)))
 	sb.set_corner_radius_all(int(10.0 * sc))
 	draw_style_box(sb, box)
-	draw_string(f, Vector2(box.position.x + 18.0 * sc, p.y + fs * 0.35), text, HORIZONTAL_ALIGNMENT_LEFT, -1, fs, Color("#e6eeff"))
+	draw_string(f, Vector2(box.position.x + 18.0 * sc, p.y + fs * 0.35), text, HORIZONTAL_ALIGNMENT_LEFT, -1, fs, Color("#efe6d2"))
 	_rest_label_y = best_y
 
 
@@ -1736,7 +1736,7 @@ func _draw_street_marks(r: Rect2, w: float) -> void:
 				var s := minf(w, r.size.y) * 0.24
 				for pass_ in 2:
 					for sd in [-1.0, 1.0]:
-						draw_line(c + Vector2(-s, -s * sd), c + Vector2(s, s * sd), OUTLINE if pass_ == 0 else Color("#ff3b30"), 20.0 if pass_ == 0 else 11.0)
+						draw_line(c + Vector2(-s, -s * sd), c + Vector2(s, s * sd), OUTLINE if pass_ == 0 else Color("#c8352a"), 20.0 if pass_ == 0 else 11.0)
 			"faint":
 				var p := project(lane_center(lane))
 				draw_arc(p, 46.0 * clampf(road_scale(LaneSkin.hit_line_y(field_rect())), 0.5, 1.5), 0.0, TAU, 24, Color(BTN_BONE, 0.7), 4.0)

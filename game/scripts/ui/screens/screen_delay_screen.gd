@@ -198,7 +198,7 @@ class LaneDrill extends Control:
 			if dt > fall or dt < -0.25:
 				continue
 			var y := ring_y - dt / fall * ring_y
-			var col := Color("#3a6fd8") if i >= watch else Color("#3a6fd8", 0.45)
+			var col := Color("#c8352a") if i >= watch else Color("#3a6fd8", 0.45)
 			draw_circle(Vector2(w * 0.5, y), r * 0.86, Palette.INK)
 			draw_circle(Vector2(w * 0.5, y), r * 0.78, col)
 			draw_circle(Vector2(w * 0.5, y), r * 0.3, Palette.CREAM)

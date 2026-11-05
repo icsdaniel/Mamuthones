@@ -186,11 +186,14 @@ static func rings(lv: LaneView, field: Rect2, hl: float, incoming: Array) -> voi
 		var punch := lv.ring_punch(lane)
 		var r := Vector2(rx, ry) * (1.0 + punch)
 		var rim := R if locked else C
-		if incoming[lane] != null:
-			var near: float = incoming[lane][1]
-			oval(lv, c, r * 0.8, _a(incoming[lane][0], 0.25 * near * near))
-		if g > 0.01:
-			oval(lv, c, r, _a(C, 0.85 * g))
+		# a note close to its ring: the ring's notches take the note's ink (no see-through tints)
+		var notch := C if locked else R
+		if incoming[lane] != null and float(incoming[lane][1]) > 0.75:
+			notch = incoming[lane][0] if incoming[lane][0] != K else C
+			if notch == rim:
+				notch = K
+		if g > 0.25:
+			oval(lv, c, r * (0.55 + 0.45 * g), C)
 		var outer := ellipse_pts(c, r + Vector2(w, w * 0.8), 40)
 		var inner := ellipse_pts(c, r - Vector2(w, w * 0.8), 40)
 		var k := ellipse_pts(c, r + Vector2(w * 2.0, w * 1.6), 40)
@@ -205,7 +208,7 @@ static func rings(lv: LaneView, field: Rect2, hl: float, incoming: Array) -> voi
 		for a: float in [PI * 0.25, PI * 0.75, PI * 1.25, PI * 1.75]:
 			var p := c + Vector2(cos(a) * r.x, sin(a) * r.y)
 			var q := (p - c).normalized()
-			lv.draw_line(p - q * w * 1.2, p + q * w * 1.2, C if locked else R, w * 1.6)
+			lv.draw_line(p - q * w * 1.2, p + q * w * 1.2, notch, w * 1.6)
 
 
 ## A note hit: a burst of square chips flying out, cream and red, gone in a moment.
@@ -235,27 +238,37 @@ static func burst(ci: CanvasItem, at: Vector2, quality: String, age: float, sc: 
 	return true
 
 
-## A bell rung on time: the bar flashes red across the road at the hit line with cream crosses.
+## A bell rung on time: a red bar printed across the road at the hit line with the bell's cream
+## marks (^ rung up, v rung down), then only its cream outline, then gone. Solid inks, no fade.
 static func bell_strike(lv: LaneView, field: Rect2, up: bool, quality: String, chain: int, age: float) -> bool:
-	var life := 0.3
+	var life := 0.24
 	if age > life:
 		return false
-	var k := 1.0 - age / life
+	var t := age / life
 	var hl := LaneSkin.hit_line_y(field)
-	var d := _lane(field) * BAR_D * 0.5 * (1.0 + 0.4 * (1.0 - k))
-	var lt := lv.project(Vector2(-field.size.x * 0.03, hl - d))
-	var rt := lv.project(Vector2(field.size.x * 1.03, hl - d))
-	var rb := lv.project(Vector2(field.size.x * 1.03, hl + d))
-	var lb := lv.project(Vector2(-field.size.x * 0.03, hl + d))
-	lv.draw_colored_polygon(PackedVector2Array([lt, rt, rb, lb]), Color(R, k))
-	var h := lb.y - lt.y
-	for lane in 3:
-		var c := lv.project(Vector2(_lane(field) * (lane + 0.5), hl))
-		var s := h * 0.3
-		lv.draw_line(c + Vector2(-s * 1.4, -s), c + Vector2(s * 1.4, s), Color(K, k), maxf(2.0, h * 0.2))
-		lv.draw_line(c + Vector2(-s * 1.4, s), c + Vector2(s * 1.4, -s), Color(K, k), maxf(2.0, h * 0.2))
-		lv.draw_line(c + Vector2(-s * 1.4, -s), c + Vector2(s * 1.4, s), Color(C, k), maxf(1.0, h * 0.1))
-		lv.draw_line(c + Vector2(-s * 1.4, s), c + Vector2(s * 1.4, -s), Color(C, k), maxf(1.0, h * 0.1))
+	var d := _lane(field) * 0.09 * (1.0 + 0.5 * t)
+	var lt := lv.project(Vector2(-field.size.x * 0.02, hl - d))
+	var rt := lv.project(Vector2(field.size.x * 1.02, hl - d))
+	var rb := lv.project(Vector2(field.size.x * 1.02, hl + d))
+	var lb := lv.project(Vector2(-field.size.x * 0.02, hl + d))
+	var h := maxf(lb.y - lt.y, 6.0)
+	var w := maxf(2.0, roundf(h * 0.14))
+	if t < 0.55:
+		lv.draw_colored_polygon(PackedVector2Array([lt, rt, rb, lb]), K)
+		var inset := Vector2(0, w)
+		lv.draw_colored_polygon(PackedVector2Array([lt + inset, rt + inset, rb - inset, lb - inset]), R if quality != "ok" else G)
+	else:
+		var box := PackedVector2Array([lt, rt, rb, lb, lt])
+		lv.draw_polyline(box, C, w)
+	if t < 0.55:
+		for lane in 3:
+			var c := lv.project(Vector2(_lane(field) * (lane + 0.5), hl))
+			var s := h * 0.28
+			var dy := -s if up else s
+			var pts := PackedVector2Array([c + Vector2(-s * 1.3, -dy * 0.6), c + Vector2(0, dy * 0.6), c + Vector2(s * 1.3, -dy * 0.6)])
+			if up:
+				pts = PackedVector2Array([c + Vector2(-s * 1.3, s * 0.6), c + Vector2(0, -s * 0.6), c + Vector2(s * 1.3, s * 0.6)])
+			lv.draw_polyline(pts, C, w * 1.4)
 	return true
 
 

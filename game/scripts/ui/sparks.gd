@@ -6,9 +6,9 @@ extends Control
 ## it never sits over the road, so no spark ever hides a note.
 
 const MAX := 160
-const FIRE: Array[Color] = [Color("#fffaf0"), Color("#ffe9a8"), Color("#ffd35a"), Color("#ff9a32"), Color("#c8282a"), Color("#5a1a10")]
-const GOLD: Array[Color] = [Color("#ffffff"), Color("#fff2a8"), Color("#ffd35a"), Color("#e8a020"), Color("#8a5200")]
-const ASH: Array[Color] = [Color("#ff6a5a"), Color("#c8282a"), Color("#8a7e7a"), Color("#5a4e4e")]
+const FIRE: Array[Color] = [Color("#efe6d2"), Color("#efe6d2"), Color("#c8352a"), Color("#c8352a"), Color("#c8352a"), Color("#4a3c38")]
+const GOLD: Array[Color] = [Color("#efe6d2"), Color("#efe6d2"), Color("#efe6d2"), Color("#c8352a"), Color("#4a3c38")]
+const ASH: Array[Color] = [Color("#c8352a"), Color("#c8352a"), Color("#c9bba0"), Color("#4a3c38")]
 
 var px := 6.0                 ## a spark's size, px
 var _p: Array = []            ## [pos: Vector2, vel: Vector2, age, life, palette, gravity, size]

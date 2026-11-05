@@ -10,14 +10,14 @@ extends Control
 signal stamped
 
 const COLORS: Array[Color] = [
-	Color("#c02a22"),   # F  (PixelPalette.RED[3])
-	Color("#e2561a"),   # E  (FIRE[3])
-	Color("#f47e22"),   # D  (FIRE[4])
-	Color("#c08a2e"),   # C  (GOLD[3])
-	Color("#e8b64c"),   # B  (GOLD[4])
-	Color("#f8dc8a"),   # A  (GOLD[5])
-	Color("#fde07a"),   # S  (FIRE[6])
-	Color("#fff6cf"),   # S+ (FIRE[7])
+	Color("#c9bba0"),   # F (Woodcut ink)
+	Color("#c9bba0"),   # E (Woodcut ink)
+	Color("#c9bba0"),   # D (Woodcut ink)
+	Color("#efe6d2"),   # C (Woodcut ink)
+	Color("#efe6d2"),   # B (Woodcut ink)
+	Color("#efe6d2"),   # A (Woodcut ink)
+	Color("#c8352a"),   # S (Woodcut ink)
+	Color("#c8352a"),   # S+ (Woodcut ink)
 ]
 const PX := 3.0
 

@@ -392,7 +392,7 @@ static func juice(b: BaseButton) -> void:
 ## Shrinks a button's label (down to `min_size`, never under the 26 px floor) until it fits between
 ## the button's ornaments, whatever the language. The button asks only for room for its text at
 ## `min_size`, so long translations shrink the type instead of pushing the layout off the screen.
-static func fit_text(b: Button, min_size := 26) -> void:
+static func fit_text(b: Button, min_size := 24) -> void:
 	var refit := func() -> void:
 		if b.text == "" or not b.is_inside_tree() or b.has_meta("fitting"):
 			return
@@ -419,7 +419,7 @@ static func fit_text(b: Button, min_size := 26) -> void:
 			b.remove_meta("fitting")
 			return
 		while fs > min_size and font.get_string_size(line, HORIZONTAL_ALIGNMENT_LEFT, -1, fs).x > room:
-			fs -= 1
+			fs = maxi(min_size, (fs - 1) / PxType.LINE * PxType.LINE)   # whole steps of the pixel type
 		if fs != b.get_theme_font_size("font_size"):
 			b.add_theme_font_size_override("font_size", fs)
 		b.remove_meta("fitting")

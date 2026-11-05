@@ -104,7 +104,7 @@ func build() -> void:
 	_count_up(score, session.score)
 	var mc := UIKit.label(tr("res_max_combo") % session.max_combo, UIKit.SUB, false, HORIZONTAL_ALIGNMENT_CENTER)
 	mc.name = "MaxCombo"
-	mc.add_theme_font_size_override("font_size", 26)
+	mc.add_theme_font_size_override("font_size", 24)
 	mc.add_theme_color_override("font_color", Palette.BONE_DIM)
 	score_col.add_child(mc)
 	if session.full_combo():
@@ -125,7 +125,7 @@ func build() -> void:
 	if best_line != "":
 		var bl := UIKit.label(best_line, UIKit.SUB, true, HORIZONTAL_ALIGNMENT_CENTER)
 		bl.name = "BestLine"
-		bl.add_theme_font_size_override("font_size", 28)
+		bl.add_theme_font_size_override("font_size", 36)
 		bl.add_theme_color_override("font_color", Palette.GOLD_HOT if bool(record.get("new_best", false)) else Palette.BONE_DIM)
 		box.add_child(bl)
 		var new_best := bool(record.get("new_best", false))

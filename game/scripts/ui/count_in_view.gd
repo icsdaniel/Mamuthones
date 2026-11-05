@@ -57,18 +57,31 @@ func _draw() -> void:
 		var lh := PxType.line_height("count", k)
 		var top := c.y - lh * 0.5 - hop
 		# the hot flash of the beat: the figure burns white-gold for its first moment
-		var col := Color.WHITE if pulse < 0.7 else Color(1.25, 1.2, 1.1)
+		var col := Color.WHITE if pulse < 0.7 else WoodcutSkin.R
+		var dw := PxType.width("count", txt, k) + 8.0 * P
+		var dp := Rect2(c.x - dw * 0.5, top - 3.0 * P, dw, lh + 6.0 * P)
+		draw_rect(dp.grow(P), WoodcutSkin.C)
+		draw_rect(dp, WoodcutSkin.K)
 		PxType.draw(self, "count", Vector2(c.x, top), txt, col, k, 0)
 		# four gold pips under it: the count so far
 		var y := minf(top + lh + 3.0 * P, size.y - 6.0 * P)
 		for i in 4:
 			var x := c.x + (float(i) - 1.5) * 9.0 * P
 			var lit := i < 5 - digit
-			FireSkin.sprite(self, "diamond_hot" if lit and i == 4 - digit else ("diamond_bright" if lit else "diamond_dim"), Vector2(x, y), 1.0, 2)
+			var pip := Rect2(x - 3.0 * P, y - 3.0 * P, 6.0 * P, 6.0 * P)
+			draw_rect(pip.grow(P), WoodcutSkin.K)
+			draw_rect(pip, WoodcutSkin.R if lit and i == 4 - digit else (WoodcutSkin.C if lit else WoodcutSkin.B))
 	else:
 		var head := tr("count_ready")
 		var lh := PxType.line_height("big_gold")
-		PxType.draw(self, "big_gold", Vector2(c.x, c.y - lh - hop), head, Color.WHITE, 1, 0)
 		var sub := tr("count_bar_one") if ready_bars == 1 else tr("count_bars") % ready_bars
 		# twice the size: at 1x it was too small to read over the fire (outside review, 2026-10-31)
-		PxType.draw(self, "caps", Vector2(c.x, c.y + 3.0 * P), sub, PixelPalette.FIRE[5], 2 if size.x >= 600.0 else 1, 0)
+		var sk := 2 if size.x >= 600.0 else 1
+		var sub_h := PxType.line_height("caps", sk)
+		# printed on a black plate in a cream rule, so it reads over the street and the fire
+		var pw := maxf(PxType.width("big_gold", head), PxType.width("caps", sub, sk)) + 12.0 * P
+		var plate := Rect2(c.x - pw * 0.5, c.y - lh - hop - 3.0 * P, pw, lh + sub_h + 9.0 * P)
+		draw_rect(plate.grow(P), WoodcutSkin.C)
+		draw_rect(plate, WoodcutSkin.K)
+		PxType.draw(self, "big_gold", Vector2(c.x, c.y - lh - hop), head, Color.WHITE, 1, 0)
+		PxType.draw(self, "caps", Vector2(c.x, c.y + 3.0 * P), sub, WoodcutSkin.R, sk, 0)

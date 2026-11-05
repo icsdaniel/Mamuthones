@@ -89,6 +89,7 @@ var still_moment: StillMoment
 var _resume_at := -1.0           ## real time when a count-in ends and the music starts (-1: none)
 var _count_from := 0.0           ## real time the first count-in stick is heard
 var _count_music_t := 0.0        ## song time the music starts from after the count-in
+var settled := false             ## the first frames are drawn and the song has been started
 var _played := false             ## the music has run since the last count-in
 var _audio_count := false        ## the song started at its own count-in (sticks in the music)
 var _bar_count := false          ## the song started inside its intro: 4-3-2-1 over the bar before the first note's
@@ -317,6 +318,7 @@ func _start() -> void:
 	await _settle()
 	if not is_inside_tree():
 		return
+	settled = true
 	_layout_router()
 	if args.has("lead_in"):
 		conductor.play(song, session.remix, _first_t - float(args.lead_in))

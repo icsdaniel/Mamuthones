@@ -20,11 +20,11 @@ const FONT := "res://fonts/woodcut5.fnt"
 ## The Woodcut look sets every face in its one pixel type (fonts/woodcut5, the Controluce menu's 5 x 7
 ## capitals, made by tools/art/claude_styles/export_font.py), at a whole number of screen px per
 ## type px: the faces differ only in size.
-const LINE := 11                     ## the type's line, in its own px (its BMFont size)
+const LINE := 12                     ## the type's line, in its own px (its BMFont size: 7-px capitals, accents, descent, a row of leading)
 const SCALE := {"caps": 3, "caps_gold": 3, "big": 6, "big_gold": 6, "score": 4, "count": 12,
 	"num_gold": 4, "num_big": 7, "num_white": 4}
-const SIZES := {"caps": 11, "caps_gold": 11, "big": 11, "big_gold": 11, "score": 11, "count": 11,
-	"num_gold": 11, "num_big": 11, "num_white": 11}
+const SIZES := {"caps": 12, "caps_gold": 12, "big": 12, "big_gold": 12, "score": 12, "count": 12,
+	"num_gold": 12, "num_big": 12, "num_white": 12}
 const BASE := {"caps": 9, "caps_gold": 9, "big": 9, "big_gold": 9, "score": 9, "count": 9,
 	"num_gold": 9, "num_big": 9, "num_white": 9}
 const CREAM := Color("#efe6d2")
