@@ -1,14 +1,14 @@
 {
  "title": {
-  "en": "Shrove Tuesday remix (Suno test)",
-  "it": "Martedì grasso remix (prova Suno)"
+  "en": "Shrove Tuesday remix",
+  "it": "Martedì grasso remix"
  },
  "stop": 7,
- "bpm": 130.9,
- "offset": 0.859,
+ "bpm": 129.91,
+ "offset": 0.016,
  "id": "suno_shrove_remix",
  "audio": "res://audio/music/suno_shrove_remix.ogg",
- "length": 172.8,
+ "length": 172.807,
  "preview": 40.0,
  "rests": []
 }

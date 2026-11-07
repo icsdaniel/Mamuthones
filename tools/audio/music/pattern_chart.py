@@ -1689,6 +1689,115 @@ def add_free(song, chart):
     return ch
 
 
+SHUFFLE = (0.0, 1 / 3, 2 / 3, 5 / 6)   # where a shuffle song's four slots of a beat sound
+
+
+def shuffle_b(b):
+    """A beat on the straight grid the charter works in, moved to where a shuffle plays it."""
+    q = round(b * 4)
+    if abs(b * 4 - q) > 0.02:       # not on a slot (a hold's odd length): scale within the beat
+        f = b % 1.0
+        return round(math.floor(b) + np.interp(f, (0, .25, .5, .75, 1), (0, 1 / 3, 2 / 3, 5 / 6, 1)), 4)
+    return round(q // 4 + SHUFFLE[q % 4], 4)
+
+
+def shuffle(song, chart, level):
+    """Daniele (2026-11-07): notes off the straight grid are welcome where the music plays them.
+    Carnival and Shrove Tuesday swing their eighths in three (the "and" two thirds into the beat, the
+    tune's quick notes on the thirds), so the chart is built on the straight grid and every note is
+    moved to where the shuffle sounds: the "and" from 1/2 to 2/3, the "e" from 1/4 to 1/3, the "a"
+    from 3/4 to 5/6. The game reads these as a triplet section and judges it by its triplet rules.
+    A note on the "a" (5/6) sits a sixth of a beat before the next beat: it stays only at Expert, and
+    only when the beat after it is free."""
+    out = []
+    starts = {round(n["b"] * 4) for n in chart if n["k"] != "rest"}
+    for n in chart:
+        n = dict(n)
+        q = round(n["b"] * 4)
+        if abs(n["b"] * 4 - q) < 0.02 and q % 4 == 3 and (level != "expert" or q + 1 in starts):
+            continue
+        if n["k"] in ("hold", "rest"):
+            end = shuffle_b(n["b"] + n["len"])
+            n["b"] = shuffle_b(n["b"])
+            n["len"] = round(end - n["b"], 4)
+            if n["k"] == "hold" and n["len"] < 0.5:     # "and" to the beat: a third, too short to hold
+                n["len"] = round(2 / 3, 4)
+        else:
+            n["b"] = shuffle_b(n["b"])
+        out.append(n)
+    return finish(song, out, level)
+
+
+HEARD_GATE = 0.3    # an off-beat tap needs at least this attack under it in the audio (music_fit salience)
+
+
+def heard_gate(sid, cfg, charts):
+    """Daniele (2026-11-07): "Don't add them randomly. Make sure that the player feels the tempo and
+    hits the notes because they need to follow the flow." A plain tap off the beat (an "and", an "e"
+    or an "a") stays only where the song the player hears has an attack there: drums, bass or tune
+    (music_fit.py reads the game's own audio, not the charter's analysis). Taps on the beat keep the
+    pulse and always stay; holds, rings, chords and stomps are left alone."""
+    import music_fit
+    if not os.path.exists(os.path.join(music_fit.MUSIC, sid + ".ogg")):
+        return charts, {}
+    A = music_fit.Audio(sid)
+    spb, off = 60.0 / cfg["bpm"], cfg["offset"]
+    n = int((cfg["length"] - off) / spb * 4)
+    k = np.arange(n)
+    if cfg.get("shuffle"):
+        fr = np.array(SHUFFLE)[k % 4]
+    else:
+        fr = (k % 4) / 4 + (k % 2) * cfg.get("swing", 0.0)
+    A.set_ref(off + (k // 4 + fr) * spb)
+    out, dropped = {}, {}
+    for d, ch in charts.items():
+        at = {}
+        for x in ch:
+            at.setdefault(round(x["b"], 3), []).append(x)
+        keep = []
+        for x in ch:
+            if x["k"] == "step" and abs(x["b"] - round(x["b"])) > 1e-3 and len(at[round(x["b"], 3)]) == 1:
+                b = shuffle_b(x["b"]) if cfg.get("shuffle") else x["b"]
+                if float(A.sal(off + b * spb)) < HEARD_GATE:
+                    dropped[d] = dropped.get(d, 0) + 1
+                    continue
+            keep.append(x)
+        out[d] = keep
+    return out, dropped
+
+
+def clean(song_data, level, chart, score):
+    """The game's own rules on the finished chart (validate_charts.check_chart with the song's sections
+    and level rules): the input each error names gives way, the weakest plain step first, then a ring
+    becomes a bell, a hold a step."""
+    for _ in range(400):
+        errs, _ = V.check_chart(song_data, level, chart, None)
+        errs = [e for e in errs if "peak" not in e and "finale" not in e and " b=" in e]
+        if not errs:
+            return chart
+        bs = [float(x) for x in re.findall(r"b=([0-9.]+)", errs[0])]
+        at = [n for n in chart if any(abs(n["b"] - b) < 2e-3 for b in bs)]
+        steps = [n for n in at if n["k"] == "step"]
+        if steps:
+            chart.remove(min(steps, key=lambda n: score(n["b"])))
+            continue
+        rings = [n for n in at if n["k"] == "ring"]
+        if rings:
+            rings[0]["k"] = "bell"
+            rings[0].pop("lane", None)
+            continue
+        held = [n for n in chart if n["k"] == "hold" and any(n["b"] - 2e-3 < b < n["b"] + n["len"] + 2e-3 for b in bs)]
+        if held:
+            held[0]["k"] = "step"
+            held[0].pop("len")
+            continue
+        if at:
+            chart.remove(at[-1])
+            continue
+        raise SystemExit(f"{level}: can't clean {errs[0]}")
+    raise SystemExit(f"{level}: still failing")
+
+
 def main(argv):
     cfg = json.load(open(argv[1]))
     ana = json.load(open(cfg["analysis"]))
@@ -1720,6 +1829,12 @@ def main(argv):
         g.update(saved)
     plus = hold_guard(song, lift(song, "expert", charts["hard"], plus))
     charts["expert"] = add_free(song, finish(song, breathe(song, harden(song, plus), "expert"), "expert"))
+    charts, dropped = heard_gate(cfg["song"], cfg, charts)
+    if dropped:
+        print("  off-beat taps with no sound under them, dropped:", dropped)
+    straight = charts
+    if cfg.get("shuffle"):
+        charts = {d: shuffle(song, ch, d) for d, ch in charts.items()}
     length = cfg["length"]
     for d in DIFFS:
         ch = charts[d]
@@ -1730,13 +1845,20 @@ def main(argv):
               + " ".join(f"{k}:{v}" for k, v in sorted(m.items())) + (f" free:{sum(1 for n in ch if n.get('free'))}" if d == "expert" else ""))
     if "--grid" in argv:
         out = os.path.splitext(cfg["analysis"])[0] + "_grid.txt"
-        open(out, "w").write(grid_text(song, charts))
+        open(out, "w").write(grid_text(song, straight))
         print("grid:", out)
     if "--write" in argv:
         p = os.path.join(ROOT, "game", "data", "songs", cfg["song"] + ".json")
         data = json.load(open(p))
-        data["charts"] = charts
         data["level_rules"] = dict(SHIFT, expert="expert")
+        data["charts"] = charts
+        if "swing" in cfg:
+            data["swing"] = cfg["swing"]
+        else:
+            data.pop("swing", None)
+        sc = lambda b: song.score(min(song.n - 1, slot_of(song, b)))
+        for d in DIFFS:
+            charts[d] = clean(data, d, charts[d], sc)
         with open(p, "w") as f:
             json.dump(data, f, indent=1, ensure_ascii=False)
             f.write("\n")

@@ -1,11 +1,11 @@
 {
  "title": {
-  "en": "The Piazza remix (Suno test)",
-  "it": "La piazza remix (prova Suno)"
+  "en": "The Piazza remix",
+  "it": "La piazza remix"
  },
  "stop": 6,
- "bpm": 144.17,
- "offset": 1.487,
+ "bpm": 144.86,
+ "offset": 1.566,
  "id": "suno_piazza_remix",
  "audio": "res://audio/music/suno_piazza_remix.ogg",
  "length": 136.36,

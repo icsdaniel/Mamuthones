@@ -4,8 +4,8 @@
   "it": "I fuochi di Sant'Antonio (prova Suno)"
  },
  "stop": 2,
- "bpm": 66.01,
- "offset": 0.456,
+ "bpm": 66.0,
+ "offset": 0.4216,
  "targets": {
   "easy": 0.75,
   "medium": 1.5,

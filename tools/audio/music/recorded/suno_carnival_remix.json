@@ -5,7 +5,7 @@
  },
  "stop": 4,
  "bpm": 110.0,
- "offset": 0.02,
+ "offset": -0.0091,
  "id": "suno_carnival_remix",
  "audio": "res://audio/music/suno_carnival_remix.ogg",
  "length": 172.982,

@@ -60,6 +60,11 @@ def analyse(cfg):
     times = cfg["offset"] + np.arange(n) * spb / 4
     # a swung song's off-beat sixteenths sound late: read them where they sound
     times = times + (np.arange(n) % 2) * cfg.get("swing", 0.0) * spb
+    if cfg.get("shuffle"):
+        # a shuffle (Carnival, Shrove Tuesday): the beat splits in three, the "and" sounds two thirds in.
+        # The four slots of a beat are read at 0, 1/3, 2/3 and 5/6 of it (SHUFFLE in pattern_chart.py)
+        k = np.arange(n)
+        times = cfg["offset"] + (k // 4 + np.array([0.0, 1 / 3, 2 / 3, 5 / 6])[k % 4]) * spb
     st = cfg["stems"]
     res = {"bpm": cfg["bpm"], "offset": cfg["offset"], "slots": n}
 

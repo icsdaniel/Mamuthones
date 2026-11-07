@@ -5,7 +5,7 @@
  },
  "stop": 1,
  "bpm": 101.0,
- "offset": 0.595,
+ "offset": 0.5798,
  "targets": {
   "easy": 0.7,
   "medium": 1.8,
