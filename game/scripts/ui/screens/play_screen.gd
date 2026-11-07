@@ -757,6 +757,8 @@ func _clank(up := true, strength := 0.2) -> void:
 func _bell_strike(up: bool, quality: String) -> void:
 	var perfect := quality == "perfect"
 	lanes.bell_hit(up, quality, _bell_chain)
+	# the load swings with a whoosh and a spray of tiny bells over the bell's own ring
+	Sound.juice("tilt_up" if up else "tilt_down")
 	knock(Vector2(0.0, -1.0 if up else 1.0) * (BELL_KNOCK if perfect else BELL_KNOCK * 0.6))
 	if backdrop != null:
 		backdrop.kick(0.7 if perfect else 0.4)

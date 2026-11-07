@@ -798,11 +798,11 @@ func _draw_under(ci: CanvasItem) -> void:
 func _draw_fx(ci: CanvasItem) -> void:
 	if street != null:
 		# the bursts are drawn over the street in _draw_street; only let go of the ones that are over
-		while not _bursts.is_empty() and _clock - float(_bursts[0][2]) > LaneSkin.BURST_TIME:
+		while not _bursts.is_empty() and _clock - float(_bursts[0][2]) > maxf(LaneSkin.BURST_TIME, 0.5):
 			_bursts.pop_front()
 		while not _stomps.is_empty() and _clock - float(_stomps[0][2]) > 1.0:
 			_stomps.pop_front()
-		while not _strikes.is_empty() and _clock - float(_strikes[0][3]) > StreetSkin.STRIKE_TIME:
+		while not _strikes.is_empty() and _clock - float(_strikes[0][3]) > maxf(StreetSkin.STRIKE_TIME, 0.5):
 			_strikes.pop_front()
 		while not _pulses.is_empty() and _clock - float(_pulses[0][2]) > PULSE_TIME * 1.5:
 			_pulses.pop_front()
@@ -1342,16 +1342,26 @@ func _draw_street() -> void:
 	var field := field_rect()
 	if session != null:
 		WoodcutSkin.draw_notes(self, field)
+	# the review page's hit juice: a carved star, a shock ring and wood chips off the hit ring
+	var P := street.pic_scale if street != null else 4.0
+	var hl := LaneSkin.hit_line_y(field)
 	for b in _bursts:
 		var pos: Vector2 = b[0]
-		WoodcutSkin.burst(self, project(pos), str(b[1]), _clock - float(b[2]), road_scale(pos.y))
+		var q := str(b[1])
+		if q == "miss":
+			continue
+		WoodcutSkin.hit_juice(self, project(pos), WoodcutSkin.lane_px(self, field, pos.y) * 0.43, P,
+			"perfect" if q == "heal" else q, _clock - float(b[2]), int(float(b[2]) * 1000.0) + int(pos.x))
 	for st in _stomps:
-		var at := project(Vector2(lane_center(int(st[0])).x, LaneSkin.hit_line_y(field)))
-		WoodcutSkin.burst(self, at, "stomp" if bool(st[1]) else "ok", _clock - float(st[2]), road_scale(LaneSkin.hit_line_y(field)) * (1.6 if bool(st[1]) else 1.0))
+		var lane := int(st[0])
+		WoodcutSkin.hit_juice(self, project(Vector2(lane_center(lane).x, hl)), WoodcutSkin.lane_px(self, field, hl) * 0.43, P,
+			"stomp" if bool(st[1]) else "ok", _clock - float(st[2]), int(float(st[2]) * 1000.0) + lane)
+	# a bell rung on time: all three rings strike at once, in red
 	for sk in _strikes:
-		WoodcutSkin.bell_strike(self, field, bool(sk[0]), str(sk[1]), int(sk[2]), _clock - float(sk[3]))
+		for lane in 3:
+			WoodcutSkin.hit_juice(self, project(Vector2(lane_center(lane).x, hl)), WoodcutSkin.lane_px(self, field, hl) * 0.43, P,
+				"bell" if str(sk[1]) != "ok" else "ok", _clock - float(sk[3]), int(float(sk[3]) * 1000.0) + 7 * lane + 1)
 	if session != null:
-		var hl := LaneSkin.hit_line_y(field)
 		var taken: Array[float] = []
 		var rests := []
 		for e in _notes_shown(field):

@@ -36,13 +36,13 @@ const UI_NAMES: Array[String] = ["tap", "back", "unlock", "carve", "result", "cu
 ## Juice stings (tools/audio/sfx/juice.py): combo milestones, a long combo lost, the multiplier
 ## rising and topping out, health running out, and the results screen's count, stamp and new best.
 const JUICE_NAMES: Array[String] = ["combo_1", "combo_2", "combo_3", "combo_break", "unison_up", "unison_top",
-	"fail", "count_tick", "stamp_1", "stamp_2", "stamp_3", "new_best"]
+	"fail", "count_tick", "stamp_1", "stamp_2", "stamp_3", "new_best", "tilt_up", "tilt_down"]
 ## Each sting's level, dB: the in-play ones sit under the music and the bells, so they flavour a
 ## run without covering the beat; the results ones can speak up.
 ## (On the Bells bus, which has no trim: a bell's on-time chime is -8 dB.)
 const JUICE_DB := {"combo_1": -12.0, "combo_2": -11.0, "combo_3": -10.0, "combo_break": -11.0, "unison_up": -12.0,
 	"unison_top": -9.0, "fail": -5.0, "count_tick": -15.0, "stamp_1": -5.0, "stamp_2": -4.5, "stamp_3": -3.5,
-	"new_best": -5.0}
+	"new_best": -5.0, "tilt_up": -9.0, "tilt_down": -9.0}
 ## Stings tuned to the song's key (resampled like the chimes); the rest play as written.
 const JUICE_TUNED: Array[String] = ["combo_1", "combo_2", "combo_3", "unison_up", "unison_top"]
 const AMBIENCES: Array[String] = ["fire", "crowd", "wind"]

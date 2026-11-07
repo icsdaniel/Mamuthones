@@ -100,6 +100,7 @@ func _shots() -> Array:
 		{"file": "play_showcase", "screen": "play", "args": {"song_id": fires_id, "difficulty": "hard", "autoplay": true}, "setup": "moment:showcase", "wait": 0.1},
 		{"file": "play_dense", "screen": "play", "args": {"song_id": fires_id, "difficulty": "hard", "autoplay": true}, "setup": "moment:dense", "wait": 0.1},
 		{"file": "play_hold", "screen": "play", "args": {"song_id": "bonfires", "difficulty": "medium", "autoplay": true}, "setup": "moment:hold", "wait": 0.1},
+		{"file": "play_juice_frames", "screen": "play", "args": {"song_id": fires_id, "difficulty": "hard", "autoplay": true}, "setup": "moment:bell", "frames": 120},
 		{"file": "play_bell_frames", "screen": "play", "args": {"song_id": fires_id, "difficulty": "hard", "autoplay": true}, "setup": "moment:bell_far", "frames": 150},
 		{"file": "play_bell", "screen": "play", "args": {"song_id": fires_id, "difficulty": "hard", "autoplay": true}, "setup": "moment:bell", "wait": 0.1},
 		{"file": "play_still", "screen": "play", "args": {"song_id": fires_id, "difficulty": "hard", "autoplay": true}, "setup": "moment:still", "wait": 0.1},

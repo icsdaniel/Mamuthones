@@ -108,13 +108,14 @@ func _draw() -> void:
 		buttons.append(b)
 		var down: bool = pressed[i]
 		draw_rect(b, WoodcutSkin.R if down else WoodcutSkin.C)
-		var fh := minf(b.size.y * 0.6, b.size.x * 0.9)
+		var fh := minf(b.size.y * 0.66, b.size.x * 1.1)
 		var ink := WoodcutSkin.C if down else WoodcutSkin.K
+		var face := WoodcutSkin.R if down else WoodcutSkin.C
 		if i == 1:
-			WoodcutSkin.foot(self, b.get_center() + Vector2(-fh * 0.2, 0), fh, true, ink)
-			WoodcutSkin.foot(self, b.get_center() + Vector2(fh * 0.2, 0), fh, false, ink)
+			WoodcutSkin.foot(self, b.get_center() + Vector2(-fh * 0.34, 0), fh * 0.9, true, ink, face, px)
+			WoodcutSkin.foot(self, b.get_center() + Vector2(fh * 0.34, 0), fh * 0.9, false, ink, face, px)
 		else:
-			WoodcutSkin.foot(self, b.get_center(), fh, i == 0, ink)
+			WoodcutSkin.foot(self, b.get_center(), fh, i == 0, ink, face, px)
 	if topic == "stomps":
 		_draw_stomp(buttons[1], dt, px)
 	if lit and topic in ["bells", "full"] and not slam:

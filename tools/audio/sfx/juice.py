@@ -130,6 +130,30 @@ def unison_up(top: bool) -> np.ndarray:
     return room(out, 0.9, -12, 33)
 
 
+def tilt(up: bool) -> np.ndarray:
+    """A bell tilted on time (Daniele, 2026-11-07: "extra sound fx for the bells tilting"): the load
+    swings with a short whoosh, up or down, and a spray of tiny bells rattles off the swing, then
+    settles. Not tuned: it sits on top of the bell's own ring, which carries the pitch."""
+    rng = np.random.default_rng([557, int(up)])
+    out = stereo(0.55)
+    m = int(0.11 * SR)
+    t = np.arange(m) / m
+    noise = rng.standard_normal(m)
+    sweep = np.zeros(m)
+    for k in range(8):
+        a, b = k * m // 8, (k + 1) * m // 8
+        kk = k if up else 7 - k
+        f = 1200 * 2 ** (1.8 * kk / 8)
+        sweep[a:b] = bandpass(noise, f, f * 1.7, 2)[a:b]
+    sweep *= np.sin(np.pi * t) ** 1.2 * 0.3
+    add_at(out, pan(sweep, -0.35 if up else 0.35), 0)
+    add_at(out, pan(sweep * 0.8, 0.35 if up else -0.35), int(0.006 * SR))
+    # the tiny bells: a quick spray going the way of the swing, then a few settling
+    shake(out, rng, 0.03, 6, 0.32, 3000 if up else 2200, 5200 if up else 3800)
+    shake(out, rng, 0.17, 3, 0.16, 2600, 4200)
+    return room(out, 0.5, -15, 34)
+
+
 def fail() -> np.ndarray:
     """Health ran out: the load falls in a heap, cowbells clanking down one on another and a body
     landing on the stones, then quiet."""
@@ -210,6 +234,8 @@ def main() -> None:
     write("juice/fail.wav", fail(), -2.0)
     write("juice/count_tick.wav", count_tick(), -6.0)
     write("juice/new_best.wav", new_best(), -2.0)
+    write("juice/tilt_up.wav", tilt(True), -4.0)
+    write("juice/tilt_down.wav", tilt(False), -4.0)
 
 
 if __name__ == "__main__":

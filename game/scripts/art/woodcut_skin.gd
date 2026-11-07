@@ -226,6 +226,76 @@ static func rings(lv: LaneView, field: Rect2, hl: float, incoming: Array) -> voi
 			lv.draw_line(p - q * w * 1.2, p + q * w * 1.2, notch, w * 1.6)
 
 
+
+## The review page's hit juice (round 38, smooth.juice), at a hit ring centred on c (rx: the ring's
+## half width on screen, P: one art px on screen). kind: "perfect"/"good"/"held" (cream), "early"/
+## "late"/"ok" (grey), "bell" and "stomp" (red shock ring, bigger chips). Three parts:
+##   a carved star, eight short cuts flying out flat from the ring (0.14 s);
+##   a shock ring spreading from the ring, dashed as it fades (0.2 s);
+##   wood chips, red and cream flecks thrown up and falling (0.35 s).
+## Returns false once it is over.
+static func hit_juice(ci: CanvasItem, c: Vector2, rx: float, P: float, kind: String, age: float, seed: int) -> bool:
+	if age > 0.45 or age < 0.0:
+		return age < 0.0
+	var ry := rx * 0.36
+	var soft := kind in ["early", "late", "ok"]
+	var big := kind in ["bell", "stomp", "perfect"]
+	var hot := C if not soft else G
+	# 0. the ring itself flashes: a solid cream (red for a bell or stomp) plate for a moment
+	if age < 0.07 and not soft:
+		oval(ci, c, Vector2(rx, ry) * (1.0 + 0.25 * age / 0.07), R if kind in ["bell", "stomp"] else C)
+		oval(ci, c, Vector2(rx, ry) * 0.55 * (1.0 + 0.25 * age / 0.07), K if kind in ["bell", "stomp"] else R)
+	# 1. the carved star (bigger than the review's: Daniele, 2026-11-07, "add some visual juice")
+	if age < 0.18:
+		var k := age / 0.18
+		var r0 := 1.12 + 0.9 * _ss(k)
+		var ln := 0.75 * (1.0 - k) + 0.15
+		if big:
+			ln *= 1.3
+		for i in 8:
+			var ang := float(i) * PI / 4.0 + PI / 8.0
+			var ca := cos(ang)
+			var sa := sin(ang)
+			if sa < -0.3 and kind != "bell":
+				sa *= 0.4                  # keep the cuts off the incoming notes
+			var steps := 10
+			for q in steps:
+				var u := ln * float(q) / float(steps - 1)
+				var p := c + Vector2(ca * rx * (r0 + u), sa * ry * (r0 + u) * 1.8)
+				var sz := P * (2.0 if u < ln * 0.5 else 1.0)
+				ci.draw_rect(Rect2((p - Vector2(sz, sz) * 0.5).round(), Vector2(sz, sz)), hot if u < ln * 0.6 else R)
+	# 2. the shock ring
+	if age < 0.26:
+		var k := age / 0.26
+		var e := 1.15 + 1.0 * _ss(k)
+		var col := R if kind in ["bell", "stomp"] else hot
+		var sz := P * (2.0 if big and k < 0.5 else 1.0)
+		for i in 64:
+			if k > 0.5 and i % 2:
+				continue
+			var a := TAU * float(i) / 64.0
+			var p := c + Vector2(cos(a) * rx * e, sin(a) * ry * e)
+			ci.draw_rect(Rect2((p - Vector2(sz, sz) * 0.5).round(), Vector2(sz, sz)), col)
+	# 3. wood chips
+	var rng := RandomNumberGenerator.new()
+	rng.seed = seed
+	var n := 8 if kind != "held" else 4
+	if big:
+		n += 6
+	for i in n:
+		var vx := (rng.randf() - 0.5) * rx * 6.5
+		var vy := -(0.5 + rng.randf() * 0.9) * ry * 7.0
+		var p := c + Vector2(vx * age, vy * age + 0.5 * (ry * 60.0) * age * age)
+		var sz := P * (2.0 if age < 0.28 else 1.0) * (1.5 if big and i % 3 == 0 and age < 0.15 else 1.0)
+		ci.draw_rect(Rect2((p - Vector2(sz, sz) * 0.5).round(), Vector2(sz, sz)), R if i % 2 else hot)
+	return true
+
+
+static func _ss(x: float) -> float:
+	x = clampf(x, 0.0, 1.0)
+	return x * x * (3.0 - 2.0 * x)
+
+
 ## A note hit: a burst of square chips flying out, cream and red, gone in a moment.
 static func burst(ci: CanvasItem, at: Vector2, quality: String, age: float, sc: float) -> bool:
 	var life := 0.28
@@ -359,18 +429,53 @@ static func draw_notes(lv: LaneView, field: Rect2) -> void:
 
 # ------------------------------------------------------------------ the step buttons
 
-## A foot, sole up, carved into a button: a black sole with five toes (mirrored for the right).
-static func foot(ci: CanvasItem, c: Vector2, h: float, mirror: bool, col: Color) -> void:
-	var w := h * 0.42
-	var sx := -1.0 if mirror else 1.0
-	# sole: a long oval, wider at the ball
-	ci.draw_colored_polygon(ellipse_pts(c + Vector2(0, h * 0.12), Vector2(w * 0.42, h * 0.38), 20), col)
-	ci.draw_colored_polygon(ellipse_pts(c + Vector2(sx * w * 0.06, -h * 0.12), Vector2(w * 0.5, h * 0.26), 20), col)
-	for i in 5:
-		var tx := (-0.42 + 0.21 * float(i)) * w * sx
-		var ty := -h * (0.42 - 0.05 * absf(float(i) - 0.5))
-		var tr := w * (0.15 - 0.018 * float(i))
-		ci.draw_circle(c + Vector2(tx, ty), tr, col)
+
+## A bare footprint, sole to the player, drawn pixel by pixel (Daniele, 2026-11-07: the feet "are
+## not well pictured"): five separate toes in an arc, the ball, the narrow arch and the heel. This is
+## the right foot (big toe on the inner, left side); mirror gives the left. size: about its height in
+## screen px; drawn in whole pixels of P (or size / 20).
+const FOOT := [
+	".###.........",
+	"#####.##.....",
+	"#####.##.##..",
+	".###......##.",
+	"...........##",
+	"..#######....",
+	".##########..",
+	"############.",
+	"############.",
+	".###########.",
+	"..##########.",
+	"....########.",
+	".....#######.",
+	"......######.",
+	"......######.",
+	"......######.",
+	".....#######.",
+	".....#######.",
+	".....######..",
+	"......####...",
+]
+
+
+static func foot(ci: CanvasItem, c: Vector2, size: float, mirror: bool, col: Color, _cut: Color = C, _P := 0.0) -> void:
+	var rows := FOOT.size()
+	var cols: int = (FOOT[0] as String).length()
+	var p := maxf(1.0, floorf(size / float(rows)))
+	var o := (c - Vector2(cols, rows) * p * 0.5).round()
+	for j in rows:
+		var row: String = FOOT[j]
+		var i := 0
+		while i < cols:
+			if row[i] != "#":
+				i += 1
+				continue
+			var e := i
+			while e < cols and row[e] == "#":
+				e += 1
+			var x0 := float(i) if not mirror else float(cols - e)
+			ci.draw_rect(Rect2(o + Vector2(x0 * p, float(j) * p), Vector2(float(e - i) * p, p)), col)
+			i = e
 
 
 ## The three step buttons: paper plates with a red stitched border and a dithered foot of grey,
@@ -433,10 +538,11 @@ static func buttons(lv: LaneView) -> void:
 			lv.draw_rect(Rect2(e.position.x, y, px, minf(px, e.end.y - y)), edge)
 			lv.draw_rect(Rect2(e.end.x - px, y, px, minf(px, e.end.y - y)), edge)
 			y += dash
-		var c := br.get_center() - Vector2(0, br.size.y * 0.06)
-		var fh := minf(br.size.y * 0.5, br.size.x * 0.9)
+		# the review's feet: 0.55 of the plate's height, both in the middle one
+		var c := br.get_center() - Vector2(0, br.size.y * 0.04)
+		var fs := minf(br.size.y * 0.62, br.size.x * 1.1)
 		if lane == 1:
-			foot(lv, c + Vector2(-fh * 0.2, 0), fh, true, ink)
-			foot(lv, c + Vector2(fh * 0.2, 0), fh, false, ink)
+			foot(lv, c + Vector2(-fs * 0.34, 0), fs * 0.9, true, ink, fill, px)
+			foot(lv, c + Vector2(fs * 0.34, 0), fs * 0.9, false, ink, fill, px)
 		else:
-			foot(lv, c, fh, lane == 0, ink)
+			foot(lv, c, fs, lane == 0, ink, fill, px)
