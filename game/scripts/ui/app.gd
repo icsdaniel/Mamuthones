@@ -55,6 +55,7 @@ func _ready() -> void:
 	_overlay.set_anchors_preset(Control.PRESET_FULL_RECT)
 	_overlay.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	add_child(_overlay)
+	ErrorWatch.install(_overlay)   # test builds: errors shown on the phone
 	get_tree().root.set_meta("app", self)
 	get_tree().set_auto_accept_quit(true)
 	get_tree().set_quit_on_go_back(false)
