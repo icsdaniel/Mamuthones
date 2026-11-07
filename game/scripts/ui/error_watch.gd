@@ -10,6 +10,16 @@ static var _box: PanelContainer
 static var _label: Label
 static var _lines: PackedStringArray = []
 static var _watch: ErrorWatch
+static var _crumbs: FileAccess
+const CRUMBS := "user://crumbs.log"
+
+
+## Test builds: notes a step about to run ("begin ...") or done ("end ..."), flushed at once, so if
+## the game freezes or closes inside a step, the next launch shows which step it was.
+static func crumb(text: String) -> void:
+	if _crumbs != null:
+		_crumbs.store_line("%d %s" % [Time.get_ticks_msec(), text])
+		_crumbs.flush()
 
 
 ## Called once by App: adds the logger and the box (in `overlay`), in debug builds only.
@@ -19,6 +29,11 @@ static func install(overlay: Control) -> void:
 	if _watch == null:
 		_watch = ErrorWatch.new()
 		OS.add_logger(_watch)
+		var last := FileAccess.get_file_as_string(CRUMBS).strip_edges().split("\n")
+		_crumbs = FileAccess.open(CRUMBS, FileAccess.WRITE)
+		if last.size() > 0 and " begin " in (" " + last[-1].get_slice(" ", 1) + " "):
+			var tail := last.slice(maxi(0, last.size() - 6))
+			_show.call_deferred("Last time the game stopped inside a step:\n" + "\n".join(tail))
 	_box = PanelContainer.new()
 	_box.name = "ErrorWatch"
 	var sb := StyleBoxFlat.new()

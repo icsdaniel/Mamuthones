@@ -24,10 +24,10 @@ extends Node
 signal changed
 
 const PATH := "user://profile.cfg"
-const VERSION := 2
-## The standard note speed (Daniele, 2026-10-31: "make the standard speed 1.6x"): the notes slide
-## 1.6 times faster than the old standard, so about 0.94 s of notes show on the road instead of 1.5 s.
-const STANDARD_SPEED := 1.6
+const VERSION := 3
+## The standard note speed: 1x (Daniele, 2026-11-07: "switch standard speed back to 1x", after
+## trying 1.6x from 2026-10-31).
+const STANDARD_SPEED := 1.0
 const DEFAULT_SETTINGS := {
 	"language": "",          # "" = follow the phone
 	"vibration": true,
@@ -419,8 +419,14 @@ func _migrate(cfg: ConfigFile, from_version: int) -> void:
 			# standard moves to the new one; a speed the player chose by hand is kept.
 			var s = cfg.get_value("settings", "values", {})
 			if s is Dictionary and s.has("note_speed") and is_equal_approx(float(s["note_speed"]), 1.0):
-				s["note_speed"] = STANDARD_SPEED
+				s["note_speed"] = 1.6
 				cfg.set_value("settings", "values", s)
+		if v == 3:
+			# 2 -> 3: the standard went back to 1.0. A profile on the 1.6 standard moves back.
+			var s3 = cfg.get_value("settings", "values", {})
+			if s3 is Dictionary and s3.has("note_speed") and is_equal_approx(float(s3["note_speed"]), 1.6):
+				s3["note_speed"] = STANDARD_SPEED
+				cfg.set_value("settings", "values", s3)
 
 
 func _leaderboards() -> Node:

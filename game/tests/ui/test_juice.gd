@@ -35,7 +35,7 @@ func test_every_juice_sting_loads() -> void:
 
 
 func test_standard_speed_is_faster() -> void:
-	check_eq(Profile.DEFAULT_SETTINGS["note_speed"], 1.6, "standard note speed 1.6x")
+	check_eq(Profile.DEFAULT_SETTINGS["note_speed"], 1.0, "standard note speed 1x")
 
 
 func test_sparks_fly_and_die() -> void:

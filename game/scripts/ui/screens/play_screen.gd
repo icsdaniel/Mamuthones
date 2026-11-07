@@ -22,7 +22,7 @@ extends Screen
 signal finished(session: Session)
 
 const GUTTER := 0.0               ## the road fills the width; the Mamuthones stand beside its far end
-const BANNER_SHARE := 0.4         ## the count-in and the stand-still moment use this top share of the lanes
+const BANNER_SHARE := 0.4         ## (old: the top share of the lanes the count-in used)
 const FAIL_MENU_DELAY := 0.5      ## seconds from running out of health to the fail menu
 const LEAD_MIN := 4.5             ## a song starts at least this many seconds (and two bars) before its first note
 const SETTLE_MAX := 3.0           ## at most this many seconds of first frames before the song starts
@@ -295,8 +295,12 @@ func build() -> void:
 	banner = Control.new()
 	banner.name = "Banner"
 	banner.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	# over the step buttons, which rest during the count: never over the notes coming down the road
+	# (Daniele, 2026-11-07: "the countdown covers the notes that are coming")
 	banner.anchor_right = 1.0
-	banner.anchor_bottom = BANNER_SHARE
+	banner.anchor_top = 1.0
+	banner.anchor_bottom = 1.0
+	banner.offset_top = -LaneView.BUTTONS_H
 	lanes.add_child(banner)
 	banner.z_index = PixelFilter.Z_OVER
 	count_view = CountInView.new()
@@ -356,12 +360,14 @@ func _settle() -> void:
 	if DisplayServer.get_name() == "headless":
 		return   # nothing is drawn, so nothing holds a frame (and tests expect the song at once)
 	await get_tree().process_frame
+	ErrorWatch.crumb("begin warm")
 	if lanes != null:
 		lanes.warm(session.notes.any(func(n: Note) -> bool: return n.kind == Note.Kind.BELL or n.kind == Note.Kind.RING))
 	if hud != null:
 		hud.warm()
 	if words != null:
 		words.warm(JUDGE_WORDS.values() + ["judge_one_thumb", "judge_wrong", "judge_still_kept"])
+	ErrorWatch.crumb("end warm")
 	var until := Time.get_ticks_msec() + int(SETTLE_MAX * 1000.0)
 	var steady := 0
 	var last := Time.get_ticks_usec()
@@ -1183,6 +1189,7 @@ func _on_music_finished() -> void:
 ## The last note is behind: the music fades out over END_FADE, then the results (a lesson inside the
 ## tutorial hands back at once).
 func _end_fade() -> void:
+	ErrorWatch.crumb("song over: fading out")
 	if bool(args.get("embedded", false)):
 		_finish()
 		return
@@ -1197,13 +1204,17 @@ func _finish() -> void:
 		return
 	done = true
 	router.enabled = false
+	ErrorWatch.crumb("begin save run")
 	_save_run("finished")
+	ErrorWatch.crumb("end save run")
 	if bool(args.get("embedded", false)):
 		finished.emit(session)
 		return
 	var record := {}
 	if autoplay == null:
+		ErrorWatch.crumb("begin record result")
 		record = Profile.record_result(session)
+		ErrorWatch.crumb("end record result")
 	app.replace("results", {"session": session, "record": record, "play_args": args, "ghost": ghost,
 			"frames": frame_stats(), "run_saved": run_log.saved_path if run_log != null else ""})
 

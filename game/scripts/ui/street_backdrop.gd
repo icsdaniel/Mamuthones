@@ -55,7 +55,8 @@ var pic_off := 0.0
 var stretch := 1.0
 
 var _street: Texture2D
-var _files: Array[Texture2D] = []
+var _figs: Array[Texture2D] = []     ## the procession's atlas pages (art/woodcut/figs_N.png)
+var _fig := {}                       ## figs.json: rows, poses, sprites
 var _fires: Array[Texture2D] = []
 var _geo := {}
 var _clock := 0.0
@@ -78,8 +79,14 @@ func _ready() -> void:
 	var f := FileAccess.open(DIR + "geometry.json", FileAccess.READ)
 	if f != null:
 		_geo = JSON.parse_string(f.get_as_text())
-	for i in int(_geo.get("file_frames", 0)):
-		_files.append(load(DIR + "files_%02d.png" % i))
+	var ff := FileAccess.open(DIR + "figs.json", FileAccess.READ)
+	if ff != null:
+		_fig = JSON.parse_string(ff.get_as_text())
+		var pages := 0
+		for v: Array in (_fig.sprites as Dictionary).values():
+			pages = maxi(pages, int(v[0]) + 1)
+		for i in pages:
+			_figs.append(load(DIR + "figs_%d.png" % i))
 	for lv in [1, 2, 3, 4]:
 		_fires.append(load(DIR + "fire_%d.png" % lv))
 	animations = not UIKit.animations_off()
@@ -315,13 +322,130 @@ func _draw() -> void:
 		var fh := float(box[3])
 		draw_texture_rect_region(_fires[lv], Rect2(pic_point(Vector2(box[0], box[1])), Vector2(fw, fh) * pic_scale),
 			Rect2(fi * fw, 0.0, fw, fh), mod)
-	# the files of Mamuthones: one picture per moment of the bob
-	if not _files.is_empty():
-		var nf := _files.size()
-		var k := nf - 1
-		if t < float(nf - 1) / float(_geo.get("file_fps", 60)):
-			k = clampi(int(t * float(_geo.get("file_fps", 60))), 0, nf - 2)
-		draw_texture_rect(_files[k], Rect2(at, sz), false, mod)
+	# the files of Mamuthones walking toward the fire, a heavy step on every beat
+	if not _figs.is_empty():
+		_draw_procession(mod)
+
+
+# ------------------------------------------------------------------ the procession
+
+## Seconds into the review's 120 bpm step cycle (0.5 s: the landing on the beat, the settle, a
+## crouch, then the short lift that carries the step into the next beat), at this song's tempo: a
+## slower song rests between the settle and the crouch, a faster one runs the cycle quicker.
+func step_time() -> float:
+	if beat <= -999.0 or not animations or still:
+		return 0.25
+	var spb := lanes.spb if lanes != null and lanes.spb > 0.0 else 0.5
+	var tsec := (beat - floorf(beat)) * spb
+	if spb < 0.5:
+		return tsec * 0.5 / spb
+	if tsec < 0.21:
+		return tsec
+	return clampf(0.5 - (spb - tsec), 0.21, 0.4999)
+
+
+static func _ss(x: float) -> float:
+	x = clampf(x, 0.0, 1.0)
+	return x * x * (3.0 - 2.0 * x)
+
+
+## The two files as the review page places them (smooth.procession_walk): rows evenly spaced in log
+## depth walk a third of a row toward the fire on every beat, the step taken in the lift; a new
+## Mamuthone walks in past the screen's edge at the front and the far ones shrink into the dark.
+## [x, y (feet, picture px), h, side, seed index, z], far to near.
+func procession(ts: float) -> Array:
+	var R: Dictionary = _fig.rows
+	var sc: Dictionary = _fig.scene
+	var tm: Dictionary = _fig.timing
+	var z0 := float(R.z0)
+	var ratio := float(R.ratio)
+	var b := floorf(beat) if beat > -999.0 and animations and not still else 0.0
+	var u := _ss((ts - float(tm.T_OFF)) / (float(tm.T_BEAT) - float(tm.T_OFF)))
+	if beat <= -999.0 or not animations or still:
+		u = 0.0
+	var pos := (b + u) * float(R.step)
+	var vpx := float(sc.vpx)
+	var vpy := float(sc.vpy)
+	var hity := float(sc.hity)
+	var hw0 := float(sc.hw0)
+	var hw1 := float(sc.hw1)
+	var out := []
+	var n := int(R.n)
+	var out_k := float(R.get("out", 1.05))
+	var nseeds := (_fig.seeds as Array).size()
+	for side: float in [-1.0, 1.0]:
+		for j in n + 2:
+			var r := float(j) - fposmod(pos, 1.0)
+			var ident := j + int(floorf(pos))
+			var z := z0 * pow(ratio, r)
+			if z > float(R.zmax) or z < z0 / ratio:
+				continue
+			var tt := 1.0 / z
+			var y := vpy + tt * (hity - vpy)
+			var h := int(roundf(float(R.scale) * tt))
+			var w := float(h) * 0.86
+			var halfw := hw0 + (hw1 - hw0) * (y - vpy) / (hity - vpy)
+			var x := vpx + side * (halfw * out_k + w * 0.36)
+			var fit := vpx - w * 0.5 - 1.0
+			if z >= z0:
+				x = vpx + side * minf(absf(x - vpx), fit)
+			else:
+				var k := (log(z0) - log(z)) / log(ratio)
+				var d0 := minf(absf(halfw * out_k + w * 0.36), fit)
+				x = vpx + side * (d0 + (vpx + w * 0.6 - d0) * k)
+			var seed := posmod(ident + (2 if side > 0.0 else 0), nseeds)
+			out.append([x, y, h, side, seed, z])
+	out.sort_custom(func(p: Array, q: Array) -> bool: return float(p[1]) < float(q[1]))
+	return out
+
+
+func _draw_procession(mod: Color) -> void:
+	var ts := step_time()
+	var poses: Array = _fig.poses
+	var pi := 0
+	for i in poses.size():
+		if float(poses[i]) <= ts + 0.0001:
+			pi = i
+	var S := float(_fig.S)
+	var seeds: Array = _fig.seeds
+	var sprites: Dictionary = _fig.sprites
+	var k := pic_scale / S
+	for fg: Array in procession(ts):
+		var key := "%d_%d_%d" % [int(seeds[int(fg[4])]), int(fg[2]), pi]
+		if not sprites.has(key):
+			continue
+		var sp: Array = sprites[key]
+		var src := Rect2(float(sp[1]), float(sp[2]), float(sp[3]), float(sp[4]))
+		var foot := pic_point(Vector2(float(fg[0]), float(fg[1])))
+		var right := float(fg[3]) > 0.0
+		# the sprites are drawn for the right-hand file; the left one is the mirror image
+		var ax := float(sp[5]) if right else float(sp[3]) - float(sp[5])
+		var tl := (foot - Vector2(ax, float(sp[6])) * k).round()
+		var dst := Rect2(tl, src.size * k)
+		if not right:
+			draw_set_transform(Vector2(tl.x * 2.0 + dst.size.x, 0.0), 0.0, Vector2(-1.0, 1.0))
+		draw_texture_rect_region(_figs[int(sp[0])], dst, src, mod)
+		if not right:
+			draw_set_transform(Vector2.ZERO)
+		_ring_marks(fg, ts, mod)
+
+
+## Short cream strokes flying off the bells for a moment after each landing (near files only).
+func _ring_marks(fg: Array, ts: float, mod: Color) -> void:
+	if ts > 0.14 or float(fg[5]) > 4.5 or beat <= -999.0:
+		return
+	var kk := 1.0 - ts / 0.14
+	var h := float(fg[2])
+	var by := float(fg[1]) - h * 0.42
+	var w := maxf(1.0, pic_scale)
+	for side: float in [-1.0, 1.0]:
+		var bx := float(fg[0]) + side * h * 0.43
+		for ang: float in [-0.5, 0.0, 0.5]:
+			var r0 := h * (0.06 + 0.1 * (1.0 - kk))
+			var ln := maxf(2.0, h * 0.07 * kk)
+			var a := pic_point(Vector2(bx + side * r0 * cos(ang), by + r0 * sin(ang)))
+			var e := pic_point(Vector2(bx + side * (r0 + ln) * cos(ang), by + (r0 + ln) * sin(ang)))
+			draw_line(a, e, WoodcutSkin.C * mod, w)
 
 
 ## How far down a figure is (1 = the full drop) t seconds after the beat: down at once, held for a

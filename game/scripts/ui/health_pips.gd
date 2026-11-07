@@ -103,19 +103,26 @@ func _heart_px(c: Vector2, pts: int, pulse: float, flare: float) -> void:
 	var o := (c - Vector2(7.5, 6.5) * px).round()
 	var red := Color("#c8352a").lerp(Color("#efe6d2"), flare).lerp(Color("#e86a5a"), pulse * 0.4)
 	var lost := Color("#4a3c38")
-	for y in HEART_PX.size():
-		var row: String = HEART_PX[y]
-		for x in row.length():
-			if row[x] == "#":
-				draw_rect(Rect2(o + Vector2(x, y) * px - Vector2(px, px), Vector2(px * 3.0, px * 3.0)), Color("#141014"))
+	# a one-pixel ink outline round the heart, as on the review page (round 38)
 	for y in HEART_PX.size():
 		var row: String = HEART_PX[y]
 		for x in row.length():
 			if row[x] != "#":
 				continue
-			var col := lost
-			if pts == 2 or (pts == 1 and x <= 3):
-				col = red
+			for d: Vector2i in [Vector2i(-1, 0), Vector2i(1, 0), Vector2i(0, -1), Vector2i(0, 1)]:
+				var nx := x + d.x
+				var ny := y + d.y
+				if ny < 0 or ny >= HEART_PX.size() or nx < 0 or nx >= row.length() or HEART_PX[ny][nx] != "#":
+					draw_rect(Rect2(o + Vector2(nx, ny) * px, Vector2(px, px)), Color("#141014"))
+	for y in HEART_PX.size():
+		var row: String = HEART_PX[y]
+		for x in row.length():
+			if row[x] != "#":
+				continue
+			var on := pts == 2 or (pts == 1 and x <= 3)
+			var col := red if on else lost
+			if on and x == 1 and y == 1:
+				col = Color("#efe6d2")   # the shine
 			draw_rect(Rect2(o + Vector2(x, y) * px, Vector2(px, px)), col)
 
 

@@ -126,10 +126,11 @@ func test_the_count_in_is_seen_on_the_audio_sticks() -> void:
 	await _to_time(c, s.notes[0].t + 0.01)
 	await tree.process_frame
 	check(not cv.is_showing(), "nothing is shown once the notes arrive")
-	# The count is drawn over the top of the lanes, never near the hit line where notes are stepped.
+	# The count is drawn over the resting step buttons, below the hit line: never over the road where
+	# the first notes come down (Daniele, 2026-11-07).
 	var lanes: LaneView = play.get("lanes")
-	var hit_zone_top := lanes.get_global_transform() * Vector2(0.0, LaneSkin.hit_line_y(lanes.field_rect()) - lanes.field_rect().size.y * 0.25)
-	check(cv.get_global_rect().end.y <= hit_zone_top.y, "the count-in sits well above the hit line")
+	var hit := lanes.get_global_transform() * Vector2(0.0, LaneSkin.hit_line_y(lanes.field_rect()))
+	check(cv.get_global_rect().position.y >= hit.y, "the count-in sits below the hit line, over the buttons")
 	check(cv.get_global_rect().size.y > 150.0, "and is big (%.0f px tall)" % cv.get_global_rect().size.y)
 	_close(app)
 

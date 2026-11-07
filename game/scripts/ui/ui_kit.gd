@@ -386,7 +386,10 @@ static func juice(b: BaseButton) -> void:
 		var hot := Color(1.35, 1.2, 0.9) if not reduced_motion() else Color(1.15, 1.08, 0.97)
 		b.self_modulate = hot
 		var tw := b.create_tween()
-		tw.tween_property(b, "self_modulate", Color.WHITE, 0.24).set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_OUT))
+		tw.tween_property(b, "self_modulate", Color.WHITE, 0.24).set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_OUT)
+		# a button taken off the screen mid-flash (the delay tests swap their buttons) stops its
+		# flash, or the tween asks a node outside the tree whether it may run (an engine error)
+		b.tree_exiting.connect(tw.kill, CONNECT_ONE_SHOT))
 
 
 ## Shrinks a button's label (down to `min_size`, never under the 26 px floor) until it fits between

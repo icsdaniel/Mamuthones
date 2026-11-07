@@ -53,7 +53,7 @@ static func oval(ci: CanvasItem, c: Vector2, r: Vector2, fill: Color, rim: Color
 ## The kind of a note as the woodcut tells it: [fill, rim].
 static func note_inks(lv: LaneView, n: Note) -> Array:
 	if n.heal:
-		return [C, R]
+		return [C, K]
 	if n.call:
 		return [R, K]
 	if lv._sixteenth(n):
@@ -71,25 +71,40 @@ static func step(lv: LaneView, field: Rect2, n: Note, cx: float, y: float, alpha
 	var rw := maxf(1.0, rx * 2.0 * RIM)
 	oval(lv, c, Vector2(rx, rx * FLAT), _a(inks[0], alpha), _a(inks[1], alpha), rw)
 	if n.heal:
-		# a small red heart stamped in the middle
-		var s := rx * 0.16
-		lv.draw_colored_polygon(PackedVector2Array([c + Vector2(0, s * 1.1), c + Vector2(-s * 1.6, -s * 0.2), c + Vector2(-s * 0.8, -s * 0.9),
-			c + Vector2(0, -s * 0.3), c + Vector2(s * 0.8, -s * 0.9), c + Vector2(s * 1.6, -s * 0.2)]), _a(R, alpha))
+		# the review's classic pixel heart (round 38), red in whole pixels on the cream face
+		pixel_heart(lv, c, rx, alpha)
 	elif n.call:
 		oval(lv, c, Vector2(rx, rx * FLAT) * 0.3, _a(C, alpha))
 
 
-## A stomp: two cream balls side by side in the lane, both thumbs.
+## A stomp, as on the review page (round 38): a black oval with a cream rim and a thin cream border
+## inside it, and two small cream balls on its face, both thumbs.
 static func stomp(lv: LaneView, field: Rect2, cx: float, y: float, alpha: float) -> void:
 	var lw := lane_px(lv, field, y)
 	var c := lv.project(Vector2(cx, y))
-	var r := lw * 0.2
+	var rx := lw * NOTE_W * 0.5
+	var r := Vector2(rx, rx * FLAT)
+	var rw := maxf(1.0, rx * 2.0 * RIM)
+	oval(lv, c, r, _a(C, alpha), _a(C, alpha), rw)
+	var bw := maxf(1.0, rx * 2.0 * 0.035)
+	oval(lv, c, r - Vector2(bw, bw * 0.6), _a(K, alpha))
+	var br := rx * 0.17
 	for sx: float in [-1.0, 1.0]:
-		var p := c + Vector2(sx * r * 1.15, -r * 0.55)
-		lv.draw_circle(p, r + maxf(1.0, r * 0.18), _a(K, alpha))
-		lv.draw_circle(p, r, _a(C, alpha))
-		lv.draw_circle(p + Vector2(r * 0.15, r * 0.25), r * 0.55, _a(G, alpha))
-		lv.draw_circle(p + Vector2(-r * 0.05, -r * 0.05), r * 0.62, _a(C, alpha))
+		oval(lv, c + Vector2(sx * rx * 0.3, 0.0), Vector2(br, br * 0.8), _a(C, alpha))
+
+
+## The classic pixel heart (7 x 6) centred on c, its pixels about a seventh of 0.36 of the oval's width.
+const HEART_ROWS := [".##.##.", "#######", "#######", ".#####.", "..###..", "...#..."]
+
+
+static func pixel_heart(ci: CanvasItem, c: Vector2, rx: float, alpha: float) -> void:
+	var n := maxf(1.0, roundf(rx * 2.0 * 0.36 / 7.0))
+	var o := (c - Vector2(3.5 * n, 3.0 * n)).round()
+	for j in HEART_ROWS.size():
+		var row: String = HEART_ROWS[j]
+		for i in row.length():
+			if row[i] == "#":
+				ci.draw_rect(Rect2(o + Vector2(i, j) * n, Vector2(n, n)), _a(R, alpha))
 
 
 ## A held note's rope: one cream band lying on the road from its end (far) to its head (near).

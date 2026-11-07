@@ -93,9 +93,10 @@ def main(out):
     s = Scene(CFG)
     W, H = s.W, s.H
     Image.fromarray(street(), 'RGBA').save(os.path.join(out, 'street.png'))
-    for i in range(FILE_FRAMES):
-        t = i / FILE_FPS if i < FILE_FRAMES - 1 else 0.45
-        Image.fromarray(files(t), 'RGBA').save(os.path.join(out, 'files_%02d.png' % i))
+    # the files of Mamuthones: every figure at every height and moment of the step, placed by the
+    # game each frame so they walk toward the fire as on the review page (export_figs.py)
+    import export_figs
+    export_figs.main(out)
     # one box holds the fire at every level and frame
     frames = {lv: [fire(lv, i / FIRE_FPS) for i in range(FIRE_FRAMES)] for lv in (1, 2, 3, 4)}
     al = np.zeros((H, W), bool)

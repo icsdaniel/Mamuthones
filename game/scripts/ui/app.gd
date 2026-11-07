@@ -75,6 +75,7 @@ func current() -> Screen:
 
 ## Push a screen by name.
 func open(name: String, args: Dictionary = {}) -> Screen:
+	ErrorWatch.crumb("begin open " + name)
 	var screen := _make(name, args)
 	var prev := current()
 	stack.append(screen)
@@ -85,11 +86,13 @@ func open(name: String, args: Dictionary = {}) -> Screen:
 		prev.hide()
 	_enter(screen, 1.0)
 	screen_changed.emit(screen)
+	ErrorWatch.crumb("end open " + name)
 	return screen
 
 
 ## Swap the top screen for another (play -> results, first-run steps).
 func replace(name: String, args: Dictionary = {}) -> Screen:
+	ErrorWatch.crumb("begin replace " + name)
 	var old: Screen = stack.pop_back() if not stack.is_empty() else null
 	if old != null:
 		old.queue_free()
@@ -100,6 +103,7 @@ func replace(name: String, args: Dictionary = {}) -> Screen:
 	screen.build()
 	_enter(screen, 1.0)
 	screen_changed.emit(screen)
+	ErrorWatch.crumb("end replace " + name)
 	return screen
 
 
