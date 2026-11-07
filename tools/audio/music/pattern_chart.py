@@ -1711,11 +1711,19 @@ def shuffle(song, chart, level):
     only when the beat after it is free."""
     out = []
     starts = {round(n["b"] * 4) for n in chart if n["k"] != "rest"}
+    lanes_at = {}
+    for n in chart:
+        lanes_at.setdefault(round(n["b"] * 4), set()).add(n.get("lane"))
     for n in chart:
         n = dict(n)
         q = round(n["b"] * 4)
         if abs(n["b"] * 4 - q) < 0.02 and q % 4 == 3 and (level != "expert" or q + 1 in starts):
             continue
+        # the "and" now sits a third of a beat before the next beat: Easy lets it go when that beat is
+        # played, Medium when the same button plays it (one thumb twice that fast)
+        if n["k"] == "step" and abs(n["b"] * 4 - q) < 0.02 and q % 4 == 2 and q + 2 in starts:
+            if level == "easy" or (level == "medium" and n.get("lane") in lanes_at.get(q + 2, set())):
+                continue
         if n["k"] in ("hold", "rest"):
             end = shuffle_b(n["b"] + n["len"])
             n["b"] = shuffle_b(n["b"])
@@ -1725,18 +1733,25 @@ def shuffle(song, chart, level):
         else:
             n["b"] = shuffle_b(n["b"])
         out.append(n)
-    return finish(song, out, level)
+    return finish(song, breathe(song, out, level), level)
 
 
-HEARD_GATE = 0.3    # an off-beat tap needs at least this attack under it in the audio (music_fit salience)
+HEARD_GATE = {"eighth": 0.3, "sixteenth": 0.4}   # attack (music_fit salience) an off-beat note needs
+ACCENT_ADD = 0.7          # Expert takes a strong off-beat accent the music plays from this salience
+ACCENT_ROOM_S = 0.2       # ... when no other input is closer than this
 
 
 def heard_gate(sid, cfg, charts):
-    """Daniele (2026-11-07): "Don't add them randomly. Make sure that the player feels the tempo and
-    hits the notes because they need to follow the flow." A plain tap off the beat (an "and", an "e"
-    or an "a") stays only where the song the player hears has an attack there: drums, bass or tune
-    (music_fit.py reads the game's own audio, not the charter's analysis). Taps on the beat keep the
-    pulse and always stay; holds, rings, chords and stomps are left alone."""
+    """Daniele (2026-11-07): "If you identify notes that are out of the intended tempo, these are fine as
+    well to have. Don't add them randomly. Make sure that the player feels the tempo and hits the notes
+    because they need to follow the flow." Read against the song the player hears (music_fit.py reads
+    the game's own audio, not the charter's analysis):
+      - a plain tap or a hold that starts off the beat stays only where the music has an attack there
+        (a sixteenth needs a clearer one than an "and"). A silent hold on an "and" moves back to its
+        beat when that beat is free, otherwise it goes. Taps on the beat keep the pulse and always stay.
+      - Expert takes the strong off-beat accents the music plays and no level has charted (pickups,
+        the bass on the "and", snare fills), where it has room: a free thumb and ACCENT_ROOM_S clear
+        around it. Expert gets harder with notes the player can hear."""
     import music_fit
     if not os.path.exists(os.path.join(music_fit.MUSIC, sid + ".ogg")):
         return charts, {}
@@ -1744,26 +1759,85 @@ def heard_gate(sid, cfg, charts):
     spb, off = 60.0 / cfg["bpm"], cfg["offset"]
     n = int((cfg["length"] - off) / spb * 4)
     k = np.arange(n)
-    if cfg.get("shuffle"):
-        fr = np.array(SHUFFLE)[k % 4]
-    else:
-        fr = (k % 4) / 4 + (k % 2) * cfg.get("swing", 0.0)
+    shuf = cfg.get("shuffle")
+    fr = np.array(SHUFFLE)[k % 4] if shuf else (k % 4) / 4 + (k % 2) * cfg.get("swing", 0.0)
     A.set_ref(off + (k // 4 + fr) * spb)
-    out, dropped = {}, {}
+    sal_slot = A.sal(off + (k // 4 + fr) * spb)
+    real = (lambda b: shuffle_b(b)) if shuf else (lambda b: b)
+
+    def sal(b):
+        return float(A.sal(off + real(b) * spb))
+    out, log = {}, {}
+
+    def note(d, what):
+        log.setdefault(d, {})
+        log[d][what] = log[d].get(what, 0) + 1
     for d, ch in charts.items():
         at = {}
         for x in ch:
             at.setdefault(round(x["b"], 3), []).append(x)
         keep = []
         for x in ch:
-            if x["k"] == "step" and abs(x["b"] - round(x["b"])) > 1e-3 and len(at[round(x["b"], 3)]) == 1:
-                b = shuffle_b(x["b"]) if cfg.get("shuffle") else x["b"]
-                if float(A.sal(off + b * spb)) < HEARD_GATE:
-                    dropped[d] = dropped.get(d, 0) + 1
+            q = x["b"] * 4
+            off_beat = abs(x["b"] - round(x["b"])) > 1e-3
+            if off_beat and x["k"] in ("step", "hold") and len(at[round(x["b"], 3)]) == 1:
+                kind = "eighth" if abs(q / 2 - round(q / 2)) < 1e-3 else "sixteenth"
+                if sal(x["b"]) < HEARD_GATE[kind]:
+                    if x["k"] == "hold":
+                        beat = float(math.floor(x["b"]))
+                        if not any(abs(y["b"] - beat) < 1e-3 or (y["k"] == "hold" and y["b"] < beat < y["b"] + y["len"])
+                                   for y in ch if y is not x):
+                            keep.append(dict(x, b=beat, len=round(x["len"] + x["b"] - beat, 4)))
+                            note(d, "silent hold moved to its beat")
+                            continue
+                    note(d, "silent " + x["k"] + " dropped")
                     continue
             keep.append(x)
+        if d == "easy":
+            # Easy feels the beat first: an off-beat tap with nothing on the beat before it (and no hold
+            # over that beat) moves onto that beat, or goes when the beat is taken by another input
+            starts = {round(x["b"], 3) for x in keep}
+            fixed = []
+            for x in keep:
+                if x["k"] == "step" and abs(x["b"] - round(x["b"])) > 1e-3:
+                    beat = float(math.floor(x["b"]))
+                    held = any(y["k"] == "hold" and y["b"] < beat + 1e-3 < y["b"] + y["len"] for y in keep)
+                    if round(beat, 3) not in starts and not held and not any(beat < y["b"] < x["b"] for y in keep):
+                        if sal(beat) >= HEARD_GATE["eighth"]:
+                            fixed.append(dict(x, b=beat))
+                            starts.add(round(beat, 3))
+                            note(d, "off-beat tap moved onto its empty beat")
+                            continue
+                fixed.append(x)
+            keep = fixed
+        keep.sort(key=lambda x: (x["b"], x.get("lane", -1)))
         out[d] = keep
-    return out, dropped
+    # Expert: the strong accents nobody charted
+    ch = out["expert"]
+    taken = {round(x["b"] * 4) for c in out.values() for x in c}
+    start = first_beat(cfg["bpm"], off) * 4
+    for s_ in range(int(start), n - 4):
+        if s_ % 4 == 0 or s_ in taken or sal_slot[s_] < ACCENT_ADD or (shuf and s_ % 4 == 3):
+            continue
+        if sal_slot[s_] < max(sal_slot[s_ - 1], sal_slot[s_ + 1]):
+            continue
+        b = s_ / 4 + (cfg.get("swing", 0.0) if s_ % 2 else 0.0)
+        t = real(b) * spb
+        if any(x["k"] != "rest" and abs(real(x["b"]) * spb - t) < ACCENT_ROOM_S for x in ch):
+            continue
+        if any(x["k"] in ("hold", "rest") and x["b"] < b < x["b"] + x["len"] for x in ch):
+            continue
+        prev = max((x for x in ch if x["b"] < b and "lane" in x), key=lambda x: x["b"], default=None)
+        nxt = min((x for x in ch if x["b"] > b and "lane" in x), key=lambda x: x["b"], default=None)
+        used = {x.get("lane") for x in (prev, nxt) if x is not None}
+        lane = next((l for l in (2, 0, 1) if l not in used), None)
+        if lane is None:
+            continue
+        ch.append({"b": round(b, 4), "k": "step", "lane": lane})
+        taken.add(s_)
+        note("expert", "accents added")
+    ch.sort(key=lambda x: (x["b"], x.get("lane", -1)))
+    return out, log
 
 
 def clean(song_data, level, chart, score):
@@ -1829,9 +1903,11 @@ def main(argv):
         g.update(saved)
     plus = hold_guard(song, lift(song, "expert", charts["hard"], plus))
     charts["expert"] = add_free(song, finish(song, breathe(song, harden(song, plus), "expert"), "expert"))
-    charts, dropped = heard_gate(cfg["song"], cfg, charts)
-    if dropped:
-        print("  off-beat taps with no sound under them, dropped:", dropped)
+    charts, log = heard_gate(cfg["song"], cfg, charts)
+    for d_, l_ in log.items():
+        print(f"  {d_}: " + ", ".join(f"{k} {v}" for k, v in l_.items()))
+    if "accents added" in log.get("expert", {}) and not cfg.get("shuffle"):
+        charts["expert"] = finish(song, breathe(song, charts["expert"], "expert"), "expert")
     straight = charts
     if cfg.get("shuffle"):
         charts = {d: shuffle(song, ch, d) for d, ch in charts.items()}
