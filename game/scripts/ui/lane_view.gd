@@ -1558,7 +1558,10 @@ func _px(o: Vector2, x: float, y: float, w: float, h: float, col: Color) -> void
 ## is needed mid-song: the buttons pressed and lit, and (bells: a song with bells) the bell bars at
 ## every size down the road. Each was a hitch of 25 ms or more on its first press, hit or bell.
 func warm(bells: bool) -> void:
-	if street == null:
+	# The Woodcut look draws its notes, rings, buttons and bells live in solid inks: there are no
+	# pictures to paint ahead. The old sprites' warm-up walked the road with the woodcut street's
+	# scale and never finished, so Play froze before the song (2026-11-07).
+	if street == null or street is StreetBackdrop:
 		return
 	if STEP_BUTTONS:
 		for lane in 3:
